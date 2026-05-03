@@ -28,6 +28,7 @@ import {
   saveAnswer,
   submitSection,
   endBreak,
+  pickSection,
   submitAttempt,
   autoTerminate,
   logViolation,
@@ -77,7 +78,7 @@ if (typeof document !== 'undefined') {
 // TYPES
 // ══════════════════════════════════════════════════════════════════
 
-type ShellStatus = 'loading' | 'ready' | 'on_break' | 'submitting_section' | 'submitting_exam' | 'submitted' | 'terminated' | 'error';
+type ShellStatus = 'loading' | 'ready' | 'choosing_section' | 'on_break' | 'submitting_section' | 'submitting_exam' | 'submitted' | 'terminated' | 'error';
 
 type BreakState = {
   justSubmittedSectionId: string;
@@ -403,6 +404,69 @@ function BreakScreen({
 }
 
 // ══════════════════════════════════════════════════════════════════
+// SECTION PICKER (student_choice mode)
+// ══════════════════════════════════════════════════════════════════
+
+function SectionPicker({
+  remaining,
+  completedCount,
+  totalCount,
+  onPick,
+  picking,
+}: {
+  remaining: AssessmentSection[];
+  completedCount: number;
+  totalCount: number;
+  onPick: (sectionId: string) => void;
+  picking: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3', padding: 24 }}>
+      <div className="flex flex-col items-center gap-4" style={{ maxWidth: 560, width: '100%' }}>
+        <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>CHOOSE YOUR NEXT SECTION</p>
+        <p className="text-sm" style={{ color: '#0C0C0B', textAlign: 'center', lineHeight: 1.6 }}>
+          {completedCount === 0
+            ? 'Pick which section you want to start with.'
+            : `You've completed ${completedCount} of ${totalCount} sections. Pick what to take next.`}
+        </p>
+        <div className="w-full grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          {remaining.map((sec) => (
+            <button
+              key={sec.id}
+              type="button"
+              disabled={picking}
+              onClick={() => onPick(sec.id)}
+              className="flex flex-col items-start gap-1.5 px-4 py-3 transition-colors text-left"
+              style={{
+                background: '#FFFFFF',
+                border: '1px solid #E3E1DB',
+                borderRadius: 3,
+                cursor: picking ? 'not-allowed' : 'pointer',
+                opacity: picking ? 0.6 : 1,
+              }}
+              onMouseEnter={(e) => { if (!picking) e.currentTarget.style.borderColor = '#0C0C0B'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E3E1DB'; }}
+            >
+              <span className="text-xs" style={{ color: '#0C0C0B' }}>{sec.name}</span>
+              <span className="text-xs" style={{ color: '#9A9891' }}>
+                {sec.questions.length} question{sec.questions.length === 1 ? '' : 's'}
+                {sec.timeLimit ? ` · ${sec.timeLimit} min` : ''}
+              </span>
+            </button>
+          ))}
+        </div>
+        {picking && (
+          <div className="flex items-center gap-2" style={{ color: '#9A9891' }}>
+            <Loader2 size={11} className="animate-spin" />
+            <span className="text-xs">Starting section…</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════
 
@@ -463,6 +527,7 @@ export function ExamShell() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [breakState, setBreakState] = useState<BreakState | null>(null);
+  const [pickingSection, setPickingSection] = useState(false);
 
   // ── Refs (stable access inside callbacks/effects) ──────────────
   const assessmentRef   = useRef<Assessment | null>(null);
@@ -506,7 +571,7 @@ export function ExamShell() {
         if (!a) { setErrorMsg('Assessment not found.'); setShellStatus('error'); return; }
 
         // 2. Normalise sections — guarantees questions are populated
-        const effSections = buildEffectiveSections(a);
+        let effSections = buildEffectiveSections(a);
 
         // 3. Get or create attempt (idempotent)
         let att = await getAttemptByStudentAndAssessment(session.studentId, assessmentId);
@@ -530,9 +595,20 @@ export function ExamShell() {
               questions: s.questions,
             })),
             shuffleQuestions: a.shuffleQuestions,
+            sectionStartOrder: a.sectionStartOrder,
             cameraDeclined,
             effectiveMaxAttempts,
           });
+        }
+
+        // Reorder effSections to match the attempt's frozen section order.
+        // The attempt may have been created with a shuffled order
+        // (sectionStartOrder = 'random' / 'student_choice') so the shell
+        // navigation must walk the attempt's order, not the builder's.
+        if (att.sectionIds && att.sectionIds.length === effSections.length) {
+          const byId = new Map(effSections.map((s) => [s.id, s]));
+          const reordered = att.sectionIds.map((id) => byId.get(id)).filter(Boolean) as typeof effSections;
+          if (reordered.length === effSections.length) effSections = reordered;
         }
 
         // 4. Load all question documents in parallel
@@ -568,6 +644,17 @@ export function ExamShell() {
         setMarksMap(mMap);
         setLocalAnswers({ ...att.answers });
         setCurrentSectionIdx(att.currentSectionIdx);
+
+        // Detect resume-mid-pick (student_choice): if the active section
+        // has no startedAt yet, the student needs to choose before we
+        // can render the question shell.
+        if (a.sectionStartOrder === 'student_choice') {
+          const cur = effSections[att.currentSectionIdx];
+          if (cur && !att.sectionTimings[cur.id]?.startedAt) {
+            setShellStatus('choosing_section');
+            return;
+          }
+        }
 
         // Detect resume-mid-break: a section is submitted, the next one
         // hasn't started, and the configured break window hasn't elapsed.
@@ -754,7 +841,14 @@ export function ExamShell() {
     const nextIdx = currentSectionIdx + 1;
     const nextSection = effectiveSections[nextIdx] ?? null;
     const breakCfg = currentSection.breakAfter;
-    const pauseBeforeNext = !!(nextSection && breakCfg && breakCfg.durationMinutes > 0);
+    const isStudentChoice = a.sectionStartOrder === 'student_choice';
+    // Pause if a break is configured OR we're in student_choice and there's
+    // a next slot — in both cases the next section's timer must not start
+    // automatically.
+    // student_choice takes precedence over breakAfter (the picker
+    // already pauses between sections, so a break is redundant).
+    const useBreak = !isStudentChoice && !!(breakCfg && breakCfg.durationMinutes > 0);
+    const pauseBeforeNext = !!nextSection && (useBreak || isStudentChoice);
 
     await submitSection({
       attemptId: att.id,
@@ -765,7 +859,7 @@ export function ExamShell() {
       pauseBeforeNext,
     });
 
-    if (nextSection && pauseBeforeNext && breakCfg) {
+    if (nextSection && useBreak && breakCfg) {
       // Enter break — next section's timer will start when student continues
       const submittedAtMs = Date.now();
       setBreakState({
@@ -789,6 +883,20 @@ export function ExamShell() {
           : prev
       );
       setShellStatus('on_break');
+    } else if (nextSection && isStudentChoice) {
+      // No break, but student picks the next section themselves.
+      setAttempt((prev) =>
+        prev
+          ? {
+              ...prev,
+              sectionTimings: {
+                ...prev.sectionTimings,
+                [sectionId]: { ...prev.sectionTimings[sectionId], submittedAt: new Date().toISOString(), timeUsedSeconds },
+              },
+            }
+          : prev
+      );
+      setShellStatus('choosing_section');
     } else if (nextSection) {
       // Advance to next section
       setCurrentSectionIdx(nextIdx);
@@ -853,6 +961,66 @@ export function ExamShell() {
     setBreakState(null);
     setShellStatus('ready');
   }, [breakState]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // PICK SECTION (student_choice)
+  // ══════════════════════════════════════════════════════════════════
+
+  const handlePickSection = useCallback(async (pickedSectionId: string) => {
+    const att = attemptRef.current;
+    if (!att || pickingSection) return;
+    setPickingSection(true);
+    try {
+      // newIdx = number of sections already started (have a startedAt)
+      const startedCount = att.sectionIds.filter(
+        (id) => !!att.sectionTimings[id]?.startedAt
+      ).length;
+      const newIdx = startedCount;
+
+      const reorderedIds = await pickSection({
+        attemptId: att.id,
+        pickedSectionId,
+        currentSectionIds: att.sectionIds,
+        newIdx,
+      });
+
+      const startISO = new Date().toISOString();
+
+      // Reorder effectiveSections to match new sectionIds
+      const byId = new Map(effectiveSections.map((s) => [s.id, s]));
+      const reorderedSections = reorderedIds
+        .map((id) => byId.get(id))
+        .filter(Boolean) as AssessmentSection[];
+      if (reorderedSections.length === effectiveSections.length) {
+        setEffectiveSections(reorderedSections);
+      }
+
+      setAttempt((prev) =>
+        prev
+          ? {
+              ...prev,
+              sectionIds: reorderedIds,
+              currentSectionIdx: newIdx,
+              sectionTimings: {
+                ...prev.sectionTimings,
+                [pickedSectionId]: {
+                  ...prev.sectionTimings[pickedSectionId],
+                  startedAt: startISO,
+                  timeUsedSeconds: 0,
+                },
+              },
+            }
+          : prev
+      );
+      setCurrentSectionIdx(newIdx);
+      setCurrentQIdx(0);
+      setShellStatus('ready');
+    } catch (e) {
+      console.error('[ExamShell] pickSection failed', e);
+    } finally {
+      setPickingSection(false);
+    }
+  }, [pickingSection, effectiveSections]);
 
   // ══════════════════════════════════════════════════════════════════
   // FINAL SUBMIT
@@ -1053,6 +1221,22 @@ export function ExamShell() {
 
   if (shellStatus === 'on_break' && breakState) {
     return <BreakScreen state={breakState} onContinue={handleEndBreak} />;
+  }
+
+  if (shellStatus === 'choosing_section') {
+    const remaining = effectiveSections.filter(
+      (s) => !attempt?.sectionTimings[s.id]?.startedAt
+    );
+    const completedCount = effectiveSections.length - remaining.length;
+    return (
+      <SectionPicker
+        remaining={remaining}
+        completedCount={completedCount}
+        totalCount={effectiveSections.length}
+        onPick={handlePickSection}
+        picking={pickingSection}
+      />
+    );
   }
 
   if (!assessment || !attempt || !currentSection) return null;

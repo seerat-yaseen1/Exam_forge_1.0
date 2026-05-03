@@ -383,7 +383,17 @@ function PreviewModal({ assessment, onClose }: { assessment: Assessment; onClose
           )}
           {assessment.sections && assessment.sections.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>SECTIONS ({assessment.sections.length})</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>SECTIONS ({assessment.sections.length})</p>
+                {assessment.sectionStartOrder && assessment.sectionStartOrder !== 'sequential' && (
+                  <span
+                    className="text-xs px-2 py-0.5"
+                    style={{ background: '#F0EFEB', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+                  >
+                    {assessment.sectionStartOrder === 'random' ? 'Random order' : "Student's choice"}
+                  </span>
+                )}
+              </div>
               {assessment.sections.map((sec, si) => {
                 const secMarks = sec.questions.reduce((s, q) => s + q.marks, 0);
                 return (
@@ -848,6 +858,8 @@ function RuleBuilderPanel({
   setSections,
   allQuestions,
   locked,
+  subjectPoolNames,
+  topicPool,
 }: {
   sections: SectionDraft[];
   activeSectionIdx: number;
@@ -855,6 +867,8 @@ function RuleBuilderPanel({
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
   allQuestions: Question[];
   locked?: boolean;
+  subjectPoolNames?: string[];
+  topicPool?: string[];
 }) {
   const activeSection = sections[activeSectionIdx];
 
@@ -882,20 +896,38 @@ function RuleBuilderPanel({
   // If assignedTopics is non-empty, only show those subject/topic pairs.
   // If empty (no pre-assignment), fall back to showing the full bank.
   const filteredSubjectTopics = useMemo(() => {
+    // Layer 1: start from full bank
+    let base: Record<string, string[]> = subjectTopics;
+
+    // Layer 2: narrow by global subjectPool / topicPool from Step 1
+    const subjSet = subjectPoolNames && subjectPoolNames.length > 0 ? new Set(subjectPoolNames) : null;
+    const topicSet = topicPool && topicPool.length > 0 ? new Set(topicPool) : null;
+    if (subjSet || topicSet) {
+      const narrowed: Record<string, string[]> = {};
+      for (const subj in base) {
+        if (subjSet && !subjSet.has(subj)) continue;
+        const topics = base[subj].filter((t) => !topicSet || topicSet.has(`${subj}::${t}`));
+        if (topics.length > 0) narrowed[subj] = topics;
+      }
+      base = narrowed;
+    }
+
+    // Layer 3: narrow further by per-section assignedTopics
     const assigned = activeSection?.assignedTopics ?? [];
-    if (assigned.length === 0) return subjectTopics; // fallback: full bank
+    if (assigned.length === 0) return base;
     const result: Record<string, string[]> = {};
     assigned.forEach((key) => {
       const idx = key.indexOf('::');
       if (idx === -1) return;
       const subj = key.slice(0, idx);
       const topic = key.slice(idx + 2);
+      if (!base[subj] || !base[subj].includes(topic)) return;
       if (!result[subj]) result[subj] = [];
       if (!result[subj].includes(topic)) result[subj].push(topic);
     });
     for (const subj in result) result[subj].sort();
     return result;
-  }, [activeSection?.assignedTopics, subjectTopics]);
+  }, [activeSection?.assignedTopics, subjectTopics, subjectPoolNames, topicPool]);
 
   const allSubjects = useMemo(() => Object.keys(filteredSubjectTopics).sort(), [filteredSubjectTopics]);
 
@@ -1047,17 +1079,24 @@ function RuleBuilderPanel({
   if (!activeSection) return null;
 
   return (
-    <div className="flex-1 flex overflow-hidden" style={{ background: '#FFFFFF' }}>
+    <div className="flex" style={{ background: '#FFFFFF', minHeight: 560, alignItems: 'stretch' }}>
 
-      {/* ── LEFT: Vertical section rail ── */}
+      {/* ── LEFT: Vertical section rail (sticky while page scrolls) ── */}
       <div className="flex-shrink-0 flex flex-col"
-        style={{ width: 172, borderRight: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+        style={{
+          width: 172,
+          borderRight: '1px solid #E3E1DB',
+          background: '#FAFAF8',
+          position: 'sticky',
+          top: 0,
+          alignSelf: 'flex-start',
+        }}>
 
         <div className="flex-shrink-0 px-4 pt-4 pb-2">
           <p style={{ color: '#C4C3BD', fontSize: 10, letterSpacing: '0.09em' }}>SECTIONS</p>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1">
           {sections.map((sec, idx) => {
             const isActive = idx === activeSectionIdx;
             const secQ = sec.rules.reduce((s, r) => s + (parseInt(r.count, 10) || 0), 0);
@@ -1098,8 +1137,8 @@ function RuleBuilderPanel({
         </div>
       </div>
 
-      {/* ── RIGHT: Rule content ── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* ── RIGHT: Rule content (grows with content; outer page handles scroll) ── */}
+      <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
 
       {/* ── Instruction or lock banner ── */}
       {locked ? (
@@ -1130,7 +1169,7 @@ function RuleBuilderPanel({
       )}
 
       {/* ── Subject / topic / difficulty tree ── */}
-      <div className="flex-1 overflow-y-auto" style={locked ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
+      <div className="flex-1" style={locked ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
         {allSubjects.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16" style={{ color: '#C4C3BD' }}>
             {isTopicFiltered ? (
@@ -2059,20 +2098,10 @@ function SetupStep({
                 placeholder="Instructions or notes visible to students" />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Subject" hint="(optional)">
-                <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
-                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px' }} placeholder="e.g., Mathematics" />
-              </Field>
-              <Field label="Status">
-                <select value={status} onChange={(e) => setStatus(e.target.value as AssessmentStatus)}
-                  style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}>
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </Field>
-            </div>
+            <Field label="Subject" hint="(optional)">
+              <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
+                style={{ ...inputStyle, fontSize: 13, padding: '9px 12px' }} placeholder="e.g., Mathematics" />
+            </Field>
 
             {mut.targetType ? (
               <Field label="Assign To">
@@ -3015,11 +3044,24 @@ function DetailsStep({
   const [passingScore, setPassingScore] = useState(assessment?.passingScore?.toString() ?? '');
   const [maxAttempts, setMaxAttempts] = useState(assessment?.maxAttempts?.toString() ?? '1');
   const [shuffleQuestions, setShuffleQuestions] = useState(assessment?.shuffleQuestions ?? false);
-  const [showResults, setShowResults] = useState(assessment?.showResults ?? true);
-  const [allowReview, setAllowReview] = useState(assessment?.allowReview ?? true);
+  const [sectionStartOrder, setSectionStartOrder] = useState<'sequential' | 'random' | 'student_choice'>(
+    assessment?.sectionStartOrder ?? 'sequential'
+  );
+  const [showResults, setShowResults] = useState(assessment?.showResults ?? false);
+  const [allowReview, setAllowReview] = useState(assessment?.allowReview ?? false);
   const [saving, setSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
+
+  // Resolve subjectPool IDs → names so RuleBuilderPanel can filter against q.subject (a name)
+  const [subjectDocs, setSubjectDocs] = useState<Subject[]>([]);
+  useEffect(() => {
+    getAllSubjects().then(setSubjectDocs).catch(() => setSubjectDocs([]));
+  }, []);
+  const subjectPoolNames = useMemo(
+    () => subjectDocs.filter((s) => subjectPool.includes(s.id)).map((s) => s.name),
+    [subjectDocs, subjectPool]
+  );
 
   const mut = mutabilityFor(originalStatus);
   const lockReason = originalStatus === 'active' ? 'test is live' : 'test is closed';
@@ -3050,8 +3092,15 @@ function DetailsStep({
       return out;
     });
 
-  const handleSave = async () => {
+  const handleSave = async (overrideStatus?: AssessmentStatus) => {
     setValidationErrors([]);
+    const targetStatus: AssessmentStatus = overrideStatus ?? status;
+
+    // Publishing requires both scheduledStart and scheduledEnd to be set.
+    if (targetStatus === 'active' && (!startDate || !endDate)) {
+      setValidationErrors(['Publishing requires both a start date and an end date — set them in the Schedule panel above, or use Save as Draft.']);
+      return;
+    }
 
     if (mut.endDate === 'extend-only' && assessment?.endDate && endDate) {
       const originalEnd = new Date(assessment.endDate).getTime();
@@ -3075,7 +3124,7 @@ function DetailsStep({
 
     const builtSections = buildSections(sections);
 
-    if (status === 'active') {
+    if (targetStatus === 'active') {
       const { valid, results } = validateSelectionRules(builtSections, allQuestions);
       if (!valid) {
         const errors = results
@@ -3096,7 +3145,7 @@ function DetailsStep({
       let finalSections = builtSections;
       let flatQuestions = builtSections.flatMap((s) => s.questions);
 
-      if (status === 'active') {
+      if (targetStatus === 'active') {
         const resolved = resolveQuestionsForSections(builtSections, allQuestions);
         finalSections = resolved.sections;
         flatQuestions = resolved.flatQuestions;
@@ -3120,9 +3169,10 @@ function DetailsStep({
         passingScore: passingScore ? parseInt(passingScore, 10) : undefined,
         maxAttempts: maxAttempts ? parseInt(maxAttempts, 10) : undefined,
         shuffleQuestions,
+        sectionStartOrder,
         showResults,
         allowReview,
-        status,
+        status: targetStatus,
       };
 
       await onSave(draft);
@@ -3134,10 +3184,10 @@ function DetailsStep({
   const totalSectionTime = sections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col">
+    <div className="flex flex-col">
 
-      {/* ── TOP: Schedule + Grading + Settings ── */}
-      <div className="flex-shrink-0 overflow-y-auto" style={{ borderBottom: '1px solid #E3E1DB', background: '#FAFAF8', maxHeight: '50%' }}>
+      {/* ── TOP: Schedule + Grading + Section Limits | Settings (fixed natural height) ── */}
+      <div className="flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB', background: '#FAFAF8' }}>
         <div style={{ padding: '20px 48px 24px' }}>
 
           {/* Back link */}
@@ -3165,11 +3215,22 @@ function DetailsStep({
             </div>
           )}
 
-          {/* Three-column flex strip */}
-          <div className="flex flex-wrap gap-8" style={{ alignItems: 'flex-start' }}>
+          {/* Two-column layout: left stacks Schedule/Grading/Section Limits, right holds Settings.
+              Collapses to a single column on screens under ~860px. */}
+          <div
+            className="gap-8"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              alignItems: 'start',
+            }}
+          >
+
+            {/* LEFT COLUMN: Schedule + Grading + Section Limits */}
+            <div className="space-y-6" style={{ minWidth: 0 }}>
 
             {/* SCHEDULE */}
-            <div className="space-y-3" style={{ flex: '1 1 210px', minWidth: 0 }}>
+            <div className="space-y-3">
               <SectionLabel label="SCHEDULE" />
               {mut.startDate ? (
                 <StartScheduleControl startDate={startDate} setStartDate={setStartDate} />
@@ -3219,44 +3280,10 @@ function DetailsStep({
               {startDate && endDate && (
                 <DurationIndicator startDate={startDate} endDate={endDate} totalSectionTime={totalSectionTime} />
               )}
-
-              {/* Section time limits */}
-              {(sections.some((s) => s.timeLimit) || sections.slice(0, -1).some((s) => parseInt(s.breakAfterMinutes, 10) > 0)) && (
-                <div className="space-y-1">
-                  <p style={{ color: '#C4C3BD', letterSpacing: '0.08em', fontSize: 10 }}>SECTION LIMITS</p>
-                  {sections.map((sec, sIdx) => {
-                    const showSection = !!sec.timeLimit;
-                    const breakMins = sIdx < sections.length - 1 ? parseInt(sec.breakAfterMinutes, 10) || 0 : 0;
-                    if (!showSection && !breakMins) return null;
-                    return (
-                      <div key={sec.id} className="space-y-1">
-                        {showSection && (
-                          <div className="flex items-center justify-between px-3 py-1.5"
-                            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                            <span className="text-xs" style={{ color: '#6B6B66' }}>{sec.name}</span>
-                            <span className="text-xs flex items-center gap-1" style={{ color: '#9A9891' }}>
-                              <Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min
-                            </span>
-                          </div>
-                        )}
-                        {breakMins > 0 && (
-                          <div className="flex items-center justify-between px-3 py-1"
-                            style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2 }}>
-                            <span className="text-xs" style={{ color: '#9A9891' }}>
-                              Break {sec.breakMandatory ? '(mandatory)' : '(skippable)'}
-                            </span>
-                            <span className="text-xs" style={{ color: '#9A9891' }}>{breakMins} min</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
 
             {/* GRADING */}
-            <div className="space-y-3" style={{ flex: '1 1 210px', minWidth: 0 }}>
+            <div className="space-y-3">
               <SectionLabel label="GRADING" />
               <Field label="Passing Score" hint="(%, optional)">
                 <div className="flex items-center gap-2 px-3 py-2"
@@ -3291,9 +3318,87 @@ function DetailsStep({
               )}
             </div>
 
-            {/* SETTINGS */}
-            <div className="space-y-3" style={{ flex: '1 1 210px', minWidth: 0 }}>
+            {/* SECTION LIMITS */}
+            {(sections.some((s) => s.timeLimit) || sections.slice(0, -1).some((s) => parseInt(s.breakAfterMinutes, 10) > 0)) && (
+              <div className="space-y-3">
+                <SectionLabel label="SECTION LIMITS" />
+                <div className="space-y-1">
+                  {sections.map((sec, sIdx) => {
+                    const showSection = !!sec.timeLimit;
+                    const breakMins = sIdx < sections.length - 1 ? parseInt(sec.breakAfterMinutes, 10) || 0 : 0;
+                    if (!showSection && !breakMins) return null;
+                    return (
+                      <div key={sec.id} className="space-y-1">
+                        {showSection && (
+                          <div className="flex items-center justify-between px-3 py-1.5"
+                            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                            <span className="text-xs" style={{ color: '#6B6B66' }}>{sec.name}</span>
+                            <span className="text-xs flex items-center gap-1" style={{ color: '#9A9891' }}>
+                              <Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min
+                            </span>
+                          </div>
+                        )}
+                        {breakMins > 0 && (
+                          <div className="flex items-center justify-between px-3 py-1"
+                            style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2 }}>
+                            <span className="text-xs" style={{ color: '#9A9891' }}>
+                              Break {sec.breakMandatory ? '(mandatory)' : '(skippable)'}
+                            </span>
+                            <span className="text-xs" style={{ color: '#9A9891' }}>{breakMins} min</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            </div>{/* /LEFT COLUMN */}
+
+            {/* RIGHT COLUMN: SETTINGS */}
+            <div className="space-y-3" style={{ minWidth: 0 }}>
               <SectionLabel label="SETTINGS" />
+
+              {/* Section start order */}
+              <div className="space-y-1.5">
+                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                  Section order
+                </p>
+                <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+                  {([
+                    { key: 'sequential' as const, label: 'In order' },
+                    { key: 'random' as const,     label: 'Random' },
+                    { key: 'student_choice' as const, label: "Student's choice" },
+                  ]).map((opt, i) => {
+                    const active = sectionStartOrder === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setSectionStartOrder(opt.key)}
+                        className="flex-1 text-xs px-2 py-1.5 transition-colors"
+                        style={{
+                          background: active ? '#0C0C0B' : 'transparent',
+                          color: active ? '#FFFFFF' : '#4A4A45',
+                          borderLeft: i === 0 ? 'none' : '1px solid #E3E1DB',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs" style={{ color: '#9A9891' }}>
+                  {sectionStartOrder === 'random'
+                    ? 'Each student gets sections in a different order.'
+                    : sectionStartOrder === 'student_choice'
+                      ? 'Students choose which section to take first.'
+                      : 'Sections are taken in the order shown below.'}
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <SettingsToggle
                   icon={<Shuffle size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
@@ -3333,10 +3438,46 @@ function DetailsStep({
         setSections={setSections}
         allQuestions={allQuestions}
         locked={!mut.sections}
+        subjectPoolNames={subjectPoolNames}
+        topicPool={topicPool}
       />
 
-      {/* Hidden save trigger */}
-      <button id="__details-save-trigger__" onClick={handleSave} disabled={saving} style={{ display: 'none' }} aria-hidden />
+      {/* Bottom save bar */}
+      <div className="flex items-center justify-end gap-3 px-12 py-5 mt-8"
+        style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+        {(() => {
+          // Edit mode on a live or closed assessment: status is locked, single Save Changes.
+          const lockedStatus = mode === 'edit' && (originalStatus === 'active' || originalStatus === 'closed');
+          if (lockedStatus) {
+            return (
+              <button onClick={() => handleSave()} disabled={saving}
+                className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+                style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                {saving
+                  ? <><Loader2 size={11} className="animate-spin" /> Saving…</>
+                  : <><CheckCircle2 size={11} /> Save Changes</>}
+              </button>
+            );
+          }
+          // Create mode, or edit on a draft: offer Save as Draft + Publish.
+          const draftLabel = mode === 'create' ? 'Save as Draft' : 'Save Draft';
+          const publishLabel = mode === 'create' ? 'Create & Publish' : 'Save & Publish';
+          return (
+            <>
+              <button onClick={() => handleSave('draft')} disabled={saving}
+                className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+                style={{ background: '#FFFFFF', color: '#0C0C0B', border: '1px solid #0C0C0B', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                {saving ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : <>{draftLabel}</>}
+              </button>
+              <button onClick={() => handleSave('active')} disabled={saving}
+                className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+                style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                {saving ? <><Loader2 size={11} className="animate-spin" /> Publishing…</> : <><CheckCircle2 size={11} /> {publishLabel}</>}
+              </button>
+            </>
+          );
+        })()}
+      </div>
     </div>
   );
 }
@@ -3353,6 +3494,14 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
   onClose: () => void;
 }) {
   const [step, setStep] = useState<1 | 2>(1);
+
+  // Lock body scroll while the panel is open so the page underneath doesn't
+  // contribute its own scrollbar alongside the panel's scrollbar.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   // ── Lifted basics state ──────────────────────────────────────────
   const [title, setTitle] = useState(assessment?.title ?? '');
@@ -3403,15 +3552,8 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
     }];
   });
 
-  const [saving] = useState(false);
-
   const grandTotalQ = sections.reduce((s, sec) => s + sec.rules.reduce((ss, r) => ss + (parseInt(r.count, 10) || 0), 0), 0);
   const grandTotalMarks = sections.reduce((s, sec) => sec.rules.reduce((ss, r) => ss + (parseInt(r.count, 10) || 0) * (parseFloat(r.marksPerQuestion) || 0), s), 0);
-
-  const triggerSave = () => {
-    const btn = document.getElementById('__details-save-trigger__') as HTMLButtonElement | null;
-    btn?.click();
-  };
 
   return (
     <motion.div
@@ -3471,15 +3613,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
             }}>
             Continue to Rules <ChevronRight size={12} strokeWidth={2} />
           </button>
-        ) : (
-          <button onClick={triggerSave} disabled={saving}
-            className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-            style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
-            {saving
-              ? <><Loader2 size={11} className="animate-spin" /> Saving…</>
-              : <><CheckCircle2 size={11} /> {mode === 'create' ? 'Create Assessment' : 'Save Changes'}</>}
-          </button>
-        )}
+        ) : null}
       </div>
 
       {/* Body */}
@@ -3504,7 +3638,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
             />
           ) : (
             <motion.div key="step2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }} className="flex-1 overflow-hidden flex flex-col">
+              transition={{ duration: 0.18 }} className="flex-1 overflow-y-auto flex flex-col">
               <DetailsStep
                 mode={mode} assessment={assessment} originalStatus={assessment?.status}
                 allQuestions={allQuestions}

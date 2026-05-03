@@ -237,6 +237,7 @@ export async function startAttempt(params: {
     questions: Array<{ questionId: string; marks: number; order: number }>;
   }>;
   shuffleQuestions: boolean;
+  sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
   cameraDeclined?: boolean;
   effectiveMaxAttempts?: number;  // undefined = unlimited
 }): Promise<Attempt> {
@@ -269,11 +270,23 @@ export async function startAttempt(params: {
   // ── Build frozen state ─────────────────────────────────────────
 
   const id = newId('attempt');
-  const sectionIds = params.sections.map((s) => s.id);
+
+  // Apply section ordering. 'random' / 'student_choice' both shuffle the
+  // play order at attempt creation; 'student_choice' will additionally gate
+  // section advancement on a picker UI in phase 2.
+  let orderedSections = params.sections;
+  if (params.sectionStartOrder === 'random' || params.sectionStartOrder === 'student_choice') {
+    orderedSections = [...params.sections];
+    for (let i = orderedSections.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [orderedSections[i], orderedSections[j]] = [orderedSections[j], orderedSections[i]];
+    }
+  }
+  const sectionIds = orderedSections.map((s) => s.id);
 
   // Question order per section (optionally shuffled via Fisher-Yates)
   const questionOrder: Record<string, string[]> = {};
-  for (const sec of params.sections) {
+  for (const sec of orderedSections) {
     let qids = [...sec.questions]
       .sort((a, b) => a.order - b.order)
       .map((q) => q.questionId);
@@ -287,11 +300,13 @@ export async function startAttempt(params: {
     questionOrder[sec.id] = qids;
   }
 
-  // Section timings — first section starts immediately; others start when advanced to
+  // Section timings — first section starts immediately for sequential/random;
+  // for student_choice nothing starts until the student picks.
   const sectionTimings: Record<string, SectionTiming> = {};
-  params.sections.forEach((sec, idx) => {
+  const autoStartFirst = params.sectionStartOrder !== 'student_choice';
+  orderedSections.forEach((sec, idx) => {
     sectionTimings[sec.id] = {
-      startedAt: idx === 0 ? now() : '',
+      startedAt: autoStartFirst && idx === 0 ? now() : '',
       timeUsedSeconds: 0,
     };
   });
@@ -380,6 +395,30 @@ export async function submitSection(params: {
   }
 
   await updateDoc(doc(db, 'attempts', attemptId), updates);
+}
+
+// ── Pick next section (student_choice mode) ───────────────────────
+// Reorders the attempt's frozen sectionIds so the picked section sits
+// at `newIdx`, then bumps currentSectionIdx and stamps startedAt on the
+// chosen section. Used at the start of the exam and between sections
+// when the assessment's sectionStartOrder is 'student_choice'.
+
+export async function pickSection(params: {
+  attemptId: string;
+  pickedSectionId: string;
+  currentSectionIds: string[];
+  newIdx: number;
+}): Promise<string[]> {
+  const { attemptId, pickedSectionId, currentSectionIds, newIdx } = params;
+  const without = currentSectionIds.filter((id) => id !== pickedSectionId);
+  const reordered = [...without.slice(0, newIdx), pickedSectionId, ...without.slice(newIdx)];
+  await updateDoc(doc(db, 'attempts', attemptId), {
+    sectionIds: reordered,
+    currentSectionIdx: newIdx,
+    [`sectionTimings.${pickedSectionId}.startedAt`]: now(),
+    updatedAt: now(),
+  });
+  return reordered;
 }
 
 // ── End break and start next section ──────────────────────────────
@@ -707,6 +746,38 @@ export async function getAttemptsByInstitute(
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as Attempt);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BREAK-STATE DETECTION
+// ══════════════════════════════════════════════════════════════════
+// Returns non-null when the attempt is mid-break: the current section
+// has a configured breakAfter, the current section is submitted, and
+// the next section's timer hasn't started yet. Used by both the exam
+// shell (for resume) and the faculty roster (for the "On break" pill).
+
+export function getBreakState(
+  attempt: Attempt,
+  sections: Array<{ id: string; name: string; breakAfter?: { durationMinutes: number; mandatory: boolean } }>,
+  nowMs: number = Date.now(),
+): { sectionName: string; nextSectionName: string; secondsRemaining: number; expired: boolean; mandatory: boolean } | null {
+  if (attempt.status !== 'in_progress') return null;
+  const cur = sections[attempt.currentSectionIdx];
+  const next = sections[attempt.currentSectionIdx + 1];
+  if (!cur || !next || !cur.breakAfter || cur.breakAfter.durationMinutes <= 0) return null;
+  const curTiming = attempt.sectionTimings[cur.id];
+  const nextTiming = attempt.sectionTimings[next.id];
+  if (!curTiming?.submittedAt) return null;
+  if (nextTiming?.startedAt) return null;
+  const endsAt = new Date(curTiming.submittedAt).getTime() + cur.breakAfter.durationMinutes * 60 * 1000;
+  const remainingMs = endsAt - nowMs;
+  return {
+    sectionName: cur.name,
+    nextSectionName: next.name,
+    secondsRemaining: Math.max(0, Math.ceil(remainingMs / 1000)),
+    expired: remainingMs <= 0,
+    mandatory: cur.breakAfter.mandatory,
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════

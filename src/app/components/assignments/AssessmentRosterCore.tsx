@@ -31,6 +31,7 @@ import {
   freezeAttempt,
   unfreezeAttempt,
   softDeleteAttempt,
+  getBreakState,
   type Attempt,
   type AttemptAnswer,
 } from '../../../lib/submissionService';
@@ -1480,7 +1481,7 @@ function AttemptDrawer({
 function RosterTableRow({
   row, onSelect, onRequestFreeze, onRequestUnfreeze, freezeLoadingId,
   onRequestBlock, onRequestUnblock, blockLoadingId,
-  attemptOverrides,
+  attemptOverrides, sections, nowMs,
 }: {
   row: RosterRow;
   onSelect: () => void;
@@ -1491,9 +1492,12 @@ function RosterTableRow({
   onRequestUnblock: (studentId: string, studentName: string) => void;
   blockLoadingId: string | null;
   attemptOverrides?: Record<string, number>;
+  sections: AssessmentSection[];
+  nowMs: number;
 }) {
   const { student, attempt, rosterStatus, isBlocked } = row;
   const isLive    = rosterStatus === 'in_progress';
+  const breakInfo = attempt && isLive ? getBreakState(attempt, sections, nowMs) : null;
   const isFrozen  = rosterStatus === 'frozen';
   const isDone    = rosterStatus === 'submitted' || rosterStatus === 'auto_submitted' || rosterStatus === 'terminated';
   const freezeLoading = freezeLoadingId === (attempt?.id ?? '');
@@ -1514,10 +1518,29 @@ function RosterTableRow({
         <p className="text-xs mt-0.5" style={{ color: '#C4C3BD' }}>{student.email}</p>
       </div>
 
-      <div style={{ width: 130, flexShrink: 0 }}><StatusChip status={rosterStatus} /></div>
+      <div style={{ width: 130, flexShrink: 0 }}>
+        {breakInfo ? (
+          <div className="flex items-center gap-1.5 px-2 py-0.5"
+            style={{ background: '#FEF9EC', border: '1px dashed #F5DFA0', borderRadius: 2 }}>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#D4A017' }} />
+            <span className="text-xs" style={{ color: '#92680A', fontVariantNumeric: 'tabular-nums' }}>
+              {breakInfo.expired
+                ? 'Break ended'
+                : `On break · ${Math.floor(breakInfo.secondsRemaining / 60)}:${(breakInfo.secondsRemaining % 60).toString().padStart(2, '0')}`}
+            </span>
+          </div>
+        ) : (
+          <StatusChip status={rosterStatus} />
+        )}
+      </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        {attempt && isLive && (
+        {attempt && isLive && breakInfo && (
+          <p className="text-xs" style={{ color: '#92680A' }}>
+            After: {breakInfo.nextSectionName}
+          </p>
+        )}
+        {attempt && isLive && !breakInfo && (
           <p className="text-xs" style={{ color: '#4A4A45' }}>
             Section {attempt.currentSectionIdx + 1}/{attempt.sectionIds.length}
             {' · '}{totalAnswered(attempt)}/{totalQuestions(attempt)} answered
@@ -1681,6 +1704,14 @@ export function AssessmentRosterCore({
   const [pendingUnblock,  setPendingUnblock]  = useState<{ studentId: string; studentName: string } | null>(null);
   const [pendingDelete,   setPendingDelete]   = useState<{ attemptId: string; attemptNumber: number } | null>(null);
   const [deleteLoading,   setDeleteLoading]   = useState(false);
+
+  // Per-second tick to drive the "On break" countdown pill on roster rows.
+  // A single shared timer avoids one interval per row.
+  const [breakTick, setBreakTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setBreakTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // ── Initial load ───────────────────────────────────────────────
   useEffect(() => {
@@ -2054,6 +2085,8 @@ export function AssessmentRosterCore({
                 onRequestUnblock={handleRequestUnblock}
                 blockLoadingId={blockLoadingId}
                 attemptOverrides={assessment.attemptOverrides}
+                sections={assessment.sections ?? []}
+                nowMs={breakTick}
               />
             ))
           )}

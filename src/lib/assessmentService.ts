@@ -251,6 +251,11 @@ export type Assessment = {
   showResults: boolean;         // show results to student after submission
   allowReview: boolean;         // allow student to review answers after submission
 
+  // Section play order — 'sequential' (default) keeps the order set in the
+  // builder; 'random' shuffles per student at startAttempt; 'student_choice'
+  // (phase 2) lets the student pick the next section themselves.
+  sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
+
   // Status
   status: AssessmentStatus;
 

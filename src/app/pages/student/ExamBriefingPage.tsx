@@ -195,7 +195,8 @@ export function ExamBriefingPage() {
         // Attempt-limit gate
         const effMax =
           a.attemptOverrides?.[session.studentId] ??
-          a.maxAttempts;
+          a.maxAttempts ??
+          1;
         const finished = allAttempts.filter(
           (at) =>
             at.status === 'submitted' ||

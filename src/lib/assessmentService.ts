@@ -62,6 +62,11 @@ export type QuestionSelectionRule = {
   marksPerQuestion: number;
 };
 
+export type SectionBreak = {
+  durationMinutes: number;  // length of the break
+  mandatory: boolean;       // true = student must wait full duration; false = may skip
+};
+
 export type AssessmentSection = {
   id: string;
   name: string;            // e.g., "Section A", "Reading Comprehension"
@@ -69,6 +74,7 @@ export type AssessmentSection = {
   rules: QuestionSelectionRule[];  // spec: what to randomly draw at publish time
   questions: AssessmentQuestion[]; // resolved at publish time (status → active)
   assignedTopics?: string[];       // "subject::topic" keys pre-assigned in Step 1
+  breakAfter?: SectionBreak;       // optional break inserted before the next section
 };
 
 // ── Resolution helpers ────────────────────────────────────────────

@@ -27,6 +27,7 @@ import {
   startAttempt,
   saveAnswer,
   submitSection,
+  endBreak,
   submitAttempt,
   autoTerminate,
   logViolation,
@@ -45,6 +46,7 @@ import {
 } from '../../../lib/questionReportService';
 import { IntegrityEngine } from '../../components/exam/IntegrityEngine';
 import { FaceMonitor } from '../../components/exam/FaceMonitor';
+import { ExtensionWatchdog } from '../../components/exam/ExtensionWatchdog';
 import { SectionTimer } from '../../components/exam/SectionTimer';
 import { QuestionNavigator } from '../../components/exam/QuestionNavigator';
 import { QuestionRenderer } from '../../components/exam/QuestionRenderer';
@@ -75,7 +77,17 @@ if (typeof document !== 'undefined') {
 // TYPES
 // ══════════════════════════════════════════════════════════════════
 
-type ShellStatus = 'loading' | 'ready' | 'submitting_section' | 'submitting_exam' | 'submitted' | 'terminated' | 'error';
+type ShellStatus = 'loading' | 'ready' | 'on_break' | 'submitting_section' | 'submitting_exam' | 'submitted' | 'terminated' | 'error';
+
+type BreakState = {
+  justSubmittedSectionId: string;
+  justSubmittedSectionName: string;
+  nextSectionId: string;
+  nextSectionIdx: number;
+  nextSectionName: string;
+  endsAt: number;        // ms timestamp
+  mandatory: boolean;
+};
 
 type OverlayKind =
   | { kind: 'warning'; violationType: ViolationType; warningNumber: 1 | 2 }
@@ -86,9 +98,23 @@ type OverlayKind =
   | null;
 
 // ── Generate a unique session ID for dual-device detection ────────
+// Persisted in sessionStorage per-tab so a same-tab refresh keeps the
+// same identity (won't kick itself); a new tab/window/device gets a
+// fresh id and is correctly detected as another session.
 function generateSessionId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  const KEY = 'stratum.examSessionId';
+  try {
+    const existing = sessionStorage.getItem(KEY);
+    if (existing) return existing;
+  } catch {
+    // sessionStorage may be blocked; fall through to a fresh id
+  }
+  const fresh =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `sess_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  try { sessionStorage.setItem(KEY, fresh); } catch { /* ignore */ }
+  return fresh;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -308,6 +334,75 @@ function SubmitConfirmModal({
 }
 
 // ══════════════════════════════════════════════════════════════════
+// BREAK SCREEN
+// ══════════════════════════════════════════════════════════════════
+
+function BreakScreen({
+  state,
+  onContinue,
+}: {
+  state: BreakState;
+  onContinue: () => void;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, []);
+
+  const remainingMs = Math.max(0, state.endsAt - now);
+  const remainingSec = Math.ceil(remainingMs / 1000);
+  const mm = Math.floor(remainingSec / 60);
+  const ss = remainingSec % 60;
+  const expired = remainingMs <= 0;
+  const canContinue = expired || !state.mandatory;
+
+  // Auto-continue once a mandatory break expires
+  useEffect(() => {
+    if (expired && state.mandatory) onContinue();
+  }, [expired, state.mandatory, onContinue]);
+
+  return (
+    <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
+      <div className="flex flex-col items-center gap-4" style={{ maxWidth: 440, textAlign: 'center', padding: '0 24px' }}>
+        <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>BREAK</p>
+        <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.6 }}>
+          {state.justSubmittedSectionName} submitted. Take a moment before {state.nextSectionName} begins.
+        </p>
+        <div
+          className="flex items-center justify-center"
+          style={{
+            width: 120, height: 120, borderRadius: '50%',
+            border: '1px solid #E3E1DB', background: '#FFFFFF',
+          }}
+        >
+          <span style={{ color: '#0C0C0B', fontVariantNumeric: 'tabular-nums', fontSize: 24 }}>
+            {mm}:{ss.toString().padStart(2, '0')}
+          </span>
+        </div>
+        <p className="text-xs" style={{ color: '#9A9891' }}>
+          {state.mandatory
+            ? 'You must wait until the timer ends.'
+            : 'You may skip this break and continue immediately.'}
+        </p>
+        <button
+          onClick={onContinue}
+          disabled={!canContinue}
+          className="text-xs px-5 py-2.5 mt-2"
+          style={{
+            background: canContinue ? '#0C0C0B' : '#C8C7C2',
+            color: '#FFFFFF', borderRadius: 2,
+            cursor: canContinue ? 'pointer' : 'not-allowed',
+          }}
+        >
+          {expired ? `Continue to ${state.nextSectionName}` : (state.mandatory ? 'Please wait…' : `Skip break`)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════
 
@@ -367,6 +462,7 @@ export function ExamShell() {
   const [warningCount, setWarningCount] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [breakState, setBreakState] = useState<BreakState | null>(null);
 
   // ── Refs (stable access inside callbacks/effects) ──────────────
   const assessmentRef   = useRef<Assessment | null>(null);
@@ -385,6 +481,13 @@ export function ExamShell() {
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  // ── Enforce fullscreen on mount (covers refresh / direct URL) ──
+  useEffect(() => {
+    const inFs = !!document.fullscreenElement;
+    setIsFullscreen(inFs);
+    if (!inFs) setOverlay({ kind: 'fullscreen_required' });
   }, []);
 
   // ── LOAD: assessment + attempt + questions ─────────────────────
@@ -409,10 +512,11 @@ export function ExamShell() {
         let att = await getAttemptByStudentAndAssessment(session.studentId, assessmentId);
 
         if (!att || (att.status !== 'in_progress' && att.status !== 'frozen')) {
-          // Compute the effective max for this student (override → global → unlimited)
+          // Compute the effective max for this student (override → global → default 1)
           const effectiveMaxAttempts =
             a.attemptOverrides?.[session.studentId] ??
-            a.maxAttempts;
+            a.maxAttempts ??
+            1;
 
           att = await startAttempt({
             assessmentId: a.id,
@@ -445,9 +549,11 @@ export function ExamShell() {
           s.questions.forEach((aq) => mMap.set(aq.questionId, aq.marks));
         });
 
-        // Register this browser session (detect dual-device)
-        const { conflict } = await registerSession(att.id, localSessionId.current);
-        if (conflict) setHasConflict(true);
+        // Register this browser session. We always claim ownership here —
+        // if a prior session existed it's now displaced, and the snapshot
+        // listener on the older device will detect the mismatch and lock.
+        // Doing it this way means the takeover device proceeds normally.
+        await registerSession(att.id, localSessionId.current);
 
         // Sync initial freeze state
         if (att.frozenAt) {
@@ -462,6 +568,31 @@ export function ExamShell() {
         setMarksMap(mMap);
         setLocalAnswers({ ...att.answers });
         setCurrentSectionIdx(att.currentSectionIdx);
+
+        // Detect resume-mid-break: a section is submitted, the next one
+        // hasn't started, and the configured break window hasn't elapsed.
+        const curSec = effSections[att.currentSectionIdx];
+        const nextSec = effSections[att.currentSectionIdx + 1];
+        if (curSec && nextSec && curSec.breakAfter && curSec.breakAfter.durationMinutes > 0) {
+          const timing = att.sectionTimings[curSec.id];
+          const nextTiming = att.sectionTimings[nextSec.id];
+          if (timing?.submittedAt && !nextTiming?.startedAt) {
+            const endsAt = new Date(timing.submittedAt).getTime() + curSec.breakAfter.durationMinutes * 60 * 1000;
+            if (endsAt > Date.now()) {
+              setBreakState({
+                justSubmittedSectionId: curSec.id,
+                justSubmittedSectionName: curSec.name,
+                nextSectionId: nextSec.id,
+                nextSectionIdx: att.currentSectionIdx + 1,
+                nextSectionName: nextSec.name,
+                endsAt,
+                mandatory: curSec.breakAfter.mandatory,
+              });
+              setShellStatus('on_break');
+              return;
+            }
+          }
+        }
 
         // Init violation warning count from existing integrity log
         const log = att.integrityLog;
@@ -622,6 +753,8 @@ export function ExamShell() {
 
     const nextIdx = currentSectionIdx + 1;
     const nextSection = effectiveSections[nextIdx] ?? null;
+    const breakCfg = currentSection.breakAfter;
+    const pauseBeforeNext = !!(nextSection && breakCfg && breakCfg.durationMinutes > 0);
 
     await submitSection({
       attemptId: att.id,
@@ -629,9 +762,34 @@ export function ExamShell() {
       nextSectionId: nextSection?.id ?? null,
       nextSectionIdx: nextIdx,
       timeUsedSeconds,
+      pauseBeforeNext,
     });
 
-    if (nextSection) {
+    if (nextSection && pauseBeforeNext && breakCfg) {
+      // Enter break — next section's timer will start when student continues
+      const submittedAtMs = Date.now();
+      setBreakState({
+        justSubmittedSectionId: sectionId,
+        justSubmittedSectionName: currentSection.name,
+        nextSectionId: nextSection.id,
+        nextSectionIdx: nextIdx,
+        nextSectionName: nextSection.name,
+        endsAt: submittedAtMs + breakCfg.durationMinutes * 60 * 1000,
+        mandatory: breakCfg.mandatory,
+      });
+      setAttempt((prev) =>
+        prev
+          ? {
+              ...prev,
+              sectionTimings: {
+                ...prev.sectionTimings,
+                [sectionId]: { ...prev.sectionTimings[sectionId], submittedAt: new Date(submittedAtMs).toISOString(), timeUsedSeconds },
+              },
+            }
+          : prev
+      );
+      setShellStatus('on_break');
+    } else if (nextSection) {
       // Advance to next section
       setCurrentSectionIdx(nextIdx);
       setCurrentQIdx(0);
@@ -655,6 +813,46 @@ export function ExamShell() {
       await doFinalSubmit('manual');
     }
   }, [currentSection, currentSectionIdx, flushAnswers, effectiveSections]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // END BREAK
+  // ══════════════════════════════════════════════════════════════════
+
+  const handleEndBreak = useCallback(async () => {
+    const att = attemptRef.current;
+    const bs = breakState;
+    if (!att || !bs) return;
+    try {
+      await endBreak({
+        attemptId: att.id,
+        nextSectionId: bs.nextSectionId,
+        nextSectionIdx: bs.nextSectionIdx,
+      });
+    } catch (e) {
+      console.error('[ExamShell] endBreak failed', e);
+    }
+    const startISO = new Date().toISOString();
+    setAttempt((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentSectionIdx: bs.nextSectionIdx,
+            sectionTimings: {
+              ...prev.sectionTimings,
+              [bs.nextSectionId]: {
+                ...prev.sectionTimings[bs.nextSectionId],
+                startedAt: startISO,
+                timeUsedSeconds: 0,
+              },
+            },
+          }
+        : prev
+    );
+    setCurrentSectionIdx(bs.nextSectionIdx);
+    setCurrentQIdx(0);
+    setBreakState(null);
+    setShellStatus('ready');
+  }, [breakState]);
 
   // ══════════════════════════════════════════════════════════════════
   // FINAL SUBMIT
@@ -780,12 +978,27 @@ export function ExamShell() {
 
   const handleTerminate = useCallback(async () => {
     const att = attemptRef.current;
+    const a   = assessmentRef.current;
     if (!att) return;
     setShellStatus('terminated');
     const reason = 'Exam terminated due to repeated integrity violations.';
-    await autoTerminate(att.id, reason).catch(() => {});
+
+    // Flush pending answers and score whatever was answered so far.
+    await flushAnswers().catch(() => {});
+    let scores;
+    if (a) {
+      const allQuestions = [...questionMap.values()];
+      const updatedAttempt = { ...att, answers: { ...att.answers, ...localAnswersRef.current } };
+      try {
+        scores = calculateScores(updatedAttempt, a, allQuestions);
+      } catch (e) {
+        console.error('[ExamShell] calculateScores on terminate failed', e);
+      }
+    }
+
+    await autoTerminate(att.id, reason, scores).catch(() => {});
     setOverlay({ kind: 'terminated', reason });
-  }, []);
+  }, [flushAnswers, questionMap]);
 
   const handleExitTerminatedView = useCallback(() => {
     navigate(`/student/exam/${assessmentId}/results`, { replace: true });
@@ -838,6 +1051,10 @@ export function ExamShell() {
     );
   }
 
+  if (shellStatus === 'on_break' && breakState) {
+    return <BreakScreen state={breakState} onContinue={handleEndBreak} />;
+  }
+
   if (!assessment || !attempt || !currentSection) return null;
 
   const sectionStartedAt = attempt.sectionTimings[currentSection.id]?.startedAt ?? new Date().toISOString();
@@ -857,6 +1074,10 @@ export function ExamShell() {
         active={isIntegrityActive}
         onViolation={handleViolation}
         onFullscreenChange={handleFullscreenChange}
+      />
+      <ExtensionWatchdog
+        active={isIntegrityActive}
+        onViolation={(type, detail) => handleViolation(type, detail)}
       />
 
       {/* ── TOP BAR ── */}

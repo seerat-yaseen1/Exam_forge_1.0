@@ -50,6 +50,8 @@ type SectionDraft = {
   timeLimit: string;
   rules: RuleDraft[];
   assignedTopics: string[]; // "subject::topic" keys pre-assigned in Step 1
+  breakAfterMinutes: string;  // empty = no break
+  breakMandatory: boolean;
 };
 
 function makeSectionId() {
@@ -396,6 +398,15 @@ function PreviewModal({ assessment, onClose }: { assessment: Assessment; onClose
                       </div>
                       <div className="flex items-center gap-3 text-xs" style={{ color: '#9A9891' }}>
                         {sec.timeLimit && <span className="flex items-center gap-1"><Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min</span>}
+                        {sec.breakAfter && sec.breakAfter.durationMinutes > 0 && (
+                          <span
+                            className="flex items-center gap-1 px-1.5"
+                            title={sec.breakAfter.mandatory ? 'Mandatory break' : 'Skippable break'}
+                            style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2, color: '#9A9891', padding: '1px 6px' }}
+                          >
+                            Break: {sec.breakAfter.durationMinutes} min
+                          </span>
+                        )}
                         <span>{sec.questions.length} Q · {secMarks} mk</span>
                       </div>
                     </div>
@@ -1963,7 +1974,7 @@ function SetupStep({
   const addSection = () => {
     setSections((prev) => [
       ...prev,
-      { id: makeSectionId(), name: defaultSectionName(prev.length), timeLimit: '', rules: [], assignedTopics: [] },
+      { id: makeSectionId(), name: defaultSectionName(prev.length), timeLimit: '', rules: [], assignedTopics: [], breakAfterMinutes: '', breakMandatory: false },
     ]);
   };
 
@@ -2270,6 +2281,63 @@ function SetupStep({
                               <X size={12} strokeWidth={1.5} />
                             </button>
                           </div>
+
+                          {/* Break-after-section row (hidden on last section) */}
+                          {idx < sections.length - 1 && (
+                            <div
+                              className="flex items-center"
+                              style={{
+                                gap: 8,
+                                padding: '6px 10px 8px 44px',
+                                background: '#FFFFFF',
+                                borderTop: '1px dashed #F0EFEB',
+                              }}
+                            >
+                              <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>
+                                Break after
+                              </span>
+                              <input
+                                type="number"
+                                value={sec.breakAfterMinutes}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (v !== '' && (parseInt(v, 10) || 0) < 1) return;
+                                  setSections((prev) => prev.map((s, i) => (i === idx ? { ...s, breakAfterMinutes: v } : s)));
+                                }}
+                                placeholder="—"
+                                min="1"
+                                className="flex-shrink-0 outline-none text-center text-xs"
+                                style={{ width: 52, padding: '5px 6px', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B', MozAppearance: 'textfield' } as React.CSSProperties}
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                onKeyDown={(e) => { if (['-', 'e', '+', '.'].includes(e.key)) e.preventDefault(); }}
+                              />
+                              <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>min</span>
+                              <label
+                                className="flex items-center gap-1.5 text-xs ml-2"
+                                style={{
+                                  color: sec.breakAfterMinutes ? '#4A4A45' : '#C4C3BD',
+                                  cursor: sec.breakAfterMinutes ? 'pointer' : 'not-allowed',
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={sec.breakMandatory}
+                                  disabled={!sec.breakAfterMinutes}
+                                  onChange={(e) =>
+                                    setSections((prev) => prev.map((s, i) => (i === idx ? { ...s, breakMandatory: e.target.checked } : s)))
+                                  }
+                                />
+                                Mandatory wait
+                              </label>
+                              <span className="text-xs ml-auto" style={{ color: '#C4C3BD' }}>
+                                {sec.breakAfterMinutes
+                                  ? sec.breakMandatory
+                                    ? 'Student must wait the full duration'
+                                    : 'Student may skip and continue'
+                                  : 'No break — next section starts immediately'}
+                              </span>
+                            </div>
+                          )}
 
                           {/* Assigned topic tags (collapsed view) */}
                           {hasAssigned && !isPickerOpen && (
@@ -2945,7 +3013,7 @@ function DetailsStep({
   const [startDate, setStartDate] = useState(toDateTimeLocal(assessment?.startDate));
   const [endDate, setEndDate] = useState(toDateTimeLocal(assessment?.endDate));
   const [passingScore, setPassingScore] = useState(assessment?.passingScore?.toString() ?? '');
-  const [maxAttempts, setMaxAttempts] = useState(assessment?.maxAttempts?.toString() ?? '');
+  const [maxAttempts, setMaxAttempts] = useState(assessment?.maxAttempts?.toString() ?? '1');
   const [shuffleQuestions, setShuffleQuestions] = useState(assessment?.shuffleQuestions ?? false);
   const [showResults, setShowResults] = useState(assessment?.showResults ?? true);
   const [allowReview, setAllowReview] = useState(assessment?.allowReview ?? true);
@@ -2957,22 +3025,30 @@ function DetailsStep({
   const lockReason = originalStatus === 'active' ? 'test is live' : 'test is closed';
 
   const buildSections = (sectionDrafts: SectionDraft[]): AssessmentSection[] =>
-    sectionDrafts.map((sec) => ({
-      id: sec.id,
-      name: sec.name,
-      timeLimit: sec.timeLimit ? parseInt(sec.timeLimit, 10) : undefined,
-      assignedTopics: sec.assignedTopics,
-      rules: sec.rules
-        .filter((r) => (parseInt(r.count, 10) || 0) > 0)
-        .map((r) => ({
-          subject: r.subject,
-          topic: r.topic,
-          difficulty: r.difficulty,
-          count: parseInt(r.count, 10),
-          marksPerQuestion: parseFloat(r.marksPerQuestion) || 1,
-        })),
-      questions: [],
-    }));
+    sectionDrafts.map((sec, idx) => {
+      const breakMins = parseInt(sec.breakAfterMinutes, 10);
+      const out: AssessmentSection = {
+        id: sec.id,
+        name: sec.name,
+        assignedTopics: sec.assignedTopics,
+        rules: sec.rules
+          .filter((r) => (parseInt(r.count, 10) || 0) > 0)
+          .map((r) => ({
+            subject: r.subject,
+            topic: r.topic,
+            difficulty: r.difficulty,
+            count: parseInt(r.count, 10),
+            marksPerQuestion: parseFloat(r.marksPerQuestion) || 1,
+          })),
+        questions: [],
+      };
+      const tl = parseInt(sec.timeLimit, 10);
+      if (tl > 0) out.timeLimit = tl;
+      if (idx < sectionDrafts.length - 1 && breakMins > 0) {
+        out.breakAfter = { durationMinutes: breakMins, mandatory: sec.breakMandatory };
+      }
+      return out;
+    });
 
   const handleSave = async () => {
     setValidationErrors([]);
@@ -2989,8 +3065,10 @@ function DetailsStep({
     if (startDate && endDate) {
       const windowMins = Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / 60000);
       const totalSectionTime = sections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
-      if (totalSectionTime > 0 && windowMins < totalSectionTime + 1) {
-        setValidationErrors([`The scheduled window (${windowMins}m) must be at least ${totalSectionTime + 1}m — 1 minute longer than the total section time (${totalSectionTime}m).`]);
+      const totalBreakTime = sections.slice(0, -1).reduce((sum, s) => sum + (parseInt(s.breakAfterMinutes, 10) || 0), 0);
+      const required = totalSectionTime + totalBreakTime;
+      if (required > 0 && windowMins < required + 1) {
+        setValidationErrors([`The scheduled window (${windowMins}m) must be at least ${required + 1}m — 1 minute longer than the total section time (${totalSectionTime}m) plus breaks (${totalBreakTime}m).`]);
         return;
       }
     }
@@ -3143,18 +3221,36 @@ function DetailsStep({
               )}
 
               {/* Section time limits */}
-              {sections.some((s) => s.timeLimit) && (
+              {(sections.some((s) => s.timeLimit) || sections.slice(0, -1).some((s) => parseInt(s.breakAfterMinutes, 10) > 0)) && (
                 <div className="space-y-1">
                   <p style={{ color: '#C4C3BD', letterSpacing: '0.08em', fontSize: 10 }}>SECTION LIMITS</p>
-                  {sections.filter(s => s.timeLimit).map((sec) => (
-                    <div key={sec.id} className="flex items-center justify-between px-3 py-1.5"
-                      style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                      <span className="text-xs" style={{ color: '#6B6B66' }}>{sec.name}</span>
-                      <span className="text-xs flex items-center gap-1" style={{ color: '#9A9891' }}>
-                        <Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min
-                      </span>
-                    </div>
-                  ))}
+                  {sections.map((sec, sIdx) => {
+                    const showSection = !!sec.timeLimit;
+                    const breakMins = sIdx < sections.length - 1 ? parseInt(sec.breakAfterMinutes, 10) || 0 : 0;
+                    if (!showSection && !breakMins) return null;
+                    return (
+                      <div key={sec.id} className="space-y-1">
+                        {showSection && (
+                          <div className="flex items-center justify-between px-3 py-1.5"
+                            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                            <span className="text-xs" style={{ color: '#6B6B66' }}>{sec.name}</span>
+                            <span className="text-xs flex items-center gap-1" style={{ color: '#9A9891' }}>
+                              <Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min
+                            </span>
+                          </div>
+                        )}
+                        {breakMins > 0 && (
+                          <div className="flex items-center justify-between px-3 py-1"
+                            style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2 }}>
+                            <span className="text-xs" style={{ color: '#9A9891' }}>
+                              Break {sec.breakMandatory ? '(mandatory)' : '(skippable)'}
+                            </span>
+                            <span className="text-xs" style={{ color: '#9A9891' }}>{breakMins} min</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -3173,7 +3269,7 @@ function DetailsStep({
                 </div>
               </Field>
 
-              <Field label="Max Attempts" hint="(per student, blank = unlimited)">
+              <Field label="Max Attempts" hint="(per student, default 1)">
                 <div className="flex items-center gap-2 px-3 py-2"
                   style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
                   <ClipboardList size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
@@ -3292,6 +3388,8 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
           count: r.count.toString(),
           marksPerQuestion: r.marksPerQuestion.toString(),
         })),
+        breakAfterMinutes: sec.breakAfter?.durationMinutes?.toString() ?? '',
+        breakMandatory: sec.breakAfter?.mandatory ?? false,
       }));
     }
     return [{
@@ -3300,6 +3398,8 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
       timeLimit: '',
       rules: [],
       assignedTopics: [],
+      breakAfterMinutes: '',
+      breakMandatory: false,
     }];
   });
 

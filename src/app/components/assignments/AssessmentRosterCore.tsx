@@ -926,7 +926,7 @@ function AttemptsPanel({
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
   // Derive limits
-  const globalMax  = assessment.maxAttempts;
+  const globalMax  = assessment.maxAttempts ?? 1;
   const override   = assessment.attemptOverrides?.[studentId];
   const effectiveMax = override ?? globalMax;
 

@@ -53,7 +53,8 @@ export type ViolationType =
   | 'face_absent'      // 0 faces detected for > threshold
   | 'devtools_open'    // devtools width heuristic
   | 'reload_attempt'   // F5 / Ctrl+R
-  | 'keyboard_block';  // blocked key combination
+  | 'keyboard_block'   // blocked key combination
+  | 'extension_detected'; // browser extension UI detected in DOM
 
 export type ViolationEvent = {
   type: ViolationType;
@@ -130,6 +131,7 @@ export type IntegrityLog = {
   faceAbsenceEvents: number;
   devtoolsEvents: number;
   keyboardBlockEvents: number;
+  extensionEvents: number;
 
   // Total violation count driving the warning system
   totalViolations: number;
@@ -210,6 +212,7 @@ const VIOLATION_COUNTER: Record<ViolationType, keyof IntegrityLog> = {
   devtools_open:   'devtoolsEvents',
   reload_attempt:  'tabSwitches',
   keyboard_block:  'keyboardBlockEvents',
+  extension_detected: 'extensionEvents',
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -320,6 +323,7 @@ export async function startAttempt(params: {
       faceAbsenceEvents: 0,
       devtoolsEvents: 0,
       keyboardBlockEvents: 0,
+      extensionEvents: 0,
       totalViolations: 0,
       violations: [],
       autoTerminated: false,
@@ -359,8 +363,10 @@ export async function submitSection(params: {
   nextSectionId: string | null; // null if this was the last section
   nextSectionIdx: number;       // new currentSectionIdx (ignored if no next section)
   timeUsedSeconds: number;
+  pauseBeforeNext?: boolean;    // if true, do not advance / start next-section timer
+                                // (used when a break is configured before next section)
 }): Promise<void> {
-  const { attemptId, sectionId, nextSectionId, nextSectionIdx, timeUsedSeconds } = params;
+  const { attemptId, sectionId, nextSectionId, nextSectionIdx, timeUsedSeconds, pauseBeforeNext } = params;
 
   const updates: Record<string, any> = {
     [`sectionTimings.${sectionId}.submittedAt`]: now(),
@@ -368,12 +374,29 @@ export async function submitSection(params: {
     updatedAt: now(),
   };
 
-  if (nextSectionId) {
+  if (nextSectionId && !pauseBeforeNext) {
     updates.currentSectionIdx = nextSectionIdx;
     updates[`sectionTimings.${nextSectionId}.startedAt`] = now();
   }
 
   await updateDoc(doc(db, 'attempts', attemptId), updates);
+}
+
+// ── End break and start next section ──────────────────────────────
+// Called when a configured break elapses (or the student skips a
+// non-mandatory break). Advances currentSectionIdx and starts the
+// next section's timer.
+
+export async function endBreak(params: {
+  attemptId: string;
+  nextSectionId: string;
+  nextSectionIdx: number;
+}): Promise<void> {
+  await updateDoc(doc(db, 'attempts', params.attemptId), {
+    currentSectionIdx: params.nextSectionIdx,
+    [`sectionTimings.${params.nextSectionId}.startedAt`]: now(),
+    updatedAt: now(),
+  });
 }
 
 // ── Submit attempt (final) ────────────────────────────────────────
@@ -416,15 +439,18 @@ export async function submitAttempt(params: {
 
 export async function autoTerminate(
   attemptId: string,
-  reason: string
+  reason: string,
+  scores?: AttemptScores,
 ): Promise<void> {
-  await updateDoc(doc(db, 'attempts', attemptId), {
+  const updates: Record<string, any> = {
     status: 'terminated' as AttemptStatus,
     submittedAt: now(),
     'integrityLog.autoTerminated': true,
     'integrityLog.terminatedReason': reason,
     updatedAt: now(),
-  });
+  };
+  if (scores) updates.scores = scores;
+  await updateDoc(doc(db, 'attempts', attemptId), updates);
 }
 
 // ── Log violation ─────────────────────────────────────────────────

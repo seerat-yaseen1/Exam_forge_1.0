@@ -106,7 +106,7 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
         // Find institute by admin email
         const institute = await getInstituteByEmail(emailNorm);
         if (!institute) {
-          return { success: false, error: 'Account not found. Verify your email address.' };
+          return { success: false, error: 'Incorrect email or password.' };
         }
 
         // Check if institute is active

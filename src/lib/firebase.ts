@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 // Firebase configuration
 // Replace these with your actual Firebase project credentials from Firebase Console
@@ -15,6 +16,26 @@ const firebaseConfig = {
 
 // Initialize Firebase (only if not already initialized)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+// ── Firebase App Check ────────────────────────────────────────────
+// Blocks Firestore/Storage calls from anything other than your real web app.
+// To enable:
+//   1. Firebase console → App Check → Register web app with reCAPTCHA v3
+//   2. Paste the site key into RECAPTCHA_V3_SITE_KEY below
+//   3. (Dev only) set window.FIREBASE_APPCHECK_DEBUG_TOKEN = true before this
+//      file loads, then copy the printed debug token into the console allowlist.
+const RECAPTCHA_V3_SITE_KEY = ''; // ← paste your site key here
+
+if (typeof window !== 'undefined' && RECAPTCHA_V3_SITE_KEY) {
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (err) {
+    console.warn('[firebase] App Check init failed:', err);
+  }
+}
 
 // Initialize Firestore
 export const db = getFirestore(app);

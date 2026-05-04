@@ -3092,14 +3092,32 @@ function DetailsStep({
       return out;
     });
 
-  const handleSave = async (overrideStatus?: AssessmentStatus) => {
+  const [pendingPublish, setPendingPublish] = useState<{ warnings: string[] } | null>(null);
+
+  const handleSave = async (overrideStatus?: AssessmentStatus, bypassSoftWarnings = false) => {
     setValidationErrors([]);
     const targetStatus: AssessmentStatus = overrideStatus ?? status;
 
-    // Publishing requires both scheduledStart and scheduledEnd to be set.
-    if (targetStatus === 'active' && (!startDate || !endDate)) {
-      setValidationErrors(['Publishing requires both a start date and an end date — set them in the Schedule panel above, or use Save as Draft.']);
-      return;
+    // ── HARD checks (apply to publish only; drafts skip all time checks) ──
+    if (targetStatus === 'active') {
+      const errors: string[] = [];
+      const now = Date.now();
+      const startMs = startDate ? new Date(fromDateTimeLocal(startDate)).getTime() : null;
+      const endMs = endDate ? new Date(fromDateTimeLocal(endDate)).getTime() : null;
+
+      if (startMs !== null && startMs < now) {
+        errors.push('Start time is in the past — choose "Start immediately" or pick a future time.');
+      }
+      if (endMs !== null && endMs <= now) {
+        errors.push('End time must be in the future.');
+      }
+      if (startMs !== null && endMs !== null && endMs <= startMs) {
+        errors.push('End time must be after the start time.');
+      }
+      if (errors.length > 0) {
+        setValidationErrors(errors);
+        return;
+      }
     }
 
     if (mut.endDate === 'extend-only' && assessment?.endDate && endDate) {
@@ -3111,26 +3129,56 @@ function DetailsStep({
       }
     }
 
-    if (startDate && endDate) {
-      const windowMins = Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / 60000);
-      const totalSectionTime = sections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
-      const totalBreakTime = sections.slice(0, -1).reduce((sum, s) => sum + (parseInt(s.breakAfterMinutes, 10) || 0), 0);
-      const required = totalSectionTime + totalBreakTime;
-      if (required > 0 && windowMins < required + 1) {
-        setValidationErrors([`The scheduled window (${windowMins}m) must be at least ${required + 1}m — 1 minute longer than the total section time (${totalSectionTime}m) plus breaks (${totalBreakTime}m).`]);
+    const builtSections = buildSections(sections);
+
+    // ── HARD section/rule checks (publish only) — must run BEFORE soft warnings ──
+    if (targetStatus === 'active') {
+      const errors: string[] = [];
+
+      // Each section must request at least 1 question.
+      sections.forEach((s) => {
+        const total = s.rules.reduce((sum, r) => sum + (parseInt(r.count, 10) || 0), 0);
+        if (total < 1) {
+          errors.push(`${s.name || 'Untitled section'} must have at least 1 question.`);
+        }
+      });
+
+      const { valid, results } = validateSelectionRules(builtSections, allQuestions);
+      if (!valid) {
+        results
+          .filter((r) => !r.ok)
+          .forEach((r) => errors.push(`${r.sectionName}: ${r.subject} › ${r.topic} (${r.difficulty}) — requested ${r.requested}, only ${r.available} available`));
+      }
+
+      if (errors.length > 0) {
+        setValidationErrors(errors);
         return;
       }
     }
 
-    const builtSections = buildSections(sections);
-
-    if (targetStatus === 'active') {
-      const { valid, results } = validateSelectionRules(builtSections, allQuestions);
-      if (!valid) {
-        const errors = results
-          .filter((r) => !r.ok)
-          .map((r) => `${r.sectionName}: ${r.subject} › ${r.topic} (${r.difficulty}) — requested ${r.requested}, only ${r.available} available`);
-        setValidationErrors(errors);
+    // ── SOFT warnings (publish only, can be bypassed) — run LAST so hard errors surface first ──
+    if (targetStatus === 'active' && !bypassSoftWarnings) {
+      const warnings: string[] = [];
+      if (!startDate) {
+        warnings.push('You\'re publishing with "Start immediately" — students will be able to begin as soon as the assessment is saved.');
+      }
+      if (!endDate) {
+        warnings.push('You\'re publishing with "No deadline" — the assessment will stay open until you close it manually.');
+      }
+      // Window-vs-required time warning. Use now as the start when "immediate".
+      const startMs = startDate ? new Date(fromDateTimeLocal(startDate)).getTime() : Date.now();
+      const endMs = endDate ? new Date(fromDateTimeLocal(endDate)).getTime() : null;
+      if (endMs !== null) {
+        const windowMins = Math.floor((endMs - startMs) / 60000);
+        const totalSectionTime = sections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
+        const totalBreakTime = sections.slice(0, -1).reduce((sum, s) => sum + (parseInt(s.breakAfterMinutes, 10) || 0), 0);
+        const required = totalSectionTime + totalBreakTime;
+        if (required > 0 && windowMins < required + 1) {
+          warnings.push(`The scheduled window (${windowMins}m) is shorter than the total section time + breaks (${required}m). Some students may run out of clock time.`);
+        }
+      }
+      if (warnings.length > 0) {
+        setPendingPublish({ warnings });
         return;
       }
     }
@@ -3200,20 +3248,6 @@ function DetailsStep({
             <span style={{ color: '#DDDBD5', fontSize: 10 }}>·</span>
             <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 2 OF 2 — RULES &amp; SETTINGS</p>
           </div>
-
-          {/* Validation errors */}
-          {validationErrors.length > 0 && (
-            <div className="mb-4 px-4 py-3 space-y-1.5"
-              style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-              <div className="flex items-center gap-2 mb-1">
-                <AlertCircle size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-                <span className="text-xs" style={{ color: '#9B2828' }}>Fix the following before saving:</span>
-              </div>
-              {validationErrors.map((err, i) => (
-                <p key={i} className="text-xs" style={{ color: '#9B2828', paddingLeft: 20, lineHeight: 1.5 }}>· {err}</p>
-              ))}
-            </div>
-          )}
 
           {/* Two-column layout: left stacks Schedule/Grading/Section Limits, right holds Settings.
               Collapses to a single column on screens under ~860px. */}
@@ -3478,6 +3512,84 @@ function DetailsStep({
           );
         })()}
       </div>
+
+      {/* Validation-error modal (hard-block) */}
+      {validationErrors.length > 0 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-6"
+          style={{ background: 'rgba(12,12,11,0.45)' }}
+          onClick={() => setValidationErrors([])}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, maxWidth: 520, width: '100%' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+              <div className="flex items-center gap-2">
+                <AlertCircle size={14} strokeWidth={1.5} style={{ color: '#9B2828' }} />
+                <span className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Fix the following before saving
+                </span>
+              </div>
+            </div>
+            <ul className="px-6 py-4 space-y-2.5">
+              {validationErrors.map((err, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#0C0C0B', lineHeight: 1.55 }}>
+                  <span style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }}>•</span>
+                  <span>{err}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center justify-end gap-2 px-6 py-4"
+              style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+              <button onClick={() => setValidationErrors([])}
+                className="text-xs px-4 py-2 transition-opacity hover:opacity-80"
+                style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}>
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Soft-warning confirmation modal (publish only) */}
+      {pendingPublish && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-6"
+          style={{ background: 'rgba(12,12,11,0.45)' }}
+          onClick={() => setPendingPublish(null)}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, maxWidth: 520, width: '100%' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={14} strokeWidth={1.5} style={{ color: '#B5651D' }} />
+                <span className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Confirm publish
+                </span>
+              </div>
+              <p className="text-xs mt-2" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+                Before publishing, please review the following:
+              </p>
+            </div>
+            <ul className="px-6 py-4 space-y-2.5">
+              {pendingPublish.warnings.map((w, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#0C0C0B', lineHeight: 1.55 }}>
+                  <span style={{ color: '#B5651D', flexShrink: 0, marginTop: 1 }}>•</span>
+                  <span>{w}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center justify-end gap-2 px-6 py-4"
+              style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+              <button onClick={() => setPendingPublish(null)}
+                className="text-xs px-4 py-2 transition-opacity hover:opacity-80"
+                style={{ background: '#FFFFFF', color: '#0C0C0B', border: '1px solid #C8C7C2', borderRadius: 2, cursor: 'pointer' }}>
+                Go back
+              </button>
+              <button onClick={() => { setPendingPublish(null); handleSave('active', true); }} disabled={saving}
+                className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-80"
+                style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                {saving ? <><Loader2 size={11} className="animate-spin" /> Publishing…</> : <><CheckCircle2 size={11} /> Publish anyway</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

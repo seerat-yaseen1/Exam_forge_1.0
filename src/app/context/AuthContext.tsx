@@ -42,10 +42,10 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 async function loadProfile(fbUser: FirebaseUser): Promise<AuthUser | null> {
-  const snap = await getDoc(doc(db, 'webOwners', fbUser.uid));
+  const snap = await getDoc(doc(db, 'webowners', fbUser.uid));
   if (!snap.exists()) {
     // Legacy account keyed by email — try email lookup as a fallback during migration.
-    const emailSnap = fbUser.email ? await getDoc(doc(db, 'webOwners', fbUser.email.toLowerCase())) : null;
+    const emailSnap = fbUser.email ? await getDoc(doc(db, 'webowners', fbUser.email.toLowerCase())) : null;
     if (!emailSnap?.exists()) return null;
     const data = emailSnap.data() as { name?: string };
     return { uid: fbUser.uid, email: fbUser.email || '', name: data.name || '' };

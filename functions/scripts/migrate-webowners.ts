@@ -33,7 +33,7 @@ interface LegacyWebOwner {
 }
 
 async function migrate() {
-  const snap = await db.collection('webOwners').get();
+  const snap = await db.collection('webowners').get();
   console.log(`Found ${snap.size} webOwner docs.`);
 
   let created = 0;
@@ -77,7 +77,7 @@ async function migrate() {
 
       // password / resetCode / resetExpiry are stripped from the new doc
       const { password: _p, resetCode: _rc, resetExpiry: _re, ...profile } = data;
-      await db.collection('webOwners').doc(uid).set(
+      await db.collection('webowners').doc(uid).set(
         {
           ...profile,
           email,

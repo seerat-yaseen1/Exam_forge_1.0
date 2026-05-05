@@ -23,7 +23,7 @@ initializeApp();
 type Role = 'webOwner' | 'institute' | 'faculty' | 'student';
 
 const COLLECTION_BY_ROLE: Record<Role, string> = {
-  webOwner: 'webOwners',
+  webOwner: 'webowners',
   institute: 'institutes',
   faculty: 'faculty',
   student: 'students',

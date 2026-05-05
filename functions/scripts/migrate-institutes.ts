@@ -43,7 +43,7 @@ async function migrate() {
   let failed = 0;
 
   for (const docSnap of instSnap.docs) {
-    const inst = { id: docSnap.id, ...(docSnap.data() as Institute) };
+    const inst: Institute = { ...(docSnap.data() as Institute), id: docSnap.id };
     const email = (inst.adminEmail || '').toLowerCase().trim();
 
     if (!email) {

@@ -59,7 +59,7 @@ async function buildSessionFromAuthUser(
   fbUser: FirebaseUser,
   expectedInstituteCode?: string
 ): Promise<BuildResult> {
-  const tokenResult = await fbUser.getIdTokenResult();
+  const tokenResult = await fbUser.getIdTokenResult(true);
   const role = tokenResult.claims.role as string | undefined;
   const instituteId = tokenResult.claims.instituteId as string | undefined;
   const facultyId = tokenResult.claims.facultyId as string | undefined;

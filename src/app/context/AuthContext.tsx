@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Confirm this signed-in user is actually a Web Owner. Firebase Auth
         // is shared across roles once Phases 3-5 land, so the role custom
         // claim is the source of truth.
-        const tokenResult = await fbUser.getIdTokenResult();
+        const tokenResult = await fbUser.getIdTokenResult(true);
         if (tokenResult.claims.role && tokenResult.claims.role !== 'webOwner') {
           setUser(null);
           setLoading(false);
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const emailNorm = email.toLowerCase().trim();
         const cred = await signInWithEmailAndPassword(auth, emailNorm, password);
-        const tokenResult = await cred.user.getIdTokenResult();
+        const tokenResult = await cred.user.getIdTokenResult(true);
         if (tokenResult.claims.role && tokenResult.claims.role !== 'webOwner') {
           await signOut(auth);
           return { success: false, error: 'This account is not a Web Owner account.' };

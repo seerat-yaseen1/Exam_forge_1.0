@@ -60,7 +60,9 @@ const InstituteAuthContext = createContext<InstituteAuthContextType | null>(null
 async function buildSessionFromAuthUser(
   fbUser: FirebaseUser
 ): Promise<{ session: InstituteSession | null; firstLoginRequired: boolean; reason?: string }> {
-  const tokenResult = await fbUser.getIdTokenResult();
+  // forceRefresh: pull the latest custom claims rather than the cached ones —
+  // necessary for accounts whose claims were set just moments before sign-in.
+  const tokenResult = await fbUser.getIdTokenResult(true);
   const role = tokenResult.claims.role as string | undefined;
   const instituteId = tokenResult.claims.instituteId as string | undefined;
 

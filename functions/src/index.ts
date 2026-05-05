@@ -1,16 +1,23 @@
 /**
  * STRATUM Cloud Functions
  *
- * Phase 1 scope:
- *   - createAuthUser: admin-only callable that provisions a Firebase Auth user
- *     and writes the matching profile document into the role's Firestore
- *     collection. Used by Web Owners (and later, Institute Admins / Faculty)
- *     to create accounts without exposing the Admin SDK to the browser.
+ * createAuthUser — admin-only callable that provisions a Firebase Auth user
+ * and writes the matching profile document into the role's Firestore
+ * collection.
  *
- * Caller authorisation (Phase 1):
- *   - Only Web Owners may call this endpoint (auth.token.role === 'webOwner').
- *   - Once Phase 3 lands, Institute Admins will be allowed to create faculty
- *     and students within their own institute — gated by custom claims.
+ * Caller authorisation:
+ *   • Web Owner   → can create any role.
+ *   • Institute   → can create faculty or student in own institute only.
+ *   • Faculty     → can create student in own institute only.
+ *   • Student     → cannot call this endpoint.
+ *
+ * Custom claims set on the new user:
+ *   webOwner  → { role }
+ *   institute → { role, instituteId: uid }
+ *   faculty   → { role, instituteId, facultyId: uid }
+ *   student   → { role, instituteId, studentId: uid }
+ *
+ * The doc id of the new profile document equals the Firebase Auth uid.
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -33,24 +40,57 @@ interface CreateAuthUserData {
   role: Role;
   password: string;
   profile: Record<string, unknown> & { email: string; name: string };
+  // Required when role === 'faculty' | 'student'.
+  // For role === 'institute' the new institute's id IS the uid; ignored.
+  // For role === 'webOwner'  ignored.
+  instituteId?: string;
+}
+
+function authorizeCaller(
+  callerRole: Role | undefined,
+  callerInstituteId: string | undefined,
+  targetRole: Role,
+  targetInstituteId: string | undefined
+): void {
+  if (callerRole === 'webOwner') return;
+
+  if (callerRole === 'institute') {
+    if (targetRole !== 'faculty' && targetRole !== 'student') {
+      throw new HttpsError('permission-denied', 'Institute admins may only create faculty or students.');
+    }
+    if (!callerInstituteId || callerInstituteId !== targetInstituteId) {
+      throw new HttpsError('permission-denied', 'instituteId must match caller.');
+    }
+    return;
+  }
+
+  if (callerRole === 'faculty') {
+    if (targetRole !== 'student') {
+      throw new HttpsError('permission-denied', 'Faculty may only create students.');
+    }
+    if (!callerInstituteId || callerInstituteId !== targetInstituteId) {
+      throw new HttpsError('permission-denied', 'instituteId must match caller.');
+    }
+    return;
+  }
+
+  throw new HttpsError('permission-denied', 'Insufficient permissions.');
 }
 
 export const createAuthUser = onCall<CreateAuthUserData>(
   { region: 'us-central1' },
   async (request) => {
-    // ── 1. AuthN: caller must be signed in
+    // ── 1. AuthN
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign-in required.');
     }
+    const callerRole         = request.auth.token.role         as Role   | undefined;
+    const callerInstituteId  = request.auth.token.instituteId  as string | undefined;
 
-    // ── 2. AuthZ: caller must be a web owner (Phase 1)
-    const callerRole = request.auth.token.role as Role | undefined;
-    if (callerRole !== 'webOwner') {
-      throw new HttpsError('permission-denied', 'Only Web Owners may create accounts.');
-    }
+    // ── 2. Validate input
+    const { role, password, profile, instituteId: providedInstituteId } =
+      request.data || ({} as CreateAuthUserData);
 
-    // ── 3. Validate input
-    const { role, password, profile } = request.data || ({} as CreateAuthUserData);
     if (!role || !COLLECTION_BY_ROLE[role]) {
       throw new HttpsError('invalid-argument', 'Invalid role.');
     }
@@ -60,6 +100,21 @@ export const createAuthUser = onCall<CreateAuthUserData>(
     if (!profile?.email || !profile?.name) {
       throw new HttpsError('invalid-argument', 'Profile must include email and name.');
     }
+
+    // For faculty / student, instituteId must be supplied explicitly.
+    if ((role === 'faculty' || role === 'student') && !providedInstituteId) {
+      throw new HttpsError('invalid-argument', 'instituteId is required for faculty / student creation.');
+    }
+
+    // ── 3. AuthZ
+    const targetInstituteId =
+      role === 'institute'
+        ? undefined // resolved to uid after creation
+        : role === 'webOwner'
+          ? undefined
+          : providedInstituteId;
+
+    authorizeCaller(callerRole, callerInstituteId, role, targetInstituteId);
 
     const email = String(profile.email).toLowerCase().trim();
 
@@ -83,20 +138,41 @@ export const createAuthUser = onCall<CreateAuthUserData>(
       throw new HttpsError('internal', 'Failed to create auth user.', code);
     }
 
-    // ── 5. Set custom claim so security rules + this function can authorise by role
-    await auth.setCustomUserClaims(uid, { role });
+    // ── 5. Set custom claims
+    const claims: Record<string, unknown> = { role };
+    if (role === 'institute') {
+      claims.instituteId = uid;
+    } else if (role === 'faculty') {
+      claims.instituteId = providedInstituteId;
+      claims.facultyId   = uid;
+    } else if (role === 'student') {
+      claims.instituteId = providedInstituteId;
+      claims.studentId   = uid;
+    }
+    await auth.setCustomUserClaims(uid, claims);
 
-    // ── 6. Write profile doc (no plaintext password!)
+    // ── 6. Write profile doc (never store plaintext password)
     const db = getFirestore();
     const collection = COLLECTION_BY_ROLE[role];
     const { password: _ignored, ...profileSansPassword } = profile as Record<string, unknown>;
-    await db.collection(collection).doc(uid).set({
+
+    const docData: Record<string, unknown> = {
       ...profileSansPassword,
       email,
       uid,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+
+    // Stamp the canonical id field expected by the rest of the app.
+    if (role === 'institute') {
+      docData.id = uid;
+    } else if (role === 'faculty' || role === 'student') {
+      docData.id          = uid;
+      docData.instituteId = providedInstituteId;
+    }
+
+    await db.collection(collection).doc(uid).set(docData);
 
     return { ok: true, uid };
   }

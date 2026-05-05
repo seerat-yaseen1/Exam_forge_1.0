@@ -1,6 +1,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getAuth } from 'firebase/auth';
+import { getFunctions } from 'firebase/functions';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 // Firebase configuration
@@ -42,5 +44,14 @@ export const db = getFirestore(app);
 
 // Initialize Firebase Storage
 export const storage = getStorage(app);
+
+// Firebase Auth — used by Web Owner login (Phase 2). Other roles still use
+// the legacy custom-password flow until they are migrated.
+export const auth = getAuth(app);
+
+// Callable Cloud Functions client — used to invoke admin-only endpoints like
+// createAuthUser(role, profile, password). Region defaults to us-central1;
+// change here if functions are deployed elsewhere.
+export const functions = getFunctions(app);
 
 export default app;

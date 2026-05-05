@@ -42,6 +42,39 @@ service cloud.firestore {
       return signedIn() && role() == 'webOwner';
     }
 
+    // True when the caller is the Institute Admin for this institute.
+    // Doc ID == claim.instituteId for institutes/credentials/logos/configs.
+    function isInstituteSelf(instituteId) {
+      return signedIn()
+        && role() == 'institute'
+        && request.auth.token.instituteId == instituteId;
+    }
+
+    // True when the caller is an Institute Admin governing the given institute.
+    // Use this when checking a doc that *belongs* to an institute (faculty,
+    // student, school, course, …) — pass in the doc's instituteId field.
+    function isInstituteOf(instituteId) {
+      return signedIn()
+        && role() == 'institute'
+        && request.auth.token.instituteId == instituteId;
+    }
+
+    // True when the caller is the same Faculty member as the doc.
+    // Migrated faculty: claim.facultyId == legacy doc id.
+    // New faculty (post createAuthUser wiring): claim.facultyId == uid.
+    function isFacultySelf(facultyId) {
+      return signedIn()
+        && role() == 'faculty'
+        && request.auth.token.facultyId == facultyId;
+    }
+
+    // True when the caller is the same Student as the doc.
+    function isStudentSelf(studentId) {
+      return signedIn()
+        && role() == 'student'
+        && request.auth.token.studentId == studentId;
+    }
+
     function str(val) {
       return val is string && val.size() > 0;
     }
@@ -75,175 +108,375 @@ service cloud.firestore {
     //        Tightened in Phase 6b.
     // ─────────────────────────────────────────────────────────────────────────
     match /institutes/{instituteId} {
-      allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow read:   if signedIn();
+      allow create: if isWebOwner();
+      allow update: if isWebOwner() || isInstituteSelf(instituteId);
       allow delete: if isWebOwner();
     }
 
     // instituteCredentials — password field stripped post-migration; this
     // collection now only holds firstLoginRequired and migration metadata.
+    // The institute admin flips firstLoginRequired=false on first sign-in.
     match /instituteCredentials/{instituteId} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if isWebOwner();
+      allow read:   if signedIn();
+      allow create: if isWebOwner();
+      allow update: if isWebOwner() || isInstituteSelf(instituteId);
+      allow delete: if isWebOwner();
     }
 
+    // Logo upload: institute admin manages own; webOwner override; structural
+    // validation kept from Phase 6a.
     match /instituteLogos/{instituteId} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() &&
+      allow read:   if signedIn();
+      allow create, update: if (isWebOwner() || isInstituteSelf(instituteId)) &&
         str(request.resource.data.dataUrl) &&
         str(request.resource.data.updatedAt) &&
         request.resource.data.dataUrl.size() <= 950000;
       allow delete: if isWebOwner();
     }
 
+    // instituteConfigs — collection has no callers in app code. Lock to
+    // webOwner only so a stray client write can't repopulate it.
     match /instituteConfigs/{instituteId} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if isWebOwner();
+      allow read:   if signedIn();
+      allow create, update, delete: if isWebOwner();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // faculty / facultyCredentials
+    //
+    // Writers:
+    //   • webOwner  — anywhere
+    //   • institute — only for faculty whose instituteId matches caller's claim
+    //   • faculty   — self-update only (e.g. flipping firstLoginRequired=false)
+    //
+    // Credentials docs don't carry instituteId, so we resolve the parent
+    // faculty doc via get() to authorise institute-admin writes. This adds one
+    // extra doc read per credentials write (acceptable — written rarely).
     // ─────────────────────────────────────────────────────────────────────────
     match /faculty/{facultyId} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      allow create: if isWebOwner()
+                       || isInstituteOf(request.resource.data.instituteId);
+      allow update: if isWebOwner()
+                       || isInstituteOf(resource.data.instituteId)
+                       || isFacultySelf(facultyId);
+      allow delete: if isWebOwner()
+                       || isInstituteOf(resource.data.instituteId);
     }
 
     match /facultyCredentials/{facultyId} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      allow create: if isWebOwner()
+                       || (
+                            exists(/databases/$(database)/documents/faculty/$(facultyId))
+                            && isInstituteOf(get(/databases/$(database)/documents/faculty/$(facultyId)).data.instituteId)
+                          );
+      allow update: if isWebOwner()
+                       || isFacultySelf(facultyId)
+                       || (
+                            exists(/databases/$(database)/documents/faculty/$(facultyId))
+                            && isInstituteOf(get(/databases/$(database)/documents/faculty/$(facultyId)).data.instituteId)
+                          );
+      allow delete: if isWebOwner()
+                       || (
+                            exists(/databases/$(database)/documents/faculty/$(facultyId))
+                            && isInstituteOf(get(/databases/$(database)/documents/faculty/$(facultyId)).data.instituteId)
+                          );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // students / studentCredentials
+    //
+    // Writers:
+    //   • webOwner  — anywhere
+    //   • institute — only for students whose instituteId matches caller's claim
+    //   • faculty   — only for students in the same institute (faculty's
+    //                 individual canCreateStudents gate is enforced app-side)
+    //   • student   — self-update only
     // ─────────────────────────────────────────────────────────────────────────
     match /students/{studentId} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      allow create: if isWebOwner()
+                       || isInstituteOf(request.resource.data.instituteId)
+                       || (role() == 'faculty'
+                           && request.auth.token.instituteId == request.resource.data.instituteId);
+      allow update: if isWebOwner()
+                       || isInstituteOf(resource.data.instituteId)
+                       || (role() == 'faculty'
+                           && request.auth.token.instituteId == resource.data.instituteId)
+                       || isStudentSelf(studentId);
+      allow delete: if isWebOwner()
+                       || isInstituteOf(resource.data.instituteId)
+                       || (role() == 'faculty'
+                           && request.auth.token.instituteId == resource.data.instituteId);
     }
 
     match /studentCredentials/{studentId} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      allow create: if isWebOwner()
+                       || (
+                            exists(/databases/$(database)/documents/students/$(studentId))
+                            && (
+                                 isInstituteOf(get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                                 || (role() == 'faculty'
+                                     && request.auth.token.instituteId == get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                               )
+                          );
+      allow update: if isWebOwner()
+                       || isStudentSelf(studentId)
+                       || (
+                            exists(/databases/$(database)/documents/students/$(studentId))
+                            && (
+                                 isInstituteOf(get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                                 || (role() == 'faculty'
+                                     && request.auth.token.instituteId == get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                               )
+                          );
+      allow delete: if isWebOwner()
+                       || (
+                            exists(/databases/$(database)/documents/students/$(studentId))
+                            && (
+                                 isInstituteOf(get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                                 || (role() == 'faculty'
+                                     && request.auth.token.instituteId == get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                               )
+                          );
     }
 
     // ═════════════════════════════════════════════════════════════════════════
     // ACADEMIC HIERARCHY
+    //
+    // Every doc in these collections carries `instituteId`. Writes require:
+    //   • webOwner, OR
+    //   • institute admin / faculty whose claim instituteId matches the doc's.
+    //
+    // Hard-deletes are blocked everywhere except academicMappings, which is
+    // how a student gets unassigned from a node.
     // ═════════════════════════════════════════════════════════════════════════
+
+    function canWriteAcademic(instituteId) {
+      return signedIn()
+        && (role() == 'webOwner'
+            || ((role() == 'institute' || role() == 'faculty')
+                && request.auth.token.instituteId == instituteId));
+    }
+
     match /schools/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /academicLevels/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /programs/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /academicSessions/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /academicYears/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /semesters/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /courses/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /sections/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /groups/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if false;
+      allow read:   if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow delete: if false;
     }
     match /academicMappings/{id} {
       allow read:   if signedIn();
-      allow create: if signedIn();
+      allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if false;     // mappings are immutable
-      allow delete: if signedIn();
+      allow delete: if canWriteAcademic(resource.data.instituteId);
     }
 
     // ═════════════════════════════════════════════════════════════════════════
     // ASSESSMENT / EXAM DATA
     // ═════════════════════════════════════════════════════════════════════════
-    match /assessments/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+    // Owned content (assessments / questions) — writer must match the doc's
+    // ownerType + ownerId. webOwner is always allowed.
+    //   ownerType ∈ {'webOwner', 'institute', 'faculty'}
+    //   ownerId   ∈ {'webOwner', instituteId, facultyId}
+    function canWriteOwned(ownerType, ownerId) {
+      return isWebOwner()
+        || (ownerType == 'institute' && role() == 'institute'
+            && request.auth.token.instituteId == ownerId)
+        || (ownerType == 'faculty'   && role() == 'faculty'
+            && request.auth.token.facultyId == ownerId);
     }
 
+    match /assessments/{id} {
+      allow read:   if signedIn();
+      allow create: if canWriteOwned(request.resource.data.ownerType,
+                                     request.resource.data.ownerId);
+      allow update: if canWriteOwned(resource.data.ownerType,
+                                     resource.data.ownerId);
+      allow delete: if canWriteOwned(resource.data.ownerType,
+                                     resource.data.ownerId);
+    }
+
+    // attempts/{id}
+    //   create: student creating their own attempt; webOwner override.
+    //   update: the student themselves while attempt is still in_progress
+    //           (covers answer writes + the in_progress→submitted/timed_out
+    //           transition, since resource.data.status is the *pre-write*
+    //           value); graders (webOwner, institute or faculty matching the
+    //           attempt's instituteId) any time.
+    //   delete: hard-blocked — soft-delete (isDeleted=true) via grader update.
     match /attempts/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      // Hard-block deletes — soft-delete (isDeleted=true) is the supported path
-      allow delete:         if false;
+      allow read: if signedIn();
+
+      allow create: if isWebOwner()
+                       || (role() == 'student'
+                           && request.resource.data.studentId == request.auth.token.studentId);
+
+      allow update: if isWebOwner()
+                       || (role() == 'student'
+                           && resource.data.studentId == request.auth.token.studentId
+                           && resource.data.status == 'in_progress')
+                       || ((role() == 'institute' || role() == 'faculty')
+                           && request.auth.token.instituteId == resource.data.instituteId);
+
+      allow delete: if false;
     }
 
     match /questions/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      // Legacy questions may lack ownerType — treat as webOwner-owned.
+      allow create: if canWriteOwned(request.resource.data.ownerType,
+                                     request.resource.data.ownerId);
+      allow update: if canWriteOwned(
+                          resource.data.get('ownerType', 'webOwner'),
+                          resource.data.get('ownerId',   'webOwner'));
+      allow delete: if canWriteOwned(
+                          resource.data.get('ownerType', 'webOwner'),
+                          resource.data.get('ownerId',   'webOwner'));
     }
 
+    // questionBanks — owned by Web Owner only (no instituteId on the doc).
     match /questionBanks/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      allow create, update, delete: if isWebOwner();
     }
 
+    // bankGrants (Web Owner → Institute) — only Web Owner mutates.
     match /bankGrants/{id} {
-      allow read:           if signedIn();
-      allow create, update: if isWebOwner();
-      allow delete:         if isWebOwner();
+      allow read:   if signedIn();
+      allow create, update, delete: if isWebOwner();
     }
 
+    // instituteGrants (Institute Admin → Faculty within the same institute).
     match /instituteGrants/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      allow create: if isWebOwner()
+                       || isInstituteOf(request.resource.data.instituteId);
+      allow update: if isWebOwner()
+                       || isInstituteOf(resource.data.instituteId);
+      allow delete: if isWebOwner()
+                       || isInstituteOf(resource.data.instituteId);
     }
 
+    // questionShares — sender (institute or faculty) writes; recipient reads.
+    // sharedByInstituteId must match the caller's institute claim, and
+    // sharedBy must match the caller's institute/faculty id.
+    function canWriteShare(d) {
+      return isWebOwner()
+        || (d.sharedByType == 'institute'
+            && role() == 'institute'
+            && request.auth.token.instituteId == d.sharedByInstituteId
+            && request.auth.token.instituteId == d.sharedBy)
+        || (d.sharedByType == 'faculty'
+            && role() == 'faculty'
+            && request.auth.token.instituteId == d.sharedByInstituteId
+            && request.auth.token.facultyId   == d.sharedBy);
+    }
     match /questionShares/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      allow create: if canWriteShare(request.resource.data);
+      allow update: if canWriteShare(resource.data);
+      allow delete: if canWriteShare(resource.data);
     }
 
+    // questionReports — student files; assessment owner (institute or faculty)
+    // resolves; webOwner override.
+    function canResolveReport(d) {
+      return isWebOwner()
+        || (d.ownerType == 'institute'
+            && role() == 'institute'
+            && request.auth.token.instituteId == d.ownerId)
+        || (d.ownerType == 'faculty'
+            && role() == 'faculty'
+            && request.auth.token.facultyId == d.ownerId)
+        || (role() == 'institute'
+            && d.instituteId is string
+            && request.auth.token.instituteId == d.instituteId);
+    }
     match /questionReports/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if signedIn();
+      allow read:   if signedIn();
+      allow create: if isWebOwner()
+                       || (role() == 'student'
+                           && request.resource.data.studentId == request.auth.token.studentId);
+      allow update: if canResolveReport(resource.data);
+      allow delete: if isWebOwner();
     }
 
+    // subjects — global taxonomy, Web Owner only.
     match /subjects/{id} {
-      allow read:           if signedIn();
-      allow create, update: if signedIn();
-      allow delete:         if isWebOwner();
+      allow read:   if signedIn();
+      allow create, update, delete: if isWebOwner();
+    }
+
+    // enrollments/{assessmentId_studentId}
+    //   read: any signed-in user (student needs to see own; grader sees roster)
+    //   write: assessment owner (resolved via get() on assessments/{assessmentId})
+    function canWriteEnrollment(assessmentId) {
+      return isWebOwner()
+        || (
+             exists(/databases/$(database)/documents/assessments/$(assessmentId))
+             && canWriteOwned(
+                  get(/databases/$(database)/documents/assessments/$(assessmentId)).data.ownerType,
+                  get(/databases/$(database)/documents/assessments/$(assessmentId)).data.ownerId
+                )
+           );
+    }
+    match /enrollments/{id} {
+      allow read:   if signedIn();
+      allow create: if canWriteEnrollment(request.resource.data.assessmentId);
+      allow update: if canWriteEnrollment(resource.data.assessmentId);
+      allow delete: if canWriteEnrollment(resource.data.assessmentId);
     }
 
     // ═════════════════════════════════════════════════════════════════════════

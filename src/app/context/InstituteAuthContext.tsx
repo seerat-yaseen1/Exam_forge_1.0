@@ -1,14 +1,19 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import {
-  getInstituteByEmail,
-  getInstituteCredentials,
-  updateInstituteCredentials,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  updatePassword,
+  type User as FirebaseUser,
+} from 'firebase/auth';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../../lib/firebase';
+import {
+  getInstituteByCode,
   getInstituteLogo,
   setInstituteLogo,
-  getInstituteByCode,
-  generatePassword,
 } from '../../lib/firebaseService';
-import { sendInstituteResetEmail } from '../../lib/emailService';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -22,78 +27,127 @@ export interface InstituteSession {
   status: 'active' | 'disabled';
   activeUntil: string;
   validityType: string;
-  // ── Permission flags (set by Web Owner) ───────────────────────────
   schoolsManagementEnabled: boolean;
   canAdminCreateFaculty: boolean;
   canAdminCreateStudents: boolean;
   facultyCanCreateStudents: boolean;
   canAdminCreateQuestions: boolean;
-  // ── Exam Roster flags ──────────────────────────────────────────────
-  canAdminManageExamRosters: boolean;    // Gate 1: admin can access rosters
-  facultyCanManageExamRosters: boolean;  // Gate 2: faculty may be individually granted
+  canAdminManageExamRosters: boolean;
+  facultyCanManageExamRosters: boolean;
 }
 
 interface InstituteAuthContextType {
   session: InstituteSession | null;
+  loading: boolean;
   logo: string | null;
   logoLoading: boolean;
   login: (
     email: string,
     password: string
   ) => Promise<{ success: boolean; error?: string; firstLoginRequired?: boolean }>;
-  changePassword: (
-    newPassword: string
-  ) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   requestPasswordReset: (
     instituteCode: string
   ) => Promise<{ success: boolean; error?: string; emailSent?: boolean }>;
-  resetPassword: (
-    code: string,
-    newPassword: string
-  ) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  /** Phase 3: in-app reset code form is no longer used; resets go via email link. */
+  resetPassword: (code: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   uploadLogo: (file: File) => Promise<{ success: boolean; error?: string }>;
 }
 
-// ── Context ───────────────────────────────────────────────────────────────────
-
 const InstituteAuthContext = createContext<InstituteAuthContextType | null>(null);
 
-const SESSION_KEY = 'stratum_institute_session';
+async function buildSessionFromAuthUser(
+  fbUser: FirebaseUser
+): Promise<{ session: InstituteSession | null; firstLoginRequired: boolean; reason?: string }> {
+  const tokenResult = await fbUser.getIdTokenResult();
+  const role = tokenResult.claims.role as string | undefined;
+  const instituteId = tokenResult.claims.instituteId as string | undefined;
+
+  if (role !== 'institute' || !instituteId) {
+    return { session: null, firstLoginRequired: false, reason: 'not_institute' };
+  }
+
+  const instSnap = await getDoc(doc(db, 'institutes', instituteId));
+  if (!instSnap.exists()) {
+    return { session: null, firstLoginRequired: false, reason: 'no_institute_doc' };
+  }
+  const inst = instSnap.data() as Record<string, unknown>;
+
+  if (inst.status === 'disabled') {
+    return { session: null, firstLoginRequired: false, reason: 'disabled' };
+  }
+  const activeUntil = String(inst.activeUntil ?? '');
+  if (activeUntil && new Date(activeUntil) < new Date()) {
+    return { session: null, firstLoginRequired: false, reason: 'expired' };
+  }
+
+  // firstLoginRequired now lives on instituteCredentials/{instituteId}
+  const credSnap = await getDoc(doc(db, 'instituteCredentials', instituteId));
+  const firstLoginRequired = credSnap.exists()
+    ? Boolean((credSnap.data() as { firstLoginRequired?: boolean }).firstLoginRequired)
+    : false;
+
+  const session: InstituteSession = {
+    instituteId,
+    instituteName: String(inst.name ?? ''),
+    instituteCode: String(inst.code ?? ''),
+    adminName: String(inst.adminName ?? ''),
+    adminEmail: String(inst.adminEmail ?? fbUser.email ?? ''),
+    firstLoginRequired,
+    status: (inst.status as 'active' | 'disabled') ?? 'active',
+    activeUntil,
+    validityType: String(inst.validityType ?? ''),
+    schoolsManagementEnabled: Boolean(inst.schoolsManagementEnabled ?? false),
+    canAdminCreateFaculty: Boolean(inst.canAdminCreateFaculty ?? false),
+    canAdminCreateStudents: Boolean(inst.canAdminCreateStudents ?? false),
+    facultyCanCreateStudents: Boolean(inst.facultyCanCreateStudents ?? false),
+    canAdminCreateQuestions: Boolean(inst.canAdminCreateQuestions ?? false),
+    canAdminManageExamRosters: Boolean(inst.canAdminManageExamRosters ?? false),
+    facultyCanManageExamRosters: Boolean(inst.facultyCanManageExamRosters ?? false),
+  };
+
+  return { session, firstLoginRequired };
+}
 
 export function InstituteAuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<InstituteSession | null>(() => {
-    try {
-      const stored = sessionStorage.getItem(SESSION_KEY);
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
-
+  const [session, setSession] = useState<InstituteSession | null>(null);
+  const [loading, setLoading] = useState(true);
   const [logo, setLogo] = useState<string | null>(null);
   const [logoLoading, setLogoLoading] = useState(false);
 
-  // Persist session to sessionStorage
   useEffect(() => {
-    if (session) {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    } else {
-      sessionStorage.removeItem(SESSION_KEY);
-    }
-  }, [session]);
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) {
+        setSession(null);
+        setLoading(false);
+        return;
+      }
+      try {
+        const { session: built } = await buildSessionFromAuthUser(fbUser);
+        setSession(built);
+      } catch (err) {
+        console.error('Institute auth state load error:', err);
+        setSession(null);
+      } finally {
+        setLoading(false);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Load logo whenever we have a session
   useEffect(() => {
-    if (!session) { setLogo(null); return; }
+    if (!session) {
+      setLogo(null);
+      return;
+    }
     setLogoLoading(true);
     getInstituteLogo(session.instituteId)
       .then((logoData) => setLogo(logoData?.dataUrl ?? null))
       .catch(() => setLogo(null))
       .finally(() => setLogoLoading(false));
   }, [session?.instituteId]);
-
-  // ── Login ─────────────────────────────────────────────────────────
 
   const login = useCallback(
     async (
@@ -102,146 +156,119 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
     ): Promise<{ success: boolean; error?: string; firstLoginRequired?: boolean }> => {
       try {
         const emailNorm = email.toLowerCase().trim();
-        
-        // Find institute by admin email
-        const institute = await getInstituteByEmail(emailNorm);
-        if (!institute) {
+        const cred = await signInWithEmailAndPassword(auth, emailNorm, password);
+        const { session: built, firstLoginRequired, reason } = await buildSessionFromAuthUser(
+          cred.user
+        );
+
+        if (!built) {
+          await signOut(auth);
+          if (reason === 'disabled') {
+            return {
+              success: false,
+              error: 'This institute account has been disabled. Contact your platform administrator.',
+            };
+          }
+          if (reason === 'expired') {
+            return {
+              success: false,
+              error: "Your institute's access period has expired. Contact your platform administrator.",
+            };
+          }
+          return { success: false, error: 'This account is not an Institute Admin account.' };
+        }
+
+        setSession(built);
+        return { success: true, firstLoginRequired };
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (
+          code === 'auth/invalid-credential' ||
+          code === 'auth/wrong-password' ||
+          code === 'auth/user-not-found'
+        ) {
           return { success: false, error: 'Incorrect email or password.' };
         }
-
-        // Check if institute is active
-        if (institute.status === 'disabled') {
-          return { success: false, error: 'This institute account has been disabled. Contact your platform administrator.' };
+        if (code === 'auth/too-many-requests') {
+          return { success: false, error: 'Too many attempts. Try again in a few minutes.' };
         }
-
-        // Check validity period
-        const now = new Date();
-        const activeUntil = new Date(institute.activeUntil);
-        if (activeUntil < now) {
-          return { success: false, error: 'Your institute\'s access period has expired. Contact your platform administrator.' };
-        }
-
-        // Validate credentials
-        const creds = await getInstituteCredentials(institute.id);
-        if (!creds) {
-          return { success: false, error: 'Credentials not configured. Contact your platform administrator.' };
-        }
-
-        if (creds.password !== password) {
-          return { success: false, error: 'Incorrect email or password.' };
-        }
-
-        const newSession: InstituteSession = {
-          instituteId: institute.id,
-          instituteName: institute.name,
-          instituteCode: institute.code,
-          adminName: institute.adminName,
-          adminEmail: institute.adminEmail,
-          firstLoginRequired: creds.firstLoginRequired,
-          status: institute.status,
-          activeUntil: institute.activeUntil,
-          validityType: institute.validityType,
-          schoolsManagementEnabled: institute.schoolsManagementEnabled ?? false,
-          canAdminCreateFaculty:    institute.canAdminCreateFaculty    ?? false,
-          canAdminCreateStudents:   institute.canAdminCreateStudents   ?? false,
-          facultyCanCreateStudents: institute.facultyCanCreateStudents ?? false,
-          canAdminCreateQuestions:  institute.canAdminCreateQuestions  ?? false,
-          canAdminManageExamRosters:   institute.canAdminManageExamRosters   ?? false,
-          facultyCanManageExamRosters: institute.facultyCanManageExamRosters ?? false,
-        };
-        setSession(newSession);
-        return { success: true, firstLoginRequired: creds.firstLoginRequired };
-      } catch (err: any) {
-        console.error('Login error:', err);
+        console.error('Institute login error:', err);
         return { success: false, error: 'Network error. Please try again.' };
       }
     },
     []
   );
 
-  // ── Change password (forced first-login) ──────────────────────────
-
   const changePassword = useCallback(
     async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
-      if (!session) return { success: false, error: 'Not authenticated.' };
+      const fbUser = auth.currentUser;
+      if (!fbUser || !session) return { success: false, error: 'Not authenticated.' };
       if (newPassword.length < 8) {
         return { success: false, error: 'Password must be at least 8 characters.' };
       }
+
       try {
-        await updateInstituteCredentials(session.instituteId, {
-          password: newPassword,
+        await updatePassword(fbUser, newPassword);
+        await updateDoc(doc(db, 'instituteCredentials', session.instituteId), {
           firstLoginRequired: false,
         });
-        // Clear the forced-change flag in session
-        setSession((prev) =>
-          prev ? { ...prev, firstLoginRequired: false } : null
-        );
+        setSession((prev) => (prev ? { ...prev, firstLoginRequired: false } : null));
         return { success: true };
-      } catch (err: any) {
-        console.error('Change password error:', err);
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (code === 'auth/requires-recent-login') {
+          return { success: false, error: 'Please sign out and back in, then change your password.' };
+        }
+        if (code === 'auth/weak-password') {
+          return { success: false, error: 'Password is too weak.' };
+        }
+        console.error('Institute change password error:', err);
         return { success: false, error: 'Failed to change password. Please try again.' };
       }
     },
     [session]
   );
 
-  // ── Request password reset ────────────────────────────────────────
-
   const requestPasswordReset = useCallback(
-    async (instituteCode: string): Promise<{ success: boolean; error?: string; emailSent?: boolean }> => {
+    async (
+      instituteCode: string
+    ): Promise<{ success: boolean; error?: string; emailSent?: boolean }> => {
       try {
         const institute = await getInstituteByCode(instituteCode);
         if (!institute) {
           return { success: false, error: 'Institute not found with this code.' };
         }
-
-        // Generate new password
-        const newPassword = generatePassword();
-        await updateInstituteCredentials(institute.id, {
-          password: newPassword,
-          firstLoginRequired: true,
-        });
-
-        // Send reset email
-        const emailResult = await sendInstituteResetEmail(institute as any, newPassword);
-        if (!emailResult.ok) {
-          console.warn('[InstituteAuthContext] reset email failed:', emailResult.error);
+        const emailNorm = (institute.adminEmail || '').toLowerCase().trim();
+        if (!emailNorm) {
+          return { success: false, error: 'Institute has no admin email on file.' };
         }
-
-        return { success: true, emailSent: emailResult.ok };
-      } catch (err: any) {
-        console.error('Password reset request error:', err);
-        return { success: false, error: 'Failed to reset password. Please try again.' };
+        await sendPasswordResetEmail(auth, emailNorm);
+        return { success: true, emailSent: true };
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (code === 'auth/user-not-found') {
+          // Don't leak whether the account exists
+          return { success: true, emailSent: true };
+        }
+        console.error('Institute reset request error:', err);
+        return { success: false, error: 'Failed to send reset email. Please try again.' };
       }
     },
     []
   );
 
-  // ── Reset password ────────────────────────────────────────────────
+  const resetPassword = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    return {
+      success: false,
+      error: 'Password reset is now handled via the email link. Please check your inbox.',
+    };
+  }, []);
 
-  const resetPassword = useCallback(
-    async (code: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
-      try {
-        // This function is for completing password reset with a code
-        // For now, we'll just update the password directly
-        // In production, you'd validate the reset code first
-        return { success: true };
-      } catch (err: any) {
-        console.error('Reset password error:', err);
-        return { success: false, error: 'Failed to reset password.' };
-      }
-    },
-    []
-  );
-
-  // ── Logout ────────────────────────────────────────────────────────
-
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await signOut(auth);
     setSession(null);
     setLogo(null);
   }, []);
-
-  // ── Upload logo ───────────────────────────────────────────────────
 
   const uploadLogo = useCallback(
     async (file: File): Promise<{ success: boolean; error?: string }> => {
@@ -262,10 +289,9 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
           updatedAt: new Date().toISOString(),
         });
 
-        // Immediately reflect in context — no refresh needed
         setLogo(dataUrl);
         return { success: true };
-      } catch (err: any) {
+      } catch (err) {
         console.error('Logo upload error:', err);
         return { success: false, error: 'Failed to upload logo. Please try again.' };
       }
@@ -275,7 +301,18 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
 
   return (
     <InstituteAuthContext.Provider
-      value={{ session, logo, logoLoading, login, changePassword, requestPasswordReset, resetPassword, logout, uploadLogo }}
+      value={{
+        session,
+        loading,
+        logo,
+        logoLoading,
+        login,
+        changePassword,
+        requestPasswordReset,
+        resetPassword,
+        logout,
+        uploadLogo,
+      }}
     >
       {children}
     </InstituteAuthContext.Provider>

@@ -10,16 +10,16 @@ import { useAuth } from '../context/AuthContext';
 import {
   getAllInstitutes,
   getInstitute,
-  setInstitute,
   updateInstitute,
   deleteInstitute,
-  setInstituteCredentials,
   generateInstituteCode,
   generatePassword,
   computeActiveUntil,
   type Institute,
 } from '../../lib/firebaseService';
-import { sendInstituteWelcomeEmail } from '../../lib/emailService';
+import { httpsCallable } from 'firebase/functions';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, functions } from '../../lib/firebase';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -196,37 +196,47 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
         const updated = await getInstitute(editing!.id);
         if (updated) onSaved(updated, false);
       } else {
-        // Create new institute
-        const instituteId = `inst_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const code = generateInstituteCode();
-        const password = generatePassword();
+        // Create new institute via Cloud Function (Firebase Auth user + profile doc).
+        // Then trigger Firebase's own password-reset email so the admin sets
+        // their own password — we never email a plaintext temporary password.
+        const code            = generateInstituteCode();
+        const tempPassword    = generatePassword();   // random; user resets via email
+        const normalizedEmail = adminEmail.toLowerCase().trim();
 
-        const newInstitute: Institute = {
-          id: instituteId,
-          code,
-          name: name.trim(),
-          adminName: adminName.trim(),
-          adminEmail: adminEmail.toLowerCase().trim(),
-          status: 'active',
-          validityType,
-          activeUntil: computedActiveUntil,
-          createdAt: now,
-          updatedAt: now,
-        };
+        const createAuthUser = httpsCallable<
+          { role: 'institute'; password: string; profile: Record<string, unknown> },
+          { ok: boolean; uid: string }
+        >(functions, 'createAuthUser');
 
-        await setInstitute(instituteId, newInstitute);
-        await setInstituteCredentials(instituteId, {
-          instituteId,
-          email: adminEmail.toLowerCase().trim(),
-          password,
-          firstLoginRequired: true,
+        const result = await createAuthUser({
+          role: 'institute',
+          password: tempPassword,
+          profile: {
+            email: normalizedEmail,
+            name: adminName.trim(),
+            code,
+            adminName: adminName.trim(),
+            adminEmail: normalizedEmail,
+            status: 'active',
+            validityType,
+            activeUntil: computedActiveUntil,
+            firstLoginRequired: false,  // admin sets pwd via reset link
+          },
         });
 
-        // Send welcome email with credentials
-        const emailResult = await sendInstituteWelcomeEmail(newInstitute, password);
-        if (!emailResult.ok) console.warn('[InstituteDrawer] email failed:', emailResult.error);
+        const uid = result.data.uid;
 
-        onSaved(newInstitute, emailResult.ok);
+        // Trigger Firebase-delivered password-reset email.
+        let emailSent = false;
+        try {
+          await sendPasswordResetEmail(auth, normalizedEmail);
+          emailSent = true;
+        } catch (e) {
+          console.warn('[InstituteDrawer] reset email failed:', e);
+        }
+
+        const created = await getInstitute(uid);
+        if (created) onSaved(created, emailSent);
       }
     } catch (e: any) {
       setFormError(e.message || 'An unexpected error occurred.');
@@ -309,7 +319,7 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
 
               {/* Admin Email */}
               <Field label="Institute admin email"
-                hint="A temporary password will be generated and sent to this address.">
+                hint="A password-setup link will be emailed to this address.">
                 <input type="email" value={adminEmail}
                   onChange={(e) => { setAdminEmail(e.target.value); setFormError(''); }}
                   placeholder="e.g. admin@institute.edu"

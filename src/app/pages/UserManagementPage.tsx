@@ -610,16 +610,18 @@ export function UserManagementPage() {
   const handleResendCredentials = async (id: string) => {
     setResendingId(id);
     const inst = institutes.find((i) => i.id === id);
+    const email = (inst?.adminEmail ?? '').toLowerCase().trim();
     try {
-      // Email sending not implemented - would require external email service
+      if (!email) throw new Error('Institute has no admin email on file.');
+      await sendPasswordResetEmail(auth, email);
       setEmailNotice({
-        ok: false,
-        to: inst?.adminEmail ?? '',
-        error: 'Email functionality not yet implemented',
+        ok: true,
+        to: email,
+        message: `Password-setup link sent to ${email}.`,
       });
       setTimeout(() => setEmailNotice(null), 6000);
     } catch (e: any) {
-      setEmailNotice({ ok: false, to: inst?.adminEmail ?? '', error: e.message });
+      setEmailNotice({ ok: false, to: email, error: e?.message ?? 'Failed to send email.' });
       setTimeout(() => setEmailNotice(null), 8000);
     } finally {
       setResendingId(null);

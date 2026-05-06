@@ -49,15 +49,26 @@ function parse(raw: string): Segment[] {
 
 // ── KaTeX renderer ─────────────────────────────────────────────────────────────
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderKatex(formula: string, display: boolean): string {
   try {
     return katex.renderToString(formula, {
       displayMode: display,
       throwOnError: false,
       output: 'html',
+      trust: false,
+      strict: 'ignore',
     });
   } catch {
-    return `<span style="color:#9B2828;font-family:monospace">${formula}</span>`;
+    return `<span style="color:#9B2828;font-family:monospace">${escapeHtml(formula)}</span>`;
   }
 }
 

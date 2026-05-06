@@ -194,7 +194,7 @@ export async function firestoreQuery<T>(
   try {
     const q = query(collection(db, collectionName), where(field, operator, value));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map((doc) => doc.data() as T);
+    return querySnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }) as T);
   } catch (err) {
     console.error(`Error querying ${collectionName}:`, err);
     return [];
@@ -204,7 +204,7 @@ export async function firestoreQuery<T>(
 export async function firestoreGetAll<T>(collectionName: string): Promise<T[]> {
   try {
     const querySnapshot = await getDocs(collection(db, collectionName));
-    return querySnapshot.docs.map((doc) => doc.data() as T);
+    return querySnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }) as T);
   } catch (err) {
     console.error(`Error getting all documents from ${collectionName}:`, err);
     return [];

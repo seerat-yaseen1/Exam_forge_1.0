@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Check, Loader2, AlertTriangle, UserCheck } from 'lucide-react';
-import { 
-  setFaculty, 
-  setFacultyCredentials, 
+import {
   generatePassword,
   getFacultyByEmail,
+  getFaculty,
   type Faculty as FirebaseFaculty,
-  type FacultyCredentials
 } from '../../../lib/firebaseService';
-import { sendFacultyWelcomeEmail } from '../../../lib/emailService';
+import { httpsCallable } from 'firebase/functions';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, functions } from '../../../lib/firebase';
 
 export interface Faculty {
   id: string;
@@ -82,51 +82,52 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
     setSaving(true); setError('');
     try {
       const normalizedEmail = email.toLowerCase().trim();
-      
-      // Check if faculty already exists
+
       const existing = await getFacultyByEmail(normalizedEmail);
       if (existing) {
         throw new Error('A faculty member with this email already exists.');
       }
 
-      // Generate faculty ID and password
-      const facultyId = `fac_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const password = generatePassword();
+      const tempPassword = generatePassword();
       const now = new Date().toISOString();
 
-      // Create faculty record
-      const faculty: FirebaseFaculty = {
-        id: facultyId,
+      const createAuthUser = httpsCallable<
+        { role: 'faculty'; password: string; instituteId: string; profile: Record<string, unknown> },
+        { ok: boolean; uid: string }
+      >(functions, 'createAuthUser');
+
+      const result = await createAuthUser({
+        role: 'faculty',
+        password: tempPassword,
         instituteId,
-        name: name.trim(),
-        email: normalizedEmail,
-        role: 'Faculty',
-        status,
-        firstLoginRequired: true,
-        createdAt: now,
-        updatedAt: now,
-      };
+        profile: {
+          email: normalizedEmail,
+          name: name.trim(),
+          instituteId,
+          role: 'Faculty',
+          status,
+          firstLoginRequired: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
 
-      // Create credentials
-      const credentials: FacultyCredentials = {
-        facultyId,
-        email: normalizedEmail,
-        password,
-        firstLoginRequired: true,
-      };
+      const uid = result.data.uid;
 
-      // Save to Firestore
-      await setFaculty(facultyId, faculty);
-      await setFacultyCredentials(facultyId, credentials);
+      let emailSent = false;
+      try {
+        await sendPasswordResetEmail(auth, normalizedEmail);
+        emailSent = true;
+      } catch (mailErr) {
+        console.warn('[AddFacultyDrawer] reset email failed:', mailErr);
+      }
 
-      // Send welcome email with credentials
-      const emailResult = await sendFacultyWelcomeEmail(faculty, instituteName, password);
-      const emailSent = emailResult.ok;
-      if (!emailResult.ok) console.warn('[AddFacultyDrawer] email failed:', emailResult.error);
+      const created = (await getFaculty(uid)) as FirebaseFaculty | null;
+      if (!created) throw new Error('Faculty created but profile not found.');
 
-      onCreated(faculty, emailSent);
+      onCreated(created as Faculty, emailSent);
     } catch (e: any) {
-      setError(e.message || 'An unexpected error occurred.');
+      setError(e?.message || 'An unexpected error occurred.');
     } finally {
       setSaving(false);
     }
@@ -171,7 +172,7 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
                 style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderLeft: '2px solid #C4C3BD', borderRadius: 2 }}>
                 <UserCheck size={12} strokeWidth={1.5} style={{ color: '#9A9891', marginTop: 1, flexShrink: 0 }} />
                 <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
-                  A temporary password will be generated and delivered directly to the faculty member's email. They must change it on first login.
+                  A password-setup link will be emailed directly to the faculty member. They set their own password before first login.
                 </p>
               </div>
 
@@ -182,7 +183,7 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
                   style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
               </Field>
 
-              <Field label="Faculty email" hint="Login credentials will be issued to this address.">
+              <Field label="Faculty email" hint="A password-setup link will be emailed to this address.">
                 <input type="email" value={email}
                   onChange={(e) => { setEmail(e.target.value); setError(''); }}
                   placeholder="e.g. priya.sharma@institute.edu"

@@ -7,14 +7,13 @@ import {
 } from 'lucide-react';
 import type { Faculty } from './AddFacultyDrawer';
 import {
-  setFaculty,
-  setFacultyCredentials,
   generatePassword,
-  getFacultyByEmail,
+  getFaculty,
   type Faculty as FirebaseFaculty,
-  type FacultyCredentials
 } from '../../../lib/firebaseService';
-import { sendFacultyWelcomeEmail } from '../../../lib/emailService';
+import { httpsCallable } from 'firebase/functions';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, functions } from '../../../lib/firebase';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -163,54 +162,51 @@ export function BulkFacultyModal({
 
     try {
       const progressIncrement = 100 / validRows.length;
+      const createAuthUser = httpsCallable<
+        { role: 'faculty'; password: string; instituteId: string; profile: Record<string, unknown> },
+        { ok: boolean; uid: string }
+      >(functions, 'createAuthUser');
 
       for (const row of validRows) {
         try {
-          const facultyId = `fac_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const password = generatePassword();
+          const tempPassword = generatePassword();
           const now = new Date().toISOString();
 
-          const faculty: FirebaseFaculty = {
-            id: facultyId,
+          const result = await createAuthUser({
+            role: 'faculty',
+            password: tempPassword,
             instituteId,
-            name: row.name,
-            email: row.email,
-            role: 'Faculty',
-            status: 'active',
-            firstLoginRequired: true,
-            createdAt: now,
-            updatedAt: now,
-          };
-
-          const credentials: FacultyCredentials = {
-            facultyId,
-            email: row.email,
-            password,
-            firstLoginRequired: true,
-          };
-
-          await setFaculty(facultyId, faculty);
-          await setFacultyCredentials(facultyId, credentials);
-
-          // Send welcome email with credentials
-          const emailResult = await sendFacultyWelcomeEmail(faculty, instituteName, password);
-          if (!emailResult.ok) console.warn('[BulkFacultyModal] email failed for', row.email, ':', emailResult.error);
-
-          bulkResults.push({
-            email: row.email,
-            name: row.name,
-            success: true,
-            emailSent: emailResult.ok,
+            profile: {
+              email: row.email,
+              name: row.name,
+              instituteId,
+              role: 'Faculty',
+              status: 'active',
+              firstLoginRequired: false,
+              createdAt: now,
+              updatedAt: now,
+            },
           });
 
-          createdFaculties.push(faculty);
+          let emailSent = false;
+          try {
+            await sendPasswordResetEmail(auth, row.email);
+            emailSent = true;
+          } catch (mailErr) {
+            console.warn('[BulkFacultyModal] reset email failed for', row.email, ':', mailErr);
+          }
+
+          const created = (await getFaculty(result.data.uid)) as FirebaseFaculty | null;
+          if (created) createdFaculties.push(created as Faculty);
+
+          bulkResults.push({ email: row.email, name: row.name, success: true, emailSent });
           setProgress((prev) => Math.min(prev + progressIncrement, 100));
         } catch (error: any) {
           bulkResults.push({
             email: row.email,
             name: row.name,
             success: false,
-            error: error.message || 'Failed to create account',
+            error: error?.message || 'Failed to create account',
           });
         }
       }
@@ -330,7 +326,7 @@ export function BulkFacultyModal({
                   'Columns: Name, Email (case-insensitive headers)',
                   'Each row must have a unique email address',
                   'Emails already registered will be skipped',
-                  'Temporary passwords will be generated and emailed',
+                  'A password-setup link will be emailed to each member',
                 ].map((r, i) => (
                   <div key={i} className="flex items-start gap-2 mb-1.5">
                     <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#C4C3BD', marginTop: 5, flexShrink: 0 }} />
@@ -452,7 +448,7 @@ export function BulkFacultyModal({
                 Creating {validRows.length} faculty {validRows.length === 1 ? 'account' : 'accounts'}…
               </p>
               <p className="text-xs mt-1.5" style={{ color: '#B0AEA8' }}>
-                Sending credentials by email. Please wait.
+                Emailing password-setup links. Please wait.
               </p>
               {/* Progress bar */}
               <div className="w-full mt-8" style={{ maxWidth: 280 }}>

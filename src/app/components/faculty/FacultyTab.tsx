@@ -7,16 +7,16 @@ import {
 } from 'lucide-react';
 import { AddFacultyDrawer, type Faculty } from './AddFacultyDrawer';
 import { BulkFacultyModal } from './BulkFacultyModal';
-import { 
-  getFacultyByInstitute, 
-  deleteFaculty, 
-  deleteFacultyCredentials,
+import {
+  getFacultyByInstitute,
   getFaculty,
   setFaculty,
   setFacultySchoolsPermission,
   setFacultyCreateStudentsPermission,
   setFacultyManageRostersPermission,
 } from '../../../lib/firebaseService';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../../lib/firebase';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -159,14 +159,17 @@ export function FacultyTab({
     if (!deletingId) return;
     setDeleteLoading(true);
     try {
-      await deleteFaculty(deletingId);
-      await deleteFacultyCredentials(deletingId);
+      const deleteAuthUser = httpsCallable<{ role: string; uid: string }, { ok: boolean }>(
+        functions,
+        'deleteAuthUser'
+      );
+      await deleteAuthUser({ role: 'faculty', uid: deletingId });
       setFaculties((prev) => prev.filter((f) => f.id !== deletingId));
       setDeletingId(null);
       setLastSynced(new Date());
-    } catch (e: any) { 
+    } catch (e: any) {
       console.error('Delete failed:', e);
-    } finally { 
+    } finally {
       setDeleteLoading(false);
     }
   };

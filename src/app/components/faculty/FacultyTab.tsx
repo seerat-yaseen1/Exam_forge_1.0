@@ -16,7 +16,8 @@ import {
   setFacultyManageRostersPermission,
 } from '../../../lib/firebaseService';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '../../../lib/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, functions } from '../../../lib/firebase';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -66,6 +67,7 @@ export function FacultyTab({
   const [deletingId, setDeletingId]         = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading]   = useState(false);
   const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [schoolsPermLoadingId, setSchoolsPermLoadingId] = useState<string | null>(null);
   const [createStudentsPermLoadingId, setCreateStudentsPermLoadingId] = useState<string | null>(null);
   const [manageRostersPermLoadingId, setManageRostersPermLoadingId] = useState<string | null>(null);
@@ -152,6 +154,19 @@ export function FacultyTab({
       console.error('Toggle status failed:', e);
     } finally { 
       setStatusLoadingId(null);
+    }
+  };
+
+  const handleResendCredentials = async (faculty: Faculty) => {
+    setResendingId(faculty.id);
+    try {
+      await sendPasswordResetEmail(auth, faculty.email);
+      setEmailNotice({ ok: true, message: `Password-setup link sent to ${faculty.email}.` });
+    } catch (e: any) {
+      setEmailNotice({ ok: false, message: e?.message ?? 'Failed to send email.' });
+    } finally {
+      setResendingId(null);
+      setTimeout(() => setEmailNotice(null), 6000);
     }
   };
 
@@ -373,6 +388,7 @@ export function FacultyTab({
             {!loading && faculties.map((faculty) => {
               const isConfirmDelete = deletingId === faculty.id;
               const isTogglingStatus = statusLoadingId === faculty.id;
+              const isResending = resendingId === faculty.id;
               const isTogglingSchools = schoolsPermLoadingId === faculty.id;
               const isTogglingStudents = createStudentsPermLoadingId === faculty.id;
               const isTogglingRosters  = manageRostersPermLoadingId === faculty.id;
@@ -548,6 +564,20 @@ export function FacultyTab({
                             : faculty.status === 'active'
                             ? <PauseCircle size={13} strokeWidth={1.5} />
                             : <PlayCircle size={13} strokeWidth={1.5} />}
+                        </button>
+
+                        {/* Resend password-setup link */}
+                        <button
+                          onClick={() => handleResendCredentials(faculty)}
+                          disabled={isResending}
+                          title="Resend password-setup link"
+                          className="p-2 rounded transition-all"
+                          style={{ color: '#C4C3BD', cursor: isResending ? 'not-allowed' : 'pointer' }}
+                          onMouseEnter={(e) => { if (!isResending) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#C4C3BD'; }}>
+                          {isResending
+                            ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
+                            : <Mail size={13} strokeWidth={1.5} />}
                         </button>
 
                         {/* Delete */}

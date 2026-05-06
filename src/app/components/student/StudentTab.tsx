@@ -8,11 +8,12 @@ import { AddStudentDrawer, type Student } from './AddStudentDrawer';
 import { BulkStudentModal } from './BulkStudentModal';
 import {
   getStudentsByInstitute,
-  deleteStudent,
-  deleteStudentCredentials,
   getStudent,
   setStudent
 } from '../../../lib/firebaseService';
+import { httpsCallable } from 'firebase/functions';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, functions } from '../../../lib/firebase';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -70,6 +71,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
   const [deletingId, setDeletingId]         = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading]   = useState(false);
   const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null);
+  const [resendingId, setResendingId]       = useState<string | null>(null);
 
   const [emailNotice, setEmailNotice] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -152,13 +154,33 @@ export function StudentTab({ instituteId, instituteName }: Props) {
     if (!deletingId) return;
     setDeleteLoading(true);
     try {
-      await deleteStudent(deletingId);
-      await deleteStudentCredentials(deletingId);
+      const deleteAuthUser = httpsCallable<{ role: 'student'; uid: string }, { ok: boolean }>(
+        functions,
+        'deleteAuthUser',
+      );
+      await deleteAuthUser({ role: 'student', uid: deletingId });
       setStudents((prev) => prev.filter((s) => s.id !== deletingId));
       setDeletingId(null);
       setLastSynced(new Date());
-    } catch (e: any) { console.error(e); }
+    } catch (e: any) {
+      console.error(e);
+      setEmailNotice({ ok: false, message: e?.message ?? 'Failed to delete student.' });
+      setTimeout(() => setEmailNotice(null), 6000);
+    }
     finally { setDeleteLoading(false); }
+  };
+
+  const handleResendCredentials = async (student: Student) => {
+    setResendingId(student.id);
+    try {
+      await sendPasswordResetEmail(auth, student.email);
+      setEmailNotice({ ok: true, message: `Password-setup link sent to ${student.email}.` });
+    } catch (e: any) {
+      setEmailNotice({ ok: false, message: e?.message ?? 'Failed to send email.' });
+    } finally {
+      setResendingId(null);
+      setTimeout(() => setEmailNotice(null), 6000);
+    }
   };
 
   // ── Derived ──────────────────────────────────────────────────────
@@ -388,6 +410,18 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-0.5">
+                        <button
+                          onClick={() => handleResendCredentials(student)}
+                          disabled={resendingId === student.id}
+                          title="Resend password-setup link"
+                          className="p-2 rounded transition-all"
+                          style={{ color: '#C4C3BD', cursor: resendingId === student.id ? 'not-allowed' : 'pointer' }}
+                          onMouseEnter={(e) => { if (resendingId !== student.id) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#C4C3BD'; }}>
+                          {resendingId === student.id
+                            ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
+                            : <Mail size={13} strokeWidth={1.5} />}
+                        </button>
                         <button
                           onClick={() => handleToggleStatus(student.id)}
                           disabled={isTogglingStatus}

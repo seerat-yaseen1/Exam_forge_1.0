@@ -2,14 +2,14 @@ import { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Check, Loader2, AlertTriangle, UserCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import {
-  setStudent,
-  setStudentCredentials,
   generatePassword,
   getStudentByEmail,
+  getStudent,
   type Student as FirebaseStudent,
-  type StudentCredentials
 } from '../../../lib/firebaseService';
-import { sendStudentWelcomeEmail } from '../../../lib/emailService';
+import { httpsCallable } from 'firebase/functions';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, functions } from '../../../lib/firebase';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -157,55 +157,56 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
     setSaving(true); setError('');
     try {
       const normalizedEmail = email.toLowerCase().trim();
-      
-      // Check if student already exists
+
       const existingStudent = await getStudentByEmail(normalizedEmail);
       if (existingStudent) throw new Error('A student with this email already exists.');
 
-      // Generate student ID and password
-      const studentId = `std_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const password = generatePassword();
+      const tempPassword = generatePassword();
       const now = new Date().toISOString();
 
-      // Create student record
-      const student: FirebaseStudent = {
-        id: studentId,
-        instituteId,
-        name: name.trim(),
+      const profile: Record<string, unknown> = {
         email: normalizedEmail,
+        name: name.trim(),
+        instituteId,
         role: 'Student',
         status,
-        firstLoginRequired: true,
-        ...(group.length && { group }),
-        ...(section.length && { section }),
-        ...(specialisation.length && { specialisation }),
-        ...(program.length && { program }),
-        ...(degreeLevel.length && { degreeLevel }),
-        ...(school.length && { school }),
+        firstLoginRequired: false,
         createdAt: now,
         updatedAt: now,
       };
+      if (group.length) profile.group = group;
+      if (section.length) profile.section = section;
+      if (specialisation.length) profile.specialisation = specialisation;
+      if (program.length) profile.program = program;
+      if (degreeLevel.length) profile.degreeLevel = degreeLevel;
+      if (school.length) profile.school = school;
 
-      // Create credentials
-      const credentials: StudentCredentials = {
-        studentId,
-        email: normalizedEmail,
-        password,
-        firstLoginRequired: true,
-      };
+      const createAuthUser = httpsCallable<
+        { role: 'student'; password: string; instituteId: string; profile: Record<string, unknown> },
+        { ok: boolean; uid: string }
+      >(functions, 'createAuthUser');
 
-      // Save to Firestore
-      await setStudent(studentId, student);
-      await setStudentCredentials(studentId, credentials);
+      const result = await createAuthUser({
+        role: 'student',
+        password: tempPassword,
+        instituteId,
+        profile,
+      });
 
-      // Send welcome email with credentials
-      const emailResult = await sendStudentWelcomeEmail(student, instituteName, password);
-      const emailSent = emailResult.ok;
-      if (!emailResult.ok) console.warn('[AddStudentDrawer] email failed:', emailResult.error);
+      let emailSent = false;
+      try {
+        await sendPasswordResetEmail(auth, normalizedEmail);
+        emailSent = true;
+      } catch (mailErr) {
+        console.warn('[AddStudentDrawer] reset email failed:', mailErr);
+      }
 
-      onCreated(student, emailSent);
+      const created = (await getStudent(result.data.uid)) as FirebaseStudent | null;
+      if (!created) throw new Error('Student created but profile not found.');
+
+      onCreated(created as Student, emailSent);
     } catch (e: any) {
-      setError(e.message || 'An unexpected error occurred.');
+      setError(e?.message || 'An unexpected error occurred.');
     } finally {
       setSaving(false);
     }
@@ -251,7 +252,7 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
                 style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderLeft: '2px solid #C4C3BD', borderRadius: 2 }}>
                 <UserCheck size={12} strokeWidth={1.5} style={{ color: '#9A9891', marginTop: 1, flexShrink: 0 }} />
                 <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
-                  A temporary password will be generated and delivered directly to the student's email. They must change it on first login.
+                  A password-setup link will be emailed directly to the student. They set their own password before first login.
                 </p>
               </div>
 
@@ -263,7 +264,7 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
                   style={inputBase} onFocus={onFocus} onBlur={onBlur} />
               </Field>
 
-              <Field label="Student email" hint="Login credentials will be issued to this address.">
+              <Field label="Student email" hint="A password-setup link will be emailed to this address.">
                 <input type="email" value={email}
                   onChange={(e) => { setEmail(e.target.value); setError(''); }}
                   placeholder="e.g. arjun.mehta@student.edu"

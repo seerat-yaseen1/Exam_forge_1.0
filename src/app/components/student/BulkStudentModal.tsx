@@ -7,13 +7,13 @@ import {
 } from 'lucide-react';
 import type { Student } from './AddStudentDrawer';
 import {
-  setStudent,
-  setStudentCredentials,
   generatePassword,
+  getStudent,
   type Student as FirebaseStudent,
-  type StudentCredentials
 } from '../../../lib/firebaseService';
-import { sendStudentWelcomeEmail } from '../../../lib/emailService';
+import { httpsCallable } from 'firebase/functions';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth, functions } from '../../../lib/firebase';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -171,59 +171,71 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
     try {
       const progressIncrement = 100 / validRows.length;
 
+      const parseMetadata = (val?: string): string[] | undefined => {
+        if (!val) return undefined;
+        const items = val.split(',').map((s) => s.trim()).filter(Boolean);
+        return items.length > 0 ? items : undefined;
+      };
+
+      const createAuthUser = httpsCallable<
+        { role: 'student'; password: string; profile: Record<string, unknown>; instituteId: string },
+        { ok: boolean; uid: string }
+      >(functions, 'createAuthUser');
+
       for (const row of validRows) {
         try {
-          const studentId = `std_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           const password = generatePassword();
           const now = new Date().toISOString();
 
-          // Parse metadata into arrays (split by comma if present)
-          const parseMetadata = (val?: string): string[] | undefined => {
-            if (!val) return undefined;
-            const items = val.split(',').map((s) => s.trim()).filter(Boolean);
-            return items.length > 0 ? items : undefined;
-          };
-
-          const student: FirebaseStudent = {
-            id: studentId,
-            instituteId,
+          const profile: Record<string, unknown> = {
             name: row.name,
             email: row.email,
+            instituteId,
             role: 'Student',
             status: 'active',
-            firstLoginRequired: true,
-            ...(parseMetadata(row.group) && { group: parseMetadata(row.group) }),
-            ...(parseMetadata(row.section) && { section: parseMetadata(row.section) }),
-            ...(parseMetadata(row.specialisation) && { specialisation: parseMetadata(row.specialisation) }),
-            ...(parseMetadata(row.program) && { program: parseMetadata(row.program) }),
-            ...(parseMetadata(row.degreeLevel) && { degreeLevel: parseMetadata(row.degreeLevel) }),
-            ...(parseMetadata(row.school) && { school: parseMetadata(row.school) }),
+            firstLoginRequired: false,
             createdAt: now,
             updatedAt: now,
           };
+          const group          = parseMetadata(row.group);
+          const section        = parseMetadata(row.section);
+          const specialisation = parseMetadata(row.specialisation);
+          const program        = parseMetadata(row.program);
+          const degreeLevel    = parseMetadata(row.degreeLevel);
+          const school         = parseMetadata(row.school);
+          if (group)          profile.group          = group;
+          if (section)        profile.section        = section;
+          if (specialisation) profile.specialisation = specialisation;
+          if (program)        profile.program        = program;
+          if (degreeLevel)    profile.degreeLevel    = degreeLevel;
+          if (school)         profile.school         = school;
 
-          const credentials: StudentCredentials = {
-            studentId,
-            email: row.email,
+          const result = await createAuthUser({
+            role: 'student',
             password,
-            firstLoginRequired: true,
-          };
+            profile: { ...profile, name: row.name, email: row.email },
+            instituteId,
+          });
+          const uid = result.data.uid;
 
-          await setStudent(studentId, student);
-          await setStudentCredentials(studentId, credentials);
+          let emailOk = true;
+          try {
+            await sendPasswordResetEmail(auth, row.email);
+          } catch (e) {
+            emailOk = false;
+            console.warn('[BulkStudentModal] reset email failed for', row.email, e);
+          }
 
-          // Send welcome email with credentials
-          const emailResult = await sendStudentWelcomeEmail(student, instituteName, password);
-          if (!emailResult.ok) console.warn('[BulkStudentModal] email failed for', row.email, ':', emailResult.error);
+          const created = await getStudent(uid);
+          if (created) createdStudents.push(created as unknown as Student);
 
           bulkResults.push({
             email: row.email,
             name: row.name,
             success: true,
-            emailSent: emailResult.ok,
+            emailSent: emailOk,
           });
 
-          createdStudents.push(student);
           setProgress((prev) => Math.min(prev + progressIncrement, 100));
         } catch (error: any) {
           bulkResults.push({

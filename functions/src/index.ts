@@ -177,3 +177,76 @@ export const createAuthUser = onCall<CreateAuthUserData>(
     return { ok: true, uid };
   }
 );
+
+interface DeleteAuthUserData {
+  role: Role;
+  uid: string;
+}
+
+const CREDENTIALS_BY_ROLE: Partial<Record<Role, string>> = {
+  institute: 'instituteCredentials',
+  faculty: 'facultyCredentials',
+  student: 'studentCredentials',
+};
+
+export const deleteAuthUser = onCall<DeleteAuthUserData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const callerRole = request.auth.token.role as Role | undefined;
+    const callerInstituteId = request.auth.token.instituteId as string | undefined;
+
+    const { role, uid } = request.data || ({} as DeleteAuthUserData);
+    if (!role || !COLLECTION_BY_ROLE[role]) throw new HttpsError('invalid-argument', 'Invalid role.');
+    if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
+
+    const db = getFirestore();
+    const profileRef = db.collection(COLLECTION_BY_ROLE[role]).doc(uid);
+    const profileSnap = await profileRef.get();
+    if (!profileSnap.exists) {
+      throw new HttpsError('not-found', 'Profile document not found.');
+    }
+    const profile = profileSnap.data() as Record<string, unknown>;
+    const targetInstituteId =
+      role === 'institute' ? uid : (profile.instituteId as string | undefined);
+
+    if (callerRole !== 'webOwner') {
+      if (callerRole === 'institute') {
+        if (role !== 'faculty' && role !== 'student') {
+          throw new HttpsError('permission-denied', 'Institute admins may only delete faculty or students.');
+        }
+        if (!callerInstituteId || callerInstituteId !== targetInstituteId) {
+          throw new HttpsError('permission-denied', 'instituteId must match caller.');
+        }
+      } else if (callerRole === 'faculty') {
+        if (role !== 'student') {
+          throw new HttpsError('permission-denied', 'Faculty may only delete students.');
+        }
+        if (!callerInstituteId || callerInstituteId !== targetInstituteId) {
+          throw new HttpsError('permission-denied', 'instituteId must match caller.');
+        }
+      } else {
+        throw new HttpsError('permission-denied', 'Insufficient permissions.');
+      }
+    }
+
+    try {
+      await getAuth().deleteUser(uid);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code !== 'auth/user-not-found') {
+        console.error('Failed to delete auth user', uid, err);
+        throw new HttpsError('internal', 'Failed to delete auth user.', code);
+      }
+    }
+
+    await profileRef.delete();
+    const credCol = CREDENTIALS_BY_ROLE[role];
+    if (credCol) await db.collection(credCol).doc(uid).delete().catch(() => undefined);
+    if (role === 'institute') {
+      await db.collection('instituteLogos').doc(uid).delete().catch(() => undefined);
+    }
+
+    return { ok: true };
+  }
+);

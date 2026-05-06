@@ -644,7 +644,11 @@ export function UserManagementPage() {
     if (!deletingId) return;
     setDeleteLoading(true);
     try {
-      await deleteInstitute(deletingId);
+      const deleteAuthUser = httpsCallable<{ role: string; uid: string }, { ok: boolean }>(
+        functions,
+        'deleteAuthUser'
+      );
+      await deleteAuthUser({ role: 'institute', uid: deletingId });
       setInstitutes((prev) => prev.filter((i) => i.id !== deletingId));
       setDeletingId(null);
       setLastSynced(new Date());

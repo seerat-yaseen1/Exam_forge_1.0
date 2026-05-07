@@ -136,12 +136,6 @@ export function StudentProfilePage() {
             <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.email}</p>
           </div>
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Student ID</p>
-            <p className="text-sm font-mono" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
-              {session.studentId}
-            </p>
-          </div>
-          <div>
             <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Account Status</p>
             <div className="inline-flex items-center gap-1.5 px-2 py-1" style={{
               background: session.status === 'active' ? '#F0F7F2' : '#F7F6F3',

@@ -155,7 +155,10 @@ service cloud.firestore {
     // extra doc read per credentials write (acceptable — written rarely).
     // ─────────────────────────────────────────────────────────────────────────
     match /faculty/{facultyId} {
-      allow read:   if signedIn();
+      allow read:   if isWebOwner()
+                       || isFacultySelf(facultyId)
+                       || ((role() == 'institute' || role() == 'faculty')
+                           && request.auth.token.instituteId == resource.data.instituteId);
       allow create: if isWebOwner()
                        || isInstituteOf(request.resource.data.instituteId);
       allow update: if isWebOwner()
@@ -196,7 +199,10 @@ service cloud.firestore {
     //   • student   — self-update only
     // ─────────────────────────────────────────────────────────────────────────
     match /students/{studentId} {
-      allow read:   if signedIn();
+      allow read:   if isWebOwner()
+                       || isStudentSelf(studentId)
+                       || ((role() == 'institute' || role() == 'faculty')
+                           && request.auth.token.instituteId == resource.data.instituteId);
       allow create: if isWebOwner()
                        || isInstituteOf(request.resource.data.instituteId)
                        || (role() == 'faculty'
@@ -357,7 +363,11 @@ service cloud.firestore {
     //           attempt's instituteId) any time.
     //   delete: hard-blocked — soft-delete (isDeleted=true) via grader update.
     match /attempts/{id} {
-      allow read: if signedIn();
+      allow read: if isWebOwner()
+                     || (role() == 'student'
+                         && resource.data.studentId == request.auth.token.studentId)
+                     || ((role() == 'institute' || role() == 'faculty')
+                         && request.auth.token.instituteId == resource.data.instituteId);
 
       allow create: if isWebOwner()
                        || (role() == 'student'
@@ -473,7 +483,10 @@ service cloud.firestore {
            );
     }
     match /enrollments/{id} {
-      allow read:   if signedIn();
+      allow read:   if isWebOwner()
+                       || (role() == 'student'
+                           && resource.data.studentId == request.auth.token.studentId)
+                       || canWriteEnrollment(resource.data.assessmentId);
       allow create: if canWriteEnrollment(request.resource.data.assessmentId);
       allow update: if canWriteEnrollment(resource.data.assessmentId);
       allow delete: if canWriteEnrollment(resource.data.assessmentId);

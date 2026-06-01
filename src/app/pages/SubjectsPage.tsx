@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Loader2, FolderTree, Hash, Trash2 } from 'lucide-react';
+import { Plus, Loader2, FolderTree, Hash, Trash2, ArrowRightLeft } from 'lucide-react';
 import {
   getAllSubjects,
   getTopicsBySubject,
   createSubjectWithSlug,
   createTopicWithSlug,
   deleteTopic,
+  moveTopic,
   isValidSlugId,
   SLUG_ID_REGEX,
   type Subject,
@@ -178,6 +179,14 @@ export function SubjectsPage() {
                       <SlugChip id={t.id} />
                       <span style={{ flex: 1 }}>{t.name}</span>
                       <span style={{ fontSize: 11, color: '#83827C' }}>{t.questionCount}</span>
+                      <MoveTopicControl
+                        topic={t}
+                        subjects={subjects}
+                        onMoved={async () => {
+                          await refreshSubjects();
+                          if (selectedSubject) await refreshTopics(selectedSubject.id);
+                        }}
+                      />
                       <button
                         onClick={async () => {
                           if (!confirm(`Delete topic "${t.name}" (${t.id})?`)) return;
@@ -290,6 +299,66 @@ function NewSubjectForm({ onCreated, onCancel }: { onCreated: () => void; onCanc
           {busy ? <Loader2 size={12} className="animate-spin" /> : 'Create'}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function MoveTopicControl({
+  topic, subjects, onMoved,
+}: { topic: Topic; subjects: Subject[]; onMoved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState('');
+  const [busy, setBusy] = useState(false);
+  const candidates = subjects.filter((s) => s.id !== topic.subjectId);
+
+  const submit = async () => {
+    if (!target) return;
+    setBusy(true);
+    try {
+      const res = await moveTopic(topic.id, target);
+      alert(`Moved. ${res.updatedQuestions} question(s) reassigned.`);
+      setOpen(false);
+      setTarget('');
+      onMoved();
+    } catch (e: any) {
+      alert(e.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#83827C', padding: 4 }}
+        title="Move topic to another subject"
+        disabled={candidates.length === 0}
+      >
+        <ArrowRightLeft size={13} strokeWidth={1.5} />
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <select
+        value={target}
+        onChange={(e) => setTarget(e.target.value)}
+        disabled={busy}
+        style={{ fontSize: 12, padding: '2px 6px', border: '1px solid #E8E7E1', borderRadius: 2 }}
+      >
+        <option value="">→ subject…</option>
+        {candidates.map((s) => (
+          <option key={s.id} value={s.id}>{s.id} · {s.name}</option>
+        ))}
+      </select>
+      <Button size="sm" onClick={submit} disabled={busy || !target} style={{ height: 24, padding: '0 8px', fontSize: 11 }}>
+        {busy ? <Loader2 size={11} className="animate-spin" /> : 'Move'}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => { setOpen(false); setTarget(''); }} disabled={busy} style={{ height: 24, padding: '0 8px', fontSize: 11 }}>
+        ✕
+      </Button>
     </div>
   );
 }

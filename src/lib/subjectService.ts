@@ -496,6 +496,35 @@ export async function createTopicWithSlug(
   return topic;
 }
 
+/**
+ * Move a topic to a different subject.
+ * Updates topics/{id}.subjectId and also rewrites every question that points
+ * at this topic so subjectId stays consistent.
+ */
+export async function moveTopic(topicId: string, newSubjectId: string): Promise<{ updatedQuestions: number }> {
+  const { where } = await import('firebase/firestore');
+  const [topicSnap, parentSnap] = await Promise.all([
+    getDoc(doc(db, TOPIC_COL, topicId)),
+    getDoc(doc(db, COL, newSubjectId)),
+  ]);
+  if (!topicSnap.exists()) throw new Error(`Topic "${topicId}" not found.`);
+  if (!parentSnap.exists()) throw new Error(`Target subject "${newSubjectId}" not found.`);
+  const topic = topicSnap.data() as Topic;
+  if (topic.subjectId === newSubjectId) return { updatedQuestions: 0 };
+
+  // Re-point every question tagged with this topicId
+  const qSnap = await getDocs(query(collection(db, 'questions'), where('topicId', '==', topicId)));
+  const batch = writeBatch(db);
+  qSnap.docs.forEach((qDoc) => {
+    batch.update(qDoc.ref, { subjectId: newSubjectId, updatedAt: now() });
+  });
+  batch.update(doc(db, TOPIC_COL, topicId), { subjectId: newSubjectId, updatedAt: now() });
+  await batch.commit();
+
+  console.log(`✅ [Topics] moveTopic ${topicId} → subject ${newSubjectId} (${qSnap.size} questions updated)`);
+  return { updatedQuestions: qSnap.size };
+}
+
 export async function deleteTopic(topicId: string): Promise<void> {
   await deleteDoc(doc(db, TOPIC_COL, topicId));
   console.log(`✅ [Topics] deleteTopic → ${topicId}`);

@@ -16,7 +16,7 @@ import {
 } from '../../../lib/questionBankService';
 import { ImageUploader } from './ImageUploader';
 import { MathToolbar, InlineMathButton } from './MathToolbar';
-import { SubjectCombobox } from './SubjectCombobox';
+import { SubjectTopicSelect } from './SubjectTopicSelect';
 
 // ── Type re-export for consumers ──────────────────────────────────────────────
 
@@ -509,8 +509,9 @@ const DIFFS: { v: Difficulty; label: string; active: string }[] = [
 ];
 
 interface MetaProps {
-  subject: string;     setSubject:     (v: string)    => void;
-  topic: string;       setTopic:       (v: string)    => void;
+  subjectId: string | null;
+  topicId: string | null;
+  setSubjectTopic: (subjectId: string | null, subjectName: string, topicId: string | null, topicName: string) => void;
   tags: string[];      setTags:        (v: string[])  => void;
   difficulty: Difficulty; setDifficulty: (v: Difficulty) => void;
   explanation: string; setExplanation: (v: string)    => void;
@@ -525,20 +526,13 @@ function MetaSection(p: MetaProps) {
       <div style={{ borderTop: '1px solid #F0EFEB', margin: '0 0 20px' }} />
       <p className="text-xs mb-4" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>METADATA</p>
 
-      <div className="grid grid-cols-2 gap-x-4">
-        <Field label="Subject *" error={p.errors.subject}>
-          <SubjectCombobox
-            value={p.subject}
-            onChange={p.setSubject}
-            error={p.errors.subject ? ' ' : undefined}
-            placeholder="e.g. Mathematics"
-          />
-        </Field>
-        <Field label="Topic">
-          <input type="text" value={p.topic} onChange={(e) => p.setTopic(e.target.value)}
-            placeholder="e.g. Algebra, Limits" style={inp} onFocus={iFocus} onBlur={iBlur} />
-        </Field>
-      </div>
+      <SubjectTopicSelect
+        subjectId={p.subjectId}
+        topicId={p.topicId}
+        onChange={(v) => p.setSubjectTopic(v.subjectId, v.subjectName, v.topicId, v.topicName)}
+        subjectError={p.errors.subject}
+        topicError={p.errors.topic}
+      />
 
       <Field label="Tags" hint="Press Enter or comma to add a tag.">
         <TagInput tags={p.tags} onChange={p.setTags} />
@@ -608,8 +602,16 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
   const [modelAnswer,  setModelAnswer]  = useState(initialData?.modelAnswer ?? '');
   const [pairs,        setPairs]        = useState<MatchPair[]>(initialData?.pairs ?? []);
   const [correctPairs, setCorrectPairs] = useState<CorrectPair[]>(initialData?.correctPairs ?? []);
-  const [subject,      setSubject]      = useState(initialData?.subject ?? '');
-  const [topic,        setTopic]        = useState(initialData?.topic ?? '');
+  const [subjectId,   setSubjectId]   = useState<string | null>(initialData?.subjectId ?? null);
+  const [topicId,     setTopicId]     = useState<string | null>(initialData?.topicId ?? null);
+  const [subject,     setSubject]     = useState(initialData?.subject ?? '');
+  const [topic,       setTopic]       = useState(initialData?.topic ?? '');
+  const setSubjectTopic = (sid: string | null, sname: string, tid: string | null, tname: string) => {
+    setSubjectId(sid);
+    setSubject(sname);
+    setTopicId(tid);
+    setTopic(tname);
+  };
   const [tags,         setTags]         = useState<string[]>(initialData?.tags ?? []);
   const [difficulty,   setDifficulty]   = useState<Difficulty>(initialData?.difficulty ?? 'medium');
   const [explanation,  setExplanation]  = useState(initialData?.explanation ?? '');
@@ -642,7 +644,8 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
       if (pairs.some((p) => !p.leftText.trim() || !p.rightText.trim()))
         errs.pairs = 'All pairs must have text in both columns.';
     }
-    if (!subject.trim()) errs.subject = 'Subject is required.';
+    if (!subjectId) errs.subject = 'Subject is required.';
+    if (!topicId)   errs.topic   = 'Topic is required.';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -659,6 +662,8 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
         modelAnswer: modelAnswer.trim(),
         pairs, correctPairs,
         subject: subject.trim(), topic: topic.trim(),
+        subjectId: subjectId ?? undefined,
+        topicId:   topicId   ?? undefined,
         tags, difficulty,
         explanation: explanation.trim(),
       });
@@ -754,8 +759,9 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
 
         {/* Metadata */}
         <MetaSection
-          subject={subject}       setSubject={setSubject}
-          topic={topic}           setTopic={setTopic}
+          subjectId={subjectId}
+          topicId={topicId}
+          setSubjectTopic={setSubjectTopic}
           tags={tags}             setTags={setTags}
           difficulty={difficulty} setDifficulty={setDifficulty}
           explanation={explanation} setExplanation={setExplanation}

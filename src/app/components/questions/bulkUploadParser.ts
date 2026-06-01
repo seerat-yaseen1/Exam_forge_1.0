@@ -429,9 +429,14 @@ export function parseWorkbook(buffer: ArrayBuffer): ParsedWorkbook {
  * Does NOT mutate rows with errors — only rows with status 'valid' or 'warning'.
  * Returns a new array (does not mutate input).
  */
-export function resolveSubjectsInRows(rows: ParsedRow[], subjects: Subject[]): ParsedRow[] {
+export function resolveSubjectsInRows(
+  rows: ParsedRow[],
+  subjects: Subject[],
+  topics: import('../../../lib/subjectService').Topic[] = [],
+): ParsedRow[] {
   return rows.map((row) => {
     const rawSubject = (row.draft.subject ?? '').trim();
+    const rawTopic   = (row.draft.topic   ?? '').trim();
     if (!rawSubject) return row;
 
     const result = resolveSubject(rawSubject, subjects);
@@ -439,48 +444,58 @@ export function resolveSubjectsInRows(rows: ParsedRow[], subjects: Subject[]): P
     let resolution: SubjectResolution;
     let updatedDraft = { ...row.draft };
     const updatedWarnings = [...row.warnings];
+    const updatedErrors   = [...row.errors];
+    let resolvedSubject: Subject | null = null;
 
-    if (result.kind === 'exact') {
-      resolution = { kind: 'exact', canonicalName: result.subject.name };
-      updatedDraft.subject = result.subject.name;
-    } else if (result.kind === 'alias') {
-      resolution = {
-        kind: 'alias',
-        canonicalName: result.subject.name,
-        note: `Matched via alias "${result.matchedAlias}"`,
-      };
-      updatedDraft.subject = result.subject.name;
-      updatedWarnings.push({
-        field: 'subject',
-        message: `"${rawSubject}" matched via alias → "${result.subject.name}"`,
-      });
-    } else if (result.kind === 'fuzzy') {
-      resolution = {
-        kind: 'fuzzy',
-        canonicalName: result.subject.name,
-        note: `Fuzzy match (${Math.round(result.score * 100)}% similar)`,
-      };
-      updatedDraft.subject = result.subject.name;
-      updatedWarnings.push({
-        field: 'subject',
-        message: `"${rawSubject}" fuzzy-matched to "${result.subject.name}" — verify this is correct`,
-      });
+    if (result.kind === 'exact' || result.kind === 'alias' || result.kind === 'fuzzy') {
+      resolvedSubject = result.subject;
+      updatedDraft.subject   = result.subject.name;
+      updatedDraft.subjectId = result.subject.id;
+
+      if (result.kind === 'exact') {
+        resolution = { kind: 'exact', canonicalName: result.subject.name };
+      } else if (result.kind === 'alias') {
+        resolution = { kind: 'alias', canonicalName: result.subject.name, note: `Matched via alias "${result.matchedAlias}"` };
+        updatedWarnings.push({ field: 'subject', message: `"${rawSubject}" matched via alias → "${result.subject.name}"` });
+      } else {
+        resolution = { kind: 'fuzzy', canonicalName: result.subject.name, note: `Fuzzy match (${Math.round(result.score * 100)}% similar)` };
+        updatedWarnings.push({ field: 'subject', message: `"${rawSubject}" fuzzy-matched to "${result.subject.name}" — verify this is correct` });
+      }
     } else {
-      // kind === 'new'
+      // kind === 'new' — strict mode: reject unknown subjects
       resolution = { kind: 'new', canonicalName: result.normalised };
-      updatedDraft.subject = result.normalised;
-      updatedWarnings.push({
+      updatedErrors.push({
         field: 'subject',
-        message: `"${result.normalised}" is a new subject — will be created`,
+        message: `Subject "${result.normalised}" doesn't exist. Create it on the Subjects page first.`,
       });
+    }
+
+    // Topic resolution — must match by name within the resolved subject's topics
+    if (resolvedSubject && rawTopic) {
+      const normTopic = rawTopic.toLowerCase().trim();
+      const match = topics.find(
+        (t) => t.subjectId === resolvedSubject!.id && t.name.toLowerCase() === normTopic
+      );
+      if (match) {
+        updatedDraft.topic   = match.name;
+        updatedDraft.topicId = match.id;
+      } else {
+        updatedErrors.push({
+          field: 'topic',
+          message: `Topic "${rawTopic}" not found under subject "${resolvedSubject.name}". Create it on the Subjects page first.`,
+        });
+      }
+    } else if (resolvedSubject && !rawTopic) {
+      updatedErrors.push({ field: 'topic', message: 'Topic is required.' });
     }
 
     return {
       ...row,
       draft: updatedDraft,
       warnings: updatedWarnings,
+      errors: updatedErrors,
       subjectResolution: resolution,
-      status: row.errors.length > 0
+      status: updatedErrors.length > 0
         ? 'error'
         : updatedWarnings.length > 0 ? 'warning' : 'valid',
     };

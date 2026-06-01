@@ -117,8 +117,10 @@ export type Question = {
   correctPairs: CorrectPair[];// which left maps to which right; [] for non-match
 
   // ── Metadata ──
-  subject: string;
-  topic: string;
+  subject: string;            // canonical name (kept for back-compat)
+  topic: string;              // canonical name (kept for back-compat)
+  subjectId?: string;         // slug ID (e.g. "math-0001") — preferred
+  topicId?: string;           // slug ID (e.g. "prob-0001") — preferred
   tags: string[];
   difficulty: Difficulty;
   explanation: string;        // optional solution explanation

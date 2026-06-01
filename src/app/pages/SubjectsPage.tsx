@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Loader2, FolderTree, Hash, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Plus, Loader2, FolderTree, Hash, Trash2, ArrowRightLeft, Pencil } from 'lucide-react';
 import {
   getAllSubjects,
   getTopicsBySubject,
   createSubjectWithSlug,
   createTopicWithSlug,
+  deleteSubject,
   deleteTopic,
   moveTopic,
+  updateSubject,
+  updateTopic,
   isValidSlugId,
   SLUG_ID_REGEX,
   type Subject,
@@ -99,27 +102,20 @@ export function SubjectsPage() {
           ) : (
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {subjects.map((s) => (
-                <li key={s.id}>
-                  <button
-                    onClick={() => setSelectedSubjectId(s.id)}
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '12px 14px',
-                      background: s.id === selectedSubjectId ? '#F2F1EC' : 'transparent',
-                      border: 'none',
-                      borderBottom: '1px solid #F2F1EC',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                    }}
-                  >
-                    <SlugChip id={s.id} />
-                    <span style={{ flex: 1 }}>{s.name}</span>
-                    <span style={{ fontSize: 11, color: '#83827C' }}>{s.questionCount}</span>
-                  </button>
-                </li>
+                <SubjectRow
+                  key={s.id}
+                  subject={s}
+                  selected={s.id === selectedSubjectId}
+                  onSelect={() => setSelectedSubjectId(s.id)}
+                  onUpdated={async (newId) => {
+                    await refreshSubjects();
+                    if (selectedSubjectId === s.id) setSelectedSubjectId(newId);
+                  }}
+                  onDeleted={async () => {
+                    if (selectedSubjectId === s.id) setSelectedSubjectId(null);
+                    await refreshSubjects();
+                  }}
+                />
               ))}
             </ul>
           )}
@@ -166,45 +162,15 @@ export function SubjectsPage() {
               ) : (
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                   {topics.map((t) => (
-                    <li
+                    <TopicRow
                       key={t.id}
-                      style={{
-                        padding: '12px 14px',
-                        borderBottom: '1px solid #F2F1EC',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
+                      topic={t}
+                      subjects={subjects}
+                      onChanged={async () => {
+                        await refreshSubjects();
+                        if (selectedSubject) await refreshTopics(selectedSubject.id);
                       }}
-                    >
-                      <SlugChip id={t.id} />
-                      <span style={{ flex: 1 }}>{t.name}</span>
-                      <span style={{ fontSize: 11, color: '#83827C' }}>{t.questionCount}</span>
-                      <MoveTopicControl
-                        topic={t}
-                        subjects={subjects}
-                        onMoved={async () => {
-                          await refreshSubjects();
-                          if (selectedSubject) await refreshTopics(selectedSubject.id);
-                        }}
-                      />
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`Delete topic "${t.name}" (${t.id})?`)) return;
-                          await deleteTopic(t.id);
-                          if (selectedSubject) await refreshTopics(selectedSubject.id);
-                        }}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: '#83827C',
-                          padding: 4,
-                        }}
-                        title="Delete topic"
-                      >
-                        <Trash2 size={13} strokeWidth={1.5} />
-                      </button>
-                    </li>
+                    />
                   ))}
                 </ul>
               )}
@@ -297,6 +263,194 @@ function NewSubjectForm({ onCreated, onCancel }: { onCreated: () => void; onCanc
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
         <Button size="sm" onClick={submit} disabled={busy || !idValid || !name.trim()}>
           {busy ? <Loader2 size={12} className="animate-spin" /> : 'Create'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SubjectRow({
+  subject, selected, onSelect, onUpdated, onDeleted,
+}: {
+  subject: Subject;
+  selected: boolean;
+  onSelect: () => void;
+  onUpdated: (newId: string) => void;
+  onDeleted: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <li>
+        <EditSlugForm
+          initialId={subject.id}
+          initialName={subject.name}
+          onSave={async (newId, newName) => {
+            await updateSubject(subject.id, newId, newName);
+            setEditing(false);
+            onUpdated(newId);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </li>
+    );
+  }
+
+  return (
+    <li
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '12px 14px',
+        background: selected ? '#F2F1EC' : 'transparent',
+        borderBottom: '1px solid #F2F1EC',
+      }}
+    >
+      <button
+        onClick={onSelect}
+        style={{
+          flex: 1, display: 'flex', alignItems: 'center', gap: 10,
+          background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0,
+        }}
+      >
+        <SlugChip id={subject.id} />
+        <span style={{ flex: 1 }}>{subject.name}</span>
+        <span style={{ fontSize: 11, color: '#83827C' }}>{subject.questionCount}</span>
+      </button>
+      <IconBtn title="Edit subject" onClick={() => setEditing(true)}>
+        <Pencil size={13} strokeWidth={1.5} />
+      </IconBtn>
+      <IconBtn
+        title="Delete subject"
+        onClick={async () => {
+          if (!confirm(`Delete subject "${subject.name}" (${subject.id})?`)) return;
+          try {
+            await deleteSubject(subject.id);
+            onDeleted();
+          } catch (e: any) {
+            alert(e.message ?? String(e));
+          }
+        }}
+      >
+        <Trash2 size={13} strokeWidth={1.5} />
+      </IconBtn>
+    </li>
+  );
+}
+
+function TopicRow({
+  topic, subjects, onChanged,
+}: { topic: Topic; subjects: Subject[]; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <div>
+        <EditSlugForm
+          initialId={topic.id}
+          initialName={topic.name}
+          onSave={async (newId, newName) => {
+            await updateTopic(topic.id, newId, newName);
+            setEditing(false);
+            onChanged();
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <li
+      style={{
+        padding: '12px 14px',
+        borderBottom: '1px solid #F2F1EC',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}
+    >
+      <SlugChip id={topic.id} />
+      <span style={{ flex: 1 }}>{topic.name}</span>
+      <span style={{ fontSize: 11, color: '#83827C' }}>{topic.questionCount}</span>
+      <MoveTopicControl topic={topic} subjects={subjects} onMoved={onChanged} />
+      <IconBtn title="Edit topic" onClick={() => setEditing(true)}>
+        <Pencil size={13} strokeWidth={1.5} />
+      </IconBtn>
+      <IconBtn
+        title="Delete topic"
+        onClick={async () => {
+          if (!confirm(`Delete topic "${topic.name}" (${topic.id})?`)) return;
+          await deleteTopic(topic.id);
+          onChanged();
+        }}
+      >
+        <Trash2 size={13} strokeWidth={1.5} />
+      </IconBtn>
+    </li>
+  );
+}
+
+function IconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#83827C', padding: 4 }}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EditSlugForm({
+  initialId, initialName, onSave, onCancel,
+}: {
+  initialId: string;
+  initialName: string;
+  onSave: (newId: string, newName: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [id, setId] = useState(initialId);
+  const [name, setName] = useState(initialName);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const idValid = isValidSlugId(id);
+
+  const submit = async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      await onSave(id.trim(), name);
+    } catch (e: any) {
+      setErr(e.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: 12, borderBottom: '1px solid #E8E7E1', background: '#FAFAF7' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <Input
+          value={id}
+          onChange={(e) => setId(e.target.value.toLowerCase())}
+          style={{ width: 150, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+          disabled={busy}
+        />
+        <Input value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
+      </div>
+      <div style={{ fontSize: 11, color: idValid ? '#83827C' : '#B91C1C', marginBottom: 8 }}>
+        Format: {SLUG_ID_REGEX.toString().slice(1, -1)}
+      </div>
+      {err && <div style={{ fontSize: 12, color: '#B91C1C', marginBottom: 8 }}>{err}</div>}
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
+        <Button size="sm" onClick={submit} disabled={busy || !idValid || !name.trim()}>
+          {busy ? <Loader2 size={12} className="animate-spin" /> : 'Save'}
         </Button>
       </div>
     </div>

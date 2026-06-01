@@ -459,9 +459,11 @@ export async function getAllTopics(): Promise<Topic[]> {
 export async function getTopicsBySubject(subjectId: string): Promise<Topic[]> {
   const { where } = await import('firebase/firestore');
   const snap = await getDocs(
-    query(collection(db, TOPIC_COL), where('subjectId', '==', subjectId), orderBy('name'))
+    query(collection(db, TOPIC_COL), where('subjectId', '==', subjectId))
   );
-  return snap.docs.map((d) => d.data() as Topic);
+  return snap.docs
+    .map((d) => d.data() as Topic)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function createTopicWithSlug(
@@ -523,6 +525,116 @@ export async function moveTopic(topicId: string, newSubjectId: string): Promise<
 
   console.log(`✅ [Topics] moveTopic ${topicId} → subject ${newSubjectId} (${qSnap.size} questions updated)`);
   return { updatedQuestions: qSnap.size };
+}
+
+/**
+ * Update a subject's ID and/or name.
+ * • Name-only change → single field update.
+ * • ID change → copies the doc under the new ID, re-points every topic's subjectId
+ *   and every question's subjectId, then deletes the old doc. All in one batch.
+ */
+export async function updateSubject(
+  oldId: string,
+  newId: string,
+  newRawName: string,
+): Promise<{ updatedTopics: number; updatedQuestions: number }> {
+  const { where } = await import('firebase/firestore');
+  const name = normalizeSubject(newRawName);
+  if (!name) throw new Error('Name is required.');
+
+  const oldSnap = await getDoc(doc(db, COL, oldId));
+  if (!oldSnap.exists()) throw new Error(`Subject "${oldId}" not found.`);
+  const oldSubj = oldSnap.data() as Subject;
+
+  // Name-only path
+  if (oldId === newId) {
+    if (oldSubj.name === name) return { updatedTopics: 0, updatedQuestions: 0 };
+    await updateDoc(doc(db, COL, oldId), { name, updatedAt: now() });
+    return { updatedTopics: 0, updatedQuestions: 0 };
+  }
+
+  if (!isValidSlugId(newId)) {
+    throw new Error(`Invalid ID "${newId}". Use 1–4 letters, a dash, and 1–4 digits.`);
+  }
+  const clash = await getDoc(doc(db, COL, newId));
+  if (clash.exists()) throw new Error(`Subject ID "${newId}" is already in use.`);
+
+  const [topicsSnap, qSnap] = await Promise.all([
+    getDocs(query(collection(db, TOPIC_COL), where('subjectId', '==', oldId))),
+    getDocs(query(collection(db, 'questions'),  where('subjectId', '==', oldId))),
+  ]);
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, COL, newId), { ...oldSubj, id: newId, name, updatedAt: now() });
+  topicsSnap.docs.forEach((t) => batch.update(t.ref, { subjectId: newId, updatedAt: now() }));
+  qSnap.docs.forEach((q) =>     batch.update(q.ref, { subjectId: newId, updatedAt: now() }));
+  batch.delete(doc(db, COL, oldId));
+  await batch.commit();
+
+  console.log(`✅ [Subjects] updateSubject ${oldId} → ${newId} "${name}" (${topicsSnap.size} topics, ${qSnap.size} questions)`);
+  return { updatedTopics: topicsSnap.size, updatedQuestions: qSnap.size };
+}
+
+/**
+ * Update a topic's ID and/or name.
+ * • Name-only change → single field update.
+ * • ID change → copies the doc under the new ID, re-points every question's
+ *   topicId, then deletes the old doc.
+ */
+export async function updateTopic(
+  oldId: string,
+  newId: string,
+  newRawName: string,
+): Promise<{ updatedQuestions: number }> {
+  const { where } = await import('firebase/firestore');
+  const name = normalizeSubject(newRawName);
+  if (!name) throw new Error('Name is required.');
+
+  const oldSnap = await getDoc(doc(db, TOPIC_COL, oldId));
+  if (!oldSnap.exists()) throw new Error(`Topic "${oldId}" not found.`);
+  const oldTopic = oldSnap.data() as Topic;
+
+  if (oldId === newId) {
+    if (oldTopic.name === name) return { updatedQuestions: 0 };
+    await updateDoc(doc(db, TOPIC_COL, oldId), { name, updatedAt: now() });
+    return { updatedQuestions: 0 };
+  }
+
+  if (!isValidSlugId(newId)) {
+    throw new Error(`Invalid ID "${newId}". Use 1–4 letters, a dash, and 1–4 digits.`);
+  }
+  const clash = await getDoc(doc(db, TOPIC_COL, newId));
+  if (clash.exists()) throw new Error(`Topic ID "${newId}" is already in use.`);
+
+  const qSnap = await getDocs(query(collection(db, 'questions'), where('topicId', '==', oldId)));
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, TOPIC_COL, newId), { ...oldTopic, id: newId, name, updatedAt: now() });
+  qSnap.docs.forEach((q) => batch.update(q.ref, { topicId: newId, updatedAt: now() }));
+  batch.delete(doc(db, TOPIC_COL, oldId));
+  await batch.commit();
+
+  console.log(`✅ [Topics] updateTopic ${oldId} → ${newId} "${name}" (${qSnap.size} questions)`);
+  return { updatedQuestions: qSnap.size };
+}
+
+/**
+ * Delete a subject. Refuses if any topic or question still references it —
+ * the caller should reassign or delete those first.
+ */
+export async function deleteSubject(subjectId: string): Promise<void> {
+  const { where } = await import('firebase/firestore');
+  const [topicsSnap, qSnap] = await Promise.all([
+    getDocs(query(collection(db, TOPIC_COL), where('subjectId', '==', subjectId))),
+    getDocs(query(collection(db, 'questions'),  where('subjectId', '==', subjectId))),
+  ]);
+  if (topicsSnap.size > 0 || qSnap.size > 0) {
+    throw new Error(
+      `Cannot delete: ${topicsSnap.size} topic(s) and ${qSnap.size} question(s) still reference this subject. Reassign or delete them first.`
+    );
+  }
+  await deleteDoc(doc(db, COL, subjectId));
+  console.log(`✅ [Subjects] deleteSubject → ${subjectId}`);
 }
 
 export async function deleteTopic(topicId: string): Promise<void> {

@@ -10,7 +10,7 @@ import {
   computeSummary, getSaveableRows, getAllRows,
   type ParsedWorkbook, type ParsedRow, type UploadSummary,
 } from './bulkUploadParser';
-import { getAllSubjects, ensureSubject, type Subject } from '../../../lib/subjectService';
+import { getAllSubjects, getAllTopics, ensureSubject, type Subject, type Topic } from '../../../lib/subjectService';
 import {
   createQuestion,
   type QuestionOwnerType,
@@ -578,11 +578,15 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
   const [summary,   setSummary]   = useState<UploadSummary | null>(null);
   const [saveRows,  setSaveRows]  = useState<ParsedRow[]>([]);
   const [subjects,  setSubjects]  = useState<Subject[]>([]);
+  const [topics,    setTopics]    = useState<Topic[]>([]);
   const [parseErr,  setParseErr]  = useState<string | null>(null);
 
-  // Fetch subjects once
+  // Fetch subjects + topics once
   useEffect(() => {
-    getAllSubjects().then(setSubjects);
+    Promise.all([getAllSubjects(), getAllTopics()]).then(([s, t]) => {
+      setSubjects(s);
+      setTopics(t);
+    });
   }, []);
 
   const handleFile = useCallback((buffer: ArrayBuffer) => {
@@ -596,9 +600,9 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
       // Resolve subjects against registry
       const resolved: ParsedWorkbook = {
         ...raw,
-        mcq:   resolveSubjectsInRows(raw.mcq,   subjects),
-        text:  resolveSubjectsInRows(raw.text,  subjects),
-        match: resolveSubjectsInRows(raw.match, subjects),
+        mcq:   resolveSubjectsInRows(raw.mcq,   subjects, topics),
+        text:  resolveSubjectsInRows(raw.text,  subjects, topics),
+        match: resolveSubjectsInRows(raw.match, subjects, topics),
       };
       const allRows = getAllRows(resolved);
       const sum = computeSummary(allRows);
@@ -609,7 +613,7 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
     } catch (err: any) {
       setParseErr(`Failed to parse file: ${err?.message ?? 'Unknown error'}. Make sure you are using the STRATUM template.`);
     }
-  }, [subjects]);
+  }, [subjects, topics]);
 
   const handleComplete = (saved: number, skipped: number) => {
     onComplete(saved);

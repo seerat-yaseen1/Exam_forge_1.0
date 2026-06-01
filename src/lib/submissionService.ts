@@ -12,9 +12,24 @@ import {
   onSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
+import { functions } from './firebase';
 import type { Assessment } from './assessmentService';
-import type { Question } from './questionBankService';
+import type { Question, CorrectPair } from './questionBankService';
+
+// ── Per-question grading data populated server-side by gradeAttempt ─
+// Students can never read questionAnswers directly; this map is the
+// channel through which the results page learns the correct answers
+// (only after submission).
+
+export type GradedAnswer = {
+  isCorrect: boolean | null;   // null for ungraded (text) questions
+  marksAwarded: number;
+  correctIds?: string[];       // mcq
+  correctPairs?: CorrectPair[]; // match
+  modelAnswer?: string;        // text
+};
 
 // ══════════════════════════════════════════════════════════════════
 // INTERNAL HELPERS
@@ -173,6 +188,11 @@ export type Attempt = {
 
   // Populated on submission
   scores?: AttemptScores;
+
+  // Populated server-side by gradeAttempt — per-question correctness +
+  // the correct-answer payload (which students can never read from
+  // questionAnswers directly). Empty on legacy / pre-migration attempts.
+  gradedAnswers?: Record<string, GradedAnswer>;
 
   // Anti-cheat
   integrityLog: IntegrityLog;
@@ -436,6 +456,33 @@ export async function endBreak(params: {
     [`sectionTimings.${params.nextSectionId}.startedAt`]: now(),
     updatedAt: now(),
   });
+}
+
+// ── Grade attempt (server-side) ───────────────────────────────────
+// Calls the gradeAttempt Cloud Function which holds the only legitimate
+// read path for answer keys (questionAnswers is denied to students).
+// Replaces the old client-side calculateScores → submitAttempt pair.
+
+export type GradeReason =
+  | 'manual'
+  | 'time_expired'
+  | 'window_closed'
+  | 'violation_limit'
+  | 'terminated';
+
+export async function gradeAttempt(params: {
+  attemptId: string;
+  reason: GradeReason;
+  terminateReason?: string;
+  lastSectionId?: string;
+  lastSectionTimeUsed?: number;
+}): Promise<{ ok: true; scores: AttemptScores }> {
+  const call = httpsCallable<typeof params, { ok: true; scores: AttemptScores }>(
+    functions,
+    'gradeAttempt',
+  );
+  const res = await call(params);
+  return res.data;
 }
 
 // ── Submit attempt (final) ────────────────────────────────────────

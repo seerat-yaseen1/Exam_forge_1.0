@@ -23,6 +23,7 @@ import {
   getAttemptByStudentAndAssessment,
   type Attempt,
   type AttemptAnswer,
+  type GradedAnswer,
 } from '../../../lib/submissionService';
 import { getQuestion, type Question } from '../../../lib/questionBankService';
 import {
@@ -86,14 +87,21 @@ function ScoreRing({ pct, passed }: { pct: number; passed: boolean }) {
 function ReviewQuestion({
   question,
   answer,
+  graded,
   marks,
   qNumber,
 }: {
   question: Question;
   answer: AttemptAnswer | undefined;
+  graded: GradedAnswer | undefined;
   marks: number;
   qNumber: number;
 }) {
+  // Correct-answer data comes from the server-populated gradedAnswers map
+  // (questionAnswers itself is denied to students by Firestore rules). Falls
+  // back to inline question fields for legacy/pre-migration attempts.
+  const correctIds   = graded?.correctIds   ?? question.correctIds   ?? [];
+  const correctPairs = graded?.correctPairs ?? question.correctPairs ?? [];
   const [open, setOpen] = useState(false);
 
   const studentAnswerText = useMemo(() => {
@@ -119,19 +127,21 @@ function ReviewQuestion({
   }, [answer, question]);
 
   const isCorrect = useMemo(() => {
-    if (!answer || question.engine === 'text') return null; // text needs manual review
+    if (!answer || question.engine === 'text') return null;
+    // Prefer the authoritative server result when present.
+    if (graded && typeof graded.isCorrect === 'boolean') return graded.isCorrect;
     if (question.engine === 'mcq') {
       const ids = Array.isArray(answer.value) ? answer.value : [answer.value as string];
-      const correct = [...question.correctIds].sort();
-      const selected = [...ids].sort();
-      return JSON.stringify(correct) === JSON.stringify(selected);
+      const sortedCorrect = [...correctIds].sort();
+      const sortedSelected = [...ids].sort();
+      return JSON.stringify(sortedCorrect) === JSON.stringify(sortedSelected);
     }
     if (question.engine === 'match') {
       const m = answer.value as Record<string, string>;
-      return question.correctPairs.every((cp) => m[cp.leftId] === cp.rightId);
+      return correctPairs.every((cp) => m[cp.leftId] === cp.rightId);
     }
     return false;
-  }, [answer, question]);
+  }, [answer, question, graded, correctIds, correctPairs]);
 
   const statusIcon =
     question.engine === 'text'
@@ -228,7 +238,7 @@ function ReviewQuestion({
                     }}
                   >
                     {question.options
-                      .filter((o) => question.correctIds.includes(o.id))
+                      .filter((o) => correctIds.includes(o.id))
                       .map((o) => o.text)
                       .join(', ')}
                   </div>
@@ -242,7 +252,7 @@ function ReviewQuestion({
                     className="px-3 py-2.5 space-y-1"
                     style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}
                   >
-                    {question.correctPairs.map((cp) => {
+                    {correctPairs.map((cp) => {
                       const left  = question.pairs.find((p) => p.leftId  === cp.leftId);
                       const right = question.pairs.find((p) => p.rightId === cp.rightId);
                       return (
@@ -315,7 +325,9 @@ export function ExamResultsPage() {
           const allQIds = [...new Set(
             (a.sections ?? []).flatMap((s) => s.questions.map((q) => q.questionId))
           )];
-          const results = await Promise.all(allQIds.map((id) => getQuestion(id)));
+          const results = await Promise.all(
+            allQIds.map((id) => getQuestion(id, { includeAnswer: false }))
+          );
           const map = new Map<string, Question>();
           results.forEach((q) => { if (q) map.set(q.id, q); });
           setQuestionMap(map);
@@ -643,6 +655,7 @@ export function ExamResultsPage() {
                           key={qId}
                           question={q}
                           answer={attempt.answers[qId]}
+                          graded={attempt.gradedAnswers?.[qId]}
                           marks={marksMap.get(qId) ?? 1}
                           qNumber={globalIdx + 1}
                         />

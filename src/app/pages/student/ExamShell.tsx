@@ -29,10 +29,8 @@ import {
   submitSection,
   endBreak,
   pickSection,
-  submitAttempt,
-  autoTerminate,
+  gradeAttempt,
   logViolation,
-  calculateScores,
   getAttemptByStudentAndAssessment,
   subscribeToAttempt,
   registerSession,
@@ -615,7 +613,9 @@ export function ExamShell() {
         const allQIds = [...new Set(
           effSections.flatMap((s) => s.questions.map((q) => q.questionId))
         )];
-        const qResults = await Promise.all(allQIds.map((id) => getQuestion(id)));
+        const qResults = await Promise.all(
+          allQIds.map((id) => getQuestion(id, { includeAnswer: false }))
+        );
         const qMap = new Map<string, Question>();
         qResults.forEach((q) => { if (q) qMap.set(q.id, q); });
 
@@ -1042,15 +1042,10 @@ export function ExamShell() {
     setShellStatus('submitting_exam');
     await flushAnswers();
 
-    // Calculate scores
-    const allQuestions = [...questionMap.values()];
-    const updatedAttempt = { ...att, answers: { ...att.answers, ...localAnswersRef.current } };
-    const scores = calculateScores(updatedAttempt, a, allQuestions);
-
     try {
-      await submitAttempt({ attemptId: att.id, reason, scores });
+      await gradeAttempt({ attemptId: att.id, reason });
     } catch (e) {
-      console.error('[ExamShell] submitAttempt failed', e);
+      console.error('[ExamShell] gradeAttempt failed', e);
     }
 
     // Persist any flags raised during the exam (best-effort; never blocks navigation)
@@ -1151,22 +1146,17 @@ export function ExamShell() {
     setShellStatus('terminated');
     const reason = 'Exam terminated due to repeated integrity violations.';
 
-    // Flush pending answers and score whatever was answered so far.
+    // Flush pending answers and ask the server to grade + terminate.
     await flushAnswers().catch(() => {});
-    let scores;
     if (a) {
-      const allQuestions = [...questionMap.values()];
-      const updatedAttempt = { ...att, answers: { ...att.answers, ...localAnswersRef.current } };
-      try {
-        scores = calculateScores(updatedAttempt, a, allQuestions);
-      } catch (e) {
-        console.error('[ExamShell] calculateScores on terminate failed', e);
-      }
+      await gradeAttempt({
+        attemptId: att.id,
+        reason: 'terminated',
+        terminateReason: reason,
+      }).catch((e) => console.error('[ExamShell] gradeAttempt(terminate) failed', e));
     }
-
-    await autoTerminate(att.id, reason, scores).catch(() => {});
     setOverlay({ kind: 'terminated', reason });
-  }, [flushAnswers, questionMap]);
+  }, [flushAnswers]);
 
   const handleExitTerminatedView = useCallback(() => {
     navigate(`/student/exam/${assessmentId}/results`, { replace: true });

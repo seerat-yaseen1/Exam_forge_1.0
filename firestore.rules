@@ -396,6 +396,24 @@ service cloud.firestore {
                           resource.data.get('ownerId',   'webOwner'));
     }
 
+    // questionAnswers/{id} — sibling collection holding correctIds /
+    // correctPairs / modelAnswer for each question. Students MUST NOT read
+    // these — the Cloud Function gradeAttempt (admin SDK, bypasses rules)
+    // is the only legitimate read path for student-facing flows. Admin
+    // surfaces (web owner / institute / faculty editors) read via the
+    // questionBankService getters.
+    match /questionAnswers/{id} {
+      allow read:   if signedIn() && role() != 'student';
+      allow create: if canWriteOwned(request.resource.data.ownerType,
+                                     request.resource.data.ownerId);
+      allow update: if canWriteOwned(
+                          resource.data.get('ownerType', 'webOwner'),
+                          resource.data.get('ownerId',   'webOwner'));
+      allow delete: if canWriteOwned(
+                          resource.data.get('ownerType', 'webOwner'),
+                          resource.data.get('ownerId',   'webOwner'));
+    }
+
     // questionBanks — owned by Web Owner only (no instituteId on the doc).
     match /questionBanks/{id} {
       allow read:   if signedIn();

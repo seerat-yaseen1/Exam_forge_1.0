@@ -7,6 +7,7 @@ import {
   getDocs,
   query,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -222,15 +223,106 @@ export type ResolvedFacultyAccess = {
 
 const COL = {
   questions:       'questions',
+  questionAnswers: 'questionAnswers',
   questionBanks:   'questionBanks',
   bankGrants:      'bankGrants',
   instituteGrants: 'instituteGrants',
   questionShares:  'questionShares',
 } as const;
 
+// ── Answer-key storage ────────────────────────────────────────────
+// correctIds / correctPairs / modelAnswer are written to a sibling
+// collection (questionAnswers) so Firestore rules can block students
+// from reading them during an exam. Public Question reads always
+// return these as empty defaults; admin reads merge them back in.
+
+export type QuestionAnswer = {
+  id: string;
+  correctIds: string[];
+  correctPairs: CorrectPair[];
+  modelAnswer: string;
+  ownerType?: QuestionOwnerType;
+  ownerId?: string;
+  updatedAt: string;
+};
+
+const ANSWER_KEYS = ['correctIds', 'correctPairs', 'modelAnswer'] as const;
+
+function pickAnswerFields(q: Partial<Question>): Partial<QuestionAnswer> {
+  const out: Partial<QuestionAnswer> = {};
+  if (q.correctIds   !== undefined) out.correctIds   = q.correctIds;
+  if (q.correctPairs !== undefined) out.correctPairs = q.correctPairs;
+  if (q.modelAnswer  !== undefined) out.modelAnswer  = q.modelAnswer;
+  return out;
+}
+
+function stripAnswerFields<T extends Partial<Question>>(q: T): T {
+  const out: any = { ...q };
+  for (const k of ANSWER_KEYS) delete out[k];
+  return out;
+}
+
+function emptyAnswerDefaults(): Pick<Question, 'correctIds' | 'correctPairs' | 'modelAnswer'> {
+  return { correctIds: [], correctPairs: [], modelAnswer: '' };
+}
+
+async function mergeAnswers(ids: string[]): Promise<Map<string, QuestionAnswer>> {
+  const map = new Map<string, QuestionAnswer>();
+  if (ids.length === 0) return map;
+  for (let i = 0; i < ids.length; i += 30) {
+    const chunk = ids.slice(i, i + 30);
+    const q = query(collection(db, COL.questionAnswers), where('id', 'in', chunk));
+    const snap = await getDocs(q);
+    snap.docs.forEach((d) => {
+      const ans = d.data() as QuestionAnswer;
+      map.set(ans.id, ans);
+    });
+  }
+  return map;
+}
+
+function applyAnswer(q: Question, ans?: QuestionAnswer | null): Question {
+  if (ans) {
+    return {
+      ...q,
+      correctIds:   ans.correctIds   ?? [],
+      correctPairs: ans.correctPairs ?? [],
+      modelAnswer:  ans.modelAnswer  ?? '',
+    };
+  }
+  // Backwards-compat: pre-migration questions still carry answers inline.
+  // Leave the embedded values untouched so admin paths keep working until
+  // the migration script runs.
+  return {
+    ...q,
+    correctIds:   q.correctIds   ?? [],
+    correctPairs: q.correctPairs ?? [],
+    modelAnswer:  q.modelAnswer  ?? '',
+  };
+}
+
+function sanitizePublic(q: Question): Question {
+  // Always wipe answer fields from the public payload — defense in depth
+  // for pre-migration docs still carrying them inline.
+  return { ...q, ...emptyAnswerDefaults() };
+}
+
 // ══════════════════════════════════════════════════════════════════
 // QUESTION CRUD
 // ══════════════════════════════════════════════════════════════════
+
+/**
+ * Read options for question getters.
+ *
+ *   includeAnswer: true  (default) — admin path; merges correctIds/correctPairs/
+ *                                    modelAnswer from the questionAnswers sibling.
+ *   includeAnswer: false           — student exam path; never merges, returns
+ *                                    empty defaults for answer fields.
+ *
+ * Defense in depth: Firestore rules separately block students from reading
+ * the questionAnswers collection, so even hostile clients can't pull answers.
+ */
+export type QuestionReadOpts = { includeAnswer?: boolean };
 
 /** Create a new question. Defaults ownerType/ownerId to 'webOwner' if omitted. */
 export async function createQuestion(
@@ -246,18 +338,50 @@ export async function createQuestion(
     createdAt: now(),
     updatedAt: now(),
   };
-  const ref = doc(db, COL.questions, id);
-  await setDoc(ref, removeUndefined(question as any));
+
+  const batch = writeBatch(db);
+
+  // Public doc: answer fields wiped
+  batch.set(
+    doc(db, COL.questions, id),
+    removeUndefined({ ...sanitizePublic(question) } as any),
+  );
+
+  // Sibling answer doc
+  const answer: QuestionAnswer = {
+    id,
+    ownerType: question.ownerType,
+    ownerId:   question.ownerId,
+    ...emptyAnswerDefaults(),
+    ...pickAnswerFields(question),
+    updatedAt: now(),
+  };
+  batch.set(doc(db, COL.questionAnswers, id), removeUndefined(answer as any));
+
+  await batch.commit();
   console.log(`✅ [QB] createQuestion → ${id} (${question.ownerType}:${question.ownerId})`);
   return question;
 }
 
-/** Fetch a single question by id (returns null if not found or deleted). */
-export async function getQuestion(id: string): Promise<Question | null> {
+/**
+ * Fetch a single question by id (returns null if not found or deleted).
+ * By default merges answer fields from the questionAnswers sibling.
+ * Pass `{ includeAnswer: false }` from student exam paths.
+ */
+export async function getQuestion(
+  id: string,
+  opts: QuestionReadOpts = { includeAnswer: true },
+): Promise<Question | null> {
   const snap = await getDoc(doc(db, COL.questions, id));
   if (!snap.exists()) return null;
   const data = snap.data() as Question;
-  return data.isDeleted ? null : data;
+  if (data.isDeleted) return null;
+
+  if (opts.includeAnswer) {
+    const aSnap = await getDoc(doc(db, COL.questionAnswers, id));
+    return applyAnswer(data, aSnap.exists() ? (aSnap.data() as QuestionAnswer) : null);
+  }
+  return sanitizePublic(data);
 }
 
 /**
@@ -265,7 +389,10 @@ export async function getQuestion(id: string): Promise<Question | null> {
  * Firestore `in` operator cap is 30 — automatically chunks the request.
  * Deleted questions are excluded from the result.
  */
-export async function getQuestionsByIds(ids: string[]): Promise<Question[]> {
+export async function getQuestionsByIds(
+  ids: string[],
+  opts: QuestionReadOpts = { includeAnswer: true },
+): Promise<Question[]> {
   if (ids.length === 0) return [];
   const results: Question[] = [];
   for (let i = 0; i < ids.length; i += 30) {
@@ -277,7 +404,13 @@ export async function getQuestionsByIds(ids: string[]): Promise<Question[]> {
       if (!data.isDeleted) results.push(data);
     });
   }
-  return results;
+
+  if (!opts.includeAnswer) {
+    return results.map(sanitizePublic);
+  }
+
+  const answerMap = await mergeAnswers(results.map((q) => q.id));
+  return results.map((q) => applyAnswer(q, answerMap.get(q.id) ?? null));
 }
 
 /**
@@ -285,13 +418,20 @@ export async function getQuestionsByIds(ids: string[]): Promise<Question[]> {
  * Returns questions where ownerType === 'webOwner' OR ownerType is absent
  * (backward compat for questions created before Phase 1).
  */
-export async function getAllQuestions(): Promise<Question[]> {
+export async function getAllQuestions(
+  opts: QuestionReadOpts = { includeAnswer: true },
+): Promise<Question[]> {
   const snap = await getDocs(
     query(collection(db, COL.questions), where('isDeleted', '==', false))
   );
-  return snap.docs
+  const filtered = snap.docs
     .map((d) => d.data() as Question)
     .filter((q) => !q.ownerType || q.ownerType === 'webOwner');
+
+  if (!opts.includeAnswer) return filtered.map(sanitizePublic);
+
+  const answerMap = await mergeAnswers(filtered.map((q) => q.id));
+  return filtered.map((q) => applyAnswer(q, answerMap.get(q.id) ?? null));
 }
 
 /**
@@ -300,7 +440,8 @@ export async function getAllQuestions(): Promise<Question[]> {
  */
 export async function getQuestionsByOwner(
   ownerType: QuestionOwnerType,
-  ownerId: string
+  ownerId: string,
+  opts: QuestionReadOpts = { includeAnswer: true },
 ): Promise<Question[]> {
   const snap = await getDocs(
     query(
@@ -310,16 +451,52 @@ export async function getQuestionsByOwner(
       where('ownerId',    '==', ownerId)
     )
   );
-  return snap.docs.map((d) => d.data() as Question);
+  const list = snap.docs.map((d) => d.data() as Question);
+
+  if (!opts.includeAnswer) return list.map(sanitizePublic);
+
+  const answerMap = await mergeAnswers(list.map((q) => q.id));
+  return list.map((q) => applyAnswer(q, answerMap.get(q.id) ?? null));
 }
 
-/** Update question metadata or content. Always bumps updatedAt. */
+/**
+ * Update question metadata or content. Always bumps updatedAt.
+ * Routes answer-key fields to the questionAnswers sibling collection.
+ */
 export async function updateQuestion(
   id: string,
   data: Partial<Omit<Question, 'id' | 'createdAt'>>
 ): Promise<void> {
-  const ref = doc(db, COL.questions, id);
-  await updateDoc(ref, removeUndefined({ ...data, updatedAt: now() } as any));
+  const answerPart = pickAnswerFields(data);
+  const publicPart = stripAnswerFields(data);
+
+  const batch = writeBatch(db);
+  const ts = now();
+
+  if (Object.keys(publicPart).length > 0) {
+    batch.update(
+      doc(db, COL.questions, id),
+      removeUndefined({ ...publicPart, updatedAt: ts } as any),
+    );
+  }
+
+  if (Object.keys(answerPart).length > 0) {
+    // setDoc with merge ensures we create the sibling if it doesn't exist
+    // (the case for pre-migration questions whose first edit happens post-cutover).
+    batch.set(
+      doc(db, COL.questionAnswers, id),
+      removeUndefined({
+        id,
+        ownerType: data.ownerType,
+        ownerId:   data.ownerId,
+        ...answerPart,
+        updatedAt: ts,
+      } as any),
+      { merge: true },
+    );
+  }
+
+  await batch.commit();
   console.log(`✅ [QB] updateQuestion → ${id}`);
 }
 

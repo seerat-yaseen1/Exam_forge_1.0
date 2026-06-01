@@ -16,6 +16,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SecurityPage } from './pages/SecurityPage';
 import { UserManagementPage } from './pages/UserManagementPage';
 import { QuestionsPage } from './pages/QuestionsPage';
+import { SubjectsPage } from './pages/SubjectsPage';
 import { AssignmentsPage } from './pages/AssignmentsPage';
 import { AssessmentRosterPage } from './pages/AssessmentRosterPage';
 import { ReportsInboxPage } from './pages/ReportsInboxPage';
@@ -86,6 +87,7 @@ export const router = createBrowserRouter([
           { path: 'user-management',                         element: <UserManagementPage /> },
           { path: 'user-management/:id',                     element: <InstituteDetailPage /> },
           { path: 'questions',                               element: <QuestionsPage /> },
+          { path: 'subjects',                                element: <SubjectsPage /> },
           { path: 'assignments',                             element: <AssignmentsPage /> },
           { path: 'assignments/:assessmentId/roster',        element: <AssessmentRosterPage /> },
           { path: 'reports',                                 element: <ReportsInboxPage /> },

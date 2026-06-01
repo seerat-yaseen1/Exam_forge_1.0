@@ -487,6 +487,12 @@ service cloud.firestore {
       allow create, update, delete: if isWebOwner();
     }
 
+    // topics — child of subjects (subjectId field), Web Owner only.
+    match /topics/{id} {
+      allow read:   if signedIn();
+      allow create, update, delete: if isWebOwner();
+    }
+
     // enrollments/{assessmentId_studentId}
     //   read: any signed-in user (student needs to see own; grader sees roster)
     //   write: assessment owner (resolved via get() on assessments/{assessmentId})

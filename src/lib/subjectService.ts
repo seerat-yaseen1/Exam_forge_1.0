@@ -25,6 +25,15 @@ export type Subject = {
   updatedAt: string;
 };
 
+export type Topic = {
+  id: string;            // slug — e.g. "prob-0001"
+  name: string;          // free label, duplicates allowed across topics
+  subjectId: string;     // parent subject slug
+  questionCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ResolveResult =
   | { kind: 'exact';   subject: Subject }
   | { kind: 'alias';   subject: Subject; matchedAlias: string }
@@ -44,6 +53,15 @@ function now(): string {
 }
 
 const COL = 'subjects';
+const TOPIC_COL = 'topics';
+
+// ── Slug ID validation ───────────────────────────────────────────
+// Format: 1–4 lowercase letters + '-' + 1–4 digits, e.g. "prob-0001".
+export const SLUG_ID_REGEX = /^[a-z]{1,4}-\d{1,4}$/;
+
+export function isValidSlugId(id: string): boolean {
+  return SLUG_ID_REGEX.test(id);
+}
 
 // ── Normalisation ─────────────────────────────────────────────────
 // Trim → collapse whitespace → title-case each word.
@@ -396,4 +414,89 @@ export async function ensureSubject(
   subjectsCache.push(newSubject); // mutate cache so next call in batch sees it
   console.log(`✅ [Subjects] ensureSubject created → "${name}"`);
   return { canonicalName: name, wasCreated: true };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SLUG-BASED CREATE (Subjects Module — user types the ID)
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Create a subject using a user-supplied slug ID (e.g. "math-0001").
+ * Name is NOT unique — duplicate names allowed because the ID is the key.
+ */
+export async function createSubjectWithSlug(slugId: string, rawName: string): Promise<Subject> {
+  if (!isValidSlugId(slugId)) {
+    throw new Error(`Invalid ID "${slugId}". Use 1–4 letters, a dash, and 1–4 digits (e.g. "math-0001").`);
+  }
+  const name = normalizeSubject(rawName);
+  if (!name) throw new Error('Name is required.');
+
+  const existing = await getDoc(doc(db, COL, slugId));
+  if (existing.exists()) throw new Error(`Subject ID "${slugId}" is already in use.`);
+
+  const subject: Subject = {
+    id: slugId,
+    name,
+    aliases: [],
+    questionCount: 0,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  await setDoc(doc(db, COL, slugId), subject);
+  console.log(`✅ [Subjects] createSubjectWithSlug → ${slugId} "${name}"`);
+  return subject;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TOPICS — first-class entity, owned by exactly one subject
+// ══════════════════════════════════════════════════════════════════
+
+export async function getAllTopics(): Promise<Topic[]> {
+  const snap = await getDocs(query(collection(db, TOPIC_COL), orderBy('name')));
+  return snap.docs.map((d) => d.data() as Topic);
+}
+
+export async function getTopicsBySubject(subjectId: string): Promise<Topic[]> {
+  const { where } = await import('firebase/firestore');
+  const snap = await getDocs(
+    query(collection(db, TOPIC_COL), where('subjectId', '==', subjectId), orderBy('name'))
+  );
+  return snap.docs.map((d) => d.data() as Topic);
+}
+
+export async function createTopicWithSlug(
+  slugId: string,
+  rawName: string,
+  subjectId: string,
+): Promise<Topic> {
+  if (!isValidSlugId(slugId)) {
+    throw new Error(`Invalid ID "${slugId}". Use 1–4 letters, a dash, and 1–4 digits (e.g. "prob-0001").`);
+  }
+  const name = normalizeSubject(rawName);
+  if (!name) throw new Error('Name is required.');
+  if (!subjectId) throw new Error('Subject is required.');
+
+  const [parentSnap, existingSnap] = await Promise.all([
+    getDoc(doc(db, COL, subjectId)),
+    getDoc(doc(db, TOPIC_COL, slugId)),
+  ]);
+  if (!parentSnap.exists()) throw new Error(`Parent subject "${subjectId}" not found.`);
+  if (existingSnap.exists()) throw new Error(`Topic ID "${slugId}" is already in use.`);
+
+  const topic: Topic = {
+    id: slugId,
+    name,
+    subjectId,
+    questionCount: 0,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  await setDoc(doc(db, TOPIC_COL, slugId), topic);
+  console.log(`✅ [Topics] createTopicWithSlug → ${slugId} "${name}" (subject ${subjectId})`);
+  return topic;
+}
+
+export async function deleteTopic(topicId: string): Promise<void> {
+  await deleteDoc(doc(db, TOPIC_COL, topicId));
+  console.log(`✅ [Topics] deleteTopic → ${topicId}`);
 }

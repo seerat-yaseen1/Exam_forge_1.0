@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Shield, LogOut, Building2, BookOpen, ClipboardList, Flag } from 'lucide-react';
+import { User, Shield, LogOut, Building2, BookOpen, ClipboardList, Flag, FolderTree } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PlatformLogo } from '../components/PlatformLogo';
 
@@ -175,6 +175,7 @@ export function DashboardLayout() {
 
   const isUserMgmt = location.pathname.startsWith('/dashboard/user-management');
   const isQuestions = location.pathname.startsWith('/dashboard/questions');
+  const isSubjects = location.pathname.startsWith('/dashboard/subjects');
   const isAssignments = location.pathname.startsWith('/dashboard/assignments');
   const isReports = location.pathname.startsWith('/dashboard/reports');
 
@@ -265,6 +266,12 @@ export function DashboardLayout() {
           icon={<BookOpen size={13} strokeWidth={1.5} />}
           label="Questions"
           isActive={isQuestions}
+        />
+        <SidebarNavItem
+          to="/dashboard/subjects"
+          icon={<FolderTree size={13} strokeWidth={1.5} />}
+          label="Subjects"
+          isActive={isSubjects}
         />
         <SidebarNavItem
           to="/dashboard/assignments"

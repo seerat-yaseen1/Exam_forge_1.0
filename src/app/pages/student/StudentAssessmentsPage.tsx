@@ -263,23 +263,22 @@ function AssessmentCard({
   const action = useMemo((): { label: string; icon: React.ReactNode; variant: 'primary' | 'secondary' } | null => {
     if (availability === 'upcoming') return null;
 
-    const done = attempt?.status === 'submitted' || attempt?.status === 'auto_submitted';
-    const terminated = attempt?.status === 'terminated';
-
-    if (!attempt || terminated) {
-      if (availability === 'available') {
-        return { label: 'Begin', icon: <PlayCircle size={12} strokeWidth={1.5} />, variant: 'primary' };
-      }
-      return null;
-    }
-
-    if (attempt.status === 'in_progress') {
-      if (availability === 'available') {
+    // Primary: if the student can still open the test, that takes priority over
+    // any "view results" action — even after a successful submission with slots left.
+    if (canStillOpen(a, availability, allAttempts, studentId)) {
+      const hasInProgress = allAttempts.some((at) => at.status === 'in_progress');
+      if (hasInProgress) {
         return { label: 'Resume', icon: <RotateCcw size={12} strokeWidth={1.5} />, variant: 'primary' };
       }
-      return null;
+      const finishedCount = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
+      if (finishedCount > 0) {
+        return { label: 'Retake', icon: <RotateCcw size={12} strokeWidth={1.5} />, variant: 'primary' };
+      }
+      return { label: 'Begin', icon: <PlayCircle size={12} strokeWidth={1.5} />, variant: 'primary' };
     }
 
+    // Secondary: window closed / attempts exhausted — surface results when allowed.
+    const done = attempt?.status === 'submitted' || attempt?.status === 'auto_submitted';
     if (done) {
       if (a.showResults && a.allowReview) {
         return { label: 'Review', icon: <Eye size={12} strokeWidth={1.5} />, variant: 'secondary' };
@@ -290,7 +289,7 @@ function AssessmentCard({
     }
 
     return null;
-  }, [attempt, availability, a.showResults, a.allowReview]);
+  }, [a, attempt, allAttempts, availability, studentId]);
 
   // ── Status bar left side ───────────────────────────────────────
   const statusLeft = useMemo(() => {
@@ -500,7 +499,7 @@ function AssessmentCard({
           {action && (
             <button
               onClick={() => {
-                if (action.label === 'Begin' || action.label === 'Resume') {
+                if (action.variant === 'primary') {
                   navigate(`/student/exam/${a.id}/briefing`);
                 } else {
                   navigate(`/student/exam/${a.id}/results`);

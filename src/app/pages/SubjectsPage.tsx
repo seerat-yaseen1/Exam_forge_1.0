@@ -62,13 +62,13 @@ export function SubjectsPage() {
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1280, margin: '0 auto' }}>
+    <div className="px-4 py-6 md:px-10 md:py-8" style={{ maxWidth: 1280, margin: '0 auto' }}>
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
         <FolderTree size={18} strokeWidth={1.5} />
         <h1 style={{ margin: 0 }}>Subjects</h1>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 24 }}>
+      <div className="grid grid-cols-1 md:[grid-template-columns:380px_1fr] gap-6">
         {/* ── Subjects column ── */}
         <div style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderRadius: 4 }}>
           <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -316,7 +316,7 @@ function SubjectRow({
         }}
       >
         <SlugChip id={subject.id} />
-        <span style={{ flex: 1 }}>{subject.name}</span>
+        <span className="min-w-0 truncate" style={{ flex: 1 }}>{subject.name}</span>
         <span style={{ fontSize: 11, color: '#83827C' }}>{subject.questionCount}</span>
       </button>
       <IconBtn title="Edit subject" onClick={() => setEditing(true)}>
@@ -373,7 +373,7 @@ function TopicRow({
       }}
     >
       <SlugChip id={topic.id} />
-      <span style={{ flex: 1 }}>{topic.name}</span>
+      <span className="min-w-0 truncate" style={{ flex: 1 }}>{topic.name}</span>
       <span style={{ fontSize: 11, color: '#83827C' }}>{topic.questionCount}</span>
       <MoveTopicControl topic={topic} subjects={subjects} onMoved={onChanged} />
       <IconBtn title="Edit topic" onClick={() => setEditing(true)}>

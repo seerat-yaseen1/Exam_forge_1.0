@@ -222,54 +222,80 @@ function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEditor, o
   const [hovered, setHovered] = useState(false);
   const sectionCount = assessment.sections?.length;
 
+  const meta = (
+    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+      {assessment.subject && <span className="text-xs" style={{ color: '#9A9891' }}>{assessment.subject}</span>}
+      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+        · {assessment.questions.length} Q · {assessment.totalMarks} marks
+      </span>
+      {sectionCount && (
+        <span className="text-xs" style={{ color: '#C4C3BD' }}>
+          · {sectionCount} section{sectionCount !== 1 ? 's' : ''}
+        </span>
+      )}
+      <span className="text-xs" style={{ color: '#C4C3BD' }}>· {formatAssignmentTarget(assessment.assignedTo)}</span>
+    </div>
+  );
+
+  const dateBlock = assessment.startDate || assessment.endDate ? (
+    <div className="flex items-center gap-1.5 md:justify-end">
+      <span className="text-xs" style={{ color: '#9A9891' }}>{formatDateShort(assessment.startDate)}</span>
+      {assessment.endDate && (
+        <><ArrowRight size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+        <span className="text-xs" style={{ color: '#9A9891' }}>{formatDateShort(assessment.endDate)}</span></>
+      )}
+    </div>
+  ) : <span className="text-xs" style={{ color: '#C4C3BD' }}>No date set</span>;
+
+  const actions = (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      {assessment.status !== 'draft' && (
+        <button onClick={onRoster} title="Live Roster"
+          className="flex items-center gap-1 text-xs px-2 py-1.5 transition-all"
+          style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FAFAF8' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B'; (e.currentTarget as HTMLElement).style.color = '#0C0C0B'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB'; (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}>
+          <Users size={11} strokeWidth={1.5} /> Roster
+        </button>
+      )}
+      <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}><Eye size={13} strokeWidth={1.5} /></button>
+      <EditMenu assessment={assessment} onPatched={onPatched} onOpenLegacyEditor={onOpenLegacyEditor} />
+      <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}><Trash2 size={13} strokeWidth={1.5} /></button>
+    </div>
+  );
+
   return (
     <div
-      className="flex items-center gap-4 px-5 py-3.5 transition-colors"
+      className="px-4 py-3.5 md:px-5 transition-colors"
       style={{ borderBottom: '1px solid #F0EFEB', background: hovered ? '#FAFAF8' : '#FFFFFF' }}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     >
-      <div className="flex-shrink-0"><StatusBadgeChip status={assessment.status} /></div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-          {truncate(assessment.title, 80) || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
-        </p>
-        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          {assessment.subject && <span className="text-xs" style={{ color: '#9A9891' }}>{assessment.subject}</span>}
-          <span className="text-xs" style={{ color: '#C4C3BD' }}>
-            · {assessment.questions.length} Q · {assessment.totalMarks} marks
-          </span>
-          {sectionCount && (
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>
-              · {sectionCount} section{sectionCount !== 1 ? 's' : ''}
-            </span>
-          )}
-          <span className="text-xs" style={{ color: '#C4C3BD' }}>· {formatAssignmentTarget(assessment.assignedTo)}</span>
+      {/* Desktop: single row */}
+      <div className="hidden md:flex items-center gap-4">
+        <div className="flex-shrink-0"><StatusBadgeChip status={assessment.status} /></div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
+            {truncate(assessment.title, 80) || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
+          </p>
+          {meta}
         </div>
+        <div className="flex-shrink-0 text-right" style={{ minWidth: 148 }}>{dateBlock}</div>
+        {actions}
       </div>
-      <div className="flex-shrink-0 text-right" style={{ minWidth: 148 }}>
-        {assessment.startDate || assessment.endDate ? (
-          <div className="flex items-center gap-1.5 justify-end">
-            <span className="text-xs" style={{ color: '#9A9891' }}>{formatDateShort(assessment.startDate)}</span>
-            {assessment.endDate && (
-              <><ArrowRight size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-              <span className="text-xs" style={{ color: '#9A9891' }}>{formatDateShort(assessment.endDate)}</span></>
-            )}
-          </div>
-        ) : <span className="text-xs" style={{ color: '#C4C3BD' }}>No date set</span>}
-      </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {assessment.status !== 'draft' && (
-          <button onClick={onRoster} title="Live Roster"
-            className="flex items-center gap-1 text-xs px-2 py-1.5 transition-all"
-            style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FAFAF8' }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B'; (e.currentTarget as HTMLElement).style.color = '#0C0C0B'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB'; (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}>
-            <Users size={11} strokeWidth={1.5} /> Roster
-          </button>
-        )}
-        <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}><Eye size={13} strokeWidth={1.5} /></button>
-        <EditMenu assessment={assessment} onPatched={onPatched} onOpenLegacyEditor={onOpenLegacyEditor} />
-        <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}><Trash2 size={13} strokeWidth={1.5} /></button>
+
+      {/* Phone: stacked card */}
+      <div className="md:hidden flex flex-col gap-2">
+        <div className="flex items-start gap-2">
+          <div className="flex-shrink-0 mt-0.5"><StatusBadgeChip status={assessment.status} /></div>
+          <p className="text-xs flex-1 min-w-0" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
+            {truncate(assessment.title, 80) || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
+          </p>
+        </div>
+        {meta}
+        <div>{dateBlock}</div>
+        <div className="flex items-center justify-end pt-1" style={{ borderTop: '1px solid #F5F4F0' }}>
+          {actions}
+        </div>
       </div>
     </div>
   );
@@ -3853,10 +3879,10 @@ export function AssignmentsPage() {
     <>
       <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="px-8 py-10" style={{ maxWidth: 1120, margin: '0 auto' }}>
+        className="px-4 py-6 md:px-8 md:py-10" style={{ maxWidth: 1120, margin: '0 auto' }}>
 
         {/* Header */}
-        <div className="flex items-start justify-between mb-8"
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-8"
           style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
           <div>
             <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>WEB OWNER</p>
@@ -3866,14 +3892,14 @@ export function AssignmentsPage() {
             </p>
           </div>
           <button onClick={openCreate}
-            className="flex items-center gap-1.5 text-xs px-4 py-2.5 mt-1 transition-opacity hover:opacity-80"
+            className="flex items-center justify-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80 self-start md:mt-1"
             style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.03em' }}>
             <Plus size={12} strokeWidth={2} /> Create Assessment
           </button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <StatPill icon={<ClipboardList size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Total Assessments" value={loading ? '…' : String(assessments.length)} />
           <StatPill icon={<FileText size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Drafts" value={loading ? '…' : String(draftCount)} />
           <StatPill icon={<Target size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Active" value={loading ? '…' : String(activeCount)} />
@@ -3884,7 +3910,7 @@ export function AssignmentsPage() {
         <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
           <FilterBar search={search} setSearch={setSearch} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />
           {!loading && filtered.length > 0 && (
-            <div className="flex items-center gap-4 px-5 py-2" style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
+            <div className="hidden md:flex items-center gap-4 px-5 py-2" style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
               <div className="flex-shrink-0 w-16"><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>STATUS</span></div>
               <div className="flex-1"><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>ASSESSMENT</span></div>
               <div className="flex-shrink-0 text-right" style={{ minWidth: 148 }}><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>DATE RANGE</span></div>

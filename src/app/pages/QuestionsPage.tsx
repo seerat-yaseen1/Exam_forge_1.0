@@ -201,7 +201,7 @@ function FilterBar({
       </div>
 
       {/* Type + Diff chips */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
         <div className="flex items-center gap-1.5 flex-wrap">
           {TYPE_FILTERS.map((f) => (
             <button
@@ -220,9 +220,9 @@ function FilterBar({
           ))}
         </div>
 
-        <div style={{ width: 1, height: 20, background: '#E3E1DB', flexShrink: 0 }} />
+        <div className="hidden md:block" style={{ width: 1, height: 20, background: '#E3E1DB', flexShrink: 0 }} />
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {DIFF_FILTERS.map((f) => {
             const colors = f.value ? difficultyColor(f.value as Difficulty) : null;
             const isActive = diffFilter === f.value;
@@ -248,7 +248,7 @@ function FilterBar({
       </div>
 
       {/* Subject + Topic slug dropdowns */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
         <div className="flex items-center gap-2">
           <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>SUBJECT</span>
           <select
@@ -294,9 +294,49 @@ function QuestionRow({
 }) {
   const [hovered, setHovered] = useState(false);
 
+  const stemBlock = (
+    <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
+      {truncate(question.stem, 110) || <em style={{ color: '#B0AEA8' }}>No stem</em>}
+    </p>
+  );
+
+  const metaBlock = (
+    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+      {question.subject && (
+        <span className="text-xs" style={{ color: '#9A9891' }}>{question.subject}</span>
+      )}
+      {question.topic && (
+        <span className="text-xs" style={{ color: '#C4C3BD' }}>· {question.topic}</span>
+      )}
+      {question.tags.slice(0, 3).map((tag) => (
+        <span
+          key={tag}
+          className="text-xs px-1.5 py-0.5"
+          style={{ background: '#F0EFEB', borderRadius: 2, color: '#6B6B66', fontSize: 10 }}
+        >
+          #{tag}
+        </span>
+      ))}
+    </div>
+  );
+
+  const actions = (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+        <Eye size={13} strokeWidth={1.5} />
+      </button>
+      <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+        <Pencil size={13} strokeWidth={1.5} />
+      </button>
+      <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}>
+        <Trash2 size={13} strokeWidth={1.5} />
+      </button>
+    </div>
+  );
+
   return (
     <div
-      className="flex items-center gap-4 px-5 py-3.5 transition-colors"
+      className="px-4 py-3.5 md:px-5 transition-colors"
       style={{
         borderBottom: '1px solid #F0EFEB',
         background: hovered ? '#FAFAF8' : '#FFFFFF',
@@ -304,71 +344,42 @@ function QuestionRow({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Type badge */}
-      <div className="flex-shrink-0">
-        <TypeBadgeChip engine={question.engine} variant={question.variant} />
-      </div>
-
-      {/* Stem + subject */}
-      <div className="flex-1 min-w-0">
-        <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-          {truncate(question.stem, 110) || <em style={{ color: '#B0AEA8' }}>No stem</em>}
-        </p>
-        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          {question.subject && (
-            <span className="text-xs" style={{ color: '#9A9891' }}>{question.subject}</span>
-          )}
-          {question.topic && (
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>· {question.topic}</span>
-          )}
-          {question.tags.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              className="text-xs px-1.5 py-0.5"
-              style={{ background: '#F0EFEB', borderRadius: 2, color: '#6B6B66', fontSize: 10 }}
-            >
-              #{tag}
-            </span>
-          ))}
+      {/* Desktop: single row */}
+      <div className="hidden md:flex items-center gap-4">
+        <div className="flex-shrink-0">
+          <TypeBadgeChip engine={question.engine} variant={question.variant} />
         </div>
+        <div className="flex-1 min-w-0">
+          {stemBlock}
+          {metaBlock}
+        </div>
+        <div className="flex-shrink-0">
+          <DiffChip difficulty={question.difficulty} />
+        </div>
+        <div className="flex-shrink-0 w-24 text-right">
+          <span className="text-xs" style={{ color: '#C4C3BD' }}>{formatDate(question.createdAt)}</span>
+        </div>
+        {actions}
       </div>
 
-      {/* Difficulty */}
-      <div className="flex-shrink-0">
-        <DiffChip difficulty={question.difficulty} />
-      </div>
-
-      {/* Date */}
-      <div className="flex-shrink-0 w-24 text-right">
-        <span className="text-xs" style={{ color: '#C4C3BD' }}>{formatDate(question.createdAt)}</span>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <button
-          onClick={onPreview}
-          title="Preview"
-          className="p-1.5 transition-opacity hover:opacity-60"
-          style={{ color: '#9A9891' }}
-        >
-          <Eye size={13} strokeWidth={1.5} />
-        </button>
-        <button
-          onClick={onEdit}
-          title="Edit"
-          className="p-1.5 transition-opacity hover:opacity-60"
-          style={{ color: '#9A9891' }}
-        >
-          <Pencil size={13} strokeWidth={1.5} />
-        </button>
-        <button
-          onClick={onDelete}
-          title="Delete"
-          className="p-1.5 transition-opacity hover:opacity-60"
-          style={{ color: '#C4C3BD' }}
-        >
-          <Trash2 size={13} strokeWidth={1.5} />
-        </button>
+      {/* Phone: stacked card */}
+      <div className="md:hidden flex flex-col gap-2">
+        <div className="flex items-start gap-2">
+          <div className="flex-shrink-0 mt-0.5">
+            <TypeBadgeChip engine={question.engine} variant={question.variant} />
+          </div>
+          <div className="flex-1 min-w-0">{stemBlock}</div>
+        </div>
+        {metaBlock}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <DiffChip difficulty={question.difficulty} />
+            <span className="text-xs" style={{ color: '#C4C3BD' }}>{formatDate(question.createdAt)}</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-end pt-1" style={{ borderTop: '1px solid #F5F4F0' }}>
+          {actions}
+        </div>
       </div>
     </div>
   );
@@ -708,12 +719,12 @@ export function QuestionsPage() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="px-8 py-10"
+        className="px-4 py-6 md:px-8 md:py-10"
         style={{ maxWidth: 1120, margin: '0 auto' }}
       >
         {/* ── Page header ── */}
         <div
-          className="flex items-start justify-between mb-8"
+          className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-8"
           style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}
         >
           <div>
@@ -725,7 +736,7 @@ export function QuestionsPage() {
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 flex-wrap md:mt-1">
             {/* Export */}
             <button
               onClick={() => setExportOpen(true)}
@@ -756,7 +767,7 @@ export function QuestionsPage() {
         </div>
 
         {/* ── Stat pills ── */}
-        <div className="grid grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <StatPill
             icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
             label="Total Questions"
@@ -802,7 +813,7 @@ export function QuestionsPage() {
               {/* Column headers */}
               {!loading && filtered.length > 0 && (
                 <div
-                  className="flex items-center gap-4 px-5 py-2"
+                  className="hidden md:flex items-center gap-4 px-5 py-2"
                   style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}
                 >
                   <div className="flex-shrink-0 w-10">

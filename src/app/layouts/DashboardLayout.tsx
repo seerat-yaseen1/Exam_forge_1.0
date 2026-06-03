@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Shield, LogOut, Building2, BookOpen, ClipboardList, Flag, FolderTree } from 'lucide-react';
+import { User, Shield, LogOut, Building2, BookOpen, ClipboardList, Flag, FolderTree, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PlatformLogo } from '../components/PlatformLogo';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 // ── Profile dropdown ──────────────────────────────────────────────────────────
 
@@ -162,7 +163,14 @@ const SIDEBAR_W = 180;
 export function DashboardLayout() {
   const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
+  const isMobile = useIsMobile();
+
+  // Auto-close mobile drawer on route change
+  useEffect(() => { setNavOpen(false); }, [location.pathname]);
+  // If user resizes from phone → desktop while drawer is open, close it
+  useEffect(() => { if (!isMobile) setNavOpen(false); }, [isMobile]);
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -183,20 +191,31 @@ export function DashboardLayout() {
     <div className="min-h-screen" style={{ background: '#F7F6F3' }}>
       {/* ── Topbar ── */}
       <header
-        className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6"
+        className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 md:px-6"
         style={{
           height: 56,
           background: '#FFFFFF',
           borderBottom: '1px solid #E3E1DB',
         }}
       >
-        {/* Left: Logo */}
-        <Link
-          to="/dashboard"
-          style={{ textDecoration: 'none', color: '#0C0C0B' }}
-        >
-          <PlatformLogo size="md" />
-        </Link>
+        {/* Left: Hamburger (phone) + Logo */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setNavOpen((v) => !v)}
+            className="md:hidden p-1.5 -ml-1.5 transition-opacity hover:opacity-70"
+            style={{ color: '#0C0C0B', outline: 'none' }}
+            aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={navOpen}
+          >
+            {navOpen ? <X size={18} strokeWidth={1.5} /> : <Menu size={18} strokeWidth={1.5} />}
+          </button>
+          <Link
+            to="/dashboard"
+            style={{ textDecoration: 'none', color: '#0C0C0B' }}
+          >
+            <PlatformLogo size="md" />
+          </Link>
+        </div>
 
         {/* Right: Profile */}
         <div className="relative">
@@ -228,9 +247,24 @@ export function DashboardLayout() {
         </div>
       </header>
 
+      {/* ── Backdrop (phone only, when drawer is open) ── */}
+      <AnimatePresence>
+        {navOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setNavOpen(false)}
+            className="fixed inset-0 z-20 md:hidden"
+            style={{ top: 56, background: 'rgba(12,12,11,0.32)' }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* ── Sidebar ── */}
       <nav
-        className="fixed z-30"
+        className={`fixed z-30 transition-transform duration-200 ease-out md:translate-x-0 ${navOpen ? 'translate-x-0' : '-translate-x-full'}`}
         style={{
           top: 56,
           left: 0,
@@ -288,7 +322,10 @@ export function DashboardLayout() {
       </nav>
 
       {/* ── Page content ── */}
-      <main style={{ paddingTop: 56, paddingLeft: SIDEBAR_W }}>
+      <main
+        className="md:pl-[180px]"
+        style={{ paddingTop: 56 }}
+      >
         <Outlet />
       </main>
     </div>

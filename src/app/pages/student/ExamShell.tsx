@@ -940,10 +940,26 @@ export function ExamShell() {
   // END BREAK
   // ══════════════════════════════════════════════════════════════════
 
+  // Re-enter fullscreen before unlocking the next section. If the browser
+  // rejects (e.g. mandatory-break auto-advance has no user gesture), show
+  // the existing FullscreenRequiredOverlay so the student is forced to click
+  // back into fullscreen before they can interact with the next section.
+  const enforceFullscreenOrPrompt = useCallback(async () => {
+    if (document.fullscreenElement) return;
+    try {
+      await document.documentElement.requestFullscreen();
+    } catch {
+      setOverlay({ kind: 'fullscreen_required' });
+    }
+  }, []);
+
   const handleEndBreak = useCallback(async () => {
     const att = attemptRef.current;
     const bs = breakState;
     if (!att || !bs) return;
+    // Request fullscreen FIRST so the click gesture is still live; if rejected,
+    // the overlay will gate interaction until the student returns to fullscreen.
+    await enforceFullscreenOrPrompt();
     try {
       await endBreak({
         attemptId: att.id,
@@ -984,6 +1000,9 @@ export function ExamShell() {
     const att = attemptRef.current;
     if (!att || pickingSection) return;
     setPickingSection(true);
+    // Same fullscreen gate as handleEndBreak — re-enter or prompt before
+    // starting the picked section.
+    await enforceFullscreenOrPrompt();
     try {
       // newIdx = number of sections already started (have a startedAt)
       const startedCount = att.sectionIds.filter(

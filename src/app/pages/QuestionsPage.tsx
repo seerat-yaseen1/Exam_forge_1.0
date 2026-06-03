@@ -11,7 +11,7 @@ import {
   questionTypeBadge, difficultyColor,
   type Question, type Difficulty,
 } from '../../lib/questionBankService';
-import { getAllSubjects, type Subject } from '../../lib/subjectService';
+import { getAllSubjects, getAllTopics, type Subject, type Topic } from '../../lib/subjectService';
 import { QuestionTypeEngine, type QuestionDraft } from '../components/questions/QuestionTypeEngine';
 import { QuestionPreview } from '../components/questions/QuestionPreview';
 import { BulkUploadModal } from '../components/questions/BulkUploadModal';
@@ -158,9 +158,25 @@ interface FilterBarProps {
   search:      string; setSearch:      (v: string) => void;
   typeFilter:  string; setTypeFilter:  (v: string) => void;
   diffFilter:  string; setDiffFilter:  (v: string) => void;
+  subjectId:   string; setSubjectId:   (v: string) => void;
+  topicId:     string; setTopicId:     (v: string) => void;
+  subjects:    Subject[];
+  topics:      Topic[];
 }
 
-function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, setDiffFilter }: FilterBarProps) {
+function FilterBar({
+  search, setSearch, typeFilter, setTypeFilter, diffFilter, setDiffFilter,
+  subjectId, setSubjectId, topicId, setTopicId, subjects, topics,
+}: FilterBarProps) {
+  // Topics visible in the dropdown are scoped to the selected subject.
+  const visibleTopics = subjectId
+    ? topics.filter((t) => t.subjectId === subjectId).sort((a, b) => a.name.localeCompare(b.name))
+    : [];
+
+  const selectStyle: React.CSSProperties = {
+    background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2,
+    color: '#0C0C0B', fontSize: 12, padding: '6px 8px', outline: 'none',
+  };
   return (
     <div className="flex flex-col gap-3 px-5 py-4" style={{ borderBottom: '1px solid #F0EFEB' }}>
       {/* Search */}
@@ -228,6 +244,38 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* Subject + Topic slug dropdowns */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>SUBJECT</span>
+          <select
+            value={subjectId}
+            onChange={(e) => { setSubjectId(e.target.value); setTopicId(''); }}
+            style={selectStyle}
+          >
+            <option value="">All subjects</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>{s.id} · {s.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>TOPIC</span>
+          <select
+            value={topicId}
+            onChange={(e) => setTopicId(e.target.value)}
+            disabled={!subjectId}
+            style={{ ...selectStyle, opacity: subjectId ? 1 : 0.5, cursor: subjectId ? 'pointer' : 'not-allowed' }}
+          >
+            <option value="">{subjectId ? 'All topics' : 'Pick a subject first'}</option>
+            {visibleTopics.map((t) => (
+              <option key={t.id} value={t.id}>{t.id} · {t.name}</option>
+            ))}
+          </select>
         </div>
       </div>
     </div>
@@ -548,6 +596,7 @@ export function QuestionsPage() {
   // ── Data ──────────────────────────────────────────────────────────
   const [questions,   setQuestions]   = useState<Question[]>([]);
   const [subjects,    setSubjects]    = useState<Subject[]>([]);
+  const [topics,      setTopics]      = useState<Topic[]>([]);
   const [bankCount,   setBankCount]   = useState<number | null>(null);
   const [grantCount,  setGrantCount]  = useState<number | null>(null);
   const [loading,     setLoading]     = useState(true);
@@ -567,21 +616,25 @@ export function QuestionsPage() {
   const [search,      setSearch]      = useState('');
   const [typeFilter,  setTypeFilter]  = useState('');
   const [diffFilter,  setDiffFilter]  = useState('');
+  const [subjectId,   setSubjectId]   = useState('');
+  const [topicId,     setTopicId]     = useState('');
 
   // ── Fetch ─────────────────────────────────────────────────────────
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [qs, banks, grants, subjs] = await Promise.all([
+      const [qs, banks, grants, subjs, tops] = await Promise.all([
         getAllQuestions(),
         getAllQuestionBanks(),
         getAllBankGrants(),
         getAllSubjects(),
+        getAllTopics(),
       ]);
       setQuestions(qs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       setBankCount(banks.length);
       setGrantCount(grants.filter((g) => !g.isRevoked).length);
       setSubjects(subjs);
+      setTopics(tops);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -621,9 +674,24 @@ export function QuestionsPage() {
   const openEdit   = (q: Question) => { setEditTarget(q); setPanelMode('edit'); setPanelOpen(true); };
 
   // ── Filter logic ──────────────────────────────────────────────────
+  // Name → slug fallback so legacy questions (no subjectId yet) still match the dropdown.
+  const subjectNameToId = new Map(subjects.map((s) => [s.name.trim().toLowerCase(), s.id]));
+  const topicNameToId   = new Map(topics.map((t) => [`${t.subjectId}::${t.name.trim().toLowerCase()}`, t.id]));
+
   const filtered = questions.filter((q) => {
     if (typeFilter) { const b = questionTypeBadge(q.engine, q.variant); if (b !== typeFilter) return false; }
     if (diffFilter && q.difficulty !== diffFilter) return false;
+
+    if (subjectId) {
+      const qSubjectId = q.subjectId ?? subjectNameToId.get((q.subject ?? '').trim().toLowerCase());
+      if (qSubjectId !== subjectId) return false;
+    }
+    if (topicId) {
+      const qTopicId = q.topicId
+        ?? topicNameToId.get(`${subjectId}::${(q.topic ?? '').trim().toLowerCase()}`);
+      if (qTopicId !== topicId) return false;
+    }
+
     if (search) {
       const s = search.toLowerCase();
       if (!q.stem.toLowerCase().includes(s) && !q.subject.toLowerCase().includes(s) && !q.topic.toLowerCase().includes(s)) return false;
@@ -726,6 +794,9 @@ export function QuestionsPage() {
                 search={search}         setSearch={setSearch}
                 typeFilter={typeFilter} setTypeFilter={setTypeFilter}
                 diffFilter={diffFilter} setDiffFilter={setDiffFilter}
+                subjectId={subjectId}   setSubjectId={setSubjectId}
+                topicId={topicId}       setTopicId={setTopicId}
+                subjects={subjects}     topics={topics}
               />
 
               {/* Column headers */}
@@ -762,18 +833,18 @@ export function QuestionsPage() {
               ))}
 
               {!loading && filtered.length === 0 && (
-                <EmptyState filtered={!!(search || typeFilter || diffFilter)} onAdd={openCreate} />
+                <EmptyState filtered={!!(search || typeFilter || diffFilter || subjectId || topicId)} onAdd={openCreate} />
               )}
 
               {!loading && filtered.length > 0 && (
                 <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid #F0EFEB' }}>
                   <span className="text-xs" style={{ color: '#C4C3BD' }}>
                     {filtered.length} {filtered.length === 1 ? 'question' : 'questions'}
-                    {(search || typeFilter || diffFilter) && ' matching filters'}
+                    {(search || typeFilter || diffFilter || subjectId || topicId) && ' matching filters'}
                   </span>
-                  {(search || typeFilter || diffFilter) && (
+                  {(search || typeFilter || diffFilter || subjectId || topicId) && (
                     <button
-                      onClick={() => { setSearch(''); setTypeFilter(''); setDiffFilter(''); }}
+                      onClick={() => { setSearch(''); setTypeFilter(''); setDiffFilter(''); setSubjectId(''); setTopicId(''); }}
                       className="text-xs transition-opacity hover:opacity-60"
                       style={{ color: '#9A9891' }}
                     >

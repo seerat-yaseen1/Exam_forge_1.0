@@ -523,6 +523,13 @@ export async function submitAttempt(params: {
 // ── Auto-terminate ────────────────────────────────────────────────
 // Force-submits with 'terminated' status after max violations reached.
 
+/**
+ * Maximum number of WARNING-type integrity violations (tab_switch, focus_loss,
+ * fullscreen_exit) before an attempt is auto-terminated. Kept here so the
+ * resume guard and the in-shell counter agree on one source of truth.
+ */
+export const MAX_INTEGRITY_WARNINGS = 3;
+
 export async function autoTerminate(
   attemptId: string,
   reason: string,
@@ -537,6 +544,31 @@ export async function autoTerminate(
   };
   if (scores) updates.scores = scores;
   await updateDoc(doc(db, 'attempts', attemptId), updates);
+}
+
+/**
+ * Resume-time defensive check. If an attempt that's still flagged in_progress
+ * has accumulated ≥ MAX_INTEGRITY_WARNINGS warning-type violations (e.g. the
+ * student killed the tab during the 30-second final-warning countdown to dodge
+ * termination), finalize it as terminated before the shell can re-enter it.
+ *
+ * Returns true if the attempt was just terminated, so callers can refuse to
+ * resume and route the student to results instead.
+ */
+export async function enforceIntegrityThreshold(attempt: Attempt): Promise<boolean> {
+  if (attempt.status !== 'in_progress') return false;
+  const log = attempt.integrityLog;
+  if (!log) return false;
+  const warningCount =
+    (log.tabSwitches ?? 0) +
+    (log.focusLosses ?? 0) +
+    (log.fullscreenExits ?? 0);
+  if (warningCount < MAX_INTEGRITY_WARNINGS) return false;
+  await autoTerminate(
+    attempt.id,
+    'Exam terminated due to repeated integrity violations.',
+  );
+  return true;
 }
 
 // ── Log violation ─────────────────────────────────────────────────

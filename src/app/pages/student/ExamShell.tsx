@@ -31,6 +31,9 @@ import {
   pickSection,
   gradeAttempt,
   logViolation,
+  autoTerminate,
+  enforceIntegrityThreshold,
+  MAX_INTEGRITY_WARNINGS,
   getAttemptByStudentAndAssessment,
   subscribeToAttempt,
   registerSession,
@@ -121,7 +124,7 @@ function generateSessionId(): string {
 // ══════════════════════════════════════════════════════════════════
 
 const WARNING_VIOLATION_TYPES: ViolationType[] = ['tab_switch', 'focus_loss', 'fullscreen_exit'];
-const MAX_WARNINGS = 3;
+const MAX_WARNINGS = MAX_INTEGRITY_WARNINGS;
 
 /**
  * Normalises sections so the exam shell always has at least one section
@@ -573,6 +576,17 @@ export function ExamShell() {
 
         // 3. Get or create attempt (idempotent)
         let att = await getAttemptByStudentAndAssessment(session.studentId, assessmentId);
+
+        // Resume guard — if the previous session breached the integrity
+        // threshold but never finalized (e.g. tab killed mid-countdown),
+        // finalize it as terminated before doing anything else. The next
+        // branch then sees a 'terminated' status and creates a fresh attempt
+        // only if the student still has slots remaining.
+        if (att && await enforceIntegrityThreshold(att)) {
+          setErrorMsg('Your previous attempt was terminated due to repeated integrity violations.');
+          setShellStatus('error');
+          return;
+        }
 
         if (!att || (att.status !== 'in_progress' && att.status !== 'frozen')) {
           // Compute the effective max for this student (override → global → default 1)
@@ -1102,6 +1116,12 @@ export function ExamShell() {
     if (!isWarningType) return; // Non-warning types are logged but don't show overlay
 
     if (newWarningCount >= MAX_WARNINGS) {
+      // Server-authoritative: flip the attempt to 'terminated' BEFORE the
+      // 30-second overlay countdown. This way, killing the tab during the
+      // countdown cannot bypass termination — the resume guard will refuse
+      // to reopen any attempt that's already terminated.
+      autoTerminate(att.id, 'Exam terminated due to repeated integrity violations.')
+        .catch((e) => console.error('[ExamShell] autoTerminate failed', e));
       setOverlay({ kind: 'final_warning', violationType: type });
     } else {
       setOverlay({
@@ -1114,13 +1134,10 @@ export function ExamShell() {
 
   const handleFullscreenChange = useCallback((isNow: boolean) => {
     setIsFullscreen(isNow);
+    // Counting + termination are owned by handleViolation. This handler only
+    // surfaces the appropriate overlay so we don't double-count the strike.
     if (!isNow && overlayRef.current?.kind !== 'terminated') {
-      // Log violation (already done in IntegrityEngine, just show the overlay)
-      const newCount = warningCountRef.current + 1;
-      setWarningCount(newCount);
-      if (newCount >= MAX_WARNINGS) {
-        setOverlay({ kind: 'final_warning', violationType: 'fullscreen_exit' });
-      } else {
+      if (warningCountRef.current < MAX_WARNINGS) {
         setOverlay({ kind: 'fullscreen_required' });
       }
     }

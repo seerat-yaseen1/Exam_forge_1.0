@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Plus, X, Check, ChevronLeft, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Plus, X, Check, ChevronLeft, Loader2, AlertTriangle, Eye } from 'lucide-react';
 import {
   type Question,
   type QuestionEngine,
@@ -13,10 +13,20 @@ import {
   buildEmptyMCQ,
   buildEmptyText,
   buildEmptyMatch,
+  getAllQuestions,
+  findDuplicateCandidates,
 } from '../../../lib/questionBankService';
+import {
+  scoreAgainstPool,
+  verdictFor,
+  pct,
+  type DuplicateScore,
+} from '../../../lib/duplicateDetection';
 import { ImageUploader } from './ImageUploader';
 import { MathToolbar, InlineMathButton } from './MathToolbar';
 import { SubjectTopicSelect } from './SubjectTopicSelect';
+import { DuplicateCompareModal } from './DuplicateCompareModal';
+import type { ParsedRow } from './bulkUploadParser';
 
 // ── Type re-export for consumers ──────────────────────────────────────────────
 
@@ -616,6 +626,24 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
   const [difficulty,   setDifficulty]   = useState<Difficulty>(initialData?.difficulty ?? 'medium');
   const [explanation,  setExplanation]  = useState(initialData?.explanation ?? '');
 
+  // ── Duplicate detection ───────────────────────────────────────────
+  const [pool, setPool] = useState<Question[]>([]);
+  const [dupScore, setDupScore]       = useState<DuplicateScore | null>(null);
+  const [showCompare, setShowCompare] = useState(false);
+  const [confirmedDup, setConfirmedDup] = useState(false); // user said "save anyway"
+
+  useEffect(() => {
+    let alive = true;
+    getAllQuestions().then((qs) => { if (alive) setPool(qs); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Reset the duplicate verdict whenever the user edits scoring-relevant fields.
+  useEffect(() => {
+    setDupScore(null);
+    setConfirmedDup(false);
+  }, [stem, options, correctIds, subjectId, topicId]);
+
   // ── Type select ───────────────────────────────────────────────────
   const selectType = (eng: QuestionEngine, vari: QuestionVariant) => {
     let empty: Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>;
@@ -653,6 +681,40 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
   // ── Save ──────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!engine || !validate()) return;
+
+    // Run duplicate detection on save click (skipped on edit of self via id filter).
+    const correctTexts = correctIds
+      .map((cid) => options.find((o) => o.id === cid)?.text ?? '')
+      .filter(Boolean);
+    const candidates = findDuplicateCandidates(
+      { subjectId: subjectId ?? undefined, topicId: topicId ?? undefined, id: initialData?.id },
+      pool,
+    );
+    const score = scoreAgainstPool(
+      {
+        id: initialData?.id,
+        stem,
+        options: options.map((o) => o.text),
+        correctAnswer: correctTexts.length === 1 ? correctTexts[0] : correctTexts,
+      },
+      candidates.map((q) => ({
+        id: q.id,
+        stem: q.stem,
+        options: (q.options ?? []).map((o) => o.text),
+        correctAnswer: (q.correctIds ?? [])
+          .map((cid) => (q.options ?? []).find((o) => o.id === cid)?.text ?? '')
+          .filter(Boolean),
+      })),
+    );
+    const verdict = verdictFor(score);
+
+    // Block verdict (exact_stem / reordered_options) cannot be overridden.
+    // Warn/note can be overridden by clicking "Save anyway", which sets confirmedDup.
+    if (verdict === 'block' || (verdict !== 'clean' && !confirmedDup)) {
+      setDupScore(score);
+      return;
+    }
+
     setSaving(true);
     try {
       await onSave({
@@ -769,6 +831,40 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
         />
       </div>
 
+      {/* Duplicate warning banner */}
+      {dupScore && (
+        <DuplicateBanner
+          score={dupScore}
+          onReview={() => setShowCompare(true)}
+          onSaveAnyway={() => { setConfirmedDup(true); setDupScore(null); handleSave(); }}
+          onDismiss={() => setDupScore(null)}
+        />
+      )}
+
+      {/* Compare modal */}
+      {showCompare && dupScore && (
+        <DuplicateCompareModal
+          row={{
+            sheet: engine === 'text' ? 'Text' : engine === 'match' ? 'Match' : 'MCQ',
+            rowIndex: 0,
+            status: 'ok',
+            errors: [],
+            warnings: [],
+            raw: {},
+            draft: {
+              stem,
+              options,
+              correctIds,
+              subject,
+              topic,
+            } as Partial<QuestionDraft>,
+            duplicateScore: dupScore,
+          } as ParsedRow}
+          pool={pool}
+          onClose={() => setShowCompare(false)}
+        />
+      )}
+
       {/* Fixed footer */}
       <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3" style={{ borderTop: '1px solid #E3E1DB' }}>
         <button
@@ -794,6 +890,71 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Duplicate banner ──────────────────────────────────────────────────────────
+
+const REASON_LABEL: Record<string, string> = {
+  exact_stem:        'Exact duplicate — this stem already exists',
+  reordered_options: 'Duplicate — same options + same correct answer',
+  fuzzy_stem:        'Very similar to an existing question',
+  option_overlap:    'Options overlap significantly with an existing question',
+  none:              'Possible match',
+};
+
+function DuplicateBanner({
+  score, onReview, onSaveAnyway, onDismiss,
+}: {
+  score: DuplicateScore;
+  onReview:     () => void;
+  onSaveAnyway: () => void;
+  onDismiss:    () => void;
+}) {
+  const verdict = verdictFor(score);
+  const isBlock = verdict === 'block';
+  const palette = isBlock
+    ? { bg: '#FDF5F5', border: '#F2CECE', text: '#9B2828', sub: '#A85050' }
+    : { bg: '#FFFBF0', border: '#F0DFA0', text: '#8B5E1A', sub: '#A07A3A' };
+
+  return (
+    <div
+      className="flex-shrink-0 px-6 py-3 flex items-start gap-3"
+      style={{ background: palette.bg, borderTop: `1px solid ${palette.border}` }}
+    >
+      <AlertTriangle size={14} strokeWidth={1.5} style={{ color: palette.text, marginTop: 2, flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <p className="text-xs" style={{ color: palette.text }}>
+          {REASON_LABEL[score.matchedReason] ?? 'Possible duplicate'}
+        </p>
+        <p className="text-xs mt-0.5" style={{ color: palette.sub, fontSize: 11 }}>
+          Stem {pct(score.stemSim)} · Options {pct(score.optionsSim)} · Correct answer {score.answerMatch ? 'matches' : 'differs'}
+        </p>
+      </div>
+      <button
+        type="button" onClick={onReview}
+        className="flex items-center gap-1 text-xs px-3 py-1.5"
+        style={{ border: `1px solid ${palette.border}`, background: '#FFFFFF', color: palette.text, borderRadius: 2 }}
+      >
+        <Eye size={11} strokeWidth={1.5} /> Review match
+      </button>
+      {!isBlock && (
+        <button
+          type="button" onClick={onSaveAnyway}
+          className="text-xs px-3 py-1.5"
+          style={{ background: palette.text, color: '#FFFFFF', borderRadius: 2 }}
+        >
+          Save anyway
+        </button>
+      )}
+      <button
+        type="button" onClick={onDismiss}
+        className="p-1 transition-opacity hover:opacity-60"
+        style={{ color: palette.sub }}
+      >
+        <X size={13} strokeWidth={1.5} />
+      </button>
     </div>
   );
 }

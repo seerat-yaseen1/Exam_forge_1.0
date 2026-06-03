@@ -12,7 +12,13 @@
 import * as XLSX from 'xlsx';
 import { type QuestionDraft } from './QuestionTypeEngine';
 import { type Subject, resolveSubject, normalizeSubject } from '../../../lib/subjectService';
-import { type Difficulty } from '../../../lib/questionBankService';
+import { type Difficulty, type Question, findDuplicateCandidates } from '../../../lib/questionBankService';
+import {
+  scoreAgainstPool,
+  verdictFor,
+  pct,
+  type DuplicateScore,
+} from '../../../lib/duplicateDetection';
 
 // ══════════════════════════════════════════════════════════════════
 // OUTPUT TYPES
@@ -51,6 +57,8 @@ export type ParsedRow = {
   warnings: RowWarning[];
   /** Filled in by resolveSubjectsInRows() — not set by parseWorkbook(). */
   subjectResolution?: SubjectResolution;
+  /** Filled in by scoreDuplicatesInRows() — three independent scores + match pointer. */
+  duplicateScore?: DuplicateScore;
 };
 
 export type ParsedWorkbook = {
@@ -619,4 +627,122 @@ export function getAllRows(wb: ParsedWorkbook): ParsedRow[] {
 
 export function getSaveableRows(rows: ParsedRow[]): ParsedRow[] {
   return rows.filter((r) => r.status !== 'error');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DUPLICATE DETECTION PASS
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Score each row against the existing question pool. Scoped to same
+ * subjectId+topicId per row.
+ *
+ *   - exact_stem        → row becomes 'error' (block)
+ *   - reordered_options → row becomes 'error' (block)
+ *   - stemSim or optionsSim ≥ 85%   → 'warning'
+ *   - stemSim or optionsSim ≥ 60%   → 'warning' (informational)
+ *
+ * Must be called AFTER resolveSubjectsInRows() so subjectId / topicId are set.
+ * Skips rows already in 'error' state (no point scoring a broken row).
+ *
+ * Also de-duplicates WITHIN the upload itself: rows are compared against
+ * prior rows in the same batch, not just the existing pool.
+ */
+export function scoreDuplicatesInRows(
+  rows: ParsedRow[],
+  pool: Question[],
+): ParsedRow[] {
+  // Seen-in-batch accumulator: tracks rows already validated within THIS upload
+  // so two identical rows in the same file also flag each other.
+  const inBatch: Array<{ id?: string } & Question> = [];
+
+  return rows.map((row) => {
+    if (row.status === 'error') return row;
+
+    const draft = row.draft;
+    if (!draft.subjectId || !draft.topicId || !draft.stem) return row;
+
+    // ── Build candidate pool: existing DB + already-seen batch rows ──
+    const dbCandidates  = findDuplicateCandidates(
+      { subjectId: draft.subjectId, topicId: draft.topicId },
+      pool,
+    );
+    const batchCandidates = inBatch.filter(
+      (b) => b.subjectId === draft.subjectId && b.topicId === draft.topicId,
+    );
+
+    // ── Shape draft into ScoreableQuestion ──
+    const scoreable = {
+      stem:          draft.stem,
+      options:       (draft.options ?? []).map((o) => o.text ?? ''),
+      // Map correctIds → option texts so detection compares apples-to-apples
+      correctAnswer: (draft.correctIds ?? [])
+        .map((cid) => (draft.options ?? []).find((o) => o.id === cid)?.text ?? '')
+        .filter(Boolean),
+    };
+
+    // Existing-pool questions already have option text + correct text — use directly
+    const poolScoreable = [
+      ...dbCandidates.map((q) => ({
+        id:            q.id,
+        stem:          q.stem ?? '',
+        options:       (q.options ?? []).map((o: any) => o.text ?? ''),
+        correctAnswer: (q.correctIds ?? [])
+          .map((cid: string) => (q.options ?? []).find((o: any) => o.id === cid)?.text ?? '')
+          .filter(Boolean),
+      })),
+      ...batchCandidates.map((b: any) => ({
+        id:            b.id,
+        stem:          b.stem ?? '',
+        options:       (b.options ?? []).map((o: any) => o.text ?? ''),
+        correctAnswer: (b.correctIds ?? [])
+          .map((cid: string) => (b.options ?? []).find((o: any) => o.id === cid)?.text ?? '')
+          .filter(Boolean),
+      })),
+    ];
+
+    const score = scoreAgainstPool(scoreable, poolScoreable);
+    const verdict = verdictFor(score);
+
+    // ── Mutate status based on verdict ──
+    const newErrors:   RowError[]   = [...row.errors];
+    const newWarnings: RowWarning[] = [...row.warnings];
+
+    if (verdict === 'block') {
+      const reason = score.matchedReason === 'exact_stem'
+        ? 'Exact duplicate of an existing question'
+        : 'Same options (reordered) and same correct answer as an existing question';
+      newErrors.push({
+        field: 'duplicate',
+        message: `${reason}${score.matchedQuestionId ? ` (id: ${score.matchedQuestionId})` : ''}.`,
+      });
+    } else if (verdict === 'warn' || verdict === 'note') {
+      newWarnings.push({
+        field: 'duplicate',
+        message: `Possible duplicate — stem ${pct(score.stemSim)}, options ${pct(score.optionsSim)}, answer ${score.answerMatch ? 'matches' : 'differs'}.`,
+      });
+    }
+
+    // Add to in-batch pool ONLY if not blocked (no point comparing future rows against a discarded one).
+    if (verdict !== 'block') {
+      inBatch.push({
+        id:         `batch-row-${row.rowIndex}`,
+        stem:       draft.stem ?? '',
+        options:    (draft.options ?? []) as any,
+        correctIds: (draft.correctIds ?? []) as any,
+        subjectId:  draft.subjectId,
+        topicId:    draft.topicId,
+      } as any);
+    }
+
+    return {
+      ...row,
+      duplicateScore: score,
+      errors:   newErrors,
+      warnings: newWarnings,
+      status: newErrors.length > 0
+        ? 'error'
+        : newWarnings.length > 0 ? 'warning' : 'valid',
+    };
+  });
 }

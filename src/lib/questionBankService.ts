@@ -416,6 +416,28 @@ export async function getQuestionsByIds(
 }
 
 /**
+ * Filter a question pool to candidates that share the draft's subject + topic.
+ * Used by duplicate detection — scope is intentionally narrow (only same
+ * subjectId AND same topicId, both required) to avoid false positives across
+ * unrelated subjects.
+ *
+ * Pure function, no Firestore. Pass in the already-loaded `getAllQuestions()` result.
+ */
+export function findDuplicateCandidates(
+  draft: { subjectId?: string; topicId?: string; id?: string },
+  pool:  Question[],
+): Question[] {
+  if (!draft.subjectId || !draft.topicId) return [];
+  return pool.filter(
+    (q) =>
+      !q.isDeleted &&
+      q.id        !== draft.id &&
+      q.subjectId === draft.subjectId &&
+      q.topicId   === draft.topicId,
+  );
+}
+
+/**
  * Fetch ALL non-deleted Web Owner questions (global pool).
  * Returns questions where ownerType === 'webOwner' OR ownerType is absent
  * (backward compat for questions created before Phase 1).

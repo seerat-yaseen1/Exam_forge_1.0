@@ -6,15 +6,17 @@ import {
   Info, FileDown,
 } from 'lucide-react';
 import {
-  parseWorkbook, resolveSubjectsInRows, downloadTemplate,
+  parseWorkbook, resolveSubjectsInRows, scoreDuplicatesInRows, downloadTemplate,
   computeSummary, getSaveableRows, getAllRows,
   type ParsedWorkbook, type ParsedRow, type UploadSummary,
 } from './bulkUploadParser';
 import { getAllSubjects, getAllTopics, ensureSubject, type Subject, type Topic } from '../../../lib/subjectService';
 import {
-  createQuestion,
-  type QuestionOwnerType,
+  createQuestion, getAllQuestions,
+  type QuestionOwnerType, type Question,
 } from '../../../lib/questionBankService';
+import { pct as fmtPct } from '../../../lib/duplicateDetection';
+import { DuplicateCompareModal } from './DuplicateCompareModal';
 import { type QuestionDraft } from './QuestionTypeEngine';
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -256,9 +258,16 @@ function StatusDot({ status }: { status: ParsedRow['status'] }) {
   );
 }
 
-function RowCard({ row }: { row: ParsedRow }) {
+function RowCard({
+  row,
+  onViewMatch,
+}: {
+  row: ParsedRow;
+  onViewMatch: (row: ParsedRow) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const { status, draft, errors, warnings, subjectResolution } = row;
+  const { status, draft, errors, warnings, subjectResolution, duplicateScore } = row;
+  const hasDup = duplicateScore && duplicateScore.matchedReason !== 'none';
 
   const statusColor = status === 'valid' ? '#2A6B3A' : status === 'warning' ? '#8B5E1A' : '#9B2828';
   const statusBg    = status === 'valid' ? '#F0FBF4' : status === 'warning' ? '#FFFBF0' : '#FDF5F5';
@@ -304,6 +313,25 @@ function RowCard({ row }: { row: ParsedRow }) {
           </span>
         )}
 
+        {/* Duplicate score chips */}
+        {hasDup && (
+          <span
+            className="flex items-center gap-1 text-xs flex-shrink-0 px-1.5 py-0.5"
+            style={{
+              background: status === 'error' ? '#FDF5F5' : '#FFFBF0',
+              border: `1px solid ${status === 'error' ? '#F2CECE' : '#F0DFA0'}`,
+              color: status === 'error' ? '#9B2828' : '#8B5E1A',
+              borderRadius: 2, fontSize: 10, letterSpacing: '0.04em',
+            }}
+            title={`stem ${fmtPct(duplicateScore!.stemSim)} · options ${fmtPct(duplicateScore!.optionsSim)} · answer ${duplicateScore!.answerMatch ? '✓' : '✗'}`}
+          >
+            DUP
+            <span style={{ opacity: 0.7 }}>
+              S{fmtPct(duplicateScore!.stemSim)} · O{fmtPct(duplicateScore!.optionsSim)} · A{duplicateScore!.answerMatch ? '✓' : '✗'}
+            </span>
+          </span>
+        )}
+
         {/* Error / warning counts */}
         {errors.length > 0 && (
           <span className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: '#9B2828' }}>
@@ -343,6 +371,17 @@ function RowCard({ row }: { row: ParsedRow }) {
           {errors.length === 0 && warnings.length === 0 && (
             <p className="text-xs" style={{ color: '#2A6B3A' }}>✓ No issues found</p>
           )}
+
+          {hasDup && duplicateScore?.matchedQuestionId && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onViewMatch(row); }}
+              className="mt-2 text-xs px-2 py-1 transition-opacity hover:opacity-70"
+              style={{ border: '1px solid #E3E1DB', background: '#FFFFFF', color: '#4A4A45', borderRadius: 2 }}
+            >
+              View matched question →
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -355,12 +394,14 @@ function Step3({
   summary,
   onConfirm,
   onBack,
+  onViewMatch,
 }: {
   workbook: ParsedWorkbook;
   subjects: Subject[];
   summary: UploadSummary;
   onConfirm: () => void;
   onBack: () => void;
+  onViewMatch: (row: ParsedRow) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ReviewTab>('All');
   const tabs: ReviewTab[] = ['All', 'MCQ', 'Text', 'Match'].filter((t) => {
@@ -426,7 +467,13 @@ function Step3({
         {rows.length === 0 ? (
           <p className="text-xs text-center py-8" style={{ color: '#B0AEA8' }}>No rows in this sheet.</p>
         ) : (
-          rows.map((row) => <RowCard key={`${row.sheet}-${row.rowIndex}`} row={row} />)
+          rows.map((row) => (
+            <RowCard
+              key={`${row.sheet}-${row.rowIndex}`}
+              row={row}
+              onViewMatch={onViewMatch}
+            />
+          ))
         )}
       </div>
 
@@ -579,13 +626,16 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
   const [saveRows,  setSaveRows]  = useState<ParsedRow[]>([]);
   const [subjects,  setSubjects]  = useState<Subject[]>([]);
   const [topics,    setTopics]    = useState<Topic[]>([]);
+  const [pool,      setPool]      = useState<Question[]>([]);
   const [parseErr,  setParseErr]  = useState<string | null>(null);
+  const [compareRow, setCompareRow] = useState<ParsedRow | null>(null);
 
-  // Fetch subjects + topics once
+  // Fetch subjects + topics + existing question pool once
   useEffect(() => {
-    Promise.all([getAllSubjects(), getAllTopics()]).then(([s, t]) => {
+    Promise.all([getAllSubjects(), getAllTopics(), getAllQuestions()]).then(([s, t, qs]) => {
       setSubjects(s);
       setTopics(t);
+      setPool(qs);
     });
   }, []);
 
@@ -597,12 +647,21 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
         setParseErr('No recognised sheets found (expected MCQ, Text, or Match). Check your template.');
         return;
       }
-      // Resolve subjects against registry
-      const resolved: ParsedWorkbook = {
+      // Pass 1: resolve subjects against registry
+      const withSubjects: ParsedWorkbook = {
         ...raw,
         mcq:   resolveSubjectsInRows(raw.mcq,   subjects, topics),
         text:  resolveSubjectsInRows(raw.text,  subjects, topics),
         match: resolveSubjectsInRows(raw.match, subjects, topics),
+      };
+      // Pass 2: score duplicates (must run after subjects so subjectId+topicId are set).
+      // Scoring runs across all three sheets together — but the candidate filter scopes
+      // each row to its own subject+topic, so cross-sheet matches still work correctly.
+      const resolved: ParsedWorkbook = {
+        ...withSubjects,
+        mcq:   scoreDuplicatesInRows(withSubjects.mcq,   pool),
+        text:  scoreDuplicatesInRows(withSubjects.text,  pool),
+        match: scoreDuplicatesInRows(withSubjects.match, pool),
       };
       const allRows = getAllRows(resolved);
       const sum = computeSummary(allRows);
@@ -613,7 +672,7 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
     } catch (err: any) {
       setParseErr(`Failed to parse file: ${err?.message ?? 'Unknown error'}. Make sure you are using the STRATUM template.`);
     }
-  }, [subjects, topics]);
+  }, [subjects, topics, pool]);
 
   const handleComplete = (saved: number, skipped: number) => {
     onComplete(saved);
@@ -684,6 +743,7 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
                   summary={summary}
                   onConfirm={() => setStep(4)}
                   onBack={() => setStep(2)}
+                  onViewMatch={setCompareRow}
                 />
               </motion.div>
             )}
@@ -700,6 +760,17 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
             )}
           </AnimatePresence>
         </div>
+
+        {/* Duplicate compare modal */}
+        <AnimatePresence>
+          {compareRow && (
+            <DuplicateCompareModal
+              row={compareRow}
+              pool={pool}
+              onClose={() => setCompareRow(null)}
+            />
+          )}
+        </AnimatePresence>
 
         {/* Footer for step 4 */}
         {step === 4 && (

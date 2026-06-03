@@ -28,8 +28,33 @@ type AvailabilityState = 'available' | 'upcoming' | 'window_closed' | 'admin_clo
 type AssessmentWithMeta = {
   assessment: Assessment;
   attempt: Attempt | undefined;
+  allAttempts: Attempt[];
   availability: AvailabilityState;
 };
+
+const FINISHED_STATUSES: AttemptStatus[] = ['submitted', 'auto_submitted', 'terminated'];
+
+/**
+ * The student can still open/access the test when the window is active AND
+ * they're not blocked AND either an in-progress attempt exists to resume OR
+ * they have remaining attempts (respecting per-student override). Mirrors the
+ * gate in ExamBriefingPage so the card and the briefing never disagree.
+ */
+function canStillOpen(
+  a: Assessment,
+  availability: AvailabilityState,
+  allAttempts: Attempt[],
+  studentId: string,
+): boolean {
+  if (availability !== 'available') return false;
+  if (a.blockedStudents?.includes(studentId)) return false;
+
+  if (allAttempts.some((at) => at.status === 'in_progress')) return true;
+
+  const effMax = a.attemptOverrides?.[studentId] ?? a.maxAttempts ?? 1;
+  const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
+  return finished < effMax;
+}
 
 // ══════════════════════════════════════════════════════════════════
 // PURE HELPERS
@@ -194,12 +219,14 @@ function AssessmentCard({
   data,
   nowDate,
   index,
+  studentId,
 }: {
   data: AssessmentWithMeta;
   nowDate: Date;
   index: number;
+  studentId: string;
 }) {
-  const { assessment: a, attempt, availability } = data;
+  const { assessment: a, attempt, allAttempts, availability } = data;
   const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
 
@@ -208,12 +235,13 @@ function AssessmentCard({
   const totalSectionTime = a.sections?.reduce((s, sec) => s + (sec.timeLimit ?? 0), 0) ?? 0;
 
   // ── Time display logic ────────────────────────────────────────
+  // Show the countdown only when the student can actually still open the test
+  // (window active + not blocked + attempts remaining OR resumable in-progress).
   const timeInfo = useMemo(() => {
-    if (availability === 'available' && a.endDate) {
-      return timeLeft(a.endDate, nowDate);
-    }
-    return null;
-  }, [availability, a.endDate, nowDate]);
+    if (!a.endDate) return null;
+    if (!canStillOpen(a, availability, allAttempts, studentId)) return null;
+    return timeLeft(a.endDate, nowDate);
+  }, [a, availability, allAttempts, studentId, nowDate]);
 
   // ── Action button ──────────────────────────────────────────────
   const action = useMemo((): { label: string; icon: React.ReactNode; variant: 'primary' | 'secondary' } | null => {
@@ -518,6 +546,7 @@ export function StudentAssessmentsPage() {
 
   const [assessments, setAssessments]     = useState<Assessment[]>([]);
   const [attemptMap, setAttemptMap]       = useState<Record<string, Attempt>>({});
+  const [attemptsByAssessment, setAttemptsByAssessment] = useState<Record<string, Attempt[]>>({});
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState('');
   const [lastSynced, setLastSynced]       = useState<Date | null>(null);
@@ -542,14 +571,21 @@ export function StudentAssessmentsPage() {
         getAttemptsByStudent(session.studentId),
       ]);
 
-      // Build attempt map: assessmentId → most recent attempt
+      // Build attempt map: assessmentId → most recent attempt, plus a parallel
+      // map of assessmentId → all attempts (needed for attempt-limit math).
       const map: Record<string, Attempt> = {};
-      attemptList
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-        .forEach((at) => { map[at.assessmentId] = at; });
+      const allMap: Record<string, Attempt[]> = {};
+      const sorted = [...attemptList].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+      sorted.forEach((at) => {
+        map[at.assessmentId] = at;
+        (allMap[at.assessmentId] ??= []).push(at);
+      });
 
       setAssessments(aList);
       setAttemptMap(map);
+      setAttemptsByAssessment(allMap);
       setLastSynced(new Date());
     } catch (e: any) {
       console.error('[StudentAssessmentsPage] load error:', e);
@@ -587,6 +623,7 @@ export function StudentAssessmentsPage() {
       const entry: AssessmentWithMeta = {
         assessment: a,
         attempt: attemptMap[a.id],
+        allAttempts: attemptsByAssessment[a.id] ?? [],
         availability: avail,
       };
 
@@ -619,7 +656,7 @@ export function StudentAssessmentsPage() {
     });
 
     return { available, upcoming, past };
-  }, [assessments, attemptMap, nowDate]);
+  }, [assessments, attemptMap, attemptsByAssessment, nowDate]);
 
   const total = assessments.length;
 
@@ -732,7 +769,7 @@ export function StudentAssessmentsPage() {
               ) : (
                 <div className="space-y-3">
                   {available.map((d, i) => (
-                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} />
+                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} />
                   ))}
                 </div>
               )}
@@ -744,7 +781,7 @@ export function StudentAssessmentsPage() {
                 <SectionDivider label="UPCOMING" count={upcoming.length} />
                 <div className="space-y-3">
                   {upcoming.map((d, i) => (
-                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} />
+                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} />
                   ))}
                 </div>
               </div>
@@ -756,7 +793,7 @@ export function StudentAssessmentsPage() {
                 <SectionDivider label="PAST" count={past.length} />
                 <div className="space-y-3">
                   {past.map((d, i) => (
-                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} />
+                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} />
                   ))}
                 </div>
               </div>

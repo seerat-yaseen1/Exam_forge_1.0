@@ -49,11 +49,12 @@ function canStillOpen(
   if (availability !== 'available') return false;
   if (a.blockedStudents?.includes(studentId)) return false;
 
-  if (allAttempts.some((at) => at.status === 'in_progress')) return true;
-
   const effMax = a.attemptOverrides?.[studentId] ?? a.maxAttempts ?? 1;
   const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
-  return finished < effMax;
+  if (finished >= effMax) return false; // matches ExamBriefingPage attempt-limit gate
+
+  // Slots remaining: either resume an in-progress attempt or start a fresh one.
+  return true;
 }
 
 type TabKey = 'available' | 'missed' | 'submitted';

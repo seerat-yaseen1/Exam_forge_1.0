@@ -31,6 +31,7 @@ import {
 } from '../../lib/assessmentService';
 import { getAllQuestions, type Question } from '../../lib/questionBankService';
 import { getAllSubjects, type Subject } from '../../lib/subjectService';
+import { EditMenu } from '../components/assignments/edit/EditMenu';
 
 // ── Local draft types ─────────────────────────────────────────────
 
@@ -210,8 +211,13 @@ function FilterBar({ search, setSearch, statusFilter, setStatusFilter }: {
 
 // ── Assessment row ────────────────────────────────────────────────
 
-function AssessmentRow({ assessment, onPreview, onEdit, onDelete, onRoster }: {
-  assessment: Assessment; onPreview: () => void; onEdit: () => void; onDelete: () => void; onRoster: () => void;
+function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEditor, onDelete, onRoster }: {
+  assessment: Assessment;
+  onPreview: () => void;
+  onPatched: (patch: Partial<Assessment>) => void;
+  onOpenLegacyEditor: () => void;
+  onDelete: () => void;
+  onRoster: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const sectionCount = assessment.sections?.length;
@@ -262,7 +268,7 @@ function AssessmentRow({ assessment, onPreview, onEdit, onDelete, onRoster }: {
           </button>
         )}
         <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}><Eye size={13} strokeWidth={1.5} /></button>
-        <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}><Pencil size={13} strokeWidth={1.5} /></button>
+        <EditMenu assessment={assessment} onPatched={onPatched} onOpenLegacyEditor={onOpenLegacyEditor} />
         <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}><Trash2 size={13} strokeWidth={1.5} /></button>
       </div>
     </div>
@@ -3889,7 +3895,8 @@ export function AssignmentsPage() {
           {!loading && filtered.map((a) => (
             <AssessmentRow key={a.id} assessment={a}
               onPreview={() => setPreviewAssessment(a)}
-              onEdit={() => openEdit(a)}
+              onPatched={(patch) => setAssessments((prev) => prev.map((x) => (x.id === a.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } as Assessment : x)))}
+              onOpenLegacyEditor={() => openEdit(a)}
               onDelete={() => setDeleteTarget(a)}
               onRoster={() => navigate(`/dashboard/assignments/${a.id}/roster`)} />
           ))}

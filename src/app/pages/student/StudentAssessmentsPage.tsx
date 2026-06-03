@@ -291,6 +291,24 @@ function AssessmentCard({
     return null;
   }, [a, attempt, allAttempts, availability, studentId]);
 
+  // ── Why the student can't act (only when there's no primary action) ──
+  // Surfaces an explicit reason next to the status badge so the absence of a
+  // Begin/Retake button is never ambiguous.
+  const noAccessReason = useMemo((): string | null => {
+    if (canStillOpen(a, availability, allAttempts, studentId)) return null;
+    if (availability === 'upcoming') return null; // upcoming is its own story
+    if (a.blockedStudents?.includes(studentId)) return 'Blocked';
+    if (availability === 'admin_closed' || availability === 'window_closed') {
+      return 'Access closed';
+    }
+    const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
+    if (finished > 0) {
+      const lastTerminated = attempt?.status === 'terminated';
+      return lastTerminated ? 'No attempts left' : 'Attempts exhausted';
+    }
+    return null;
+  }, [a, attempt, allAttempts, availability, studentId]);
+
   // ── Status bar left side ───────────────────────────────────────
   const statusLeft = useMemo(() => {
     if (!attempt) {
@@ -483,6 +501,19 @@ function AssessmentCard({
         >
           <div className="flex items-center gap-4">
             {statusLeft}
+            {noAccessReason && (
+              <span
+                className="text-xs px-2 py-0.5"
+                style={{
+                  background: '#F5F5F5',
+                  color: '#6B6B66',
+                  border: '1px solid #DDDBD5',
+                  borderRadius: 2,
+                }}
+              >
+                {noAccessReason}
+              </span>
+            )}
             {attempt && (attempt.status === 'submitted' || attempt.status === 'auto_submitted') && (
               <ScoreDisplay attempt={attempt} assessment={a} />
             )}

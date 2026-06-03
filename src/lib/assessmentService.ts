@@ -358,6 +358,33 @@ export async function updateAssessment(
   await updateDoc(doc(db, 'assessments', id), removeUndefined(updates));
 }
 
+// ── Narrow patch helpers (focused edit panels) ────────────────────
+// Each helper writes only the fields its panel owns. Pages should prefer
+// these over updateAssessment() so saves don't accidentally overwrite
+// unrelated fields.
+
+export type DetailsPatch = Partial<Pick<Assessment, 'title' | 'description' | 'subject' | 'tags'>>;
+export async function updateAssessmentDetails(id: string, patch: DetailsPatch): Promise<void> {
+  await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
+}
+
+export type SchedulePatch = Partial<Pick<Assessment, 'startDate' | 'endDate' | 'maxAttempts' | 'attemptOverrides'>>;
+export async function updateAssessmentSchedule(id: string, patch: SchedulePatch): Promise<void> {
+  await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
+}
+
+export type AccessPatch = Partial<Pick<Assessment, 'assignedTo' | 'blockedStudents'>>;
+export async function updateAssessmentAccess(id: string, patch: AccessPatch): Promise<void> {
+  await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
+}
+
+export type BehaviourPatch = Partial<Pick<Assessment,
+  'shuffleQuestions' | 'passingScore' | 'showResults' | 'allowReview' | 'sectionStartOrder'
+>>;
+export async function updateAssessmentBehaviour(id: string, patch: BehaviourPatch): Promise<void> {
+  await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
+}
+
 // ── Soft delete assessment ────────────────────────────────────────
 
 export async function softDeleteAssessment(id: string): Promise<void> {

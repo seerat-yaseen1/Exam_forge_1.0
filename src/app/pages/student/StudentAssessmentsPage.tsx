@@ -56,6 +56,31 @@ function canStillOpen(
   return finished < effMax;
 }
 
+type TabKey = 'available' | 'missed' | 'submitted';
+
+/**
+ * Tab bucketing rule:
+ *  - available: student can still open the test now (or window not yet open)
+ *  - submitted: has at least one finished attempt and can NOT still open
+ *  - missed:    everything else (window closed/blocked, never submitted)
+ *
+ * A card with prior submissions AND a remaining attempt stays in `available`
+ * — the card itself surfaces a "Submitted N×" badge so the student knows.
+ */
+function classifyForTab(
+  a: Assessment,
+  availability: AvailabilityState,
+  allAttempts: Attempt[],
+  studentId: string,
+): TabKey {
+  if (canStillOpen(a, availability, allAttempts, studentId)) return 'available';
+  if (availability === 'upcoming') return 'available';
+
+  const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
+  if (finished > 0) return 'submitted';
+  return 'missed';
+}
+
 // ══════════════════════════════════════════════════════════════════
 // PURE HELPERS
 // ══════════════════════════════════════════════════════════════════
@@ -112,27 +137,6 @@ function timeUntil(startIso: string, now: Date): string {
 // SUB-COMPONENTS
 // ══════════════════════════════════════════════════════════════════
 
-// ── Section divider ───────────────────────────────────────────────
-
-function SectionDivider({ label, count }: { label: string; count: number }) {
-  return (
-    <div className="flex items-center gap-3 mb-4">
-      <span
-        className="text-xs select-none"
-        style={{ color: '#9A9891', letterSpacing: '0.1em', flexShrink: 0 }}
-      >
-        {label}
-      </span>
-      <span
-        className="text-xs px-1.5 py-0.5"
-        style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 10 }}
-      >
-        {count}
-      </span>
-      <div style={{ flex: 1, height: 1, background: '#F0EFEB' }} />
-    </div>
-  );
-}
 
 // ── Attempt status indicator ──────────────────────────────────────
 
@@ -243,6 +247,17 @@ function AssessmentCard({
     return timeLeft(a.endDate, nowDate);
   }, [a, availability, allAttempts, studentId, nowDate]);
 
+  // ── Reattempt indicator ───────────────────────────────────────
+  // When the student has already submitted but still has chances left,
+  // surface that explicitly so they don't think the card is a fresh test.
+  const attemptInfo = useMemo(() => {
+    const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
+    if (finished === 0) return null;
+    if (!canStillOpen(a, availability, allAttempts, studentId)) return null;
+    const effMax = a.attemptOverrides?.[studentId] ?? a.maxAttempts ?? 1;
+    return { used: finished, total: effMax };
+  }, [a, availability, allAttempts, studentId]);
+
   // ── Action button ──────────────────────────────────────────────
   const action = useMemo((): { label: string; icon: React.ReactNode; variant: 'primary' | 'secondary' } | null => {
     if (availability === 'upcoming') return null;
@@ -324,6 +339,22 @@ function AssessmentCard({
             {a.title || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
           </p>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Reattempt badge — only when prior submission exists + chances left */}
+            {attemptInfo && (
+              <span
+                className="text-xs px-2 py-0.5 flex items-center gap-1"
+                style={{
+                  background: '#FFF7E6',
+                  color: '#8B5E1A',
+                  border: '1px solid #F0DFA0',
+                  borderRadius: 2,
+                }}
+                title="You've already submitted this assessment but have a reattempt available."
+              >
+                <RotateCcw size={9} strokeWidth={1.5} />
+                Submitted {attemptInfo.used}× · {attemptInfo.total - attemptInfo.used} left
+              </span>
+            )}
             {/* Time left badge for available */}
             {timeInfo && (
               <span
@@ -496,7 +527,7 @@ function AssessmentCard({
 
 // ── Empty state ───────────────────────────────────────────────────
 
-function EmptyState({ category }: { category: 'available' | 'upcoming' | 'past' | 'all' }) {
+function EmptyState({ category }: { category: 'available' | 'missed' | 'submitted' | 'all' }) {
   const messages: Record<typeof category, { icon: React.ReactNode; title: string; body: string }> = {
     all: {
       icon: <ClipboardList size={28} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
@@ -506,17 +537,17 @@ function EmptyState({ category }: { category: 'available' | 'upcoming' | 'past' 
     available: {
       icon: <PlayCircle size={20} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
       title: 'Nothing available right now',
-      body: 'Check back later or look in Upcoming.',
+      body: 'Check back later — new assessments will appear here when they open.',
     },
-    upcoming: {
-      icon: <Calendar size={20} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
-      title: 'No upcoming assessments',
-      body: '',
+    missed: {
+      icon: <XCircle size={20} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
+      title: 'Nothing missed',
+      body: 'Assessments you did not submit before they closed will appear here.',
     },
-    past: {
-      icon: <BarChart2 size={20} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
-      title: 'No past assessments',
-      body: '',
+    submitted: {
+      icon: <CheckCircle2 size={20} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
+      title: 'No submissions yet',
+      body: 'Your completed assessments will appear here.',
     },
   };
   const m = messages[category];
@@ -551,6 +582,8 @@ export function StudentAssessmentsPage() {
   const [error, setError]                 = useState('');
   const [lastSynced, setLastSynced]       = useState<Date | null>(null);
   const [syncAge, setSyncAge]             = useState('');
+
+  const [activeTab, setActiveTab] = useState<TabKey>('available');
 
   // Live clock — updates every 30s (good enough for the listing page)
   const [nowDate, setNowDate] = useState(() => new Date());
@@ -613,50 +646,62 @@ export function StudentAssessmentsPage() {
 
   // ── Categorise ────────────────────────────────────────────────
 
-  const { available, upcoming, past } = useMemo(() => {
+  const { available, missed, submitted } = useMemo(() => {
     const available: AssessmentWithMeta[] = [];
-    const upcoming: AssessmentWithMeta[]  = [];
-    const past: AssessmentWithMeta[]      = [];
+    const missed:    AssessmentWithMeta[] = [];
+    const submitted: AssessmentWithMeta[] = [];
 
     assessments.forEach((a) => {
       const avail = getAvailability(a, nowDate);
+      const all   = attemptsByAssessment[a.id] ?? [];
       const entry: AssessmentWithMeta = {
         assessment: a,
         attempt: attemptMap[a.id],
-        allAttempts: attemptsByAssessment[a.id] ?? [],
+        allAttempts: all,
         availability: avail,
       };
 
-      if (avail === 'available')     available.push(entry);
-      else if (avail === 'upcoming') upcoming.push(entry);
-      else                           past.push(entry);
+      const tab = session
+        ? classifyForTab(a, avail, all, session.studentId)
+        : 'available';
+      if (tab === 'available')      available.push(entry);
+      else if (tab === 'submitted') submitted.push(entry);
+      else                          missed.push(entry);
     });
 
-    // Sort available: most urgent (closest end date) first; no-end-date last
+    // Available: open-now (by closest end date) before upcoming (by soonest start)
     available.sort((x, y) => {
-      if (x.assessment.endDate && y.assessment.endDate)
-        return new Date(x.assessment.endDate).getTime() - new Date(y.assessment.endDate).getTime();
-      if (x.assessment.endDate) return -1;
-      if (y.assessment.endDate) return  1;
-      return 0;
-    });
-
-    // Sort upcoming: soonest first
-    upcoming.sort((x, y) => {
+      const xOpen = x.availability === 'available';
+      const yOpen = y.availability === 'available';
+      if (xOpen !== yOpen) return xOpen ? -1 : 1;
+      if (xOpen) {
+        if (x.assessment.endDate && y.assessment.endDate)
+          return new Date(x.assessment.endDate).getTime() - new Date(y.assessment.endDate).getTime();
+        if (x.assessment.endDate) return -1;
+        if (y.assessment.endDate) return  1;
+        return 0;
+      }
       if (x.assessment.startDate && y.assessment.startDate)
         return new Date(x.assessment.startDate).getTime() - new Date(y.assessment.startDate).getTime();
       return 0;
     });
 
-    // Sort past: most recent first
-    past.sort((x, y) => {
+    // Submitted: most recently submitted first
+    submitted.sort((x, y) => {
+      const xd = x.attempt?.submittedAt ?? x.assessment.endDate ?? x.assessment.updatedAt;
+      const yd = y.attempt?.submittedAt ?? y.assessment.endDate ?? y.assessment.updatedAt;
+      return new Date(yd).getTime() - new Date(xd).getTime();
+    });
+
+    // Missed: most recently closed first
+    missed.sort((x, y) => {
       const xd = x.assessment.endDate || x.assessment.updatedAt;
       const yd = y.assessment.endDate || y.assessment.updatedAt;
       return new Date(yd).getTime() - new Date(xd).getTime();
     });
 
-    return { available, upcoming, past };
-  }, [assessments, attemptMap, attemptsByAssessment, nowDate]);
+    return { available, missed, submitted };
+  }, [assessments, attemptMap, attemptsByAssessment, nowDate, session]);
 
   const total = assessments.length;
 
@@ -761,46 +806,58 @@ export function StudentAssessmentsPage() {
         {!loading && !error && total > 0 && (
           <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
 
-            {/* ── AVAILABLE NOW ── */}
-            <div className="mb-8">
-              <SectionDivider label="AVAILABLE NOW" count={available.length} />
-              {available.length === 0 ? (
-                <EmptyState category="available" />
-              ) : (
-                <div className="space-y-3">
-                  {available.map((d, i) => (
-                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} />
-                  ))}
-                </div>
-              )}
+            {/* Tab strip */}
+            <div className="flex items-center gap-1 mb-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+              {(['available', 'missed', 'submitted'] as TabKey[]).map((key) => {
+                const count = key === 'available' ? available.length : key === 'missed' ? missed.length : submitted.length;
+                const label = key === 'available' ? 'Available' : key === 'missed' ? 'Missed' : 'Submitted';
+                const isActive = activeTab === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveTab(key)}
+                    className="flex items-center gap-1.5 text-xs px-3 py-2 transition-colors"
+                    style={{
+                      color: isActive ? '#0C0C0B' : '#9A9891',
+                      borderBottom: isActive ? '2px solid #0C0C0B' : '2px solid transparent',
+                      marginBottom: -1,
+                      background: 'transparent',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    {label}
+                    <span
+                      className="text-xs px-1.5"
+                      style={{
+                        background: isActive ? '#0C0C0B' : '#F0EFEB',
+                        color: isActive ? '#FFFFFF' : '#9A9891',
+                        borderRadius: 2,
+                        fontSize: 10,
+                      }}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* ── UPCOMING ── */}
-            {(upcoming.length > 0) && (
-              <div className="mb-8">
-                <SectionDivider label="UPCOMING" count={upcoming.length} />
+            {/* Active list */}
+            {(() => {
+              const list = activeTab === 'available' ? available : activeTab === 'missed' ? missed : submitted;
+              if (list.length === 0) return <EmptyState category={activeTab} />;
+              return (
                 <div className="space-y-3">
-                  {upcoming.map((d, i) => (
+                  {list.map((d, i) => (
                     <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} />
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* ── PAST ── */}
-            {past.length > 0 && (
-              <div className="mb-8">
-                <SectionDivider label="PAST" count={past.length} />
-                <div className="space-y-3">
-                  {past.map((d, i) => (
-                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} />
-                  ))}
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Footer note */}
-            <p className="text-xs mt-4 text-center" style={{ color: '#C4C3BD' }}>
+            <p className="text-xs mt-6 text-center" style={{ color: '#C4C3BD' }}>
               {total} assessment{total !== 1 ? 's' : ''} assigned to your account
             </p>
           </motion.div>

@@ -273,7 +273,7 @@ function MergeModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[60] flex items-center justify-center"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.32)' }}
       onClick={onClose}
     >
@@ -285,7 +285,7 @@ function MergeModal({
         style={{ maxWidth: 480, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <div>
             <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>SUBJECT MANAGER</p>
             <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>Merge Subjects</p>

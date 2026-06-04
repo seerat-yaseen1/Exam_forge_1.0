@@ -89,11 +89,11 @@ export function NodeDrawer({ open, level, editing, ancestry, instituteId, onClos
           <motion.div
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed right-0 top-0 bottom-0 z-50 flex flex-col"
-            style={{ width: 400, background: '#FFFFFF', borderLeft: '1px solid #E3E1DB', boxShadow: '-8px 0 32px rgba(12,12,11,0.06)' }}
+            className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:w-[400px] sm:max-w-full"
+            style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB', boxShadow: '-8px 0 32px rgba(12,12,11,0.06)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div>
                 <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
                   {isEdit ? 'EDIT' : 'NEW'} {levelLabel.toUpperCase()}

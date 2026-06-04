@@ -229,11 +229,11 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
           <motion.div key="std-panel"
             initial={{ x: 48, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 48, opacity: 0 }}
             transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed right-0 top-0 bottom-0 z-50 flex flex-col"
-            style={{ width: 420, background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
+            className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:w-[420px] sm:max-w-full"
+            style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0"
               style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div>
                 <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>ADD STUDENT</p>

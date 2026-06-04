@@ -132,14 +132,14 @@ function StatusBadgeChip({ status }: { status: AssessmentStatus }) {
 
 function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 px-5 py-4"
+    <div className="flex items-center gap-2 md:gap-3 px-3 py-3 md:px-5 md:py-4"
       style={{ border: '1px solid #E3E1DB', borderRadius: 3, background: '#FFFFFF' }}>
       <div className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 30, height: 30, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA' }}>
+        style={{ width: 26, height: 26, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA' }}>
         {icon}
       </div>
-      <div>
-        <p className="text-xs" style={{ color: '#9A9891' }}>{label}</p>
+      <div className="min-w-0">
+        <p className="text-xs truncate" style={{ color: '#9A9891' }}>{label}</p>
         <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{value}</p>
       </div>
     </div>
@@ -266,7 +266,7 @@ function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEditor, o
 
   return (
     <div
-      className="px-4 py-3.5 md:px-5 transition-colors"
+      className="px-4 py-4 md:px-5 md:py-3.5 transition-colors"
       style={{ borderBottom: '1px solid #F0EFEB', background: hovered ? '#FAFAF8' : '#FFFFFF' }}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     >
@@ -283,18 +283,112 @@ function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEditor, o
         {actions}
       </div>
 
-      {/* Phone: stacked card */}
-      <div className="md:hidden flex flex-col gap-2">
-        <div className="flex items-start gap-2">
-          <div className="flex-shrink-0 mt-0.5"><StatusBadgeChip status={assessment.status} /></div>
-          <p className="text-xs flex-1 min-w-0" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-            {truncate(assessment.title, 80) || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
-          </p>
+      {/* Phone: redesigned card */}
+      <div className="md:hidden flex flex-col">
+        {/* Title — 2-line clamp, primary type */}
+        <p
+          className="mb-2.5"
+          style={{
+            color: '#0C0C0B',
+            fontSize: 14,
+            lineHeight: 1.4,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {assessment.title || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
+        </p>
+
+        {/* Pill strip: status + subject + target */}
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          <StatusBadgeChip status={assessment.status} />
+          {assessment.subject && (
+            <span
+              className="text-xs px-2 py-0.5"
+              style={{ background: '#F7F6F3', color: '#6B6B66', border: '1px solid #EEECEA', borderRadius: 2 }}
+            >
+              {assessment.subject}
+            </span>
+          )}
+          <span
+            className="text-xs px-2 py-0.5"
+            style={{ background: '#F7F6F3', color: '#9A9891', border: '1px solid #EEECEA', borderRadius: 2 }}
+          >
+            {formatAssignmentTarget(assessment.assignedTo)}
+          </span>
         </div>
-        {meta}
-        <div>{dateBlock}</div>
-        <div className="flex items-center justify-end pt-1" style={{ borderTop: '1px solid #F5F4F0' }}>
-          {actions}
+
+        {/* Stats line — numbers + units */}
+        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-xs mb-2.5">
+          <span><span style={{ color: '#0C0C0B' }}>{assessment.questions.length}</span> <span style={{ color: '#9A9891' }}>Q</span></span>
+          <span style={{ color: '#DDDBD5' }}>·</span>
+          <span><span style={{ color: '#0C0C0B' }}>{assessment.totalMarks}</span> <span style={{ color: '#9A9891' }}>marks</span></span>
+          {sectionCount ? (
+            <>
+              <span style={{ color: '#DDDBD5' }}>·</span>
+              <span>
+                <span style={{ color: '#0C0C0B' }}>{sectionCount}</span>{' '}
+                <span style={{ color: '#9A9891' }}>section{sectionCount !== 1 ? 's' : ''}</span>
+              </span>
+            </>
+          ) : null}
+        </div>
+
+        {/* Schedule */}
+        <div className="flex items-center gap-1.5 flex-wrap text-xs mb-3" style={{ color: '#9A9891' }}>
+          <Calendar size={11} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+          {assessment.startDate || assessment.endDate ? (
+            <>
+              <span>{formatDateShort(assessment.startDate)}</span>
+              {assessment.endDate && (
+                <>
+                  <ArrowRight size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+                  <span>{formatDateShort(assessment.endDate)}</span>
+                </>
+              )}
+            </>
+          ) : (
+            <span style={{ color: '#C4C3BD' }}>No schedule set</span>
+          )}
+        </div>
+
+        {/* Action bar */}
+        <div className="flex items-center gap-2 pt-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+          {assessment.status !== 'draft' ? (
+            <button
+              onClick={onRoster}
+              className="flex items-center justify-center gap-1.5 text-xs flex-1 transition-opacity hover:opacity-80"
+              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, height: 36, letterSpacing: '0.02em' }}
+            >
+              <Users size={12} strokeWidth={1.5} /> Live Roster
+            </button>
+          ) : (
+            <div className="flex-1" />
+          )}
+          <button
+            onClick={onPreview}
+            aria-label="Preview"
+            className="flex items-center justify-center transition-opacity hover:opacity-60"
+            style={{ width: 36, height: 36, color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+          >
+            <Eye size={14} strokeWidth={1.5} />
+          </button>
+          <div
+            className="flex items-center justify-center"
+            style={{ width: 36, height: 36, border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+          >
+            <EditMenu assessment={assessment} onPatched={onPatched} onOpenLegacyEditor={onOpenLegacyEditor} />
+          </div>
+          <button
+            onClick={onDelete}
+            aria-label="Delete"
+            className="flex items-center justify-center transition-opacity hover:opacity-60"
+            style={{ width: 36, height: 36, color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+          >
+            <Trash2 size={14} strokeWidth={1.5} />
+          </button>
         </div>
       </div>
     </div>
@@ -326,18 +420,18 @@ function DeleteModal({ assessment, onConfirm, onCancel, deleting }: {
 }) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-60 flex items-center justify-center"
+      className="fixed inset-0 z-60 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.28)' }} onClick={onCancel}>
       <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.97, opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-sm"
         style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-4 py-3.5 md:px-5 md:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>DELETE ASSESSMENT</p>
           <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}><X size={14} strokeWidth={1.5} /></button>
         </div>
-        <div className="px-5 py-5">
+        <div className="px-4 py-4 md:px-5 md:py-5">
           <div className="flex items-start gap-2.5 mb-4 px-3 py-3"
             style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
             <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
@@ -346,11 +440,11 @@ function DeleteModal({ assessment, onConfirm, onCancel, deleting }: {
             </p>
           </div>
           <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>Are you sure you want to delete:</p>
-          <p className="text-xs mt-1.5 italic" style={{ color: '#9A9891' }}>"{truncate(assessment.title, 80)}"</p>
+          <p className="text-xs mt-1.5 italic break-words" style={{ color: '#9A9891' }}>"{truncate(assessment.title, 80)}"</p>
         </div>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 px-4 py-3.5 md:px-5 md:py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button onClick={onConfirm} disabled={deleting}
-            className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
+            className="flex items-center justify-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{ background: deleting ? '#C8C7C2' : '#9B2828', color: '#FFFFFF', borderRadius: 2, cursor: deleting ? 'not-allowed' : 'pointer' }}>
             {deleting ? <><Loader2 size={11} className="animate-spin" /> Deleting…</> : <><Trash2 size={11} /> Delete</>}
           </button>
@@ -376,22 +470,22 @@ function MetaItem({ label, children }: { label: string; children: React.ReactNod
 function PreviewModal({ assessment, onClose }: { assessment: Assessment; onClose: () => void }) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-60 flex items-center justify-center"
+      className="fixed inset-0 z-60 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.28)' }} onClick={onClose}>
       <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.97, opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="w-full" style={{ maxWidth: 620, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-4 py-3.5 md:px-5 md:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>ASSESSMENT PREVIEW</p>
           <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}><X size={14} strokeWidth={1.5} /></button>
         </div>
-        <div className="px-5 py-5 max-h-[76vh] overflow-y-auto space-y-5">
+        <div className="px-4 py-4 md:px-5 md:py-5 max-h-[76vh] overflow-y-auto space-y-5">
           <div>
-            <p className="text-sm" style={{ color: '#0C0C0B' }}>{assessment.title}</p>
+            <p className="text-sm break-words" style={{ color: '#0C0C0B' }}>{assessment.title}</p>
             {assessment.description && <p className="text-xs mt-1.5" style={{ color: '#6B6B66', lineHeight: 1.6 }}>{assessment.description}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3 p-4" style={{ background: '#FAFAF8', border: '1px solid #F0EFEB', borderRadius: 2 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4" style={{ background: '#FAFAF8', border: '1px solid #F0EFEB', borderRadius: 2 }}>
             <MetaItem label="Status"><StatusBadgeChip status={assessment.status} /></MetaItem>
             <MetaItem label="Subject"><span style={{ color: '#0C0C0B' }}>{assessment.subject || '—'}</span></MetaItem>
             <MetaItem label="Questions"><span style={{ color: '#0C0C0B' }}>{assessment.questions.length}</span></MetaItem>
@@ -407,7 +501,7 @@ function PreviewModal({ assessment, onClose }: { assessment: Assessment; onClose
                 <CalendarClock size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
                 <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>SCHEDULE</span>
               </div>
-              <div className="grid grid-cols-2 gap-3 p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
                 <MetaItem label="Start"><span style={{ color: '#0C0C0B' }}>{formatDateTime(assessment.startDate)}</span></MetaItem>
                 <MetaItem label="End"><span style={{ color: '#0C0C0B' }}>{formatDateTime(assessment.endDate)}</span></MetaItem>
               </div>
@@ -430,15 +524,15 @@ function PreviewModal({ assessment, onClose }: { assessment: Assessment; onClose
                 const secMarks = sec.questions.reduce((s, q) => s + q.marks, 0);
                 return (
                   <div key={sec.id} style={{ border: '1px solid #E3E1DB', borderRadius: 2, overflow: 'hidden' }}>
-                    <div className="flex items-center justify-between px-3 py-2.5" style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center"
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5" style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center justify-center flex-shrink-0"
                           style={{ width: 18, height: 18, borderRadius: 2, background: '#F0EFEB', border: '1px solid #E3E1DB', fontSize: 9, color: '#9A9891' }}>
                           {si + 1}
                         </div>
-                        <span className="text-xs" style={{ color: '#0C0C0B' }}>{sec.name}</span>
+                        <span className="text-xs truncate" style={{ color: '#0C0C0B' }}>{sec.name}</span>
                       </div>
-                      <div className="flex items-center gap-3 text-xs" style={{ color: '#9A9891' }}>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: '#9A9891' }}>
                         {sec.timeLimit && <span className="flex items-center gap-1"><Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min</span>}
                         {sec.breakAfter && sec.breakAfter.durationMinutes > 0 && (
                           <span
@@ -2107,72 +2201,76 @@ function SetupStep({
           )}
         </div>
 
-        {/* Two-column grid */}
-        <div className="grid gap-12" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        {/* Stacked: Basics on top, Phase stepper below */}
+        <div className="space-y-10">
 
-          {/* ── LEFT: Basics ── */}
+          {/* ── TOP: Basics ── */}
           <div className="space-y-5">
             <SectionLabel label="BASICS" />
 
-            <Field label="Title" required>
-              <input
-                type="text" value={title}
-                onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setTitleError(false); }}
-                style={{ ...inputStyle, fontSize: 13, padding: '9px 12px', borderColor: titleError ? '#F2CECE' : '#E3E1DB', background: titleError ? '#FDF5F5' : '#FFFFFF' }}
-                placeholder="e.g., Midterm Exam — Mathematics" autoFocus
-              />
-              {titleError && <p className="text-xs mt-1" style={{ color: '#9B2828' }}>Title is required</p>}
-            </Field>
-
-            <Field label="Description" hint="(optional)">
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                style={{ ...inputStyle, minHeight: 80, resize: 'none', fontSize: 13, padding: '9px 12px' }}
-                placeholder="Instructions or notes visible to students" />
-            </Field>
-
-            <Field label="Subject" hint="(optional)">
-              <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
-                style={{ ...inputStyle, fontSize: 13, padding: '9px 12px' }} placeholder="e.g., Mathematics" />
-            </Field>
-
-            {mut.targetType ? (
-              <Field label="Assign To">
-                <select
-                  value={targetType}
-                  onChange={(e) => setTargetType(e.target.value as 'all' | 'institutes' | 'students')}
-                  style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}
-                >
-                  <option value="all">All Students</option>
-                  <option value="institutes">Specific Institutes</option>
-                  <option value="students">Specific Students</option>
-                </select>
-                {targetType === 'institutes' && (
-                  <InstitutePicker selectedIds={selectedInstituteIds} onChange={setSelectedInstituteIds} locked={false} />
-                )}
-                {targetType === 'students' && (
-                  <StudentPicker selectedIds={selectedStudentIds} onChange={setSelectedStudentIds} locked={false} />
-                )}
+            {/* Row 1: Title · Subject · Assign To */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <Field label="Title" required>
+                <input
+                  type="text" value={title}
+                  onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setTitleError(false); }}
+                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px', borderColor: titleError ? '#F2CECE' : '#E3E1DB', background: titleError ? '#FDF5F5' : '#FFFFFF' }}
+                  placeholder="e.g., Midterm Exam — Mathematics" autoFocus
+                />
+                {titleError && <p className="text-xs mt-1" style={{ color: '#9B2828' }}>Title is required</p>}
               </Field>
-            ) : (
-              <LockedFieldWrapper label="Assign To" reason={lockReason}>
-                <div>
-                  <select value={targetType} readOnly style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}>
+
+              <Field label="Subject" hint="(optional)">
+                <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
+                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px' }} placeholder="e.g., Mathematics" />
+              </Field>
+
+              {mut.targetType ? (
+                <Field label="Assign To">
+                  <select
+                    value={targetType}
+                    onChange={(e) => setTargetType(e.target.value as 'all' | 'institutes' | 'students')}
+                    style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}
+                  >
                     <option value="all">All Students</option>
                     <option value="institutes">Specific Institutes</option>
                     <option value="students">Specific Students</option>
                   </select>
                   {targetType === 'institutes' && (
-                    <InstitutePicker selectedIds={selectedInstituteIds} onChange={setSelectedInstituteIds} locked={true} />
+                    <InstitutePicker selectedIds={selectedInstituteIds} onChange={setSelectedInstituteIds} locked={false} />
                   )}
                   {targetType === 'students' && (
-                    <StudentPicker selectedIds={selectedStudentIds} onChange={setSelectedStudentIds} locked={true} />
+                    <StudentPicker selectedIds={selectedStudentIds} onChange={setSelectedStudentIds} locked={false} />
                   )}
-                </div>
-              </LockedFieldWrapper>
-            )}
+                </Field>
+              ) : (
+                <LockedFieldWrapper label="Assign To" reason={lockReason}>
+                  <div>
+                    <select value={targetType} readOnly style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}>
+                      <option value="all">All Students</option>
+                      <option value="institutes">Specific Institutes</option>
+                      <option value="students">Specific Students</option>
+                    </select>
+                    {targetType === 'institutes' && (
+                      <InstitutePicker selectedIds={selectedInstituteIds} onChange={setSelectedInstituteIds} locked={true} />
+                    )}
+                    {targetType === 'students' && (
+                      <StudentPicker selectedIds={selectedStudentIds} onChange={setSelectedStudentIds} locked={true} />
+                    )}
+                  </div>
+                </LockedFieldWrapper>
+              )}
+            </div>
+
+            {/* Row 2: Description (full-width) */}
+            <Field label="Description" hint="(optional)">
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                style={{ ...inputStyle, minHeight: 80, resize: 'none', fontSize: 13, padding: '9px 12px' }}
+                placeholder="Instructions or notes visible to students" />
+            </Field>
           </div>
 
-          {/* ── RIGHT: Phase stepper (Subjects → Topics → Sections) ── */}
+          {/* ── BOTTOM: Phase stepper (Subjects → Topics → Sections) ── */}
           <div>
 
             {/* Phase indicator strip */}
@@ -3886,9 +3984,9 @@ export function AssignmentsPage() {
           style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
           <div>
             <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>WEB OWNER</p>
-            <h1 className="text-base" style={{ color: '#0C0C0B' }}>Assignments</h1>
+            <h1 className="text-base" style={{ color: '#0C0C0B' }}>Assessments</h1>
             <p className="text-xs mt-1" style={{ color: '#B0AEA8' }}>
-              Create and manage test assignments for institutes and students.
+              Create and manage assessments for institutes and students.
             </p>
           </div>
           <button onClick={openCreate}
@@ -3899,7 +3997,7 @@ export function AssignmentsPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
           <StatPill icon={<ClipboardList size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Total Assessments" value={loading ? '…' : String(assessments.length)} />
           <StatPill icon={<FileText size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Drafts" value={loading ? '…' : String(draftCount)} />
           <StatPill icon={<Target size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Active" value={loading ? '…' : String(activeCount)} />

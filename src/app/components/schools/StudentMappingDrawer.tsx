@@ -168,18 +168,18 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
           <motion.div
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed right-0 top-0 bottom-0 z-50 flex flex-col"
-            style={{ width: 500, background: '#FFFFFF', borderLeft: '1px solid #E3E1DB', boxShadow: '-8px 0 32px rgba(12,12,11,0.06)' }}
+            className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:w-[500px] sm:max-w-full"
+            style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB', boxShadow: '-8px 0 32px rgba(12,12,11,0.06)' }}
           >
             {/* Header */}
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+            <div className="px-4 sm:px-6 py-4 sm:py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
                     ASSIGN STUDENTS · {NODE_LEVEL_LABELS[nodeType].toUpperCase()}
                   </p>
                   <h2 className="text-sm" style={{ color: '#0C0C0B' }}>{nodeName}</h2>
-                  <p className="text-xs mt-1 truncate" style={{ color: '#C4C3BD', maxWidth: 380 }}>{breadcrumb}</p>
+                  <p className="text-xs mt-1 truncate" style={{ color: '#C4C3BD' }}>{breadcrumb}</p>
                 </div>
                 <button onClick={onClose} style={{ color: '#9A9891', flexShrink: 0, marginTop: 2 }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}

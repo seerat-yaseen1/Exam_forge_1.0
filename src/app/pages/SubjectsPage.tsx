@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Loader2, FolderTree, Hash, Trash2, ArrowRightLeft, Pencil } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Loader2, FolderTree, Hash, Trash2, ArrowRightLeft, Pencil, BookOpen, Layers } from 'lucide-react';
 import {
   getAllSubjects,
-  getTopicsBySubject,
+  getAllTopics,
   createSubjectWithSlug,
   createTopicWithSlug,
   deleteSubject,
@@ -19,20 +19,26 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 
 // ──────────────────────────────────────────────────────────────────
-// SubjectsPage — list subjects (left) + drill-down topics (right)
+// SubjectsPage — tabs: Subjects | Topics (with subject filter)
 // IDs are user-typed slugs: 1–4 letters + '-' + 1–4 digits
 // ──────────────────────────────────────────────────────────────────
 
+type Tab = 'subjects' | 'topics';
+
 export function SubjectsPage() {
+  const [activeTab, setActiveTab] = useState<Tab>('subjects');
+
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(true);
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
 
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [loadingTopics, setLoadingTopics] = useState(false);
+  const [loadingTopics, setLoadingTopics] = useState(true);
 
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [showTopicForm, setShowTopicForm] = useState(false);
+
+  // Topics-tab subject filter ('' = all subjects)
+  const [filterSubjectId, setFilterSubjectId] = useState<string>('');
 
   const refreshSubjects = useCallback(async () => {
     setLoadingSubjects(true);
@@ -43,43 +49,75 @@ export function SubjectsPage() {
     }
   }, []);
 
-  const refreshTopics = useCallback(async (subjectId: string) => {
+  const refreshTopics = useCallback(async () => {
     setLoadingTopics(true);
     try {
-      setTopics(await getTopicsBySubject(subjectId));
+      setTopics(await getAllTopics());
     } finally {
       setLoadingTopics(false);
     }
   }, []);
 
-  useEffect(() => { refreshSubjects(); }, [refreshSubjects]);
+  useEffect(() => { refreshSubjects(); refreshTopics(); }, [refreshSubjects, refreshTopics]);
 
-  useEffect(() => {
-    if (selectedSubjectId) refreshTopics(selectedSubjectId);
-    else setTopics([]);
-  }, [selectedSubjectId, refreshTopics]);
+  const subjectsById = useMemo(() => {
+    const m: Record<string, Subject> = {};
+    subjects.forEach((s) => { m[s.id] = s; });
+    return m;
+  }, [subjects]);
 
-  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
+  const filteredTopics = useMemo(() => {
+    if (!filterSubjectId) return topics;
+    return topics.filter((t) => t.subjectId === filterSubjectId);
+  }, [topics, filterSubjectId]);
+
+  const topicCountBySubject = useMemo(() => {
+    const m: Record<string, number> = {};
+    topics.forEach((t) => { m[t.subjectId] = (m[t.subjectId] ?? 0) + 1; });
+    return m;
+  }, [topics]);
+
+  // Default subject for "Add Topic" form: current filter, or first subject
+  const defaultNewTopicSubject = filterSubjectId || subjects[0]?.id || '';
 
   return (
     <div className="px-4 py-6 md:px-10 md:py-8" style={{ maxWidth: 1280, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* Header */}
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
         <FolderTree size={18} strokeWidth={1.5} />
         <h1 style={{ margin: 0 }}>Subjects</h1>
       </div>
 
-      <div className="grid grid-cols-1 md:[grid-template-columns:380px_1fr] gap-6">
-        {/* ── Subjects column ── */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderRadius: 4 }}>
-          <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, letterSpacing: '0.04em' }}>SUBJECTS</span>
+      {/* Tab bar */}
+      <div className="flex items-center gap-0 mb-0 overflow-x-auto" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <TabButton
+          active={activeTab === 'subjects'}
+          onClick={() => setActiveTab('subjects')}
+          icon={<BookOpen size={12} strokeWidth={1.5} />}
+          label="Subjects"
+          count={subjects.length}
+        />
+        <TabButton
+          active={activeTab === 'topics'}
+          onClick={() => setActiveTab('topics')}
+          icon={<Layers size={12} strokeWidth={1.5} />}
+          label="Topics"
+          count={topics.length}
+        />
+      </div>
+
+      {/* ── Subjects tab ── */}
+      {activeTab === 'subjects' && (
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderTop: 'none', borderRadius: '0 0 4px 4px' }}>
+          <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, letterSpacing: '0.04em', color: '#6B6B66' }}>ALL SUBJECTS</span>
             <Button
               size="sm"
               variant="outline"
               onClick={() => setShowSubjectForm((v) => !v)}
-              style={{ height: 26, padding: '0 10px', fontSize: 12 }}
+              style={{ height: 28, padding: '0 12px', fontSize: 12 }}
             >
-              <Plus size={12} strokeWidth={1.5} /> New
+              <Plus size={12} strokeWidth={1.5} /> New Subject
             </Button>
           </div>
 
@@ -98,86 +136,94 @@ export function SubjectsPage() {
               <Loader2 size={16} className="animate-spin" />
             </div>
           ) : subjects.length === 0 ? (
-            <EmptyHint text="No subjects yet. Click + New to create one." />
+            <EmptyHint text="No subjects yet. Click + New Subject to create one." />
           ) : (
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3 sm:p-4">
               {subjects.map((s) => (
-                <SubjectRow
+                <SubjectCard
                   key={s.id}
                   subject={s}
-                  selected={s.id === selectedSubjectId}
-                  onSelect={() => setSelectedSubjectId(s.id)}
-                  onUpdated={async (newId) => {
-                    await refreshSubjects();
-                    if (selectedSubjectId === s.id) setSelectedSubjectId(newId);
-                  }}
-                  onDeleted={async () => {
-                    if (selectedSubjectId === s.id) setSelectedSubjectId(null);
-                    await refreshSubjects();
-                  }}
+                  topicCount={topicCountBySubject[s.id] ?? 0}
+                  onUpdated={async () => { await refreshSubjects(); await refreshTopics(); }}
+                  onDeleted={async () => { await refreshSubjects(); await refreshTopics(); }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Topics tab ── */}
+      {activeTab === 'topics' && (
+        <div style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderTop: 'none', borderRadius: '0 0 4px 4px' }}>
+          <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, letterSpacing: '0.04em', color: '#6B6B66' }}>TOPICS</span>
+              <select
+                value={filterSubjectId}
+                onChange={(e) => setFilterSubjectId(e.target.value)}
+                style={{ fontSize: 12, padding: '4px 8px', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+              >
+                <option value="">All subjects ({topics.length})</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({topics.filter((t) => t.subjectId === s.id).length})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowTopicForm((v) => !v)}
+              disabled={subjects.length === 0}
+              style={{ height: 28, padding: '0 12px', fontSize: 12 }}
+            >
+              <Plus size={12} strokeWidth={1.5} /> New Topic
+            </Button>
+          </div>
+
+          {showTopicForm && (
+            <NewTopicForm
+              subjects={subjects}
+              defaultSubjectId={defaultNewTopicSubject}
+              onCreated={async () => {
+                setShowTopicForm(false);
+                await refreshTopics();
+                await refreshSubjects();
+              }}
+              onCancel={() => setShowTopicForm(false)}
+            />
+          )}
+
+          {loadingTopics ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#83827C' }}>
+              <Loader2 size={16} className="animate-spin" />
+            </div>
+          ) : filteredTopics.length === 0 ? (
+            <EmptyHint
+              text={
+                filterSubjectId
+                  ? `No topics in ${subjectsById[filterSubjectId]?.name ?? 'this subject'} yet.`
+                  : 'No topics yet. Click + New Topic to create one.'
+              }
+            />
+          ) : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {filteredTopics.map((t) => (
+                <TopicRow
+                  key={t.id}
+                  topic={t}
+                  subject={subjectsById[t.subjectId]}
+                  subjects={subjects}
+                  showSubject={!filterSubjectId}
+                  onChanged={async () => { await refreshTopics(); await refreshSubjects(); }}
                 />
               ))}
             </ul>
           )}
         </div>
-
-        {/* ── Topics column ── */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderRadius: 4 }}>
-          <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, letterSpacing: '0.04em' }}>
-              {selectedSubject ? `TOPICS — ${selectedSubject.name}` : 'TOPICS'}
-            </span>
-            {selectedSubject && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowTopicForm((v) => !v)}
-                style={{ height: 26, padding: '0 10px', fontSize: 12 }}
-              >
-                <Plus size={12} strokeWidth={1.5} /> New
-              </Button>
-            )}
-          </div>
-
-          {!selectedSubject ? (
-            <EmptyHint text="Select a subject on the left to view and add its topics." />
-          ) : (
-            <>
-              {showTopicForm && (
-                <NewTopicForm
-                  subjectId={selectedSubject.id}
-                  onCreated={async () => {
-                    setShowTopicForm(false);
-                    await refreshTopics(selectedSubject.id);
-                  }}
-                  onCancel={() => setShowTopicForm(false)}
-                />
-              )}
-              {loadingTopics ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#83827C' }}>
-                  <Loader2 size={16} className="animate-spin" />
-                </div>
-              ) : topics.length === 0 ? (
-                <EmptyHint text="No topics in this subject yet." />
-              ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {topics.map((t) => (
-                    <TopicRow
-                      key={t.id}
-                      topic={t}
-                      subjects={subjects}
-                      onChanged={async () => {
-                        await refreshSubjects();
-                        if (selectedSubject) await refreshTopics(selectedSubject.id);
-                      }}
-                    />
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -185,6 +231,46 @@ export function SubjectsPage() {
 export default SubjectsPage;
 
 // ── Sub-components ────────────────────────────────────────────────
+
+function TabButton({
+  active, onClick, icon, label, count,
+}: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; count: number }) {
+  return (
+    <button
+      onClick={onClick}
+      className="relative flex items-center gap-1.5 px-4 py-2.5 text-xs select-none transition-colors"
+      style={{
+        color: active ? '#0C0C0B' : '#9A9891',
+        fontWeight: active ? 500 : 400,
+        letterSpacing: '0.03em',
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {icon}
+      {label}
+      <span
+        style={{
+          fontSize: 10,
+          color: active ? '#6B6B66' : '#C4C3BD',
+          background: active ? '#F0EFEB' : 'transparent',
+          padding: '1px 5px',
+          borderRadius: 2,
+        }}
+      >
+        {count}
+      </span>
+      {active && (
+        <span
+          className="absolute bottom-0 left-0 right-0"
+          style={{ height: 1.5, background: '#0C0C0B' }}
+        />
+      )}
+    </button>
+  );
+}
 
 function SlugChip({ id }: { id: string }) {
   return (
@@ -204,6 +290,25 @@ function SlugChip({ id }: { id: string }) {
     >
       <Hash size={9} strokeWidth={1.8} />
       {id}
+    </span>
+  );
+}
+
+function SubjectPill({ subject }: { subject: Subject | undefined }) {
+  if (!subject) return <span style={{ fontSize: 11, color: '#C4C3BD' }}>—</span>;
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        color: '#6B6B66',
+        background: '#F7F6F3',
+        border: '1px solid #EEECEA',
+        padding: '2px 7px',
+        borderRadius: 2,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {subject.name}
     </span>
   );
 }
@@ -240,12 +345,12 @@ function NewSubjectForm({ onCreated, onCancel }: { onCreated: () => void; onCanc
 
   return (
     <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', background: '#FAFAF7' }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      <div className="flex flex-col sm:flex-row" style={{ gap: 8, marginBottom: 8 }}>
         <Input
           placeholder="ID e.g. math-0001"
           value={id}
           onChange={(e) => setId(e.target.value.toLowerCase())}
-          style={{ width: 150, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+          style={{ width: '100%', maxWidth: 200, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
           disabled={busy}
         />
         <Input
@@ -269,12 +374,11 @@ function NewSubjectForm({ onCreated, onCancel }: { onCreated: () => void; onCanc
   );
 }
 
-function SubjectRow({
-  subject, selected, onSelect, onUpdated, onDeleted,
+function SubjectCard({
+  subject, topicCount, onUpdated, onDeleted,
 }: {
   subject: Subject;
-  selected: boolean;
-  onSelect: () => void;
+  topicCount: number;
   onUpdated: (newId: string) => void;
   onDeleted: () => void;
 }) {
@@ -282,7 +386,7 @@ function SubjectRow({
 
   if (editing) {
     return (
-      <li>
+      <div style={{ background: '#FAFAF7', border: '1px solid #E8E7E1', borderRadius: 3 }}>
         <EditSlugForm
           initialId={subject.id}
           initialName={subject.name}
@@ -293,61 +397,86 @@ function SubjectRow({
           }}
           onCancel={() => setEditing(false)}
         />
-      </li>
+      </div>
     );
   }
 
   return (
-    <li
+    <div
+      className="flex flex-col gap-3 p-4 transition-colors hover:bg-[#FAFAF8]"
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '12px 14px',
-        background: selected ? '#F2F1EC' : 'transparent',
-        borderBottom: '1px solid #F2F1EC',
+        background: '#FFFFFF',
+        border: '1px solid #E8E7E1',
+        borderRadius: 3,
+        minHeight: 120,
       }}
     >
-      <button
-        onClick={onSelect}
-        style={{
-          flex: 1, display: 'flex', alignItems: 'center', gap: 10,
-          background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0,
-        }}
-      >
+      {/* Header: slug + actions */}
+      <div className="flex items-start justify-between gap-2">
         <SlugChip id={subject.id} />
-        <span className="min-w-0 truncate" style={{ flex: 1 }}>{subject.name}</span>
-        <span style={{ fontSize: 11, color: '#83827C' }}>{subject.questionCount}</span>
-      </button>
-      <IconBtn title="Edit subject" onClick={() => setEditing(true)}>
-        <Pencil size={13} strokeWidth={1.5} />
-      </IconBtn>
-      <IconBtn
-        title="Delete subject"
-        onClick={async () => {
-          if (!confirm(`Delete subject "${subject.name}" (${subject.id})?`)) return;
-          try {
-            await deleteSubject(subject.id);
-            onDeleted();
-          } catch (e: any) {
-            alert(e.message ?? String(e));
-          }
-        }}
+        <div className="flex items-center gap-0.5 flex-shrink-0 -mt-1 -mr-1">
+          <IconBtn title="Edit subject" onClick={() => setEditing(true)}>
+            <Pencil size={13} strokeWidth={1.5} />
+          </IconBtn>
+          <IconBtn
+            title="Delete subject"
+            onClick={async () => {
+              if (!confirm(`Delete subject "${subject.name}" (${subject.id})?`)) return;
+              try {
+                await deleteSubject(subject.id);
+                onDeleted();
+              } catch (e: any) {
+                alert(e.message ?? String(e));
+              }
+            }}
+          >
+            <Trash2 size={13} strokeWidth={1.5} />
+          </IconBtn>
+        </div>
+      </div>
+
+      {/* Name */}
+      <p
+        className="break-words"
+        style={{ color: '#0C0C0B', fontSize: 14, lineHeight: 1.4, flex: 1 }}
       >
-        <Trash2 size={13} strokeWidth={1.5} />
-      </IconBtn>
-    </li>
+        {subject.name}
+      </p>
+
+      {/* Stats footer */}
+      <div
+        className="flex items-center gap-4 pt-3"
+        style={{ borderTop: '1px solid #F2F1EC' }}
+      >
+        <div className="flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
+          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <span style={{ fontSize: 12 }}>{subject.questionCount}</span>
+          <span style={{ fontSize: 11, color: '#9A9891' }}>questions</span>
+        </div>
+        <div className="flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
+          <Layers size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <span style={{ fontSize: 12 }}>{topicCount}</span>
+          <span style={{ fontSize: 11, color: '#9A9891' }}>topics</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function TopicRow({
-  topic, subjects, onChanged,
-}: { topic: Topic; subjects: Subject[]; onChanged: () => void }) {
+  topic, subject, subjects, showSubject, onChanged,
+}: {
+  topic: Topic;
+  subject: Subject | undefined;
+  subjects: Subject[];
+  showSubject: boolean;
+  onChanged: () => void;
+}) {
   const [editing, setEditing] = useState(false);
 
   if (editing) {
     return (
-      <div>
+      <li>
         <EditSlugForm
           initialId={topic.id}
           initialName={topic.name}
@@ -358,7 +487,7 @@ function TopicRow({
           }}
           onCancel={() => setEditing(false)}
         />
-      </div>
+      </li>
     );
   }
 
@@ -370,11 +499,13 @@ function TopicRow({
         display: 'flex',
         alignItems: 'center',
         gap: 10,
+        flexWrap: 'wrap',
       }}
     >
       <SlugChip id={topic.id} />
       <span className="min-w-0 truncate" style={{ flex: 1 }}>{topic.name}</span>
-      <span style={{ fontSize: 11, color: '#83827C' }}>{topic.questionCount}</span>
+      {showSubject && <SubjectPill subject={subject} />}
+      <span style={{ fontSize: 11, color: '#83827C', whiteSpace: 'nowrap' }}>{topic.questionCount} Q</span>
       <MoveTopicControl topic={topic} subjects={subjects} onMoved={onChanged} />
       <IconBtn title="Edit topic" onClick={() => setEditing(true)}>
         <Pencil size={13} strokeWidth={1.5} />
@@ -434,11 +565,11 @@ function EditSlugForm({
 
   return (
     <div style={{ padding: 12, borderBottom: '1px solid #E8E7E1', background: '#FAFAF7' }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      <div className="flex flex-col sm:flex-row" style={{ gap: 8, marginBottom: 8 }}>
         <Input
           value={id}
           onChange={(e) => setId(e.target.value.toLowerCase())}
-          style={{ width: 150, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+          style={{ width: '100%', maxWidth: 200, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
           disabled={busy}
         />
         <Input value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
@@ -518,8 +649,14 @@ function MoveTopicControl({
 }
 
 function NewTopicForm({
-  subjectId, onCreated, onCancel,
-}: { subjectId: string; onCreated: () => void; onCancel: () => void }) {
+  subjects, defaultSubjectId, onCreated, onCancel,
+}: {
+  subjects: Subject[];
+  defaultSubjectId: string;
+  onCreated: () => void;
+  onCancel: () => void;
+}) {
+  const [subjectId, setSubjectId] = useState(defaultSubjectId);
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -528,6 +665,7 @@ function NewTopicForm({
   const idValid = isValidSlugId(id);
 
   const submit = async () => {
+    if (!subjectId) { setErr('Pick a subject.'); return; }
     setErr(null);
     setBusy(true);
     try {
@@ -543,12 +681,33 @@ function NewTopicForm({
 
   return (
     <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', background: '#FAFAF7' }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      {/* Subject selector — required */}
+      <div style={{ marginBottom: 8 }}>
+        <label style={{ fontSize: 11, color: '#6B6B66', display: 'block', marginBottom: 4 }}>
+          Subject <span style={{ color: '#B91C1C' }}>*</span>
+        </label>
+        <select
+          value={subjectId}
+          onChange={(e) => setSubjectId(e.target.value)}
+          disabled={busy}
+          style={{
+            width: '100%', maxWidth: 320, fontSize: 12, padding: '6px 8px',
+            border: `1px solid ${!subjectId ? '#F2CECE' : '#E3E1DB'}`, borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B',
+          }}
+        >
+          <option value="">— pick a subject —</option>
+          {subjects.map((s) => (
+            <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col sm:flex-row" style={{ gap: 8, marginBottom: 8 }}>
         <Input
           placeholder="ID e.g. prob-0001"
           value={id}
           onChange={(e) => setId(e.target.value.toLowerCase())}
-          style={{ width: 150, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+          style={{ width: '100%', maxWidth: 200, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
           disabled={busy}
         />
         <Input
@@ -564,7 +723,7 @@ function NewTopicForm({
       {err && <div style={{ fontSize: 12, color: '#B91C1C', marginBottom: 8 }}>{err}</div>}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
-        <Button size="sm" onClick={submit} disabled={busy || !idValid || !name.trim()}>
+        <Button size="sm" onClick={submit} disabled={busy || !subjectId || !idValid || !name.trim()}>
           {busy ? <Loader2 size={12} className="animate-spin" /> : 'Create'}
         </Button>
       </div>

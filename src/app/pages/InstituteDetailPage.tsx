@@ -50,7 +50,7 @@ function PermToggle({
 }) {
   return (
     <div
-      className="flex items-center justify-between px-4 py-3 mb-2"
+      className="flex items-center justify-between gap-3 px-3 py-3 md:px-4 mb-2"
       style={{
         background: isDisabled ? '#FAFAF8' : '#F7F6F3',
         border: '1px solid #E3E1DB',
@@ -58,9 +58,9 @@ function PermToggle({
         opacity: isDisabled ? 0.6 : 1,
       }}
     >
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <span style={{ color: enabled ? '#2A6B3A' : '#9A9891' }}>{icon}</span>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs" style={{ color: '#0C0C0B' }}>{label}</p>
           <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
             {isDisabled && disabledReason ? disabledReason : sublabel}
@@ -70,7 +70,7 @@ function PermToggle({
       <button
         onClick={onToggle}
         disabled={saving || isDisabled}
-        className="flex items-center gap-2 text-xs px-3 py-1.5 transition-all select-none"
+        className="flex items-center gap-2 text-xs px-3 py-1.5 transition-all select-none flex-shrink-0"
         style={{
           border: `1px solid ${enabled ? '#C6DECE' : '#E3E1DB'}`,
           borderRadius: 2,
@@ -223,7 +223,7 @@ export function InstituteDetailPage() {
 
   if (error || !institute) {
     return (
-      <div className="px-8 py-10" style={{ maxWidth: 1120, margin: '0 auto' }}>
+      <div className="px-4 py-6 md:px-8 md:py-10" style={{ maxWidth: 1120, margin: '0 auto' }}>
         <button onClick={() => navigate('/dashboard/user-management')}
           className="flex items-center gap-1.5 text-xs mb-8 transition-colors"
           style={{ color: '#9A9891' }}
@@ -252,7 +252,7 @@ export function InstituteDetailPage() {
     <motion.div
       initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="px-8 py-10"
+      className="px-4 py-6 md:px-8 md:py-10"
       style={{ maxWidth: 1120, margin: '0 auto' }}
     >
       {/* ── Breadcrumb ── */}
@@ -269,7 +269,7 @@ export function InstituteDetailPage() {
 
       {/* ── Institute header ── */}
       <div
-        className="flex items-start justify-between mb-6 pb-5"
+        className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-6 pb-5"
         style={{ borderBottom: '1px solid #E3E1DB' }}
       >
         <div>
@@ -277,7 +277,7 @@ export function InstituteDetailPage() {
           <h1 className="text-lg font-medium mb-1" style={{ color: '#0C0C0B', letterSpacing: '-0.01em' }}>
             {institute.name}
           </h1>
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="text-xs px-2 py-0.5"
               style={{ fontFamily: 'monospace', letterSpacing: '0.12em', color: '#4A4A45', background: '#F0EFEB', borderRadius: 2 }}>
               {institute.code}
@@ -297,7 +297,7 @@ export function InstituteDetailPage() {
         </div>
 
         {/* Admin info */}
-        <div className="text-right">
+        <div className="md:text-right">
           <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>ADMINISTRATOR</p>
           <p className="text-xs" style={{ color: '#2C2C2A' }}>{institute.adminName}</p>
           <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{institute.adminEmail}</p>
@@ -305,7 +305,7 @@ export function InstituteDetailPage() {
       </div>
 
       {/* ── Primary tab bar ── */}
-      <div className="flex items-center gap-0 mb-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
+      <div className="flex items-center gap-0 mb-0 overflow-x-auto" style={{ borderBottom: '1px solid #E3E1DB' }}>
         {PRIMARY_TABS.map((tab) => {
           const isActive = primaryTab === tab.key;
           return (

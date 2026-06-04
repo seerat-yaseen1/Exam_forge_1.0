@@ -679,11 +679,11 @@ export function UserManagementPage() {
       <motion.div
         initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="px-8 py-10"
+        className="px-4 py-6 md:px-8 md:py-10"
         style={{ maxWidth: 1120, margin: '0 auto' }}
       >
         {/* ── Page header ── */}
-        <div className="flex items-start justify-between mb-6"
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-6"
           style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
           <div>
             <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>WEB OWNER</p>
@@ -693,7 +693,7 @@ export function UserManagementPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-4 mt-1">
+          <div className="flex items-center gap-4 flex-wrap md:mt-1">
             {/* Live indicator */}
             <div className="flex items-center gap-1.5 select-none">
               <div className="relative w-2 h-2 flex items-center justify-center">
@@ -721,7 +721,7 @@ export function UserManagementPage() {
         <AnimatePresence>
           {!loading && totalCount > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="flex items-center gap-4 mb-5">
+              className="flex items-center gap-4 flex-wrap mb-5">
               <span className="text-xs" style={{ color: '#9A9891' }}>
                 {totalCount} {totalCount === 1 ? 'institute' : 'institutes'}
               </span>
@@ -783,7 +783,8 @@ export function UserManagementPage() {
 
         {/* ── Table ── */}
         <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
-          <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px]" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #E3E1DB', background: '#FAFAF8' }}>
                 {['INSTITUTE', 'ADMINISTRATOR', 'STATUS', 'VALID UNTIL', ''].map((col, i) => (
@@ -983,6 +984,7 @@ export function UserManagementPage() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
 
         {!loading && institutes.length > 0 && (

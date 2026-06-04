@@ -39,8 +39,8 @@ export function EditPanelShell({
         onOpenChange={(next) => { if (next) onOpenChange(true); else requestClose(); }}
       >
         <SheetContent side="right" className="w-full sm:max-w-[480px] flex flex-col p-0">
-          <SheetHeader className="px-6 pt-6 pb-4" style={{ borderBottom: '1px solid #F0EFEB' }}>
-            <SheetTitle className="text-base" style={{ color: '#0C0C0B' }}>{title}</SheetTitle>
+          <SheetHeader className="px-4 sm:px-6 pt-5 sm:pt-6 pb-4 pr-12" style={{ borderBottom: '1px solid #F0EFEB' }}>
+            <SheetTitle className="text-base break-words" style={{ color: '#0C0C0B' }}>{title}</SheetTitle>
             {description && (
               <SheetDescription className="text-xs" style={{ color: '#9A9891' }}>
                 {description}
@@ -48,10 +48,10 @@ export function EditPanelShell({
             )}
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5">{children}</div>
 
           <div
-            className="flex items-center justify-end gap-2 px-6 py-4"
+            className="flex items-center justify-end gap-2 px-4 sm:px-6 py-3 sm:py-4"
             style={{ borderTop: '1px solid #F0EFEB', background: '#FAFAF8' }}
           >
             <button

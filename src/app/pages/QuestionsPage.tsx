@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, X, Eye, Pencil, Trash2, Loader2, BookOpen,
   Library, Share2, AlertTriangle, Search, SlidersHorizontal,
-  Upload, Download, Tag,
+  Upload, Download,
 } from 'lucide-react';
 import {
   getAllQuestions, getAllQuestionBanks, getAllBankGrants,
@@ -62,20 +62,20 @@ function DiffChip({ difficulty }: { difficulty: Difficulty }) {
 function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div
-      className="flex items-center gap-3 px-5 py-4"
+      className="flex items-center gap-2 md:gap-3 px-3 py-3 md:px-5 md:py-4"
       style={{ border: '1px solid #E3E1DB', borderRadius: 3, background: '#FFFFFF' }}
     >
       <div
         className="flex items-center justify-center flex-shrink-0"
         style={{
-          width: 30, height: 30, borderRadius: 2,
+          width: 26, height: 26, borderRadius: 2,
           background: '#F7F6F3', border: '1px solid #EEECEA',
         }}
       >
         {icon}
       </div>
-      <div>
-        <p className="text-xs" style={{ color: '#9A9891' }}>{label}</p>
+      <div className="min-w-0">
+        <p className="text-xs truncate" style={{ color: '#9A9891' }}>{label}</p>
         <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{value}</p>
       </div>
     </div>
@@ -300,6 +300,12 @@ function QuestionRow({
     </p>
   );
 
+  const stemBlockFull = (
+    <p style={{ color: '#0C0C0B', fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      {question.stem || <em style={{ color: '#B0AEA8' }}>No stem</em>}
+    </p>
+  );
+
   const metaBlock = (
     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
       {question.subject && (
@@ -362,23 +368,73 @@ function QuestionRow({
         {actions}
       </div>
 
-      {/* Phone: stacked card */}
-      <div className="md:hidden flex flex-col gap-2">
-        <div className="flex items-start gap-2">
-          <div className="flex-shrink-0 mt-0.5">
-            <TypeBadgeChip engine={question.engine} variant={question.variant} />
-          </div>
-          <div className="flex-1 min-w-0">{stemBlock}</div>
+      {/* Phone: redesigned card */}
+      <div className="md:hidden flex flex-col">
+        {/* Stem — full text, always visible, primary type */}
+        <div className="mb-3">{stemBlockFull}</div>
+
+        {/* Pill strip: type + difficulty */}
+        <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
+          <TypeBadgeChip engine={question.engine} variant={question.variant} />
+          <DiffChip difficulty={question.difficulty} />
         </div>
-        {metaBlock}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <DiffChip difficulty={question.difficulty} />
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>{formatDate(question.createdAt)}</span>
+
+        {/* Subject · topic */}
+        {(question.subject || question.topic) && (
+          <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-xs mb-2.5">
+            {question.subject && <span style={{ color: '#6B6B66' }}>{question.subject}</span>}
+            {question.subject && question.topic && <span style={{ color: '#DDDBD5' }}>·</span>}
+            {question.topic && <span style={{ color: '#9A9891' }}>{question.topic}</span>}
           </div>
+        )}
+
+        {/* Tags */}
+        {question.tags.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
+            {question.tags.slice(0, 4).map((tag) => (
+              <span
+                key={tag}
+                className="px-1.5 py-0.5"
+                style={{ background: '#F0EFEB', borderRadius: 2, color: '#6B6B66', fontSize: 10 }}
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Created date */}
+        <div className="text-xs mb-3" style={{ color: '#C4C3BD' }}>
+          Created {formatDate(question.createdAt)}
         </div>
-        <div className="flex items-center justify-end pt-1" style={{ borderTop: '1px solid #F5F4F0' }}>
-          {actions}
+
+        {/* Action bar */}
+        <div className="flex items-center gap-2 pt-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+          <div className="flex-1" />
+          <button
+            onClick={onPreview}
+            aria-label="Preview"
+            className="flex items-center justify-center transition-opacity hover:opacity-60"
+            style={{ width: 36, height: 36, color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+          >
+            <Eye size={14} strokeWidth={1.5} />
+          </button>
+          <button
+            onClick={onEdit}
+            aria-label="Edit"
+            className="flex items-center justify-center transition-opacity hover:opacity-60"
+            style={{ width: 36, height: 36, color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+          >
+            <Pencil size={14} strokeWidth={1.5} />
+          </button>
+          <button
+            onClick={onDelete}
+            aria-label="Delete"
+            className="flex items-center justify-center transition-opacity hover:opacity-60"
+            style={{ width: 36, height: 36, color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+          >
+            <Trash2 size={14} strokeWidth={1.5} />
+          </button>
         </div>
       </div>
     </div>
@@ -447,7 +503,7 @@ function DeleteModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-60 flex items-center justify-center"
+      className="fixed inset-0 z-60 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.28)' }}
       onClick={onCancel}
     >
@@ -459,13 +515,13 @@ function DeleteModal({
         style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-4 py-3.5 md:px-5 md:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>DELETE QUESTION</p>
           <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
-        <div className="px-5 py-5">
+        <div className="px-4 py-4 md:px-5 md:py-5">
           <div
             className="flex items-start gap-2.5 mb-4 px-3 py-3"
             style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}
@@ -479,11 +535,11 @@ function DeleteModal({
           <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>
             Are you sure you want to delete:
           </p>
-          <p className="text-xs mt-1.5 italic" style={{ color: '#9A9891' }}>
+          <p className="text-xs mt-1.5 italic break-words" style={{ color: '#9A9891' }}>
             "{truncate(question.stem, 80)}"
           </p>
         </div>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 px-4 py-3.5 md:px-5 md:py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button
             onClick={onConfirm}
             disabled={deleting}
@@ -515,7 +571,7 @@ function PreviewModal({ question, onClose }: { question: Question; onClose: () =
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-60 flex items-center justify-center"
+      className="fixed inset-0 z-60 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.28)' }}
       onClick={onClose}
     >
@@ -528,7 +584,7 @@ function PreviewModal({ question, onClose }: { question: Question; onClose: () =
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="flex items-center justify-between px-5 py-4"
+          className="flex items-center justify-between px-4 py-3.5 md:px-5 md:py-4"
           style={{ borderBottom: '1px solid #E3E1DB' }}
         >
           <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
@@ -538,7 +594,7 @@ function PreviewModal({ question, onClose }: { question: Question; onClose: () =
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
-        <div className="px-5 py-5 max-h-[70vh] overflow-y-auto">
+        <div className="px-4 py-4 md:px-5 md:py-5 max-h-[70vh] overflow-y-auto">
           <QuestionPreview question={question} showAnswers showMeta showExplanation />
         </div>
       </motion.div>
@@ -572,12 +628,12 @@ function QuestionPanel({
         key="panel-body"
         initial={{ x: 48, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 48, opacity: 0 }}
         transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed right-0 top-0 bottom-0 z-50 flex flex-col"
-        style={{ width: 500, background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
+        className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:w-[500px] sm:max-w-full"
+        style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+          className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0"
           style={{ borderBottom: '1px solid #E3E1DB' }}
         >
           <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
@@ -767,7 +823,7 @@ export function QuestionsPage() {
         </div>
 
         {/* ── Stat pills ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
           <StatPill
             icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
             label="Total Questions"
@@ -782,11 +838,6 @@ export function QuestionsPage() {
             icon={<Share2 size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
             label="Active Grants"
             value={fmt(grantCount)}
-          />
-          <StatPill
-            icon={<Tag size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
-            label="Subjects"
-            value={loading ? '…' : fmt(subjects.length)}
           />
         </div>
 

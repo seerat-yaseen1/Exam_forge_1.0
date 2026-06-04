@@ -310,7 +310,7 @@ export function DashboardLayout() {
         <SidebarNavItem
           to="/dashboard/assignments"
           icon={<ClipboardList size={13} strokeWidth={1.5} />}
-          label="Assignments"
+          label="Assessments"
           isActive={isAssignments}
         />
         <SidebarNavItem

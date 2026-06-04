@@ -291,7 +291,7 @@ export function QuestionPickerModal({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
-      className="fixed inset-0 z-[60] flex items-center justify-center"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.35)' }}
       onClick={onClose}
     >
@@ -312,7 +312,7 @@ export function QuestionPickerModal({
       >
         {/* ── Header ── */}
         <div
-          className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+          className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 flex-shrink-0"
           style={{ borderBottom: '1px solid #E3E1DB' }}
         >
           <div className="flex items-center gap-3">
@@ -520,7 +520,7 @@ export function QuestionPickerModal({
 
         {/* ── Footer ── */}
         <div
-          className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+          className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 flex-shrink-0"
           style={{ borderTop: '1px solid #E3E1DB' }}
         >
           <p className="text-xs" style={{ color: '#B0AEA8' }}>

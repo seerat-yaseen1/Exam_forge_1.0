@@ -1929,7 +1929,7 @@ export function AssessmentRosterCore({
         <p className="text-xs" style={{ color: '#9B2828' }}>{errorMsg || 'Assessment not found.'}</p>
         <button onClick={onBack} className="text-xs px-4 py-2 mt-2"
           style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, cursor: 'pointer' }}>
-          Back to Assignments
+          Back to Assessments
         </button>
       </div>
     );
@@ -1944,7 +1944,7 @@ export function AssessmentRosterCore({
           {/* Breadcrumb + title */}
           <div className="flex items-center gap-3 mb-4">
             <button onClick={onBack} className="flex items-center gap-1.5 text-xs" style={{ color: '#9A9891', cursor: 'pointer' }}>
-              <ArrowLeft size={12} strokeWidth={1.5} /> Assignments
+              <ArrowLeft size={12} strokeWidth={1.5} /> Assessments
             </button>
             <span style={{ color: '#E3E1DB' }}>·</span>
             <p className="text-xs" style={{ color: '#0C0C0B' }}>{assessment.title}</p>

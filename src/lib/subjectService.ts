@@ -9,6 +9,7 @@ import {
   query,
   orderBy,
   writeBatch,
+  increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -378,6 +379,62 @@ export async function refreshAllSubjectCounts(): Promise<void> {
   console.log('✅ [Subjects] refreshAllSubjectCounts complete');
 }
 
+/**
+ * Best-effort adjustment of the denormalized questionCount on a subject and/or
+ * topic when a question is added (+1) or removed (-1). Called from the question
+ * write paths so counts stay live without a manual recount.
+ *
+ * Intentionally NEVER throws: a missing/renamed taxonomy doc must not break a
+ * question save. Any drift is reconcilable via refreshAll*Counts().
+ */
+export async function bumpTaxonomyCounts(
+  ref: { subjectId?: string | null; topicId?: string | null },
+  delta: number,
+): Promise<void> {
+  if (delta === 0) return;
+  const ops: Promise<unknown>[] = [];
+  if (ref.subjectId) {
+    ops.push(updateDoc(doc(db, COL, ref.subjectId), { questionCount: increment(delta), updatedAt: now() }).catch(() => {}));
+  }
+  if (ref.topicId) {
+    ops.push(updateDoc(doc(db, TOPIC_COL, ref.topicId), { questionCount: increment(delta), updatedAt: now() }).catch(() => {}));
+  }
+  await Promise.all(ops);
+}
+
+/**
+ * Recount and sync the denormalized questionCount for every topic.
+ * Tallies live questions by topicId (skipping soft-deleted) and writes any
+ * changed counts. Mirrors refreshAllSubjectCounts. Writes are chunked at 450
+ * (Firestore write-batch cap is 500).
+ */
+export async function refreshAllTopicCounts(): Promise<void> {
+  const [topics, qSnap] = await Promise.all([
+    getAllTopics(),
+    getDocs(collection(db, 'questions')),
+  ]);
+
+  // Tally by topicId (the preferred slug link).
+  const counts: Record<string, number> = {};
+  qSnap.docs.forEach((d) => {
+    const q = d.data() as { topicId?: string; isDeleted?: boolean };
+    if (!q.isDeleted && q.topicId) {
+      counts[q.topicId] = (counts[q.topicId] ?? 0) + 1;
+    }
+  });
+
+  const changed = topics.filter((t) => (counts[t.id] ?? 0) !== t.questionCount);
+  const CHUNK = 450;
+  for (let i = 0; i < changed.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    for (const t of changed.slice(i, i + CHUNK)) {
+      batch.update(doc(db, TOPIC_COL, t.id), { questionCount: counts[t.id] ?? 0, updatedAt: now() });
+    }
+    await batch.commit();
+  }
+  console.log(`✅ [Topics] refreshAllTopicCounts complete (${changed.length} updated)`);
+}
+
 // ══════════════════════════════════════════════════════════════════
 // ENSURE SUBJECT EXISTS (used by bulk uploader)
 // ══════════════════════════════════════════════════════════════════
@@ -640,4 +697,63 @@ export async function deleteSubject(subjectId: string): Promise<void> {
 export async function deleteTopic(topicId: string): Promise<void> {
   await deleteDoc(doc(db, TOPIC_COL, topicId));
   console.log(`✅ [Topics] deleteTopic → ${topicId}`);
+}
+
+/**
+ * Merge one topic into another (e.g. fold "ages" into "age").
+ * Re-points every question tagged with the source topicId onto the target
+ * (topicId + canonical topic name + subjectId, plus the back-compat `subject`
+ * name), folds the source's questions into the target's denormalized count,
+ * then deletes the source topic. Mirrors mergeSubjects / moveTopic.
+ *
+ * Question writes are chunked at 450 (Firestore write-batch cap is 500).
+ */
+export async function mergeTopics(
+  sourceId: string,
+  targetId: string,
+): Promise<{ updatedQuestions: number }> {
+  if (sourceId === targetId) throw new Error('Source and target topics must be different.');
+  const { where } = await import('firebase/firestore');
+
+  const [sourceSnap, targetSnap] = await Promise.all([
+    getDoc(doc(db, TOPIC_COL, sourceId)),
+    getDoc(doc(db, TOPIC_COL, targetId)),
+  ]);
+  if (!sourceSnap.exists()) throw new Error(`Source topic "${sourceId}" not found.`);
+  if (!targetSnap.exists()) throw new Error(`Target topic "${targetId}" not found.`);
+  const target = targetSnap.data() as Topic;
+
+  // Canonical subject name for the back-compat `subject` field on questions.
+  const subjSnap = await getDoc(doc(db, COL, target.subjectId));
+  const targetSubjectName = subjSnap.exists() ? (subjSnap.data() as Subject).name : undefined;
+
+  // Re-point every question tagged with the source topicId.
+  const qSnap = await getDocs(query(collection(db, 'questions'), where('topicId', '==', sourceId)));
+  const docs = qSnap.docs;
+
+  const CHUNK = 450; // leave headroom under the 500-op batch cap
+  for (let i = 0; i < docs.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    for (const qDoc of docs.slice(i, i + CHUNK)) {
+      const patch: Record<string, unknown> = {
+        topicId:   target.id,
+        topic:     target.name,
+        subjectId: target.subjectId,
+        updatedAt: now(),
+      };
+      if (targetSubjectName) patch.subject = targetSubjectName; // never write undefined
+      batch.update(qDoc.ref, patch);
+    }
+    await batch.commit();
+  }
+
+  // Fold counts into the target, then remove the source topic.
+  await updateDoc(doc(db, TOPIC_COL, targetId), {
+    questionCount: (target.questionCount ?? 0) + docs.length,
+    updatedAt: now(),
+  });
+  await deleteDoc(doc(db, TOPIC_COL, sourceId));
+
+  console.log(`✅ [Topics] mergeTopics "${sourceId}" → "${targetId}" (${docs.length} questions updated)`);
+  return { updatedQuestions: docs.length };
 }

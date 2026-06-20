@@ -10,6 +10,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { bumpTaxonomyCounts } from './subjectService';
 
 // ══════════════════════════════════════════════════════════════════
 // INTERNAL HELPERS
@@ -361,6 +362,10 @@ export async function createQuestion(
   batch.set(doc(db, COL.questionAnswers, id), removeUndefined(answer as any));
 
   await batch.commit();
+
+  // Keep denormalized taxonomy counts live (best-effort; reconcilable via Recount).
+  await bumpTaxonomyCounts({ subjectId: question.subjectId, topicId: question.topicId }, +1);
+
   console.log(`✅ [QB] createQuestion → ${id} (${question.ownerType}:${question.ownerId})`);
   return question;
 }
@@ -494,6 +499,15 @@ export async function updateQuestion(
   const answerPart = pickAnswerFields(data);
   const publicPart = stripAnswerFields(data);
 
+  // If this edit reassigns the question's subject/topic, read the previous
+  // values so we can shift the denormalized counts after the write.
+  const touchesTaxonomy = 'subjectId' in data || 'topicId' in data;
+  let prev: Question | null = null;
+  if (touchesTaxonomy) {
+    const snap = await getDoc(doc(db, COL.questions, id));
+    prev = snap.exists() ? (snap.data() as Question) : null;
+  }
+
   const batch = writeBatch(db);
   const ts = now();
 
@@ -521,6 +535,19 @@ export async function updateQuestion(
   }
 
   await batch.commit();
+
+  // Shift denormalized counts off the old taxonomy and onto the new one.
+  if (prev && !prev.isDeleted) {
+    if ('subjectId' in data && data.subjectId !== prev.subjectId) {
+      await bumpTaxonomyCounts({ subjectId: prev.subjectId }, -1);
+      await bumpTaxonomyCounts({ subjectId: data.subjectId }, +1);
+    }
+    if ('topicId' in data && data.topicId !== prev.topicId) {
+      await bumpTaxonomyCounts({ topicId: prev.topicId }, -1);
+      await bumpTaxonomyCounts({ topicId: data.topicId }, +1);
+    }
+  }
+
   console.log(`✅ [QB] updateQuestion → ${id}`);
 }
 
@@ -530,10 +557,19 @@ export async function updateQuestion(
  * Downstream consumers should filter out isDeleted === true when resolving grants.
  */
 export async function softDeleteQuestion(id: string): Promise<void> {
+  // Read first so we know which taxonomy counts to decrement, and so we don't
+  // double-decrement a question that was already deleted.
+  const snap = await getDoc(doc(db, COL.questions, id));
+  const prev = snap.exists() ? (snap.data() as Question) : null;
+
   await updateDoc(doc(db, COL.questions, id), {
     isDeleted: true,
     updatedAt: now(),
   });
+
+  if (prev && !prev.isDeleted) {
+    await bumpTaxonomyCounts({ subjectId: prev.subjectId, topicId: prev.topicId }, -1);
+  }
   console.log(`✅ [QB] softDeleteQuestion → ${id}`);
 }
 

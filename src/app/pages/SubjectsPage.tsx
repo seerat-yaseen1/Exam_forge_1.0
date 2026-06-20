@@ -19,6 +19,7 @@ import {
 } from '../../lib/subjectService';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { QuestionBankCore } from '../components/questions/QuestionBankCore';
 
 // ──────────────────────────────────────────────────────────────────
 // SubjectsPage — master → detail drill-in. The list shows subject
@@ -36,6 +37,7 @@ export function SubjectsPage() {
 
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [recounting, setRecounting] = useState(false);
 
   const refreshSubjects = useCallback(async () => {
@@ -86,6 +88,9 @@ export function SubjectsPage() {
   const selectedSubject = selectedSubjectId
     ? subjects.find((s) => s.id === selectedSubjectId) ?? null
     : null;
+  const selectedTopic = selectedTopicId
+    ? topics.find((t) => t.id === selectedTopicId) ?? null
+    : null;
 
   return (
     <div className="px-4 py-6 md:px-10 md:py-8" style={{ maxWidth: 1280, margin: '0 auto' }}>
@@ -96,16 +101,25 @@ export function SubjectsPage() {
       </div>
 
       <div style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderRadius: 4, overflow: 'hidden' }}>
-        {selectedSubject ? (
+        {selectedSubject && selectedTopic ? (
+          <TopicQuestionsView
+            key={selectedTopic.id}
+            subject={selectedSubject}
+            topic={selectedTopic}
+            onBack={() => setSelectedTopicId(null)}
+            onChanged={async () => { await refreshTopics(); await refreshSubjects(); }}
+          />
+        ) : selectedSubject ? (
           <SubjectDetail
             key={selectedSubject.id}
             subject={selectedSubject}
             topics={topicsBySubject[selectedSubject.id] ?? []}
             allSubjects={subjects}
             topicsLoading={loadingTopics}
-            onBack={() => setSelectedSubjectId(null)}
+            onBack={() => { setSelectedSubjectId(null); setSelectedTopicId(null); }}
+            onOpenTopic={(id) => setSelectedTopicId(id)}
             onRenamed={(newId) => { setSelectedSubjectId(newId); refreshSubjects(); refreshTopics(); }}
-            onDeleted={() => { setSelectedSubjectId(null); refreshSubjects(); refreshTopics(); }}
+            onDeleted={() => { setSelectedSubjectId(null); setSelectedTopicId(null); refreshSubjects(); refreshTopics(); }}
             onTopicsChanged={async () => { await refreshTopics(); await refreshSubjects(); }}
           />
         ) : (
@@ -163,7 +177,7 @@ export function SubjectsPage() {
                     key={s.id}
                     subject={s}
                     topicCount={topicCountBySubject[s.id] ?? 0}
-                    onOpen={() => setSelectedSubjectId(s.id)}
+                    onOpen={() => { setSelectedSubjectId(s.id); setSelectedTopicId(null); }}
                   />
                 ))}
               </div>
@@ -310,13 +324,14 @@ function SubjectCard({
 
 // Detail view — slides in; the subject's topics are managed here.
 function SubjectDetail({
-  subject, topics, allSubjects, topicsLoading, onBack, onRenamed, onDeleted, onTopicsChanged,
+  subject, topics, allSubjects, topicsLoading, onBack, onOpenTopic, onRenamed, onDeleted, onTopicsChanged,
 }: {
   subject: Subject;
   topics: Topic[];
   allSubjects: Subject[];
   topicsLoading: boolean;
   onBack: () => void;
+  onOpenTopic: (topicId: string) => void;
   onRenamed: (newId: string) => void;
   onDeleted: () => void;
   onTopicsChanged: () => void;
@@ -428,6 +443,7 @@ function SubjectDetail({
               topic={t}
               subjects={allSubjects}
               siblingTopics={topics}
+              onOpen={() => onOpenTopic(t.id)}
               onChanged={onTopicsChanged}
             />
           ))}
@@ -438,11 +454,12 @@ function SubjectDetail({
 }
 
 function TopicRow({
-  topic, subjects, siblingTopics, onChanged,
+  topic, subjects, siblingTopics, onOpen, onChanged,
 }: {
   topic: Topic;
   subjects: Subject[];
   siblingTopics: Topic[];
+  onOpen: () => void;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -469,9 +486,17 @@ function TopicRow({
       className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 sm:px-4 py-2"
       style={{ borderBottom: '1px solid #F2F1EC' }}
     >
-      <SlugChip id={topic.id} />
-      <span className="min-w-0 truncate" style={{ flex: 1, fontSize: 13 }}>{topic.name}</span>
-      <span style={{ fontSize: 11, color: '#83827C', whiteSpace: 'nowrap' }}>{topic.questionCount} Q</span>
+      {/* Clickable region → drill into this topic's questions */}
+      <button
+        onClick={onOpen}
+        className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer hover:opacity-70 transition-opacity"
+        style={{ background: 'transparent', border: 'none', padding: 0, touchAction: 'manipulation' }}
+      >
+        <SlugChip id={topic.id} />
+        <span className="min-w-0 truncate" style={{ fontSize: 13, color: '#0C0C0B' }}>{topic.name}</span>
+        <span style={{ fontSize: 11, color: '#83827C', whiteSpace: 'nowrap' }}>{topic.questionCount} Q</span>
+        <ChevronRight size={14} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+      </button>
       <div className="flex items-center gap-1 ml-auto">
         <MergeTopicControl topic={topic} siblingTopics={siblingTopics} onMerged={onChanged} />
         <MoveTopicControl topic={topic} subjects={subjects} onMoved={onChanged} />
@@ -490,6 +515,49 @@ function TopicRow({
         </IconBtn>
       </div>
     </li>
+  );
+}
+
+// Third drill level — questions inside one topic (shared QuestionBankCore, locked).
+function TopicQuestionsView({
+  subject, topic, onBack, onChanged,
+}: {
+  subject: Subject;
+  topic: Topic;
+  onBack: () => void;
+  onChanged: () => void;
+}) {
+  return (
+    <div className="animate-in fade-in slide-in-from-right-4 duration-200">
+      {/* Back bar */}
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid #E8E7E1' }}>
+        <button
+          onClick={onBack}
+          aria-label={`Back to ${subject.name} topics`}
+          className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[#F2F1EC]"
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#6B6B66', fontSize: 12, touchAction: 'manipulation' }}
+        >
+          <ArrowLeft size={14} strokeWidth={1.5} /> {subject.name} · topics
+        </button>
+      </div>
+
+      {/* Topic header */}
+      <div style={{ padding: 16, borderBottom: '1px solid #E8E7E1' }}>
+        <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
+          <SlugChip id={topic.id} />
+          <span style={{ fontSize: 11, color: '#9A9891' }}>in {subject.name}</span>
+        </div>
+        <p className="break-words" style={{ color: '#0C0C0B', fontSize: 16, lineHeight: 1.3 }}>{topic.name}</p>
+      </div>
+
+      {/* Shared question bank, scoped to this topic */}
+      <QuestionBankCore
+        lockSubjectId={subject.id}
+        lockTopicId={topic.id}
+        showAddButton
+        onChanged={onChanged}
+      />
+    </div>
   );
 }
 

@@ -355,7 +355,9 @@ export async function mergeSubjects(
 export async function refreshAllSubjectCounts(): Promise<void> {
   const [subjects, qSnap] = await Promise.all([
     getAllSubjects(),
-    getDocs(query(collection(db, 'questions'), ...[]))
+    // Full scan is intentional: rebuilding every subject's count requires
+    // reading all questions. Missing isDeleted is treated as not-deleted below.
+    getDocs(collection(db, 'questions')),
   ]);
 
   // Build count map
@@ -561,6 +563,11 @@ export async function createTopicWithSlug(
  * at this topic so subjectId stays consistent.
  */
 export async function moveTopic(topicId: string, newSubjectId: string): Promise<{ updatedQuestions: number }> {
+  // Guard against empty/undefined at the boundary — an unset target would
+  // otherwise write subjectId=undefined onto every affected question.
+  if (!topicId || !newSubjectId) {
+    throw new Error('moveTopic requires both a topic id and a target subject id.');
+  }
   const { where } = await import('firebase/firestore');
   const [topicSnap, parentSnap] = await Promise.all([
     getDoc(doc(db, TOPIC_COL, topicId)),

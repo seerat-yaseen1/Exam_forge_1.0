@@ -58,7 +58,7 @@ export function InstituteProfilePage() {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="px-8 py-10"
+      className="px-4 py-6 sm:px-8 sm:py-10"
       style={{ maxWidth: 680, margin: '0 auto' }}
     >
       {/* ── Page header ── */}
@@ -71,7 +71,7 @@ export function InstituteProfilePage() {
 
       {/* ── Logo section ── */}
       <div
-        className="flex items-center gap-5 p-5 mb-6"
+        className="flex flex-wrap sm:flex-nowrap items-center gap-4 sm:gap-5 p-4 sm:p-5 mb-6"
         style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
       >
         {/* Logo preview */}
@@ -95,8 +95,8 @@ export function InstituteProfilePage() {
           )}
         </div>
 
-        <div>
-          <p className="text-sm font-medium mb-0.5" style={{ color: '#0C0C0B' }}>
+        <div className="min-w-0">
+          <p className="text-sm font-medium mb-0.5 break-words" style={{ color: '#0C0C0B' }}>
             Institute Logo
           </p>
           <p className="text-xs mb-3" style={{ color: '#9A9891', lineHeight: 1.5 }}>

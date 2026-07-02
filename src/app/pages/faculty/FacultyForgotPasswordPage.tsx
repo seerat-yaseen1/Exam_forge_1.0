@@ -77,7 +77,7 @@ export function FacultyForgotPasswordPage() {
           <div className="mt-5 w-8" style={{ height: 1, background: '#DDDBD5' }} />
         </div>
 
-        <div className="bg-white px-8 py-8"
+        <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
           style={{ border: '1px solid #E3E1DB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <AnimatePresence mode="wait">
             {stage === 'input' ? (

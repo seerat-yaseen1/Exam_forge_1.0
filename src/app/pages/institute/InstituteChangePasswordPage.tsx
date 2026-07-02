@@ -150,7 +150,7 @@ export function InstituteChangePasswordPage() {
 
         {/* Form card */}
         <div
-          className="bg-white px-8 py-8"
+          className="bg-white px-5 py-7 sm:px-8 sm:py-8"
           style={{ border: '1px solid #E3E1DB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
         >
           <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>

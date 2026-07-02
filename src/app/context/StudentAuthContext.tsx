@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
-import { getInstituteByCode, getInstituteLogo } from '../../lib/firebaseService';
+import { getInstituteLogo } from '../../lib/firebaseService';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -247,11 +247,11 @@ export function StudentAuthProvider({ children }: { children: React.ReactNode })
     ): Promise<{ success: boolean; error?: string; emailSent?: boolean }> => {
       try {
         const emailNorm = email.toLowerCase().trim();
-        const codeNorm = instituteCode.toUpperCase().trim();
-        const institute = await getInstituteByCode(codeNorm);
-        if (!institute) {
-          return { success: false, error: 'Institute not found with this code.' };
-        }
+        // Do NOT pre-validate the institute code — doing so leaks whether a
+        // code is registered to unauthenticated callers (enumeration attack).
+        // Send the reset email unconditionally; Firebase returns success even
+        // if the email has no account (auth/user-not-found is caught below).
+        void instituteCode; // parameter kept for API compat but not used here
         await sendPasswordResetEmail(auth, emailNorm);
         return { success: true, emailSent: true };
       } catch (err: unknown) {

@@ -1,7 +1,4 @@
 import { createBrowserRouter, Navigate } from 'react-router';
-import { FirebaseTestPage } from './pages/FirebaseTestPage';
-import { FirebaseDebugPage } from './pages/FirebaseDebugPage';
-import { InitializeWebOwnerPage } from './pages/InitializeWebOwnerPage';
 import { InstituteRoot } from './pages/institute/InstituteRoot';
 import { Root } from './Root';
 import { LoginPage } from './pages/LoginPage';
@@ -61,15 +58,6 @@ export const router = createBrowserRouter([
   {
     element: <Root />,
     children: [
-      // ── Firebase Test (Public) ────────────────────────────────────
-      { path: '/firebase-test', element: <FirebaseTestPage /> },
-      
-      // ── Firebase Debug (Public) ───────────────────────────────────
-      { path: '/firebase-debug', element: <FirebaseDebugPage /> },
-      
-      // ── Initialize Web Owner (Public) ─────────────────────────────
-      { path: '/initialize', element: <InitializeWebOwnerPage /> },
-
       // ── Web Owner auth ────────────────────────────────────────────
       { index: true, element: <Navigate to="/login" replace /> },
       { path: '/login',           element: <LoginPage /> },

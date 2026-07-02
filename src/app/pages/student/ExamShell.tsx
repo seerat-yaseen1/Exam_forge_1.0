@@ -31,10 +31,10 @@ import {
   pickSection,
   gradeAttempt,
   logViolation,
-  autoTerminate,
   enforceIntegrityThreshold,
   MAX_INTEGRITY_WARNINGS,
   getAttemptByStudentAndAssessment,
+  getServerSkew,
   subscribeToAttempt,
   registerSession,
   type Attempt,
@@ -167,6 +167,20 @@ function buildEffectiveSections(a: Assessment): AssessmentSection[] {
   return secs;
 }
 
+/**
+ * Single source of truth for "did the student meaningfully answer this?".
+ * Used by both the submit-modal unanswered count and the bottom-bar answered
+ * count so the two never disagree (e.g. a whitespace-only text answer must
+ * read the same way in both places).
+ */
+function isAnswerEmpty(ans: AttemptAnswer | undefined): boolean {
+  if (!ans) return true;
+  if (ans.type === 'text') return !(ans.value as string).trim();
+  if (Array.isArray(ans.value)) return (ans.value as string[]).length === 0;
+  if (typeof ans.value === 'object') return Object.keys(ans.value as Record<string, string>).length === 0;
+  return !(ans.value as string);
+}
+
 // ══════════════════════════════════════════════════════════════════
 // FREEZE PAUSED OVERLAY  (blocking — exam is halted, clock is paused)
 // ══════════════════════════════════════════════════════════════════
@@ -272,14 +286,12 @@ function SubmitConfirmModal({
   isFinal,
   onConfirm,
   onCancel,
-  submitting,
 }: {
   sectionName: string;
   unanswered: number;
   isFinal: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-  submitting: boolean;
 }) {
   return (
     <motion.div
@@ -321,20 +333,17 @@ function SubmitConfirmModal({
         <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button
             onClick={onConfirm}
-            disabled={submitting}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5"
             style={{
-              background: submitting ? '#C8C7C2' : '#0C0C0B',
+              background: '#0C0C0B',
               color: '#FFFFFF', borderRadius: 2,
-              cursor: submitting ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
             }}
           >
-            {submitting && <Loader2 size={11} className="animate-spin" />}
             {isFinal ? 'Submit exam' : `Submit ${sectionName}`}
           </button>
           <button
             onClick={onCancel}
-            disabled={submitting}
             className="text-xs px-4 py-2.5"
             style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
           >
@@ -506,6 +515,12 @@ export function ExamShell() {
   const [questionMap, setQuestionMap]       = useState<Map<string, Question>>(new Map());
   const [marksMap, setMarksMap]             = useState<Map<string, number>>(new Map());
 
+  // ── Server clock skew (serverNow - clientNow, ms) ──────────────
+  // Captured once on load; SectionTimer uses it so the countdown display
+  // resists local-clock tampering. Server owns actual enforcement.
+  const serverSkewRef = useRef(0);
+  const nowFn = useCallback(() => Date.now() + serverSkewRef.current, []);
+
   // ── Freeze / session state (synced from Firestore) ─────────────
   const [isFrozen, setIsFrozen]                     = useState(false);
   const [frozenReason, setFrozenReason]             = useState<string | undefined>();
@@ -593,6 +608,20 @@ export function ExamShell() {
         const a = await getAssessment(assessmentId);
         if (!a) { setErrorMsg('Assessment not found.'); setShellStatus('error'); return; }
 
+        // Schedule gate (defense-in-depth) — the briefing already refuses to
+        // let a student enter before startDate, but a student who navigates
+        // directly to /student/exam/<id>/shell would otherwise bypass that.
+        // Only enforced if there is no existing attempt already in progress —
+        // once started, letting a running attempt continue is the right thing.
+        if (a.startDate && new Date() < new Date(a.startDate)) {
+          const existing = await getAttemptByStudentAndAssessment(session.studentId, assessmentId);
+          if (!existing || (existing.status !== 'in_progress' && existing.status !== 'frozen')) {
+            setErrorMsg('This exam is not yet open. Please return once it starts.');
+            setShellStatus('error');
+            return;
+          }
+        }
+
         // 2. Normalise sections — guarantees questions are populated
         let effSections = buildEffectiveSections(a);
 
@@ -601,11 +630,12 @@ export function ExamShell() {
 
         // Resume guard — if the previous session breached the integrity
         // threshold but never finalized (e.g. tab killed mid-countdown),
-        // finalize it as terminated before doing anything else. The next
-        // branch then sees a 'terminated' status and creates a fresh attempt
-        // only if the student still has slots remaining.
+        // finalize it as terminated via the gradeAttempt Cloud Function, then
+        // block this session with an error. The student does NOT auto-continue
+        // to a fresh attempt: a terminated student can only get another attempt
+        // when the invigilator raises their attemptOverride.
         if (att && await enforceIntegrityThreshold(att)) {
-          setErrorMsg('Your previous attempt was terminated due to repeated integrity violations.');
+          setErrorMsg('Your previous attempt was terminated due to repeated integrity violations. Contact your invigilator if you believe you should be granted another attempt.');
           setShellStatus('error');
           return;
         }
@@ -675,6 +705,11 @@ export function ExamShell() {
           setFrozenReason(att.frozenReason);
           setFrozenAtISO(att.frozenAt);
         }
+
+        // Capture server-clock skew once so the section countdown display is
+        // anchored to server time (spoof-resistant). Non-blocking: on failure
+        // skew stays 0 and enforcement remains server-side anyway.
+        getServerSkew().then((skew) => { serverSkewRef.current = skew; }).catch(() => {});
 
         setAssessment(a);
         setEffectiveSections(effSections);
@@ -808,14 +843,7 @@ export function ExamShell() {
   // ── Count unanswered in current section ────────────────────────
 
   const unansweredInSection = useMemo(() => {
-    return currentSectionQIds.filter((qId) => {
-      const ans = localAnswers[qId];
-      if (!ans) return true;
-      if (ans.type === 'text') return !(ans.value as string).trim();
-      if (Array.isArray(ans.value)) return (ans.value as string[]).length === 0;
-      if (typeof ans.value === 'object') return Object.keys(ans.value as Record<string, string>).length === 0;
-      return !(ans.value as string);
-    }).length;
+    return currentSectionQIds.filter((qId) => isAnswerEmpty(localAnswers[qId])).length;
   }, [currentSectionQIds, localAnswers]);
 
   // ══════════════════════════════════════════════════════════════════
@@ -910,14 +938,27 @@ export function ExamShell() {
     const useBreak = !isStudentChoice && !!(breakCfg && breakCfg.durationMinutes > 0);
     const pauseBeforeNext = !!nextSection && (useBreak || isStudentChoice);
 
-    await submitSection({
-      attemptId: att.id,
-      sectionId,
-      nextSectionId: nextSection?.id ?? null,
-      nextSectionIdx: nextIdx,
-      timeUsedSeconds,
-      pauseBeforeNext,
-    });
+    try {
+      await submitSection({
+        attemptId: att.id,
+        sectionId,
+        nextSectionId: nextSection?.id ?? null,
+        nextSectionIdx: nextIdx,
+        timeUsedSeconds,
+        pauseBeforeNext,
+      });
+    } catch (e) {
+      const msg = (e as { message?: string })?.message ?? '';
+      // A late submit is finalised server-side (section closed at its true
+      // deadline, and advanced identically to the normal path). Fall through
+      // to the local-state advance below. Any OTHER error is a real failure.
+      if (!msg.includes('SECTION_DEADLINE_EXCEEDED') && !msg.includes('deadline-exceeded')) {
+        submittingRef.current = false;
+        setErrorMsg('Could not submit this section. Check your connection and try again.');
+        setShellStatus('error');
+        return;
+      }
+    }
 
     if (nextSection && useBreak && breakCfg) {
       // Enter break — next section's timer will start when student continues
@@ -1184,12 +1225,15 @@ export function ExamShell() {
     if (!isWarningType) return; // Non-warning types are logged but don't show overlay
 
     if (newWarningCount >= MAX_WARNINGS) {
-      // Server-authoritative: flip the attempt to 'terminated' BEFORE the
-      // 30-second overlay countdown. This way, killing the tab during the
-      // countdown cannot bypass termination — the resume guard will refuse
-      // to reopen any attempt that's already terminated.
-      autoTerminate(att.id, 'Exam terminated due to repeated integrity violations.')
-        .catch((e) => console.error('[ExamShell] autoTerminate failed', e));
+      // Server-authoritative: finalize the attempt BEFORE the 30-second overlay
+      // countdown so killing the tab can't dodge termination. This goes through
+      // gradeAttempt (Cloud Function, admin SDK) because student-side writes to
+      // `status` are — correctly — denied by the tightened Firestore rules.
+      gradeAttempt({
+        attemptId: att.id,
+        reason: 'terminated',
+        terminateReason: 'Exam terminated due to repeated integrity violations.',
+      }).catch((e) => console.error('[ExamShell] pre-countdown terminate failed', e));
       setOverlay({ kind: 'final_warning', violationType: type });
     } else {
       setOverlay({
@@ -1317,7 +1361,15 @@ export function ExamShell() {
 
   if (!assessment || !attempt || !currentSection) return null;
 
-  const sectionStartedAt = attempt.sectionTimings[currentSection.id]?.startedAt ?? new Date().toISOString();
+  // Read startedAt WITHOUT a wall-clock fallback: SectionTimer re-syncs on
+  // startedAtISO change, and re-renders happen on every keystroke, so any
+  // fallback like `?? new Date().toISOString()` would restart the countdown
+  // forever. If startedAt is genuinely missing, the timer simply doesn't render
+  // — the shell should have routed to `choosing_section` before reaching here.
+  const sectionStartedAt = attempt.sectionTimings[currentSection.id]?.startedAt || null;
+  if (!sectionStartedAt && currentSection.timeLimit) {
+    console.warn('[ExamShell] section missing startedAt — timer suppressed', currentSection.id);
+  }
   const isIntegrityActive = overlay === null && shellStatus === 'ready' && !hasConflict && !isFrozen;
 
   // ══════════════════════════════════════════════════════════════════
@@ -1388,6 +1440,7 @@ export function ExamShell() {
             onExpire={handleSectionTimerExpire}
             frozenOffsetSeconds={totalFrozenSeconds}
             frozenAtISO={isFrozen ? frozenAtISO : null}
+            nowFn={nowFn}
           />
         )}
         {/* Session conflict badge */}
@@ -1506,10 +1559,10 @@ export function ExamShell() {
                 {/* Centre: answered count */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs" style={{ color: '#C4C3BD' }}>
-                    {Object.keys(localAnswers).filter((id) => currentSectionQIds.includes(id)).length}
+                    {currentSectionQIds.length - unansweredInSection}
                     /{currentSectionQIds.length} answered in this section
                   </span>
-                  {localAnswers[currentQId!] && (
+                  {!isAnswerEmpty(localAnswers[currentQId!]) && (
                     <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
                   )}
                 </div>
@@ -1593,7 +1646,6 @@ export function ExamShell() {
             sectionName={currentSection.name}
             unanswered={unansweredInSection}
             isFinal={isLastSection}
-            submitting={shellStatus === 'submitting_section' || shellStatus === 'submitting_exam'}
             onConfirm={async () => {
               setShowSubmitModal(false);
               await doSectionSubmit('manual');

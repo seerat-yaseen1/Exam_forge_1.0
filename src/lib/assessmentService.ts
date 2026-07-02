@@ -269,6 +269,11 @@ export type Assessment = {
   maxAttempts?: number;
   attemptOverrides?: Record<string, number>;
 
+  // Section grace period — extra seconds allowed past each section's timer
+  // before the server rejects a late submit. undefined = default (30 s).
+  // Enforced server-side in the submitSection Cloud Function.
+  sectionGraceSeconds?: number;
+
   // System
   isDeleted: boolean;
   createdAt: string;
@@ -368,7 +373,7 @@ export async function updateAssessmentDetails(id: string, patch: DetailsPatch): 
   await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
 }
 
-export type SchedulePatch = Partial<Pick<Assessment, 'startDate' | 'endDate' | 'maxAttempts' | 'attemptOverrides'>>;
+export type SchedulePatch = Partial<Pick<Assessment, 'startDate' | 'endDate' | 'maxAttempts' | 'attemptOverrides' | 'sectionGraceSeconds'>>;
 export async function updateAssessmentSchedule(id: string, patch: SchedulePatch): Promise<void> {
   await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
 }
@@ -468,16 +473,24 @@ export async function getAssessmentsForStudent(
   studentId: string,
   instituteId: string
 ): Promise<Assessment[]> {
-  const snap = await getDocs(
-    query(collection(db, 'assessments'), where('isDeleted', '==', false))
-  );
-  const all = snap.docs.map((d) => d.data() as Assessment);
+  // Fetch only active or closed assessments — students never see drafts.
+  // Two queries (one per status value) instead of a full collection scan so
+  // we don't pull every other institute's drafts across the wire.
+  const [activeSnap, closedSnap] = await Promise.all([
+    getDocs(query(collection(db, 'assessments'),
+      where('status', '==', 'active'),
+      where('isDeleted', '==', false))),
+    getDocs(query(collection(db, 'assessments'),
+      where('status', '==', 'closed'),
+      where('isDeleted', '==', false))),
+  ]);
+
+  const all = [
+    ...activeSnap.docs.map((d) => d.data() as Assessment),
+    ...closedSnap.docs.map((d) => d.data() as Assessment),
+  ];
 
   return all.filter((a) => {
-    // Hide drafts from students
-    if (a.status === 'draft') return false;
-
-    // Check assignment target
     const t = a.assignedTo;
     if (t.type === 'all') return true;
     if (t.type === 'institutes') return t.instituteIds.includes(instituteId);

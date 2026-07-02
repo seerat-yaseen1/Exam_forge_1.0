@@ -192,6 +192,15 @@ export function ExamBriefingPage() {
           setError('__blocked__'); return;
         }
 
+        // Schedule gate — refuse entry before the advertised startDate. A
+        // student who navigates directly to the briefing URL early sees a
+        // locked state instead of the exam. The countdown effect below
+        // re-checks each minute so the state auto-clears when the time hits.
+        if (a.startDate && new Date() < new Date(a.startDate)) {
+          setAssessment(a);
+          setError('__not_yet_open__'); return;
+        }
+
         // Attempt-limit gate
         const effMax =
           a.attemptOverrides?.[session.studentId] ??
@@ -220,6 +229,46 @@ export function ExamBriefingPage() {
       .catch((e) => setError(e.message || 'Failed to load assessment.'))
       .finally(() => setLoading(false));
   }, [assessmentId, session]);
+
+  // ── Auto-clear the "not yet open" gate when startDate passes ─────
+  useEffect(() => {
+    if (error !== '__not_yet_open__' || !assessment?.startDate) return;
+    const startMs = new Date(assessment.startDate).getTime();
+    const tick = () => {
+      if (Date.now() >= startMs) {
+        // Reload — the load effect above will re-check the gate and, if all
+        // other gates pass, transition into the briefing.
+        setError('');
+        // Trigger a fresh load by nudging session dep; simplest is to
+        // re-run getAssessment + attempts and let the load effect settle.
+        // Force a rerun by toggling loading — the outer effect keys on
+        // assessmentId/session only, so we manually restart the checks.
+        setLoading(true);
+        Promise.all([
+          getAssessment(assessmentId!),
+          getAllAttemptsByStudentAndAssessment(session!.studentId, assessmentId!),
+        ])
+          .then(([a, allAttempts]) => {
+            if (!a) { setError('Assessment not found.'); return; }
+            if (a.blockedStudents?.includes(session!.studentId)) { setError('__blocked__'); return; }
+            const effMax = a.attemptOverrides?.[session!.studentId] ?? a.maxAttempts ?? 1;
+            const finished = allAttempts.filter((at) =>
+              at.status === 'submitted' || at.status === 'auto_submitted' || at.status === 'terminated').length;
+            setAttemptsUsed(finished);
+            setEffectiveMax(effMax);
+            if (effMax !== undefined && finished >= effMax) { setError('__attempts_exhausted__'); return; }
+            setAssessment(a);
+            const sorted = [...allAttempts].sort(
+              (x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime());
+            setExistingAttempt(sorted.find((at) => at.status === 'in_progress' || at.status === 'frozen') ?? null);
+          })
+          .finally(() => setLoading(false));
+      }
+    };
+    tick(); // immediate check in case component mounted late
+    const id = setInterval(tick, 15_000); // 15s cadence — good enough for a per-minute schedule
+    return () => clearInterval(id);
+  }, [error, assessment?.startDate, assessmentId, session]);
 
   // ── Camera request ────────────────────────────────────────────
 
@@ -255,6 +304,12 @@ export function ExamBriefingPage() {
 
   const enterExam = useCallback(async () => {
     if (!assessmentId) return;
+    // Belt-and-suspenders schedule check at click-time in case the render
+    // is stale (e.g. student left the tab open on the briefing for a while).
+    if (assessment?.startDate && new Date() < new Date(assessment.startDate)) {
+      setError('__not_yet_open__');
+      return;
+    }
     // Try fullscreen one more time
     if (!document.fullscreenElement) {
       try { await document.documentElement.requestFullscreen(); } catch {}
@@ -265,7 +320,7 @@ export function ExamBriefingPage() {
         cameraGranted: cameraState === 'granted',
       },
     });
-  }, [assessmentId, navigate, cameraDeclined, cameraState]);
+  }, [assessmentId, navigate, cameraDeclined, cameraState, assessment?.startDate]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -328,6 +383,35 @@ export function ExamBriefingPage() {
                         Please contact your invigilator or faculty member if you believe
                         this is an error.
                       </p>
+                    </div>
+                    <button
+                      onClick={() => navigate('/student/assessments')}
+                      className="text-xs px-4 py-2"
+                      style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF', cursor: 'pointer' }}
+                    >
+                      ← Back to assessments
+                    </button>
+                  </div>
+                ) : error === '__not_yet_open__' ? (
+                  <div className="flex flex-col items-center gap-5 py-24 px-4">
+                    <div className="flex items-center justify-center"
+                      style={{ width: 52, height: 52, borderRadius: '50%',
+                        background: '#F7F6F3', border: '1px solid #E3E1DB' }}>
+                      <Clock size={22} strokeWidth={1} style={{ color: '#6B6B66' }} />
+                    </div>
+                    <div className="text-center" style={{ maxWidth: 380 }}>
+                      <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+                        NOT YET OPEN
+                      </p>
+                      <p className="text-sm mb-2 break-words" style={{ color: '#0C0C0B', lineHeight: 1.7 }}>
+                        This exam hasn't started yet.
+                      </p>
+                      {assessment?.startDate && (
+                        <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                          Opens {formatDateTime(assessment.startDate)}. This page will unlock
+                          automatically once the exam is open.
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={() => navigate('/student/assessments')}

@@ -21,10 +21,11 @@ function calcSecondsLeft(
   startedAtISO: string,
   frozenOffsetSeconds = 0,
   frozenAtISO?: string | null,
+  nowMs = Date.now(),
 ): number {
   // While frozen, freeze the elapsed reference at the moment of the freeze so
-  // the countdown stops. Otherwise use wall-clock now.
-  const refNow  = frozenAtISO ? new Date(frozenAtISO).getTime() : Date.now();
+  // the countdown stops. Otherwise use the (skew-corrected) current time.
+  const refNow  = frozenAtISO ? new Date(frozenAtISO).getTime() : nowMs;
   const started = new Date(startedAtISO).getTime();
   const elapsed = (refNow - started) / 1000 - frozenOffsetSeconds;
   return Math.max(0, Math.floor(timeLimitMinutes * 60 - elapsed));
@@ -51,6 +52,12 @@ interface SectionTimerProps {
   frozenOffsetSeconds?: number;
   /** ISO of the current freeze; when set, the clock is paused. */
   frozenAtISO?: string | null;
+  /**
+   * Skew-corrected clock. Defaults to Date.now. ExamShell passes
+   * `() => Date.now() + serverSkew` so the display resists local-clock
+   * tampering. Enforcement is server-side regardless.
+   */
+  nowFn?: () => number;
 }
 
 export function SectionTimer({
@@ -60,9 +67,13 @@ export function SectionTimer({
   onTick,
   frozenOffsetSeconds = 0,
   frozenAtISO = null,
+  nowFn = Date.now,
 }: SectionTimerProps) {
+  const nowFnRef = useRef(nowFn);
+  useEffect(() => { nowFnRef.current = nowFn; }, [nowFn]);
+
   const [secondsLeft, setSecondsLeft] = useState(() =>
-    calcSecondsLeft(timeLimitMinutes, startedAtISO, frozenOffsetSeconds, frozenAtISO)
+    calcSecondsLeft(timeLimitMinutes, startedAtISO, frozenOffsetSeconds, frozenAtISO, nowFn())
   );
 
   const expiredRef  = useRef(false);
@@ -76,7 +87,7 @@ export function SectionTimer({
     expiredRef.current = false;
 
     const tick = () => {
-      const left = calcSecondsLeft(timeLimitMinutes, startedAtISO, frozenOffsetSeconds, frozenAtISO);
+      const left = calcSecondsLeft(timeLimitMinutes, startedAtISO, frozenOffsetSeconds, frozenAtISO, nowFnRef.current());
       setSecondsLeft(left);
       onTickRef.current?.(left);
 

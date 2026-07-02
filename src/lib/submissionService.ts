@@ -2,7 +2,6 @@ import {
   collection,
   doc,
   getDoc,
-  setDoc,
   updateDoc,
   getDocs,
   query,
@@ -34,10 +33,6 @@ export type GradedAnswer = {
 // ══════════════════════════════════════════════════════════════════
 // INTERNAL HELPERS
 // ══════════════════════════════════════════════════════════════════
-
-function newId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
 
 function now(): string {
   return new Date().toISOString();
@@ -261,116 +256,41 @@ export async function startAttempt(params: {
   cameraDeclined?: boolean;
   effectiveMaxAttempts?: number;  // undefined = unlimited
 }): Promise<Attempt> {
-  // ── Idempotency guard ──────────────────────────────────────────
-  const existing = await getAttemptByStudentAndAssessment(
-    params.studentId,
-    params.assessmentId
-  );
-  if (existing && existing.status === 'in_progress') return existing;
-
-  // ── Max-attempts pre-flight ────────────────────────────────────
-  if (params.effectiveMaxAttempts !== undefined) {
-    const all = await getAllAttemptsByStudentAndAssessment(
-      params.studentId,
-      params.assessmentId
-    );
-    const finishedCount = all.filter(
-      (a) =>
-        a.status === 'submitted' ||
-        a.status === 'auto_submitted' ||
-        a.status === 'terminated'
-    ).length;
-    if (finishedCount >= params.effectiveMaxAttempts) {
-      throw new Error(
-        `ATTEMPT_LIMIT_EXCEEDED:${finishedCount}:${params.effectiveMaxAttempts}`
-      );
-    }
-  }
-
-  // ── Build frozen state ─────────────────────────────────────────
-
-  const id = newId('attempt');
-
-  // Apply section ordering. 'random' / 'student_choice' both shuffle the
-  // play order at attempt creation; 'student_choice' will additionally gate
-  // section advancement on a picker UI in phase 2.
-  let orderedSections = params.sections;
-  if (params.sectionStartOrder === 'random' || params.sectionStartOrder === 'student_choice') {
-    orderedSections = [...params.sections];
-    for (let i = orderedSections.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [orderedSections[i], orderedSections[j]] = [orderedSections[j], orderedSections[i]];
-    }
-  }
-  const sectionIds = orderedSections.map((s) => s.id);
-
-  // Question order per section (optionally shuffled via Fisher-Yates)
-  const questionOrder: Record<string, string[]> = {};
-  for (const sec of orderedSections) {
-    let qids = [...sec.questions]
-      .sort((a, b) => a.order - b.order)
-      .map((q) => q.questionId);
-
-    if (params.shuffleQuestions) {
-      for (let i = qids.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [qids[i], qids[j]] = [qids[j], qids[i]];
-      }
-    }
-    questionOrder[sec.id] = qids;
-  }
-
-  // Section timings — first section starts immediately for sequential/random;
-  // for student_choice nothing starts until the student picks.
-  const sectionTimings: Record<string, SectionTiming> = {};
-  const autoStartFirst = params.sectionStartOrder !== 'student_choice';
-  orderedSections.forEach((sec, idx) => {
-    sectionTimings[sec.id] = {
-      startedAt: autoStartFirst && idx === 0 ? now() : '',
-      timeUsedSeconds: 0,
-    };
-  });
-
-  // ── Construct document ─────────────────────────────────────────
-
-  const attempt: Attempt = {
-    id,
-    assessmentId: params.assessmentId,
-    assessmentTitle: params.assessmentTitle,
-    studentId: params.studentId,
-    studentName: params.studentName,
-    instituteId: params.instituteId,
-    status: 'in_progress',
-    startedAt: now(),
-    currentSectionIdx: 0,
-    sectionIds,
-    sectionTimings,
-    questionOrder,
-    answers: {},
-    integrityLog: {
-      tabSwitches: 0,
-      focusLosses: 0,
-      fullscreenExits: 0,
-      copyAttempts: 0,
-      pasteAttempts: 0,
-      rightClickAttempts: 0,
-      multiPersonEvents: 0,
-      faceAbsenceEvents: 0,
-      devtoolsEvents: 0,
-      keyboardBlockEvents: 0,
-      extensionEvents: 0,
-      totalViolations: 0,
-      violations: [],
-      autoTerminated: false,
+  // Server-authoritative: the startExam Cloud Function owns schedule
+  // enforcement (startDate/endDate), the attempt-limit check, and all
+  // timestamps. Identity + schedule + limits are re-derived server-side from
+  // auth claims + the assessment doc, so the client-supplied values here are
+  // advisory only. We still pass sections / shuffle / order so the server can
+  // freeze the same play order the shell expects. Throws
+  // ATTEMPT_LIMIT_EXCEEDED:<used>:<max> when the student is out of attempts.
+  const call = httpsCallable<
+    {
+      assessmentId: string;
+      sections: typeof params.sections;
+      shuffleQuestions: boolean;
+      sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
+      cameraDeclined?: boolean;
     },
-    cameraDeclined: params.cameraDeclined ?? false,
-    totalFrozenSeconds: 0,
-    createdAt: now(),
-    updatedAt: now(),
-  };
+    { ok: true; attempt: Attempt }
+  >(functions, 'startExam');
 
-  await setDoc(doc(db, 'attempts', id), removeUndefined(attempt));
-  return attempt;
+  try {
+    const res = await call({
+      assessmentId: params.assessmentId,
+      sections: params.sections,
+      shuffleQuestions: params.shuffleQuestions,
+      sectionStartOrder: params.sectionStartOrder,
+      cameraDeclined: params.cameraDeclined,
+    });
+    return res.data.attempt;
+  } catch (e) {
+    const msg = (e as { message?: string })?.message ?? '';
+    if (msg.includes('ATTEMPT_LIMIT_EXCEEDED')) {
+      const m = msg.match(/ATTEMPT_LIMIT_EXCEEDED:\d+:\d+/);
+      throw new Error(m ? m[0] : 'ATTEMPT_LIMIT_EXCEEDED');
+    }
+    throw e;
+  }
 }
 
 // ── Save answer ───────────────────────────────────────────────────
@@ -397,24 +317,32 @@ export async function submitSection(params: {
   sectionId: string;           // section being submitted
   nextSectionId: string | null; // null if this was the last section
   nextSectionIdx: number;       // new currentSectionIdx (ignored if no next section)
-  timeUsedSeconds: number;
+  timeUsedSeconds: number;      // advisory only — server recomputes from its clock
   pauseBeforeNext?: boolean;    // if true, do not advance / start next-section timer
                                 // (used when a break is configured before next section)
 }): Promise<void> {
-  const { attemptId, sectionId, nextSectionId, nextSectionIdx, timeUsedSeconds, pauseBeforeNext } = params;
+  // Server-authoritative: the submitSection Cloud Function computes
+  // timeUsedSeconds from the server clock and rejects submits past the section
+  // deadline + configured grace. Throws SECTION_DEADLINE_EXCEEDED when late
+  // (the server still finalises the section at its true deadline).
+  const call = httpsCallable<
+    {
+      attemptId: string;
+      sectionId: string;
+      nextSectionId: string | null;
+      nextSectionIdx: number;
+      pauseBeforeNext?: boolean;
+    },
+    { ok: true; timeUsedSeconds: number }
+  >(functions, 'submitSection');
 
-  const updates: Record<string, any> = {
-    [`sectionTimings.${sectionId}.submittedAt`]: now(),
-    [`sectionTimings.${sectionId}.timeUsedSeconds`]: timeUsedSeconds,
-    updatedAt: now(),
-  };
-
-  if (nextSectionId && !pauseBeforeNext) {
-    updates.currentSectionIdx = nextSectionIdx;
-    updates[`sectionTimings.${nextSectionId}.startedAt`] = now();
-  }
-
-  await updateDoc(doc(db, 'attempts', attemptId), updates);
+  await call({
+    attemptId: params.attemptId,
+    sectionId: params.sectionId,
+    nextSectionId: params.nextSectionId,
+    nextSectionIdx: params.nextSectionIdx,
+    pauseBeforeNext: params.pauseBeforeNext,
+  });
 }
 
 // ── Pick next section (student_choice mode) ───────────────────────
@@ -430,15 +358,18 @@ export async function pickSection(params: {
   newIdx: number;
 }): Promise<string[]> {
   const { attemptId, pickedSectionId, currentSectionIds, newIdx } = params;
+  // Compute the desired order client-side; the server validates it's a
+  // permutation and stamps the picked section's startedAt with server time.
   const without = currentSectionIds.filter((id) => id !== pickedSectionId);
   const reordered = [...without.slice(0, newIdx), pickedSectionId, ...without.slice(newIdx)];
-  await updateDoc(doc(db, 'attempts', attemptId), {
-    sectionIds: reordered,
-    currentSectionIdx: newIdx,
-    [`sectionTimings.${pickedSectionId}.startedAt`]: now(),
-    updatedAt: now(),
-  });
-  return reordered;
+
+  const call = httpsCallable<
+    { attemptId: string; sectionId: string; reorderedSectionIds: string[] },
+    { ok: true; startedAt: string; sectionIds: string[] }
+  >(functions, 'startSection');
+
+  const res = await call({ attemptId, sectionId: pickedSectionId, reorderedSectionIds: reordered });
+  return res.data.sectionIds;
 }
 
 // ── End break and start next section ──────────────────────────────
@@ -451,11 +382,37 @@ export async function endBreak(params: {
   nextSectionId: string;
   nextSectionIdx: number;
 }): Promise<void> {
-  await updateDoc(doc(db, 'attempts', params.attemptId), {
-    currentSectionIdx: params.nextSectionIdx,
-    [`sectionTimings.${params.nextSectionId}.startedAt`]: now(),
-    updatedAt: now(),
-  });
+  // Server stamps the next section's startedAt and refuses if a mandatory
+  // break hasn't elapsed. nextSectionIdx is re-derived server-side.
+  const call = httpsCallable<
+    { attemptId: string; sectionId: string },
+    { ok: true; startedAt: string; sectionIds: string[] }
+  >(functions, 'startSection');
+  await call({ attemptId: params.attemptId, sectionId: params.nextSectionId });
+}
+
+// ── Server clock skew ─────────────────────────────────────────────
+// Returns (serverNow - clientNow) in ms, captured once on exam load. The
+// SectionTimer adds this offset to Date.now() so the countdown display stays
+// accurate even if the local clock is later tampered with. Falls back to 0
+// (trust local clock) if the call fails — enforcement is still server-side.
+export async function getServerSkew(): Promise<number> {
+  try {
+    const call = httpsCallable<Record<string, never>, { serverTime: number }>(
+      functions,
+      'getServerTime',
+    );
+    const clientBefore = Date.now();
+    const res = await call({});
+    const clientAfter = Date.now();
+    // Compensate for round-trip: assume the server timestamp was taken at the
+    // midpoint of the request.
+    const rtt = clientAfter - clientBefore;
+    const clientMid = clientBefore + rtt / 2;
+    return res.data.serverTime - clientMid;
+  } catch {
+    return 0;
+  }
 }
 
 // ── Grade attempt (server-side) ───────────────────────────────────
@@ -485,40 +442,9 @@ export async function gradeAttempt(params: {
   return res.data;
 }
 
-// ── Submit attempt (final) ────────────────────────────────────────
-// Finalises the attempt. Optionally accepts pre-calculated scores
-// (computed client-side by the ExamShell which has all questions loaded).
-
-export async function submitAttempt(params: {
-  attemptId: string;
-  reason: 'manual' | 'time_expired' | 'violation_limit' | 'window_closed';
-  scores?: AttemptScores;
-  lastSectionId?: string;
-  lastSectionTimeUsed?: number;
-}): Promise<void> {
-  const { attemptId, reason, scores, lastSectionId, lastSectionTimeUsed } = params;
-
-  const status: AttemptStatus =
-    reason === 'manual' ? 'submitted' : 'auto_submitted';
-
-  const updates: Record<string, any> = {
-    status,
-    submittedAt: now(),
-    updatedAt: now(),
-  };
-
-  if (scores) {
-    updates.scores = scores;
-  }
-
-  // Mark the last section as submitted if passed in
-  if (lastSectionId && lastSectionTimeUsed !== undefined) {
-    updates[`sectionTimings.${lastSectionId}.submittedAt`] = now();
-    updates[`sectionTimings.${lastSectionId}.timeUsedSeconds`] = lastSectionTimeUsed;
-  }
-
-  await updateDoc(doc(db, 'attempts', attemptId), updates);
-}
+// (Removed: legacy client-side submitAttempt. Finalisation now runs entirely
+// through the gradeAttempt Cloud Function, which is the only path that may set
+// status/scores/submittedAt — and it computes them server-side.)
 
 // ── Auto-terminate ────────────────────────────────────────────────
 // Force-submits with 'terminated' status after max violations reached.
@@ -564,10 +490,14 @@ export async function enforceIntegrityThreshold(attempt: Attempt): Promise<boole
     (log.focusLosses ?? 0) +
     (log.fullscreenExits ?? 0);
   if (warningCount < MAX_INTEGRITY_WARNINGS) return false;
-  await autoTerminate(
-    attempt.id,
-    'Exam terminated due to repeated integrity violations.',
-  );
+  // Route termination through the Cloud Function so it runs server-side (admin
+  // SDK bypasses the tight student-update rules on attempts/{id}). Direct
+  // client writes to `status` are — correctly — no longer permitted.
+  await gradeAttempt({
+    attemptId: attempt.id,
+    reason: 'terminated',
+    terminateReason: 'Exam terminated due to repeated integrity violations.',
+  });
   return true;
 }
 

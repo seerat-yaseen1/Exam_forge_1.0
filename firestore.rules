@@ -97,7 +97,9 @@ service cloud.firestore {
     match /webowners/{ownerId} {
       allow read:   if isWebOwner();
       allow create: if isWebOwner() && str(request.resource.data.email) && str(request.resource.data.name);
-      allow update: if isWebOwner();
+      // A web owner may only update their OWN doc — prevents one admin from
+      // overwriting another's name / email if multi-owner is ever enabled.
+      allow update: if isWebOwner() && request.auth.uid == ownerId;
       allow delete: if false;
     }
 
@@ -345,7 +347,22 @@ service cloud.firestore {
     }
 
     match /assessments/{id} {
-      allow read:   if signedIn();
+      // Read access:
+      //   • webOwner — always (owns all content)
+      //   • institute / faculty — only non-draft docs in their own institute
+      //     (ownerType matches role and ownerId matches institute/faculty claim)
+      //   • student — only non-draft docs (draft check is also client-filtered;
+      //     the student list query already filters by status == active|closed)
+      //
+      // Note: students still receive docs from other institutes if assignedTo.type
+      // == 'all' — this is intentional (webOwner global assessments). A future
+      // improvement would add an instituteId field to assessments and filter here.
+      allow read: if isWebOwner()
+                     || (role() == 'student'
+                         && resource.data.status != 'draft')
+                     || ((role() == 'institute' || role() == 'faculty')
+                         && resource.data.status != 'draft'
+                         && canWriteOwned(resource.data.ownerType, resource.data.ownerId));
       allow create: if canWriteOwned(request.resource.data.ownerType,
                                      request.resource.data.ownerId);
       allow update: if canWriteOwned(resource.data.ownerType,
@@ -356,12 +373,36 @@ service cloud.firestore {
 
     // attempts/{id}
     //   create: student creating their own attempt; webOwner override.
-    //   update: the student themselves while attempt is still in_progress
-    //           (covers answer writes + the in_progress→submitted/timed_out
-    //           transition, since resource.data.status is the *pre-write*
-    //           value); graders (webOwner, institute or faculty matching the
-    //           attempt's instituteId) any time.
+    //   update:
+    //     • student — only while in_progress, and only on a whitelisted set of
+    //       fields the exam shell needs (answers, timings, integrity log,
+    //       session tracking). Status transitions, scores, gradedAnswers,
+    //       submittedAt, freeze fields, and identity fields are OFF-LIMITS to
+    //       the student client; those are written by the gradeAttempt Cloud
+    //       Function (admin SDK, bypasses these rules) and by grader UIs.
+    //     • grader (webOwner, institute or faculty in the same institute) —
+    //       any field, any time.
     //   delete: hard-blocked — soft-delete (isDeleted=true) via grader update.
+    function studentAttemptUpdateFieldsAllowed() {
+      // hasOnly() checks TOP-LEVEL keys of the patch. Dot-path writes like
+      // `answers.q_xyz` or `integrityLog.tabSwitches` count as changes to the
+      // top-level parent key, so this gates every legitimate direct write.
+      //
+      // NOTE: sectionTimings / sectionIds / currentSectionIdx are DELIBERATELY
+      // excluded — all time transitions (exam start, section start/submit,
+      // break) now flow through the startExam / startSection / submitSection
+      // Cloud Functions (admin SDK, which bypasses these rules). A student can
+      // no longer write section timings directly, so the per-section clock
+      // cannot be forged from the browser.
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'answers',
+        'integrityLog',
+        'activeSessionId',
+        'sessionConflictAt',
+        'updatedAt'
+      ]);
+    }
+
     match /attempts/{id} {
       allow read: if isWebOwner()
                      || (role() == 'student'
@@ -376,7 +417,9 @@ service cloud.firestore {
       allow update: if isWebOwner()
                        || (role() == 'student'
                            && resource.data.studentId == request.auth.token.studentId
-                           && resource.data.status == 'in_progress')
+                           && resource.data.status == 'in_progress'
+                           && request.resource.data.status == 'in_progress'
+                           && studentAttemptUpdateFieldsAllowed())
                        || ((role() == 'institute' || role() == 'faculty')
                            && request.auth.token.instituteId == resource.data.instituteId);
 
@@ -473,7 +516,14 @@ service cloud.firestore {
             && request.auth.token.instituteId == d.instituteId);
     }
     match /questionReports/{id} {
-      allow read:   if signedIn();
+      // Read: reporters see their own; reviewers (owner/institute/faculty)
+      // see reports scoped to their institute. Cross-institute read blocked.
+      allow read: if isWebOwner()
+                     || (role() == 'student'
+                         && resource.data.studentId == request.auth.token.studentId)
+                     || ((role() == 'institute' || role() == 'faculty')
+                         && resource.data.instituteId is string
+                         && request.auth.token.instituteId == resource.data.instituteId);
       allow create: if isWebOwner()
                        || (role() == 'student'
                            && request.resource.data.studentId == request.auth.token.studentId);

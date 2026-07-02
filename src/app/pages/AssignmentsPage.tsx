@@ -3173,6 +3173,7 @@ function DetailsStep({
   const [endDate, setEndDate] = useState(toDateTimeLocal(assessment?.endDate));
   const [passingScore, setPassingScore] = useState(assessment?.passingScore?.toString() ?? '');
   const [maxAttempts, setMaxAttempts] = useState(assessment?.maxAttempts?.toString() ?? '1');
+  const [sectionGraceSeconds, setSectionGraceSeconds] = useState(assessment?.sectionGraceSeconds?.toString() ?? '');
   const [shuffleQuestions, setShuffleQuestions] = useState(assessment?.shuffleQuestions ?? false);
   const [sectionStartOrder, setSectionStartOrder] = useState<'sequential' | 'random' | 'student_choice'>(
     assessment?.sectionStartOrder ?? 'sequential'
@@ -3346,6 +3347,7 @@ function DetailsStep({
         timeLimit: undefined,
         passingScore: passingScore ? parseInt(passingScore, 10) : undefined,
         maxAttempts: maxAttempts ? parseInt(maxAttempts, 10) : undefined,
+        sectionGraceSeconds: sectionGraceSeconds ? parseInt(sectionGraceSeconds, 10) : undefined,
         shuffleQuestions,
         sectionStartOrder,
         showResults,
@@ -3468,6 +3470,17 @@ function DetailsStep({
                     placeholder="e.g., 2" min="1" className="flex-1 outline-none"
                     style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
                   {maxAttempts && <span style={{ color: '#C4C3BD', fontSize: 10 }}>attempts</span>}
+                </div>
+              </Field>
+
+              <Field label="Section grace period" hint="(seconds past each section timer; blank = 30s default)">
+                <div className="flex items-center gap-2 px-3 py-2"
+                  style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                  <Timer size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                  <input type="number" value={sectionGraceSeconds} onChange={(e) => setSectionGraceSeconds(e.target.value)}
+                    placeholder="e.g., 30" min="0" className="flex-1 outline-none"
+                    style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
+                  {sectionGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
                 </div>
               </Field>
 

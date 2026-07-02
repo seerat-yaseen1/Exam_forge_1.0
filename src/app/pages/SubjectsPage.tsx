@@ -436,9 +436,9 @@ function SubjectDetail({
       ) : topics.length === 0 ? (
         <EmptyHint text="No topics in this subject yet. Click + New Topic to create one." />
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3 sm:p-4">
           {topics.map((t) => (
-            <TopicRow
+            <TopicCard
               key={t.id}
               topic={t}
               subjects={allSubjects}
@@ -447,13 +447,13 @@ function SubjectDetail({
               onChanged={onTopicsChanged}
             />
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
 }
 
-function TopicRow({
+function TopicCard({
   topic, subjects, siblingTopics, onOpen, onChanged,
 }: {
   topic: Topic;
@@ -466,7 +466,7 @@ function TopicRow({
 
   if (editing) {
     return (
-      <li style={{ borderBottom: '1px solid #F2F1EC' }}>
+      <div style={{ background: '#FAFAF7', border: '1px solid #E8E7E1', borderRadius: 3 }}>
         <EditSlugForm
           initialId={topic.id}
           initialName={topic.name}
@@ -477,27 +477,40 @@ function TopicRow({
           }}
           onCancel={() => setEditing(false)}
         />
-      </li>
+      </div>
     );
   }
 
   return (
-    <li
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 sm:px-4 py-2"
-      style={{ borderBottom: '1px solid #F2F1EC' }}
+    <div
+      className="flex flex-col"
+      style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderRadius: 3 }}
     >
       {/* Clickable region → drill into this topic's questions */}
       <button
         onClick={onOpen}
-        className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer hover:opacity-70 transition-opacity"
-        style={{ background: 'transparent', border: 'none', padding: 0, touchAction: 'manipulation' }}
+        className="flex flex-col gap-3 p-4 text-left w-full cursor-pointer transition-colors hover:bg-[#FAFAF8]"
+        style={{ background: 'transparent', border: 'none', touchAction: 'manipulation', borderRadius: '3px 3px 0 0' }}
       >
-        <SlugChip id={topic.id} />
-        <span className="min-w-0 truncate" style={{ fontSize: 13, color: '#0C0C0B' }}>{topic.name}</span>
-        <span style={{ fontSize: 11, color: '#83827C', whiteSpace: 'nowrap' }}>{topic.questionCount} Q</span>
-        <ChevronRight size={14} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+        <div className="flex items-center justify-between gap-2">
+          <SlugChip id={topic.id} />
+          <ChevronRight size={16} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+        </div>
+        <p className="break-words" style={{ color: '#0C0C0B', fontSize: 14, lineHeight: 1.4 }}>
+          {topic.name}
+        </p>
+        <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
+          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <span style={{ fontSize: 12 }}>{topic.questionCount}</span>
+          <span style={{ fontSize: 11, color: '#9A9891' }}>questions</span>
+        </span>
       </button>
-      <div className="flex items-center gap-1 ml-auto">
+
+      {/* Action bar */}
+      <div
+        className="flex flex-wrap items-center gap-1 px-2 py-1.5"
+        style={{ borderTop: '1px solid #F2F1EC' }}
+      >
         <MergeTopicControl topic={topic} siblingTopics={siblingTopics} onMerged={onChanged} />
         <MoveTopicControl topic={topic} subjects={subjects} onMoved={onChanged} />
         <IconBtn title="Edit topic" onClick={() => setEditing(true)}>
@@ -514,7 +527,7 @@ function TopicRow({
           <Trash2 size={13} strokeWidth={1.5} />
         </IconBtn>
       </div>
-    </li>
+    </div>
   );
 }
 

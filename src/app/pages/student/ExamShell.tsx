@@ -168,44 +168,55 @@ function buildEffectiveSections(a: Assessment): AssessmentSection[] {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// FREEZE BANNER  (non-blocking — student's exam continues normally)
+// FREEZE PAUSED OVERLAY  (blocking — exam is halted, clock is paused)
 // ══════════════════════════════════════════════════════════════════
 
-function FreezeBanner({ reason }: { reason?: string }) {
+function FreezePausedOverlay({ reason }: { reason?: string }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.25 }}
-      className="flex items-center gap-3 px-5 py-2.5 flex-shrink-0"
-      style={{
-        background:   '#FFFBF0',
-        borderBottom: '1px solid #F5DFA0',
-      }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center px-6"
+      style={{ background: 'rgba(12,12,11,0.92)' }}
     >
-      {/* Pulsing dot */}
-      <div style={{ position: 'relative', width: 8, height: 8, flexShrink: 0 }}>
-        <div style={{
-          position: 'absolute', inset: 0, borderRadius: '50%',
-          background: '#D4A017', opacity: 0.35,
-          animation: 'freeze-ping 1.6s ease-in-out infinite',
-        }} />
-        <div style={{
-          position: 'absolute', inset: 1, borderRadius: '50%',
-          background: '#D4A017',
-        }} />
-      </div>
-
-      <Flag size={12} strokeWidth={1.5} style={{ color: '#92680A', flexShrink: 0 }} />
-
-      <p className="text-xs flex-1" style={{ color: '#92680A', lineHeight: 1.5 }}>
-        <span style={{ fontWeight: 500 }}>Your session has been flagged by an invigilator.</span>
-        {' '}Your exam continues normally — please keep working.
-        {reason && (
-          <span style={{ color: '#A07830' }}>{' '}Reason: {reason}</span>
-        )}
-      </p>
+      <motion.div
+        initial={{ scale: 0.95, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 12 }}
+        className="flex flex-col items-center gap-5"
+        style={{ maxWidth: 420, textAlign: 'center' }}
+      >
+        {/* Pulsing pause indicator */}
+        <div className="flex items-center justify-center"
+          style={{
+            position: 'relative', width: 56, height: 56, borderRadius: '50%',
+            background: 'rgba(212,160,23,0.15)', border: '1px solid rgba(212,160,23,0.35)',
+          }}>
+          <div style={{
+            position: 'absolute', inset: 0, borderRadius: '50%',
+            background: '#D4A017', opacity: 0.25,
+            animation: 'freeze-ping 1.6s ease-in-out infinite',
+          }} />
+          <Flag size={22} strokeWidth={1.5} style={{ color: '#F5DFA0' }} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <p className="text-xs" style={{ color: '#F5DFA0', letterSpacing: '0.12em' }}>
+            EXAM PAUSED
+          </p>
+          <p className="text-sm" style={{ color: '#FFFFFF', lineHeight: 1.6 }}>
+            An invigilator has paused your exam.
+          </p>
+          <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+            Your timer is stopped and no time is being lost. Please wait — the exam
+            will resume automatically when the invigilator lifts the pause.
+          </p>
+          {reason && (
+            <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
+              Reason: {reason}
+            </p>
+          )}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -498,7 +509,18 @@ export function ExamShell() {
   // ── Freeze / session state (synced from Firestore) ─────────────
   const [isFrozen, setIsFrozen]                     = useState(false);
   const [frozenReason, setFrozenReason]             = useState<string | undefined>();
+  const [frozenAtISO, setFrozenAtISO]               = useState<string | null>(null);
+  const [totalFrozenSeconds, setTotalFrozenSeconds] = useState(0);
   const [hasConflict, setHasConflict]               = useState(false);
+  const isFrozenRef = useRef(false);
+  useEffect(() => { isFrozenRef.current = isFrozen; }, [isFrozen]);
+
+  // Synchronous submit lock. shellStatus updates asynchronously, so two triggers
+  // firing in the same tick (e.g. timer expiry + click, or window_closed + manual
+  // submit on the last section) can both pass the status check. This ref latches
+  // true on first entry and is never reset — once we're submitting we're going
+  // to the results page.
+  const submittingRef = useRef(false);
 
   // ── Navigation state ───────────────────────────────────────────
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
@@ -645,10 +667,13 @@ export function ExamShell() {
         // Doing it this way means the takeover device proceeds normally.
         await registerSession(att.id, localSessionId.current);
 
-        // Sync initial freeze state
+        // Sync initial freeze state (including accumulated paused time so the
+        // timer resumes fairly, and the current freeze instant so it stays paused)
+        setTotalFrozenSeconds(att.totalFrozenSeconds ?? 0);
         if (att.frozenAt) {
           setIsFrozen(true);
           setFrozenReason(att.frozenReason);
+          setFrozenAtISO(att.frozenAt);
         }
 
         setAssessment(a);
@@ -723,13 +748,20 @@ export function ExamShell() {
     if (!attempt?.id) return;
     const unsub = subscribeToAttempt(attempt.id, (live) => {
       if (!live) return;
-      // Freeze — administrative flag only; exam continues, banner is shown
+      // Freeze — invigilator pause: the exam halts and the clock stops.
+      // totalFrozenSeconds (credited paused time) always tracks the live doc so
+      // the timer resumes fairly the moment the invigilator unfreezes.
+      setTotalFrozenSeconds(live.totalFrozenSeconds ?? 0);
       if (live.frozenAt) {
         setIsFrozen(true);
         setFrozenReason(live.frozenReason);
+        setFrozenAtISO(live.frozenAt);
+        // Drop focus so nothing can be typed into a field behind the overlay.
+        (document.activeElement as HTMLElement | null)?.blur?.();
       } else {
         setIsFrozen(false);
         setFrozenReason(undefined);
+        setFrozenAtISO(null);
       }
       // Session conflict: another device took over
       if (live.activeSessionId && live.activeSessionId !== localSessionId.current) {
@@ -792,6 +824,8 @@ export function ExamShell() {
 
   const handleAnswer = useCallback((questionId: string, value: AnswerValue) => {
     if (!attemptRef.current || !assessmentRef.current) return;
+    // Exam is halted by an invigilator — reject any answer input.
+    if (isFrozenRef.current) return;
 
     const q = questionMap.get(questionId);
     if (!q) return;
@@ -836,6 +870,16 @@ export function ExamShell() {
     );
   }, []);
 
+  // Flush pending answers the instant a freeze lands, so nothing sitting in the
+  // 1.5 s debounce window is lost if the paused tab is later closed.
+  const prevFrozenRef = useRef(false);
+  useEffect(() => {
+    if (isFrozen && !prevFrozenRef.current) {
+      flushAnswers().catch((e) => console.error('[ExamShell] flush on freeze failed', e));
+    }
+    prevFrozenRef.current = isFrozen;
+  }, [isFrozen, flushAnswers]);
+
   // ══════════════════════════════════════════════════════════════════
   // SECTION SUBMIT
   // ══════════════════════════════════════════════════════════════════
@@ -844,6 +888,8 @@ export function ExamShell() {
     const att = attemptRef.current;
     const a   = assessmentRef.current;
     if (!att || !a || !currentSection) return;
+    if (submittingRef.current) return; // another submit path is already running
+    submittingRef.current = true;
 
     setShellStatus('submitting_section');
     await flushAnswers();
@@ -931,8 +977,9 @@ export function ExamShell() {
           : prev
       );
     } else {
-      // Last section — go to final submit
-      await doFinalSubmit('manual');
+      // Last section — go to final submit. Preserve the trigger reason so a
+      // timer-driven finish is recorded as auto_submitted, not manual.
+      await doFinalSubmit(reason);
     }
   }, [currentSection, currentSectionIdx, flushAnswers, effectiveSections]);
 
@@ -1062,6 +1109,8 @@ export function ExamShell() {
   const handleFinalSubmit = useCallback(async (
     reason: 'manual' | 'time_expired' | 'violation_limit' | 'window_closed'
   ) => {
+    if (submittingRef.current) return; // another submit path is already running
+    submittingRef.current = true;
     await doFinalSubmit(reason);
   }, []); // eslint-disable-line
 
@@ -1204,6 +1253,7 @@ export function ExamShell() {
 
   const handleSectionTimerExpire = useCallback(() => {
     if (shellStatus !== 'ready') return;
+    if (isFrozenRef.current) return; // paused by invigilator — don't auto-submit
     doSectionSubmit('time_expired');
   }, [shellStatus, doSectionSubmit]);
 
@@ -1268,7 +1318,7 @@ export function ExamShell() {
   if (!assessment || !attempt || !currentSection) return null;
 
   const sectionStartedAt = attempt.sectionTimings[currentSection.id]?.startedAt ?? new Date().toISOString();
-  const isIntegrityActive = overlay === null && shellStatus === 'ready' && !hasConflict;
+  const isIntegrityActive = overlay === null && shellStatus === 'ready' && !hasConflict && !isFrozen;
 
   // ══════════════════════════════════════════════════════════════════
   // RENDER: EXAM SHELL
@@ -1336,6 +1386,8 @@ export function ExamShell() {
             timeLimitMinutes={currentSection.timeLimit}
             startedAtISO={sectionStartedAt}
             onExpire={handleSectionTimerExpire}
+            frozenOffsetSeconds={totalFrozenSeconds}
+            frozenAtISO={isFrozen ? frozenAtISO : null}
           />
         )}
         {/* Session conflict badge */}
@@ -1383,11 +1435,6 @@ export function ExamShell() {
           {isLastSection ? 'Submit exam' : `Submit ${currentSection.name}`}
         </button>
       </div>
-
-      {/* ── FREEZE BANNER (non-blocking notification) ── */}
-      <AnimatePresence>
-        {isFrozen && <FreezeBanner key="freeze-banner" reason={frozenReason} />}
-      </AnimatePresence>
 
       {/* ── BODY ── */}
       <div className="flex flex-1 overflow-hidden">
@@ -1531,6 +1578,10 @@ export function ExamShell() {
         )}
         {overlay?.kind === 'session_conflict' && (
           <SessionConflictOverlay key="conflict" />
+        )}
+        {/* Freeze halts the exam; a session conflict is terminal and outranks it. */}
+        {isFrozen && !hasConflict && (
+          <FreezePausedOverlay key="freeze-paused" reason={frozenReason} />
         )}
       </AnimatePresence>
 

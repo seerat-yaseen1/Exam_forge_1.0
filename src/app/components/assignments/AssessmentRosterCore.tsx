@@ -130,7 +130,7 @@ function FreezeConfirmModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.36)' }}
       onClick={onCancel}
     >
@@ -258,7 +258,7 @@ function UnfreezeConfirmModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.36)' }}
       onClick={onCancel}
     >
@@ -356,7 +356,7 @@ function BlockConfirmModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.36)' }}
       onClick={onCancel}
     >
@@ -421,7 +421,7 @@ function UnblockConfirmModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.36)' }}
       onClick={onCancel}
     >
@@ -838,7 +838,7 @@ function SoftDeleteConfirmModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.36)' }}
       onClick={onCancel}
     >
@@ -1205,13 +1205,13 @@ function AttemptDrawer({
       initial={{ x: 380, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
       exit={{ x: 380, opacity: 0 }}
       transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-      className="fixed top-0 right-0 bottom-0 z-40 flex flex-col overflow-hidden"
-      style={{ width: 380, background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
+      className="fixed top-0 right-0 bottom-0 z-40 flex flex-col overflow-hidden w-full sm:w-[380px] sm:max-w-full"
+      style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+      <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-4 flex-shrink-0"
         style={{ borderBottom: '1px solid #E3E1DB' }}>
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-xs" style={{ color: '#0C0C0B' }}>{student.name}</p>
             {isBlocked && (
@@ -1222,15 +1222,15 @@ function AttemptDrawer({
               </div>
             )}
           </div>
-          <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{student.email}</p>
+          <p className="text-xs mt-0.5 truncate" style={{ color: '#9A9891' }}>{student.email}</p>
         </div>
-        <button onClick={onClose} className="p-1" style={{ color: '#C4C3BD' }}>
+        <button onClick={onClose} className="p-1 flex-shrink-0" style={{ color: '#C4C3BD' }}>
           <X size={14} strokeWidth={1.5} />
         </button>
       </div>
 
       {/* Status + flag action */}
-      <div className="px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid #F0EFEB' }}>
+      <div className="px-4 sm:px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid #F0EFEB' }}>
         <div className="flex items-center justify-between">
           <StatusChip status={rosterStatus} />
           {canFreeze && (
@@ -1295,8 +1295,8 @@ function AttemptDrawer({
       </div>
 
       {/* Block / Unblock section */}
-      <div className="px-5 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #F0EFEB' }}>
-        <div className="flex items-center justify-between mb-1.5">
+      <div className="px-4 sm:px-5 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #F0EFEB' }}>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
           <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.07em' }}>EXAM ACCESS</p>
           {isBlocked ? (
             <button
@@ -1338,7 +1338,7 @@ function AttemptDrawer({
       </div>
 
       {/* Scrollable detail */}
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4">
         {!attempt ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <BookOpen size={18} strokeWidth={1} style={{ color: '#C4C3BD' }} />
@@ -1507,18 +1507,18 @@ function RosterTableRow({
 
   return (
     <div
-      className="flex items-center gap-4 px-5 py-3.5 cursor-pointer transition-colors"
+      className="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-3 gap-y-2 sm:gap-4 px-4 sm:px-5 py-3 sm:py-3.5 cursor-pointer transition-colors"
       style={{ borderBottom: '1px solid #F7F6F3' }}
       onClick={onSelect}
       onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFAF9')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
-      <div style={{ width: 200, flexShrink: 0 }}>
+      <div className="w-full sm:w-[200px] sm:flex-shrink-0 min-w-0">
         <p className="text-xs" style={{ color: '#0C0C0B' }}>{student.name}</p>
-        <p className="text-xs mt-0.5" style={{ color: '#C4C3BD' }}>{student.email}</p>
+        <p className="text-xs mt-0.5 truncate" style={{ color: '#C4C3BD' }}>{student.email}</p>
       </div>
 
-      <div style={{ width: 130, flexShrink: 0 }}>
+      <div className="sm:w-[130px] sm:flex-shrink-0">
         {breakInfo ? (
           <div className="flex items-center gap-1.5 px-2 py-0.5"
             style={{ background: '#FEF9EC', border: '1px dashed #F5DFA0', borderRadius: 2 }}>
@@ -1534,7 +1534,7 @@ function RosterTableRow({
         )}
       </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="w-full sm:flex-1 sm:min-w-0">
         {attempt && isLive && breakInfo && (
           <p className="text-xs" style={{ color: '#92680A' }}>
             After: {breakInfo.nextSectionName}
@@ -1561,7 +1561,7 @@ function RosterTableRow({
       </div>
 
       {/* Badges */}
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
         {/* Override badge */}
         {attemptOverrides?.[student.id] !== undefined && (
           <div className="flex items-center gap-1 px-2 py-1"
@@ -1662,7 +1662,7 @@ function RosterTableRow({
         )}
       </div>
 
-      <ChevronRight size={13} strokeWidth={1.5} style={{ color: '#E3E1DB', flexShrink: 0 }} />
+      <ChevronRight size={13} strokeWidth={1.5} className="hidden sm:block" style={{ color: '#E3E1DB', flexShrink: 0 }} />
     </div>
   );
 }
@@ -1940,19 +1940,19 @@ export function AssessmentRosterCore({
 
       {/* ── Page header ── */}
       <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E3E1DB' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 24px' }}>
+        <div className="px-4 py-4 sm:px-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
           {/* Breadcrumb + title */}
-          <div className="flex items-center gap-3 mb-4">
-            <button onClick={onBack} className="flex items-center gap-1.5 text-xs" style={{ color: '#9A9891', cursor: 'pointer' }}>
+          <div className="flex items-center gap-2 sm:gap-3 mb-4 flex-wrap">
+            <button onClick={onBack} className="flex items-center gap-1.5 text-xs flex-shrink-0" style={{ color: '#9A9891', cursor: 'pointer' }}>
               <ArrowLeft size={12} strokeWidth={1.5} /> Assessments
             </button>
-            <span style={{ color: '#E3E1DB' }}>·</span>
-            <p className="text-xs" style={{ color: '#0C0C0B' }}>{assessment.title}</p>
-            <span className="text-xs px-2 py-0.5"
+            <span className="hidden sm:inline" style={{ color: '#E3E1DB' }}>·</span>
+            <p className="text-xs min-w-0 truncate" style={{ color: '#0C0C0B' }}>{assessment.title}</p>
+            <span className="text-xs px-2 py-0.5 flex-shrink-0"
               style={{ background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, borderRadius: 2 }}>
               {assessment.status}
             </span>
-            <div className="flex items-center gap-1.5 ml-auto">
+            <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
               {liveConnected ? (
                 <>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E7B3C',
@@ -1969,7 +1969,7 @@ export function AssessmentRosterCore({
           </div>
 
           {/* Stats */}
-          <div className="flex items-center gap-5 flex-wrap">
+          <div className="flex items-center gap-x-4 gap-y-2 sm:gap-5 flex-wrap">
             {[
               { label: 'Total allocated', value: stats.total,      icon: <Users size={11} strokeWidth={1.5} /> },
               { label: 'Live now',        value: stats.live,       icon: <Activity size={11} strokeWidth={1.5} />,      color: stats.live > 0 ? '#1E7B3C' : undefined },
@@ -1993,8 +1993,8 @@ export function AssessmentRosterCore({
 
       {/* ── View toggle: Roster | Reports ── */}
       <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E3E1DB' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '8px 24px' }}
-          className="flex items-center gap-2">
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}
+          className="flex items-center gap-2 px-4 py-2 sm:px-6">
           {(['roster', 'reports'] as const).map((v) => (
             <button key={v} onClick={() => setView(v)}
               className="text-xs px-3 py-1.5"
@@ -2011,7 +2011,7 @@ export function AssessmentRosterCore({
       </div>
 
       {view === 'reports' ? (
-        <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%', padding: '24px' }}>
+        <div className="px-4 py-6 sm:p-6" style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
           <AssessmentReportsPanel
             assessmentId={assessmentId}
             reviewerId={invigId}
@@ -2022,19 +2022,19 @@ export function AssessmentRosterCore({
       <>
       {/* ── Toolbar ── */}
       <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E3E1DB' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '10px 24px' }}
-          className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-2"
-            style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, width: 240 }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}
+          className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 sm:px-6">
+          <div className="flex items-center gap-2 px-3 py-2 w-full sm:w-[240px] sm:flex-shrink-0"
+            style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
             <Search size={11} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search students…" className="text-xs outline-none bg-transparent flex-1"
+              placeholder="Search students…" className="text-xs outline-none bg-transparent flex-1 min-w-0"
               style={{ color: '#0C0C0B' }} />
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
             {filterTabs.map((tab) => (
               <button key={tab.value} onClick={() => setFilterStatus(tab.value)}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5"
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 flex-shrink-0 whitespace-nowrap"
                 style={{
                   borderRadius: 2, cursor: 'pointer',
                   background: filterStatus === tab.value ? '#0C0C0B' : 'transparent',
@@ -2054,8 +2054,8 @@ export function AssessmentRosterCore({
       </div>
 
       {/* ── Roster table ── */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%', padding: '24px' }}>
-        <div className="flex items-center gap-4 px-5 pb-2 mb-1" style={{ borderBottom: '1px solid #E3E1DB' }}>
+      <div className="px-4 py-6 sm:p-6" style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
+        <div className="hidden sm:flex items-center gap-4 px-5 pb-2 mb-1" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <div style={{ width: 200, flexShrink: 0 }}><span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>STUDENT</span></div>
           <div style={{ width: 130, flexShrink: 0 }}><span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>STATUS</span></div>
           <div style={{ flex: 1 }}><span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>PROGRESS / SCORE</span></div>

@@ -1,10 +1,14 @@
 /**
  * SectionTimer
  *
- * Simple countdown timer for a section.
- * Remaining = timeLimitMinutes*60 - (elapsed since startedAt)
- * The timer always runs — freeze is purely an administrative flag
- * handled at the shell level and does NOT pause the clock.
+ * Countdown timer for a section.
+ * Remaining = timeLimitMinutes*60 - (elapsed since startedAt - frozen time)
+ *
+ * Freeze (invigilator pause) halts the clock: while `frozenAtISO` is set the
+ * elapsed reference is pinned to the freeze instant, so the displayed value
+ * stops. `frozenOffsetSeconds` is the total paused time accumulated across
+ * previous freeze/unfreeze cycles, credited back so the student is not
+ * penalised for the pause.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -12,10 +16,17 @@ import { Clock } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function calcSecondsLeft(timeLimitMinutes: number, startedAtISO: string): number {
-  const now     = Date.now();
+function calcSecondsLeft(
+  timeLimitMinutes: number,
+  startedAtISO: string,
+  frozenOffsetSeconds = 0,
+  frozenAtISO?: string | null,
+): number {
+  // While frozen, freeze the elapsed reference at the moment of the freeze so
+  // the countdown stops. Otherwise use wall-clock now.
+  const refNow  = frozenAtISO ? new Date(frozenAtISO).getTime() : Date.now();
   const started = new Date(startedAtISO).getTime();
-  const elapsed = (now - started) / 1000;
+  const elapsed = (refNow - started) / 1000 - frozenOffsetSeconds;
   return Math.max(0, Math.floor(timeLimitMinutes * 60 - elapsed));
 }
 
@@ -36,6 +47,10 @@ interface SectionTimerProps {
   startedAtISO: string;
   onExpire: () => void;
   onTick?: (secondsLeft: number) => void;
+  /** Total paused time (s) accumulated across freeze/unfreeze cycles. */
+  frozenOffsetSeconds?: number;
+  /** ISO of the current freeze; when set, the clock is paused. */
+  frozenAtISO?: string | null;
 }
 
 export function SectionTimer({
@@ -43,9 +58,11 @@ export function SectionTimer({
   startedAtISO,
   onExpire,
   onTick,
+  frozenOffsetSeconds = 0,
+  frozenAtISO = null,
 }: SectionTimerProps) {
   const [secondsLeft, setSecondsLeft] = useState(() =>
-    calcSecondsLeft(timeLimitMinutes, startedAtISO)
+    calcSecondsLeft(timeLimitMinutes, startedAtISO, frozenOffsetSeconds, frozenAtISO)
   );
 
   const expiredRef  = useRef(false);
@@ -59,11 +76,12 @@ export function SectionTimer({
     expiredRef.current = false;
 
     const tick = () => {
-      const left = calcSecondsLeft(timeLimitMinutes, startedAtISO);
+      const left = calcSecondsLeft(timeLimitMinutes, startedAtISO, frozenOffsetSeconds, frozenAtISO);
       setSecondsLeft(left);
       onTickRef.current?.(left);
 
-      if (left <= 0 && !expiredRef.current) {
+      // Never auto-expire while the exam is frozen (paused by invigilator).
+      if (left <= 0 && !expiredRef.current && !frozenAtISO) {
         expiredRef.current = true;
         onExpireRef.current();
       }
@@ -73,7 +91,7 @@ export function SectionTimer({
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [timeLimitMinutes, startedAtISO]);
+  }, [timeLimitMinutes, startedAtISO, frozenOffsetSeconds, frozenAtISO]);
 
   // ── Colour logic ──────────────────────────────────────────────
   const totalSeconds = timeLimitMinutes * 60;

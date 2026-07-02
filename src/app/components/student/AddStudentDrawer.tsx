@@ -245,7 +245,7 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
             </div>
 
             {/* Form */}
-            <div className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
 
               {/* Authority notice */}
               <div className="flex items-start gap-2.5 px-3 py-3 mb-6"
@@ -355,7 +355,7 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 px-6 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+            <div className="flex-shrink-0 px-4 sm:px-6 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
               <AnimatePresence>
                 {error && (
                   <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}

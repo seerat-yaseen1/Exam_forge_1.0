@@ -359,7 +359,7 @@ service cloud.firestore {
       // improvement would add an instituteId field to assessments and filter here.
       allow read: if isWebOwner()
                      || (role() == 'student'
-                         && resource.data.status != 'draft')
+                         && resource.data.status in ['active', 'closed'])
                      || ((role() == 'institute' || role() == 'faculty')
                          && resource.data.status != 'draft'
                          && canWriteOwned(resource.data.ownerType, resource.data.ownerId));

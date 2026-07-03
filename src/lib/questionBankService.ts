@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { bumpTaxonomyCounts } from './subjectService';
+import { getFlatReceivedQuestions } from './questionShareService';
 
 // ══════════════════════════════════════════════════════════════════
 // INTERNAL HELPERS
@@ -1088,4 +1089,61 @@ export function buildEmptyMatch(): Omit<Question, 'id' | 'isDeleted' | 'createdA
       { leftId: 'l3', rightId: 'r3' },
     ],
   };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DUPLICATE-CHECK POOL
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Returns the set of questions a given user should be duplicate-checked
+ * against: everything they OWN plus everything explicitly SHARED/GRANTED
+ * to them. No cross-tenant content — an institute/faculty never sees
+ * another tenant's ungranted questions here.
+ *
+ *   webOwner  → all web-owner questions (draft / private / global — all theirs)
+ *   institute → own questions + questions from banks granted to the institute
+ *   faculty   → own questions + institute-granted questions + questions
+ *               shared directly to them (incl. from other faculty)
+ *
+ * Deduplicated by question id. Safe to call from any question surface.
+ */
+export async function getDuplicateCheckPool(
+  ownerType?: QuestionOwnerType,
+  ownerId?: string,
+): Promise<Question[]> {
+  // Web owner (or unknown context) → the global/owner bank, as before.
+  if (!ownerType || !ownerId || ownerType === 'webOwner') {
+    return getAllQuestions();
+  }
+
+  const buckets: Question[][] = [];
+
+  try {
+    if (ownerType === 'institute') {
+      buckets.push(await getQuestionsByOwner('institute', ownerId));
+      const granted = await getQuestionsForInstitute(ownerId);
+      buckets.push(granted.flatMap((g) => g.questions));
+    } else if (ownerType === 'faculty') {
+      buckets.push(await getQuestionsByOwner('faculty', ownerId));
+      buckets.push(await getFlatQuestionsForFaculty(ownerId));
+      const received = await getFlatReceivedQuestions(ownerId);
+      buckets.push(received.questions);
+    }
+  } catch (err) {
+    console.warn('[getDuplicateCheckPool] partial pool — some sources failed:', err);
+  }
+
+  // Deduplicate by id.
+  const seen = new Set<string>();
+  const out: Question[] = [];
+  for (const bucket of buckets) {
+    for (const q of bucket) {
+      if (q?.id && !seen.has(q.id)) {
+        seen.add(q.id);
+        out.push(q);
+      }
+    }
+  }
+  return out;
 }

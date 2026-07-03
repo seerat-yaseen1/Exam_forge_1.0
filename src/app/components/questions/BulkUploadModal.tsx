@@ -12,7 +12,7 @@ import {
 } from './bulkUploadParser';
 import { getAllSubjects, getAllTopics, ensureSubject, bumpTaxonomyCounts, type Subject, type Topic } from '../../../lib/subjectService';
 import {
-  createQuestion, getAllQuestions,
+  createQuestion, getDuplicateCheckPool,
   type QuestionOwnerType, type Question,
 } from '../../../lib/questionBankService';
 import { pct as fmtPct } from '../../../lib/duplicateDetection';
@@ -710,9 +710,13 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
   const [parseErr,  setParseErr]  = useState<string | null>(null);
   const [compareRow, setCompareRow] = useState<ParsedRow | null>(null);
 
-  // Fetch subjects + topics + existing question pool once
+  // Fetch subjects + topics + the caller-scoped duplicate-check pool once
   useEffect(() => {
-    Promise.all([getAllSubjects(), getAllTopics(), getAllQuestions()]).then(([s, t, qs]) => {
+    Promise.all([
+      getAllSubjects(),
+      getAllTopics(),
+      getDuplicateCheckPool(ownerType, ownerId),
+    ]).then(([s, t, qs]) => {
       setSubjects(s);
       setTopics(t);
       setPool(qs);

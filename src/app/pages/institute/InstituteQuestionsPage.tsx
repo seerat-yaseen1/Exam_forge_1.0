@@ -417,10 +417,11 @@ function PreviewModal({ question, onClose }: { question: Question; onClose: () =
 // ── Slide-over panel ───────────────────────────────────────────────────────────
 
 function QuestionPanel({
-  mode, question, onSave, onClose,
+  mode, question, instituteId, onSave, onClose,
 }: {
   mode: 'create' | 'edit';
   question: Question | null;
+  instituteId: string;
   onSave: (draft: QuestionDraft) => Promise<void>;
   onClose: () => void;
 }) {
@@ -455,6 +456,8 @@ function QuestionPanel({
         <div className="flex-1 overflow-hidden">
           <QuestionTypeEngine
             initialData={question ?? undefined}
+            ownerType="institute"
+            ownerId={instituteId}
             onSave={onSave}
             onCancel={onClose}
           />
@@ -687,6 +690,7 @@ export function InstituteQuestionsPage() {
           <QuestionPanel
             mode={panelMode}
             question={editTarget}
+            instituteId={instituteId}
             onSave={handleSave}
             onClose={() => { setPanelOpen(false); setEditTarget(null); }}
           />

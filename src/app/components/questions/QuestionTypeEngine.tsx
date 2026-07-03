@@ -10,10 +10,11 @@ import {
   type MatchPair,
   type CorrectPair,
   type Difficulty,
+  type QuestionOwnerType,
   buildEmptyMCQ,
   buildEmptyText,
   buildEmptyMatch,
-  getAllQuestions,
+  getDuplicateCheckPool,
   findDuplicateCandidates,
 } from '../../../lib/questionBankService';
 import {
@@ -592,11 +593,12 @@ function MetaSection(p: MetaProps) {
 
 export interface QuestionTypeEngineProps {
   initialData?: Partial<Question>;
+  ownerType?: QuestionOwnerType;
+  ownerId?:   string;
   onSave:   (draft: QuestionDraft) => Promise<void>;
-  onCancel: () => void;
 }
 
-export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTypeEngineProps) {
+export function QuestionTypeEngine({ initialData, ownerType, ownerId, onSave, onCancel }: QuestionTypeEngineProps) {
   const hasInitial = !!initialData?.engine;
   const [phase,   setPhase]   = useState<'pick' | 'form'>(hasInitial ? 'form' : 'pick');
   const [saving,  setSaving]  = useState(false);
@@ -634,7 +636,7 @@ export function QuestionTypeEngine({ initialData, onSave, onCancel }: QuestionTy
 
   useEffect(() => {
     let alive = true;
-    getAllQuestions().then((qs) => { if (alive) setPool(qs); }).catch(() => {});
+    getDuplicateCheckPool(ownerType, ownerId).then((qs) => { if (alive) setPool(qs); }).catch(() => {});
     return () => { alive = false; };
   }, []);
 

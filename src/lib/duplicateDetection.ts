@@ -20,10 +20,12 @@ export const EXACT_THRESHOLD = 1.0;    // == this → block (exact match)
 
 // ── Reason codes ──────────────────────────────────────────────────────────
 export type MatchReason =
-  | 'exact_stem'           // pass 1: normalized stems identical
-  | 'reordered_options'    // pass 2: same option set + same correct answer
-  | 'fuzzy_stem'           // pass 4: similar but not identical stems
-  | 'option_overlap'       // pass 3: options overlap strongly even though stems don't
+  | 'confirmed_duplicate'  // stem + options + answer all 100% → certain duplicate
+  | 'same_stem_answer'     // stem + answer 100%, options differ → review (different distractors)
+  | 'exact_stem'           // stem 100% but answer differs → review
+  | 'reordered_options'    // same option set + same correct answer, stem differs → review
+  | 'fuzzy_stem'           // similar but not identical stems
+  | 'option_overlap'       // options overlap strongly even though stems don't
   | 'none';                // nothing significant
 
 export interface DuplicateScore {
@@ -176,11 +178,15 @@ export function scorePair(neu: ScoreableQuestion, existing: ScoreableQuestion): 
 
   // ── reason ──
   let matchedReason: MatchReason = 'none';
-  if (stemSim >= EXACT_THRESHOLD)                         matchedReason = 'exact_stem';
+  if (stemSim >= EXACT_THRESHOLD && optionsSim >= EXACT_THRESHOLD && answerMatch) {
+    matchedReason = 'confirmed_duplicate';
+  }
+  else if (stemSim >= EXACT_THRESHOLD && answerMatch)     matchedReason = 'same_stem_answer';
+  else if (stemSim >= EXACT_THRESHOLD)                    matchedReason = 'exact_stem';
   else if (optionsSim >= EXACT_THRESHOLD && answerMatch)  matchedReason = 'reordered_options';
   else if (stemSim >= WARN_THRESHOLD)                     matchedReason = 'fuzzy_stem';
   else if (optionsSim >= WARN_THRESHOLD)                  matchedReason = 'option_overlap';
-
+  
   return {
     stemSim,
     optionsSim,
@@ -202,12 +208,14 @@ export function scoreAgainstPool(
   draft: ScoreableQuestion,
   pool: ScoreableQuestion[],
 ): DuplicateScore {
-  const priority: Record<MatchReason, number> = {
-    exact_stem:        4,
-    reordered_options: 3,
-    fuzzy_stem:        2,
-    option_overlap:    1,
-    none:              0,
+ const priority: Record<MatchReason, number> = {
+    confirmed_duplicate: 6,
+    same_stem_answer:    5,
+    exact_stem:          4,
+    reordered_options:   3,
+    fuzzy_stem:          2,
+    option_overlap:      1,
+    none:                0,
   };
 
   let best: DuplicateScore = {
@@ -236,8 +244,12 @@ export function scoreAgainstPool(
 export type Verdict = 'clean' | 'note' | 'warn' | 'block';
 
 export function verdictFor(score: DuplicateScore): Verdict {
-  if (score.matchedReason === 'exact_stem')         return 'block';
-  if (score.matchedReason === 'reordered_options')  return 'block';
+  // Only a full triple match (stem + options + answer) is a certain duplicate.
+  if (score.matchedReason === 'confirmed_duplicate') return 'block';
+  // Everything else meaningful goes to human review.
+  if (score.matchedReason === 'same_stem_answer')    return 'warn';
+  if (score.matchedReason === 'exact_stem')          return 'warn';
+  if (score.matchedReason === 'reordered_options')   return 'warn';
   const top = Math.max(score.stemSim, score.optionsSim);
   if (top >= WARN_THRESHOLD) return 'warn';
   if (top >= NOTE_THRESHOLD) return 'note';

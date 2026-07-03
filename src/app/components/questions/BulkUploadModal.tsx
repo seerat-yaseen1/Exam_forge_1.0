@@ -10,7 +10,7 @@ import {
   computeSummary, getSaveableRows, getAllRows,
   type ParsedWorkbook, type ParsedRow, type UploadSummary,
 } from './bulkUploadParser';
-import { getAllSubjects, getAllTopics, ensureSubject, type Subject, type Topic } from '../../../lib/subjectService';
+import { getAllSubjects, getAllTopics, ensureSubject, bumpTaxonomyCounts, type Subject, type Topic } from '../../../lib/subjectService';
 import {
   createQuestion, getAllQuestions,
   type QuestionOwnerType, type Question,
@@ -537,22 +537,34 @@ function Step4({
       const subjectCache = [...subjects];
       let savedCount  = 0;
       let skippedCount = 0;
+      const subjectDeltas = new Map<string, number>();
+      const topicDeltas   = new Map<string, number>();
 
       for (const row of rows) {
         try {
           // Ensure subject exists (creates if new)
           const { canonicalName } = await ensureSubject(row.draft.subject ?? '', subjectCache);
           const draft = { ...row.draft, subject: canonicalName } as QuestionDraft;
-          await createQuestion({
+          const created = await createQuestion({
             ...draft,
             ...(ownerType ? { ownerType, ownerId: ownerId ?? ownerType } : {}),
-          });
+          }, { skipCounterBump: true });
+          if (created.subjectId) subjectDeltas.set(created.subjectId, (subjectDeltas.get(created.subjectId) ?? 0) + 1);
+          if (created.topicId)   topicDeltas.set(created.topicId, (topicDeltas.get(created.topicId) ?? 0) + 1);
           savedCount++;
         } catch (err: any) {
           console.warn(`[BulkUpload] skipped row ${row.rowIndex}:`, err?.message);
           skippedCount++;
         }
         setDone((d) => d + 1);
+      }
+
+      // One counter write per subject/topic instead of one per question.
+      for (const [subjectId, delta] of subjectDeltas) {
+        await bumpTaxonomyCounts({ subjectId }, delta);
+      }
+      for (const [topicId, delta] of topicDeltas) {
+        await bumpTaxonomyCounts({ topicId }, delta);
       }
 
       setSaved(savedCount);

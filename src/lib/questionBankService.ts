@@ -329,7 +329,8 @@ export type QuestionReadOpts = { includeAnswer?: boolean };
 
 /** Create a new question. Defaults ownerType/ownerId to 'webOwner' if omitted. */
 export async function createQuestion(
-  data: Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>
+  data: Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>,
+  opts?: { skipCounterBump?: boolean }
 ): Promise<Question> {
   const id = newId('q');
   const question: Question = {
@@ -364,8 +365,9 @@ export async function createQuestion(
   await batch.commit();
 
   // Keep denormalized taxonomy counts live (best-effort; reconcilable via Recount).
-  await bumpTaxonomyCounts({ subjectId: question.subjectId, topicId: question.topicId }, +1);
-
+  if (!opts?.skipCounterBump) {
+    await bumpTaxonomyCounts({ subjectId: question.subjectId, topicId: question.topicId }, +1);
+  }
   console.log(`✅ [QB] createQuestion → ${id} (${question.ownerType}:${question.ownerId})`);
   return question;
 }

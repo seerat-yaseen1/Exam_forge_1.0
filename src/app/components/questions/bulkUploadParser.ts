@@ -599,26 +599,47 @@ export function downloadTemplate(): void {
 // ══════════════════════════════════════════════════════════════════
 
 export type UploadSummary = {
-  totalParsed:  number;
-  valid:        number;
-  warnings:     number;
-  errors:       number;
-  willSave:     number;
-  willSkip:     number;
+  totalParsed: number;
+  valid:       number;
+  warnings:    number;
+  errors:      number;
+  dupSkipped:  number;   // confirmed duplicates — auto-skipped
+  dupReview:   number;   // possible duplicates — need a human decision
+  willSave:    number;
+  willSkip:    number;
 };
 
 export function computeSummary(rows: ParsedRow[]): UploadSummary {
   const valid    = rows.filter((r) => r.status === 'valid').length;
   const warnings = rows.filter((r) => r.status === 'warning').length;
   const errors   = rows.filter((r) => r.status === 'error').length;
+  const dupSkipped = rows.filter(
+    (r) => r.status === 'error' && r.errors.some((e) => e.field === 'duplicate'),
+  ).length;
+  const dupReview = rows.filter(
+    (r) => r.status !== 'error' && r.warnings.some((w) => w.field === 'duplicate'),
+  ).length;
   return {
     totalParsed: rows.length,
     valid,
     warnings,
     errors,
-    willSave:  valid + warnings,
-    willSkip:  errors,
+    dupSkipped,
+    dupReview,
+    // Possible duplicates are EXCLUDED by default — user includes them one by one.
+    willSave:  valid + warnings - dupReview,
+    willSkip:  errors + dupReview,
   };
+}
+
+/** True when a row is a possible duplicate awaiting a human include/skip decision. */
+export function isDupReviewRow(row: ParsedRow): boolean {
+  return row.status !== 'error' && row.warnings.some((w) => w.field === 'duplicate');
+}
+
+/** Stable key for a row across tabs. */
+export function rowKey(row: ParsedRow): string {
+  return `${row.sheet}-${row.rowIndex}`;
 }
 
 export function getAllRows(wb: ParsedWorkbook): ParsedRow[] {
@@ -637,10 +658,9 @@ export function getSaveableRows(rows: ParsedRow[]): ParsedRow[] {
  * Score each row against the existing question pool. Scoped to same
  * subjectId+topicId per row.
  *
- *   - exact_stem        → row becomes 'error' (block)
- *   - reordered_options → row becomes 'error' (block)
- *   - stemSim or optionsSim ≥ 85%   → 'warning'
- *   - stemSim or optionsSim ≥ 60%   → 'warning' (informational)
+ *   - confirmed_duplicate (stem + options + answer all 100%) → 'error' (auto-skipped)
+ *   - everything else with meaningful similarity → 'warning' (held for
+ *     human include/skip review in the UI)
  *
  * Must be called AFTER resolveSubjectsInRows() so subjectId / topicId are set.
  * Skips rows already in 'error' state (no point scoring a broken row).
@@ -709,12 +729,9 @@ export function scoreDuplicatesInRows(
     const newWarnings: RowWarning[] = [...row.warnings];
 
     if (verdict === 'block') {
-      const reason = score.matchedReason === 'exact_stem'
-        ? 'Exact duplicate of an existing question'
-        : 'Same options (reordered) and same correct answer as an existing question';
       newErrors.push({
         field: 'duplicate',
-        message: `${reason}${score.matchedQuestionId ? ` (id: ${score.matchedQuestionId})` : ''}.`,
+        message: `Confirmed duplicate — question, options, and answer all match an existing question${score.matchedQuestionId ? ` (id: ${score.matchedQuestionId})` : ''}. Auto-skipped.`,
       });
     } else if (verdict === 'warn' || verdict === 'note') {
       newWarnings.push({

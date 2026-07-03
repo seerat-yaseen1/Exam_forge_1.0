@@ -7,21 +7,29 @@ import { pct } from '../../../lib/duplicateDetection';
 interface Props {
   row:   ParsedRow;
   pool:  Question[];
+  allRows?: ParsedRow[];
   onClose: () => void;
 }
 
 const REASON_LABEL: Record<string, string> = {
-  exact_stem:        'Exact match — stems are identical',
-  reordered_options: 'Same options (reordered) + same correct answer',
-  fuzzy_stem:        'Stems are very similar',
-  option_overlap:    'Options overlap significantly',
-  none:              'No significant match',
+  confirmed_duplicate: 'Confirmed duplicate — question, options, and answer all match',
+  same_stem_answer:    'Same question & correct answer — different options',
+  exact_stem:          'Same question — different correct answer',
+  reordered_options:   'Same options (reordered) + same correct answer',
+  fuzzy_stem:          'Stems are very similar',
+  option_overlap:      'Options overlap significantly',
+  none:                'No significant match',
 };
 
-export function DuplicateCompareModal({ row, pool, onClose }: Props) {
+export function DuplicateCompareModal({ row, pool, allRows, onClose }: Props) {
   const score = row.duplicateScore;
   const matchedId = score?.matchedQuestionId ?? null;
   const matched = matchedId ? pool.find((q) => q.id === matchedId) : null;
+  // Within-upload match: ids look like 'batch-row-N'. In-batch comparison is
+  // per-sheet, so the matched row lives in the SAME sheet as this row.
+  const batchMatch = (!matched && matchedId && matchedId.startsWith('batch-row-') && allRows)
+    ? allRows.find((r) => r.sheet === row.sheet && `batch-row-${r.rowIndex}` === matchedId) ?? null
+    : null;
 
   // For the new draft, pull readable copies of stem, options, correct answers
   const draftStem    = row.draft.stem ?? '';
@@ -30,11 +38,17 @@ export function DuplicateCompareModal({ row, pool, onClose }: Props) {
     .map((cid: string) => (row.draft.options ?? []).find((o: any) => o.id === cid)?.text ?? '')
     .filter(Boolean);
 
-  const matchedStem    = matched?.stem ?? '';
-  const matchedOptions = (matched?.options ?? []).map((o: any) => o.text ?? '');
-  const matchedCorrect = (matched?.correctIds ?? [])
-    .map((cid: string) => (matched?.options ?? []).find((o: any) => o.id === cid)?.text ?? '')
-    .filter(Boolean);
+  const matchedStem    = matched?.stem ?? batchMatch?.draft.stem ?? '';
+  const matchedOptions = matched
+    ? (matched.options ?? []).map((o: any) => o.text ?? '')
+    : (batchMatch?.draft.options ?? []).map((o: any) => o.text ?? '');
+  const matchedCorrect = matched
+    ? ((matched.correctIds ?? [])
+        .map((cid: string) => (matched.options ?? []).find((o: any) => o.id === cid)?.text ?? '')
+        .filter(Boolean))
+    : ((batchMatch?.draft.correctIds ?? [])
+        .map((cid: string) => (batchMatch?.draft.options ?? []).find((o: any) => o.id === cid)?.text ?? '')
+        .filter(Boolean));
 
   return (
     <motion.div
@@ -104,6 +118,16 @@ export function DuplicateCompareModal({ row, pool, onClose }: Props) {
               correct={matchedCorrect}
               subject={matched.subject ?? ''}
               topic={matched.topic ?? ''}
+            />
+          ) : batchMatch ? (
+            <Side
+              heading="ANOTHER ROW IN THIS UPLOAD"
+              sheet={`${batchMatch.sheet} · row ${batchMatch.rowIndex}`}
+              stem={matchedStem}
+              options={matchedOptions}
+              correct={matchedCorrect}
+              subject={batchMatch.draft.subject ?? ''}
+              topic={batchMatch.draft.topic ?? ''}
             />
           ) : (
             <div className="px-5 py-6">

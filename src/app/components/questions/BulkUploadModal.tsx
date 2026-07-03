@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   parseWorkbook, resolveSubjectsInRows, scoreDuplicatesInRows, downloadTemplate,
-  computeSummary, getSaveableRows, getAllRows,
+  computeSummary, getSaveableRows, getAllRows, isDupReviewRow, rowKey,
   type ParsedWorkbook, type ParsedRow, type UploadSummary,
 } from './bulkUploadParser';
 import { getAllSubjects, getAllTopics, ensureSubject, bumpTaxonomyCounts, type Subject, type Topic } from '../../../lib/subjectService';
@@ -261,9 +261,15 @@ function StatusDot({ status }: { status: ParsedRow['status'] }) {
 function RowCard({
   row,
   onViewMatch,
+  isDupReview,
+  isIncluded,
+  onToggleInclude,
 }: {
   row: ParsedRow;
   onViewMatch: (row: ParsedRow) => void;
+  isDupReview?: boolean;
+  isIncluded?: boolean;
+  onToggleInclude?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { status, draft, errors, warnings, subjectResolution, duplicateScore } = row;
@@ -348,6 +354,36 @@ function RowCard({
           {expanded ? '▲' : '▼'}
         </span>
       </button>
+      {/* Possible-duplicate decision strip */}
+      {isDupReview && (
+        <div className="flex items-center gap-2 px-3 pb-2">
+          <span className="text-xs" style={{ color: '#8B5E1A' }}>
+            Possible duplicate — {isIncluded ? 'will be saved' : 'skipped unless included'}
+          </span>
+          <div style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onViewMatch(row); }}
+            className="text-xs px-2 py-1 transition-opacity hover:opacity-70"
+            style={{ border: '1px solid #E3E1DB', background: '#FFFFFF', color: '#4A4A45', borderRadius: 2 }}
+          >
+            Compare
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleInclude?.(); }}
+            className="text-xs px-2 py-1 transition-opacity hover:opacity-70"
+            style={{
+              border: `1px solid ${isIncluded ? '#2A6B3A' : '#E3E1DB'}`,
+              background: isIncluded ? '#F0FBF4' : '#FFFFFF',
+              color: isIncluded ? '#2A6B3A' : '#4A4A45',
+              borderRadius: 2,
+            }}
+          >
+            {isIncluded ? '✓ Included' : 'Include'}
+          </button>
+        </div>
+      )}
 
       {/* Expanded detail */}
       {expanded && (
@@ -399,11 +435,32 @@ function Step3({
   workbook: ParsedWorkbook;
   subjects: Subject[];
   summary: UploadSummary;
-  onConfirm: () => void;
+  onConfirm: (rowsToSave: ParsedRow[]) => void;
   onBack: () => void;
   onViewMatch: (row: ParsedRow) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ReviewTab>('All');
+  // Possible-duplicate rows the user has explicitly chosen to include.
+  const [included, setIncluded] = useState<Set<string>>(new Set());
+
+  const toggleInclude = (row: ParsedRow) => {
+    setIncluded((prev) => {
+      const next = new Set(prev);
+      const k = rowKey(row);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
+  };
+
+  const allRows = getAllRows(workbook);
+  // A row saves if: not an error, and (not a possible duplicate OR explicitly included).
+  const rowsToSave = allRows.filter(
+    (r) => r.status !== 'error' && (!isDupReviewRow(r) || included.has(rowKey(r))),
+  );
+  const includedCount = allRows.filter(
+    (r) => isDupReviewRow(r) && included.has(rowKey(r)),
+  ).length;
+
   const tabs: ReviewTab[] = ['All', 'MCQ', 'Text', 'Match'].filter((t) => {
     if (t === 'All') return true;
     if (t === 'MCQ')   return workbook.mcq.length > 0;
@@ -413,7 +470,7 @@ function Step3({
   }) as ReviewTab[];
 
   const rows =
-    activeTab === 'All'   ? getAllRows(workbook) :
+    activeTab === 'All'   ? allRows :
     activeTab === 'MCQ'   ? workbook.mcq :
     activeTab === 'Text'  ? workbook.text :
     workbook.match;
@@ -430,10 +487,18 @@ function Step3({
       >
         <span className="text-xs" style={{ color: '#2A6B3A' }}>✓ {summary.valid} valid</span>
         {summary.warnings > 0 && <span className="text-xs" style={{ color: '#8B5E1A' }}>⚠ {summary.warnings} warnings</span>}
-        {summary.errors   > 0 && <span className="text-xs" style={{ color: '#9B2828' }}>✗ {summary.errors} errors (will be skipped)</span>}
+        {summary.dupSkipped > 0 && <span className="text-xs" style={{ color: '#9B2828' }}>⊘ {summary.dupSkipped} exact duplicates (auto-skipped)</span>}
+        {summary.dupReview > 0 && (
+          <span className="text-xs" style={{ color: '#8B5E1A' }}>
+            ? {summary.dupReview} possible duplicates — {includedCount} included
+          </span>
+        )}
+        {summary.errors - summary.dupSkipped > 0 && (
+          <span className="text-xs" style={{ color: '#9B2828' }}>✗ {summary.errors - summary.dupSkipped} errors (will be skipped)</span>
+        )}
         <div style={{ flex: 1 }} />
         <span className="text-xs" style={{ color: '#0C0C0B' }}>
-          <strong>{summary.willSave}</strong> will save · <strong>{summary.willSkip}</strong> skipped
+          <strong>{rowsToSave.length}</strong> will save · <strong>{allRows.length - rowsToSave.length}</strong> skipped
         </span>
       </div>
 
@@ -441,7 +506,7 @@ function Step3({
       <div className="flex gap-0 mb-3" style={{ borderBottom: '1px solid #E3E1DB' }}>
         {tabs.map((t) => {
           const count =
-            t === 'All' ? getAllRows(workbook).length :
+            t === 'All' ? allRows.length :
             t === 'MCQ' ? workbook.mcq.length :
             t === 'Text' ? workbook.text.length :
             workbook.match.length;
@@ -469,34 +534,37 @@ function Step3({
         ) : (
           rows.map((row) => (
             <RowCard
-              key={`${row.sheet}-${row.rowIndex}`}
+              key={rowKey(row)}
               row={row}
               onViewMatch={onViewMatch}
+              isDupReview={isDupReviewRow(row)}
+              isIncluded={included.has(rowKey(row))}
+              onToggleInclude={() => toggleInclude(row)}
             />
           ))
         )}
       </div>
 
-      {summary.willSave === 0 && (
+      {rowsToSave.length === 0 && (
         <div className="flex items-start gap-2.5 px-3 py-2.5 mb-4" style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
           <AlertCircle size={13} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
-          <p className="text-xs" style={{ color: '#9B2828' }}>No valid rows found. Fix the errors in your file and re-upload.</p>
+          <p className="text-xs" style={{ color: '#9B2828' }}>No rows will be saved. Fix errors, or include reviewed duplicates you want to keep.</p>
         </div>
       )}
 
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={onConfirm}
-          disabled={summary.willSave === 0}
+          onClick={() => onConfirm(rowsToSave)}
+          disabled={rowsToSave.length === 0}
           className="flex items-center gap-2 text-xs px-4 py-2.5 transition-opacity"
           style={{
-            background: summary.willSave > 0 ? '#0C0C0B' : '#C8C7C2',
+            background: rowsToSave.length > 0 ? '#0C0C0B' : '#C8C7C2',
             color: '#FFFFFF', borderRadius: 2,
-            cursor: summary.willSave > 0 ? 'pointer' : 'not-allowed',
+            cursor: rowsToSave.length > 0 ? 'pointer' : 'not-allowed',
           }}
         >
-          Save {summary.willSave} questions <ChevronRight size={11} strokeWidth={1.5} />
+          Save {rowsToSave.length} questions <ChevronRight size={11} strokeWidth={1.5} />
         </button>
         <button type="button" onClick={onBack} className="text-xs" style={{ color: '#9A9891' }}>
           ← Re-upload
@@ -753,7 +821,7 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
                   workbook={workbook}
                   subjects={subjects}
                   summary={summary}
-                  onConfirm={() => setStep(4)}
+                 onConfirm={(rowsToSave) => { setSaveRows(rowsToSave); setStep(4); }}
                   onBack={() => setStep(2)}
                   onViewMatch={setCompareRow}
                 />
@@ -779,6 +847,7 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
             <DuplicateCompareModal
               row={compareRow}
               pool={pool}
+              allRows={workbook ? getAllRows(workbook) : []}
               onClose={() => setCompareRow(null)}
             />
           )}

@@ -26,7 +26,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 //   2. Paste the site key into RECAPTCHA_V3_SITE_KEY below
 //   3. (Dev only) set window.FIREBASE_APPCHECK_DEBUG_TOKEN = true before this
 //      file loads, then copy the printed debug token into the console allowlist.
-const RECAPTCHA_V3_SITE_KEY = ''; // ← paste your site key here
+const RECAPTCHA_V3_SITE_KEY = '6LfgVkItAAAAAHU_amh7GG6R5IuvFVN6D-YTkg7h'; // ← paste your site key here
 
 if (typeof window !== 'undefined' && RECAPTCHA_V3_SITE_KEY) {
   try {

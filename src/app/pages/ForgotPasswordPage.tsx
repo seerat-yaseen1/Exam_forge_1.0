@@ -1,22 +1,19 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Loader2, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { LogoMark } from '../components/PlatformLogo';
 
 type Stage = 'input' | 'sent';
 
 export function ForgotPasswordPage() {
-  const navigate = useNavigate();
   const { requestPasswordReset, platformSettings } = useAuth();
 
   const [stage, setStage] = useState<Stage>('input');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [resetCode, setResetCode] = useState('');
-  const [copied, setCopied] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,19 +28,7 @@ export function ForgotPasswordPage() {
       setError(result.error ?? 'An error occurred.');
       return;
     }
-
-    setResetCode(result.code ?? '');
     setStage('sent');
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(resetCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleProceed = () => {
-    navigate('/reset-password', { state: { email, code: resetCode } });
   };
 
   return (
@@ -192,65 +177,23 @@ export function ForgotPasswordPage() {
                   className="text-xs mb-1"
                   style={{ color: '#9A9891', letterSpacing: '0.08em' }}
                 >
-                  RESET CODE ISSUED
+                  CHECK YOUR INBOX
                 </p>
-                <p className="text-xs mb-5" style={{ color: '#6B6B65' }}>
-                  In production, this code is sent securely to your email.
-                  It is valid for{' '}
-                  <span style={{ color: '#0C0C0B' }}>15 minutes</span> and
-                  can only be used once.
+                <p className="text-xs mb-6" style={{ color: '#6B6B65', lineHeight: 1.6 }}>
+                  If an account exists for{' '}
+                  <span style={{ color: '#0C0C0B' }}>{email}</span>, a
+                  password-reset link has been sent. Open it from your inbox to
+                  set a new password. The link expires in 1 hour and can be used
+                  once. If it doesn’t arrive, check your spam folder.
                 </p>
 
-                {/* Code display */}
-                <div
-                  className="mb-5 flex items-center justify-between px-4 py-3"
-                  style={{
-                    background: '#F7F6F3',
-                    border: '1px solid #E3E1DB',
-                    borderRadius: 2,
-                  }}
+                <Link
+                  to="/login"
+                  className="block w-full py-2.5 text-sm mb-3 text-center"
+                  style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', textDecoration: 'none' }}
                 >
-                  <span
-                    className="text-sm font-medium tracking-widest"
-                    style={{ color: '#0C0C0B', fontFamily: 'monospace', letterSpacing: '0.25em' }}
-                  >
-                    {resetCode}
-                  </span>
-                  <button
-                    onClick={handleCopy}
-                    className="ml-3 transition-colors"
-                    style={{ color: '#9A9891' }}
-                    onMouseEnter={(e) =>
-                      ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')
-                    }
-                    onMouseLeave={(e) =>
-                      ((e.currentTarget as HTMLElement).style.color = '#9A9891')
-                    }
-                    aria-label="Copy reset code"
-                  >
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                  </button>
-                </div>
-
-                <p className="text-xs mb-5" style={{ color: '#9A9891' }}>
-                  Account:{' '}
-                  <span style={{ color: '#4A4A45' }}>{email}</span>
-                </p>
-
-                <button
-                  onClick={handleProceed}
-                  className="w-full py-2.5 text-sm mb-3"
-                  style={{
-                    background: '#0C0C0B',
-                    color: '#FFFFFF',
-                    borderRadius: 2,
-                    letterSpacing: '0.04em',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Enter reset code
-                </button>
-              </motion.div>
+                  Back to sign in
+                </Link>              </motion.div>
             )}
           </AnimatePresence>
 

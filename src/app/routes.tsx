@@ -3,7 +3,7 @@ import { InstituteRoot } from './pages/institute/InstituteRoot';
 import { Root } from './Root';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
-import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { ResetPasswordActionPage } from './pages/ResetPasswordActionPage';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { InstituteDashboardLayout } from './layouts/InstituteDashboardLayout';
 import { FacultyDashboardLayout } from './layouts/FacultyDashboardLayout';
@@ -21,7 +21,6 @@ import { InstituteDetailPage } from './pages/InstituteDetailPage';
 import { InstituteLoginPage } from './pages/institute/InstituteLoginPage';
 import { InstituteChangePasswordPage } from './pages/institute/InstituteChangePasswordPage';
 import { InstituteForgotPasswordPage } from './pages/institute/InstituteForgotPasswordPage';
-import { InstituteResetPasswordPage } from './pages/institute/InstituteResetPasswordPage';
 import { InstituteLandingPage } from './pages/institute/InstituteLandingPage';
 import { InstituteProfilePage } from './pages/institute/InstituteProfilePage';
 import { InstituteSecurityPage } from './pages/institute/InstituteSecurityPage';
@@ -33,7 +32,6 @@ import { FacultyRoot } from './pages/faculty/FacultyRoot';
 import { FacultyLoginPage } from './pages/faculty/FacultyLoginPage';
 import { FacultyChangePasswordPage } from './pages/faculty/FacultyChangePasswordPage';
 import { FacultyForgotPasswordPage } from './pages/faculty/FacultyForgotPasswordPage';
-import { FacultyResetPasswordPage } from './pages/faculty/FacultyResetPasswordPage';
 import { FacultyLandingPage } from './pages/faculty/FacultyLandingPage';
 import { FacultyProfilePage } from './pages/faculty/FacultyProfilePage';
 import { FacultySecurityPage } from './pages/faculty/FacultySecurityPage';
@@ -45,7 +43,6 @@ import { StudentRoot } from './pages/student/StudentRoot';
 import { StudentLoginPage } from './pages/student/StudentLoginPage';
 import { StudentChangePasswordPage } from './pages/student/StudentChangePasswordPage';
 import { StudentForgotPasswordPage } from './pages/student/StudentForgotPasswordPage';
-import { StudentResetPasswordPage } from './pages/student/StudentResetPasswordPage';
 import { StudentLandingPage } from './pages/student/StudentLandingPage';
 import { StudentProfilePage } from './pages/student/StudentProfilePage';
 import { StudentSecurityPage } from './pages/student/StudentSecurityPage';
@@ -62,7 +59,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/login" replace /> },
       { path: '/login',           element: <LoginPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
-      { path: '/reset-password',  element: <ResetPasswordPage /> },
+      { path: '/reset-password',  element: <ResetPasswordActionPage role="web_owner" /> },
 
       // ── Web Owner dashboard ───────────────────────────────────────
       {
@@ -91,7 +88,7 @@ export const router = createBrowserRouter([
           { path: 'login',           element: <InstituteLoginPage /> },
           { path: 'change-password', element: <InstituteChangePasswordPage /> },
           { path: 'forgot-password', element: <InstituteForgotPasswordPage /> },
-          { path: 'reset-password',  element: <InstituteResetPasswordPage /> },
+          { path: 'reset-password',  element: <ResetPasswordActionPage role="institute" /> },
           {
             element: <InstituteDashboardLayout />,
             children: [
@@ -116,7 +113,7 @@ export const router = createBrowserRouter([
           { path: 'login',            element: <FacultyLoginPage /> },
           { path: 'change-password',  element: <FacultyChangePasswordPage /> },
           { path: 'forgot-password',  element: <FacultyForgotPasswordPage /> },
-          { path: 'reset-password',   element: <FacultyResetPasswordPage /> },
+          { path: 'reset-password',   element: <ResetPasswordActionPage role="faculty" /> },
           {
             element: <FacultyDashboardLayout />,
             children: [
@@ -141,7 +138,7 @@ export const router = createBrowserRouter([
           { path: 'login',            element: <StudentLoginPage /> },
           { path: 'change-password',  element: <StudentChangePasswordPage /> },
           { path: 'forgot-password',  element: <StudentForgotPasswordPage /> },
-          { path: 'reset-password',   element: <StudentResetPasswordPage /> },
+          { path: 'reset-password',   element: <ResetPasswordActionPage role="student" /> },
           // ── Exam routes (outside dashboard layout — full page takeover) ──
           { path: 'exam/:assessmentId/briefing', element: <ExamBriefingPage /> },
           { path: 'exam/:assessmentId/shell',    element: <ExamShell /> },

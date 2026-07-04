@@ -50,12 +50,6 @@ export function StudentForgotPasswordPage() {
     setStage('sent');
   };
 
-  const handleProceed = () => {
-    // Navigate to the reset password page with the institute code and email
-    // This is a placeholder for the actual navigation logic
-    console.log('Proceed to reset password with:', instituteCode.trim(), email.trim());
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
       style={{ background: '#F7F6F3' }}>
@@ -86,7 +80,7 @@ export function StudentForgotPasswordPage() {
                   PASSWORD RECOVERY
                 </p>
                 <p className="text-xs mb-6" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
-                  Provide your Institute Code and email. A 16-character reset code will be sent to your inbox.
+                  Provide your Institute Code and email. A password-reset link will be sent to your inbox.
                 </p>
 
                 <form onSubmit={handleSubmit} noValidate>
@@ -151,20 +145,16 @@ export function StudentForgotPasswordPage() {
                   <Mail size={12} strokeWidth={1.5} style={{ color: emailSent ? '#2A6B3A' : '#9A9891', marginTop: 1, flexShrink: 0 }} />
                   <p className="text-xs" style={{ color: emailSent ? '#2A6B3A' : '#9A9891', lineHeight: 1.6 }}>
                     {emailSent
-                      ? `A 16-character reset code has been sent to ${email}. It is valid for 1 hour and can only be used once.`
-                      : `Email delivery encountered an issue. Please contact your administrator or proceed and enter the code directly.`}
+                      ? `If an account matches ${email}, a password-reset link has been sent. Open it from your inbox to set a new password. The link expires in 1 hour and can be used once.`
+                      : `If you don't receive an email shortly, check your spam folder or contact your administrator.`}
                   </p>
                 </div>
 
-                <p className="text-xs mb-5" style={{ color: '#9A9891' }}>
-                  Account: <span style={{ color: '#4A4A45' }}>{email}</span>
-                </p>
-
-                <button onClick={handleProceed}
-                  className="w-full py-2.5 text-sm mb-3"
-                  style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', cursor: 'pointer' }}>
-                  Enter reset code
-                </button>
+                <Link to="/student/login"
+                  className="block w-full py-2.5 text-sm mb-3 text-center"
+                  style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', textDecoration: 'none' }}>
+                  Back to sign in
+                </Link>
               </motion.div>
             )}
           </AnimatePresence>

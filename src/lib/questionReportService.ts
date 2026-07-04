@@ -185,20 +185,41 @@ export async function getReport(id: string): Promise<QuestionReport | null> {
   return snap.exists() ? (snap.data() as QuestionReport) : null;
 }
 
-export async function listReportsByAssessment(assessmentId: string): Promise<QuestionReport[]> {
-  const q = query(collection(db, COLL), where('assessmentId', '==', assessmentId));
+// SCOPING NOTE (all list functions below): the questionReports read rule
+// grants students access only where studentId == their claim, and staff
+// access only where instituteId == their claim. Queries missing those
+// filters are unprovable and rejected WHOLESALE. Pass the scope param for
+// non-webOwner callers; omit only for webOwner.
+
+export async function listReportsByAssessment(
+  assessmentId: string,
+  instituteId?: string | null
+): Promise<QuestionReport[]> {
+  const constraints = [where('assessmentId', '==', assessmentId)];
+  if (instituteId) constraints.push(where('instituteId', '==', instituteId));
+  const q = query(collection(db, COLL), ...constraints);
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as QuestionReport);
 }
 
-export async function listReportsByAttempt(attemptId: string): Promise<QuestionReport[]> {
-  const q = query(collection(db, COLL), where('attemptId', '==', attemptId));
+export async function listReportsByAttempt(
+  attemptId: string,
+  studentId?: string | null
+): Promise<QuestionReport[]> {
+  const constraints = [where('attemptId', '==', attemptId)];
+  if (studentId) constraints.push(where('studentId', '==', studentId));
+  const q = query(collection(db, COLL), ...constraints);
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as QuestionReport);
 }
 
-export async function listReportsByOwner(ownerId: string): Promise<QuestionReport[]> {
-  const q = query(collection(db, COLL), where('ownerId', '==', ownerId));
+export async function listReportsByOwner(
+  ownerId: string,
+  instituteId?: string | null
+): Promise<QuestionReport[]> {
+  const constraints = [where('ownerId', '==', ownerId)];
+  if (instituteId) constraints.push(where('instituteId', '==', instituteId));
+  const q = query(collection(db, COLL), ...constraints);
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as QuestionReport);
 }

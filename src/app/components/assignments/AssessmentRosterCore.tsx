@@ -34,8 +34,9 @@ import {
   getBreakState,
   type Attempt,
   type AttemptAnswer,
+  type GradedAnswer,
 } from '../../../lib/submissionService';
-import { getQuestionsByIds, type Question } from '../../../lib/questionBankService';
+import { getQuestionsByIdsForReview, type Question } from '../../../lib/questionBankService';
 
 // ══════════════════════════════════════════════════════════════════
 // TYPES
@@ -491,9 +492,31 @@ type ClassifiedItem = {
 function classifyAnswer(
   q: Question,
   answer: AttemptAnswer | undefined,
-  marks: number
+  marks: number,
+  graded?: GradedAnswer
 ): { category: AnswerCategory; awarded: number } {
   if (!answer) return { category: 'unattempted', awarded: 0 };
+
+  // Prefer the server-written verdict (gradedAnswers, populated by the
+  // gradeAttempt / regradeAttempts Cloud Functions). It is the source of
+  // truth, exists on every finalised attempt, and — unlike the local
+  // re-derivation below — doesn't depend on the reviewer being able to
+  // read the question's answer key (owner-scoped by the rules).
+  if (graded) {
+    if (q.engine === 'text' && graded.isCorrect === null) {
+      return { category: 'text', awarded: graded.marksAwarded };
+    }
+    if (graded.isCorrect === true)  return { category: 'correct', awarded: graded.marksAwarded };
+    if (graded.isCorrect === false) {
+      const cat: AnswerCategory = graded.marksAwarded > 0 ? 'partial' : 'wrong';
+      return { category: cat, awarded: Math.round(graded.marksAwarded * 100) / 100 };
+    }
+    // isCorrect null on a non-text question: invalidated (full marks) or
+    // ungradeable — surface the awarded marks either way.
+    return { category: graded.marksAwarded > 0 ? 'correct' : 'unattempted', awarded: graded.marksAwarded };
+  }
+
+  // Fallback for attempts that predate server grading (no gradedAnswers).
   if (q.engine === 'text') return { category: 'text', awarded: 0 };
 
   if (q.engine === 'mcq') {
@@ -579,7 +602,10 @@ function ResponseViewer({
 
   useEffect(() => {
     setLoading(true);
-    getQuestionsByIds(allIds)
+    // Review path: assessment-scoped callable merges answer keys so graders
+    // see correct answers even for questions they don't own (owner-scoped
+    // questionAnswers rules deny those direct reads).
+    getQuestionsByIdsForReview(attempt.assessmentId, allIds)
       .then(setQuestions)
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -590,7 +616,7 @@ function ResponseViewer({
     return questions.map((q) => {
       const marks  = marksMap.get(q.id) ?? 0;
       const ans    = attempt.answers[q.id];
-      const { category, awarded } = classifyAnswer(q, ans, marks);
+      const { category, awarded } = classifyAnswer(q, ans, marks, attempt.gradedAnswers?.[q.id]);
       return { question: q, sectionName: sectionNameMap.get(q.id) ?? '—', marks, awarded, category, studentAnswer: ans };
     });
   }, [questions, attempt.answers, marksMap, sectionNameMap]);
@@ -1744,12 +1770,14 @@ export function AssessmentRosterCore({
 
   // ── Live attempts — filter out soft-deleted from active roster ─
   useEffect(() => {
+    // instituteId scopes the query so the attempts read rule is provable for
+    // institute/faculty; webOwner passes null and subscribes unscoped.
     const unsub = subscribeToAttemptsByAssessment(assessmentId, (live) => {
       setAttempts(live.filter((a) => !a.isDeleted));
       setLiveConnected(true);
-    });
+    }, instituteId);
     return () => unsub();
-  }, [assessmentId]);
+  }, [assessmentId, instituteId]);
 
   // ── Live assessment refresh (to keep blockedStudents fresh) ────
   const refreshAssessment = useCallback(async () => {
@@ -2016,6 +2044,7 @@ export function AssessmentRosterCore({
             assessmentId={assessmentId}
             reviewerId={invigId}
             reviewerRole={reviewerRole}
+            instituteId={instituteId}
           />
         </div>
       ) : (

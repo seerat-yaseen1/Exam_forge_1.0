@@ -322,9 +322,10 @@ export function ExamResultsPage() {
 
         // Load questions for review (only if allowReview)
         if (att && a.showResults && a.allowReview) {
-          const allQIds = [...new Set(
-            (a.sections ?? []).flatMap((s) => s.questions.map((q) => q.questionId))
-          )];
+          const allQIds = [...new Set([
+            ...(a.sections ?? []).flatMap((s) => (s.questions ?? []).map((q) => q.questionId)),
+            ...(a.questions ?? []).map((q) => q.questionId), // legacy flat shape
+          ])];
           const results = await Promise.all(
             allQIds.map((id) => getQuestion(id, { includeAnswer: false }))
           );
@@ -336,7 +337,7 @@ export function ExamResultsPage() {
         // Load any reports the student raised on this attempt
         if (att) {
           try {
-            const list = await listReportsByAttempt(att.id);
+            const list = await listReportsByAttempt(att.id, session.studentId);
             setReports(list);
           } catch { /* non-blocking */ }
         }

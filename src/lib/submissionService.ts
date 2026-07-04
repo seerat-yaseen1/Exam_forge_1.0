@@ -308,6 +308,26 @@ export async function saveAnswer(
   });
 }
 
+// ── Save many answers in ONE write ────────────────────────────────
+// Used by the shell's flush-before-submit. The previous implementation
+// issued one updateDoc per answer in parallel against the SAME document —
+// heavy write contention (aborted/retried commits) right at submit time.
+// All `answers.*` dot-paths land under the whitelisted `answers` key, so
+// this passes studentAttemptUpdateFieldsAllowed the same as saveAnswer.
+
+export async function saveAnswers(
+  attemptId: string,
+  answers: Record<string, AttemptAnswer>
+): Promise<void> {
+  const entries = Object.entries(answers);
+  if (entries.length === 0) return;
+  const updates: Record<string, any> = { updatedAt: now() };
+  for (const [questionId, answer] of entries) {
+    updates[`answers.${questionId}`] = removeUndefined(answer as Record<string, any>);
+  }
+  await updateDoc(doc(db, 'attempts', attemptId), updates);
+}
+
 // ── Submit section ────────────────────────────────────────────────
 // Marks the current section as done, records time used, advances
 // currentSectionIdx, and starts the next section's timer.
@@ -613,58 +633,30 @@ export async function softDeleteAttempt(attemptId: string): Promise<void> {
 
 // ── Regrade attempts after a question fix ────────────────────────
 // Used by the Reports flow when a reviewer changes the answer key or
-// invalidates a question. Re-runs calculateScores on every finished
-// attempt for the assessment using the (possibly updated) Question
-// docs the caller supplies. If `invalidatedQuestionIds` is provided,
-// those questions award full marks to every attempt that included them.
+// invalidates a question. Server-authoritative: the regradeAttempts
+// Cloud Function re-scores every finished attempt of the assessment
+// against the CURRENT answer keys, using the exact same scoring code
+// as gradeAttempt. (Replaces the old client-side loop, which needed
+// direct answer-key reads — those are now denied to non-owners by the
+// questionAnswers rules — and duplicated the scoring logic.)
+// Institute/faculty callers are scoped server-side to attempts in
+// their own institute via their auth claims.
 //
-// Returns the number of attempts whose score field was rewritten.
+// Returns the number of attempts whose scores were rewritten.
 
 export async function regradeAssessmentAttempts(params: {
-  assessment: Assessment;
-  questions: Question[];               // current Question docs (post-edit)
+  assessmentId: string;
   invalidatedQuestionIds?: string[];   // award full marks for these
 }): Promise<number> {
-  const invalid = new Set(params.invalidatedQuestionIds ?? []);
-  const allAttempts = await getAttemptsByAssessment(params.assessment.id);
-
-  // Only regrade finished attempts (have a recorded score)
-  const finished = allAttempts.filter(
-    (a) => a.status === 'submitted' || a.status === 'auto_submitted' || a.status === 'terminated'
-  );
-
-  let updated = 0;
-  for (const att of finished) {
-    // Compute fresh scores for this attempt
-    const fresh = calculateScores(att, params.assessment, params.questions);
-
-    // Apply invalidation bonus: any invalidated question that exists in
-    // this attempt's section list awards its full marks.
-    if (invalid.size > 0) {
-      let bonus = 0;
-      for (const sec of params.assessment.sections ?? []) {
-        for (const aq of sec.questions) {
-          if (invalid.has(aq.questionId)) bonus += aq.marks;
-        }
-      }
-      // Only credit each attempt with the bonus once (above already
-      // includes 0 for invalidated questions because they failed scoring).
-      fresh.total = Math.min(fresh.total + bonus, fresh.available);
-      fresh.percentage = fresh.available > 0
-        ? Math.round((fresh.total / fresh.available) * 100 * 10) / 10
-        : 0;
-      fresh.passed = params.assessment.passingScore !== undefined
-        ? fresh.percentage >= params.assessment.passingScore
-        : true;
-    }
-
-    await updateDoc(doc(db, 'attempts', att.id), {
-      scores: fresh,
-      updatedAt: now(),
-    });
-    updated++;
-  }
-  return updated;
+  const call = httpsCallable<
+    { assessmentId: string; invalidatedQuestionIds?: string[] },
+    { ok: true; updated: number }
+  >(functions, 'regradeAttempts');
+  const res = await call({
+    assessmentId: params.assessmentId,
+    invalidatedQuestionIds: params.invalidatedQuestionIds,
+  });
+  return res.data.updated;
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -733,13 +725,18 @@ export async function getAttemptsByStudent(
 
 // ── Fetch all attempts for an assessment (admin roster) ───────────
 
+// NOTE ON SCOPING: the attempts read rule only grants institute/faculty
+// access to docs whose instituteId matches their claim. A query without an
+// instituteId filter is unprovable and Firestore rejects it WHOLESALE with
+// permission-denied. Pass instituteId for institute/faculty callers; pass
+// null/undefined only for webOwner.
 export async function getAttemptsByAssessment(
-  assessmentId: string
+  assessmentId: string,
+  instituteId?: string | null
 ): Promise<Attempt[]> {
-  const q = query(
-    collection(db, 'attempts'),
-    where('assessmentId', '==', assessmentId)
-  );
+  const constraints = [where('assessmentId', '==', assessmentId)];
+  if (instituteId) constraints.push(where('instituteId', '==', instituteId));
+  const q = query(collection(db, 'attempts'), ...constraints);
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as Attempt);
 }
@@ -795,6 +792,14 @@ export function getBreakState(
 // Called by ExamShell after submission, before calling submitAttempt.
 // Requires the full Question[] objects (already loaded in ExamShell).
 
+/**
+ * @deprecated NO CALLERS — kept temporarily for reference only. All scoring
+ * runs server-side in the gradeAttempt / regradeAttempts Cloud Functions
+ * (functions/src/index.ts, scoreAttemptAnswers), which are the single source
+ * of truth. Do NOT reintroduce client-side scoring: it duplicates logic that
+ * will drift, and answer-key reads are owner-scoped by the Firestore rules.
+ * Safe to delete in a future cleanup pass.
+ */
 export function calculateScores(
   attempt: Attempt,
   assessment: Assessment,
@@ -932,12 +937,14 @@ export function subscribeToAttempt(
 
 export function subscribeToAttemptsByAssessment(
   assessmentId: string,
-  cb: (attempts: Attempt[]) => void
+  cb: (attempts: Attempt[]) => void,
+  instituteId?: string | null
 ): Unsubscribe {
-  const q = query(
-    collection(db, 'attempts'),
-    where('assessmentId', '==', assessmentId)
-  );
+  // instituteId REQUIRED for institute/faculty callers (see scoping note
+  // above) — without it the rules reject the whole subscription.
+  const constraints = [where('assessmentId', '==', assessmentId)];
+  if (instituteId) constraints.push(where('instituteId', '==', instituteId));
+  const q = query(collection(db, 'attempts'), ...constraints);
   return onSnapshot(q, (snap) => {
     cb(snap.docs.map((d) => d.data() as Attempt));
   });

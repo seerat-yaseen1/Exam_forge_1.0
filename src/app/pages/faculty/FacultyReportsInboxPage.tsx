@@ -9,7 +9,7 @@ export function FacultyReportsInboxPage() {
   }
   return (
     <ReportsInboxCore
-      scope={{ kind: 'faculty', facultyId: session.facultyId }}
+      scope={{ kind: 'faculty', facultyId: session.facultyId, instituteId: session.instituteId }}
       rosterPathFor={(id) => `/faculty/assignments/${id}/roster`}
     />
   );

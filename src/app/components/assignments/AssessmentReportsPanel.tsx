@@ -29,7 +29,7 @@ import {
   type Assessment,
 } from '../../../lib/assessmentService';
 import {
-  getQuestionsByIds,
+  getQuestionsByIdsForReview,
   type Question,
 } from '../../../lib/questionBankService';
 import { regradeAssessmentAttempts } from '../../../lib/submissionService';
@@ -65,9 +65,12 @@ interface Props {
   assessmentId: string;
   reviewerId: string;
   reviewerRole: 'web_owner' | 'institute' | 'faculty';
+  /** Required for institute/faculty reviewers — scopes report + attempt
+   *  queries so the security rules can prove access. null for webOwner. */
+  instituteId?: string | null;
 }
 
-export function AssessmentReportsPanel({ assessmentId, reviewerId, reviewerRole }: Props) {
+export function AssessmentReportsPanel({ assessmentId, reviewerId, reviewerRole, instituteId }: Props) {
   const [loading, setLoading]       = useState(true);
   const [errorMsg, setErrorMsg]     = useState('');
   const [reports, setReports]       = useState<QuestionReport[]>([]);
@@ -80,13 +83,17 @@ export function AssessmentReportsPanel({ assessmentId, reviewerId, reviewerRole 
     try {
       const [a, list] = await Promise.all([
         getAssessment(assessmentId),
-        listReportsByAssessment(assessmentId),
+        listReportsByAssessment(assessmentId, instituteId),
       ]);
       setAssessment(a);
       setReports(list);
       const qids = [...new Set(list.map((r) => r.questionId))];
       if (qids.length > 0) {
-        const qs = await getQuestionsByIds(qids);
+        // Review path: keys come from the getAnswerKeysForReview callable
+        // (assessment-scoped) so institute/faculty reviewers can see the
+        // recorded correct answer even on webOwner-owned questions, which
+        // the owner-scoped questionAnswers rules deny to direct reads.
+        const qs = await getQuestionsByIdsForReview(assessmentId, qids);
         setQuestionMap(new Map(qs.map((q) => [q.id, q])));
       } else {
         setQuestionMap(new Map());
@@ -419,16 +426,13 @@ function ResolveAllForm({
       let regradeApplied = false;
       if (willRegrade) {
         setStatusMsg('Regrading attempts…');
-        // Reload current questions for this assessment so we use the
-        // latest answer-key state (the reviewer is expected to have
-        // edited the question doc separately before this step).
-        const allQids = [...new Set(
-          (assessment.sections ?? []).flatMap((s) => s.questions.map((q) => q.questionId))
-        )];
-        const qs = await getQuestionsByIds(allQids);
+        // Server-authoritative: the regradeAttempts Cloud Function reads the
+        // CURRENT answer keys itself (the reviewer is expected to have edited
+        // the question doc before this step) and re-scores every finished
+        // attempt with the exact same code as gradeAttempt. No client-side
+        // answer-key fetch — those reads are owner-scoped by the rules.
         const updated = await regradeAssessmentAttempts({
-          assessment,
-          questions: qs,
+          assessmentId: assessment.id,
           invalidatedQuestionIds: action === 'question_invalidated' ? [questionId] : [],
         });
         regradeApplied = true;

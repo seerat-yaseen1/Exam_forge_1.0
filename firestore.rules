@@ -349,20 +349,35 @@ service cloud.firestore {
     match /assessments/{id} {
       // Read access:
       //   • webOwner — always (owns all content)
-      //   • institute / faculty — only non-draft docs in their own institute
-      //     (ownerType matches role and ownerId matches institute/faculty claim)
-      //   • student — only non-draft docs (draft check is also client-filtered;
-      //     the student list query already filters by status == active|closed)
+      //   • institute / faculty — their OWN assessments in any status
+      //     (canWriteOwned; owners must be able to read back their drafts to
+      //     edit and publish them — the previous `status != 'draft'` clause
+      //     made drafts unreadable to their own creators AND was unprovable
+      //     for the list queries, so every institute/faculty listing query was
+      //     rejected wholesale), PLUS published assessments assigned to their
+      //     institute (assignedTo.type == 'all', or their instituteId in
+      //     assignedTo.instituteIds).
+      //   • student — only published docs (list queries filter by
+      //     status == active|closed; the startExam Cloud Function enforces
+      //     assignedTo server-side before an attempt can be created).
       //
-      // Note: students still receive docs from other institutes if assignedTo.type
-      // == 'all' — this is intentional (webOwner global assessments). A future
-      // improvement would add an instituteId field to assessments and filter here.
+      // Query provability notes (keep queries and rule in sync):
+      //   owner listing     → where ownerType==, ownerId==        (provable)
+      //   assigned-to-all   → where assignedTo.type=='all',
+      //                        status=='active'|'closed'          (provable)
+      //   assigned-to-mine  → where assignedTo.instituteIds
+      //                        array-contains <claim instituteId>,
+      //                        status=='active'|'closed'          (provable)
       allow read: if isWebOwner()
                      || (role() == 'student'
                          && resource.data.status in ['active', 'closed'])
                      || ((role() == 'institute' || role() == 'faculty')
-                         && resource.data.status != 'draft'
-                         && canWriteOwned(resource.data.ownerType, resource.data.ownerId));
+                         && canWriteOwned(resource.data.ownerType, resource.data.ownerId))
+                     || ((role() == 'institute' || role() == 'faculty')
+                         && resource.data.status in ['active', 'closed']
+                         && (resource.data.assignedTo.type == 'all'
+                             || (resource.data.assignedTo.type == 'institutes'
+                                 && request.auth.token.instituteId in resource.data.assignedTo.instituteIds)));
       allow create: if canWriteOwned(request.resource.data.ownerType,
                                      request.resource.data.ownerId);
       allow update: if canWriteOwned(resource.data.ownerType,
@@ -440,13 +455,30 @@ service cloud.firestore {
     }
 
     // questionAnswers/{id} — sibling collection holding correctIds /
-    // correctPairs / modelAnswer for each question. Students MUST NOT read
-    // these — the Cloud Function gradeAttempt (admin SDK, bypasses rules)
-    // is the only legitimate read path for student-facing flows. Admin
-    // surfaces (web owner / institute / faculty editors) read via the
-    // questionBankService getters.
+    // correctPairs / modelAnswer for each question.
+    //
+    // READ — owner-scoped (was: any signed-in non-student, which let ANY
+    // institute or faculty account on the platform dump EVERY answer key,
+    // including other institutes' private questions and the webOwner bank):
+    //   • webOwner — all keys
+    //   • institute / faculty — only keys of questions they own
+    //     (canWriteOwned on the answer doc's own ownerType/ownerId fields)
+    //   • students — never; the gradeAttempt / regradeAttempts Cloud
+    //     Functions (admin SDK, bypass rules) are the only student-facing
+    //     read path, and bulk regrade also runs server-side now.
+    //
+    // Query provability: batched reads from the client must carry
+    // where('ownerType','==',…) + where('ownerId','==',…) filters matching
+    // the caller's claim (see mergeAnswers in questionBankService), or fall
+    // back to per-document gets which are evaluated doc-by-doc.
+    //
+    // NOTE: direct field access (not .get() with a default) is deliberate —
+    // it keeps owner-filtered queries provable. Legacy answer docs missing
+    // ownerType/ownerId are readable by webOwner only.
     match /questionAnswers/{id} {
-      allow read:   if signedIn() && role() != 'student';
+      allow read:   if isWebOwner()
+                       || canWriteOwned(resource.data.ownerType,
+                                        resource.data.ownerId);
       allow create: if canWriteOwned(request.resource.data.ownerType,
                                      request.resource.data.ownerId);
       allow update: if canWriteOwned(

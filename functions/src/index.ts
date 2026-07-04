@@ -347,6 +347,246 @@ function scoreMatchMultiplier(
   return { multiplier: mult, isCorrect: mult === 1 };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// SHARED GRADING HELPERS — single source of truth for scoring.
+// Used by gradeAttempt (finalise) AND regradeAttempts (post-fix regrade)
+// so the two paths can never drift apart.
+// ══════════════════════════════════════════════════════════════════
+
+interface GradingAssessmentDoc {
+  sections?: Array<{
+    id: string;
+    name: string;
+    questions?: Array<{ questionId: string; marks: number }>;
+  }>;
+  questions?: Array<{ questionId: string; marks: number }>;
+  passingScore?: number;
+  allowReview?: boolean;
+}
+
+type EffectiveSection = { id: string; name: string; questions: Array<{ questionId: string; marks: number }> };
+
+// Effective sections — MUST mirror buildEffectiveSections in ExamShell.tsx
+// exactly, or grading diverges from what the student saw.
+//   Case 1: at least one section carries resolved questions → use those
+//           sections (dropping empty ones).
+//   Case 2: sections exist but none has questions (legacy / flat shape) →
+//           distribute the flat assessment.questions list across the named
+//           sections equally (Math.ceil chunks), same as the shell.
+//   Case 3: no sections at all → one synthetic 'main_section' wrapping the
+//           flat list (same id the shell uses, so bySection keys line up
+//           with attempt.questionOrder).
+function normalizeSections(assessment: GradingAssessmentDoc): EffectiveSection[] {
+  const rawSections = assessment.sections ?? [];
+  const hasResolved = rawSections.some((s) => (s.questions?.length ?? 0) > 0);
+  if (hasResolved) {
+    return rawSections
+      .filter((s) => (s.questions?.length ?? 0) > 0)
+      .map((s) => ({ id: s.id, name: s.name, questions: s.questions! }));
+  }
+  if ((assessment.questions?.length ?? 0) > 0) {
+    const flat = assessment.questions!;
+    if (rawSections.length > 0) {
+      const perSection = Math.ceil(flat.length / rawSections.length);
+      return rawSections
+        .map((sec, i) => ({
+          id: sec.id,
+          name: sec.name,
+          questions: flat.slice(i * perSection, (i + 1) * perSection),
+        }))
+        .filter((s) => s.questions.length > 0);
+    }
+    return [{ id: 'main_section', name: 'Questions', questions: flat }];
+  }
+  return [];
+}
+
+// Batch-load question + answer docs, chunked at 300 refs per getAll call so
+// very large papers can't blow a single BatchGetDocuments RPC. Pre-migration
+// questions still carrying inline answer fields are honoured as a fallback.
+async function loadQuestionAndAnswerMaps(
+  db: FirebaseFirestore.Firestore,
+  qIds: string[],
+): Promise<{ questionMap: Map<string, QuestionDoc>; answerMap: Map<string, QuestionAnswerDoc> }> {
+  const chunkedGetAll = async (col: string, ids: string[]) => {
+    const out: FirebaseFirestore.DocumentSnapshot[] = [];
+    for (let i = 0; i < ids.length; i += 300) {
+      const refs = ids.slice(i, i + 300).map((id) => db.collection(col).doc(id));
+      out.push(...await db.getAll(...refs));
+    }
+    return out;
+  };
+  const [questionSnaps, answerSnaps] = await Promise.all([
+    chunkedGetAll('questions', qIds),
+    chunkedGetAll('questionAnswers', qIds),
+  ]);
+
+  const questionMap = new Map<string, QuestionDoc>();
+  questionSnaps.forEach((snap) => {
+    if (snap.exists) {
+      questionMap.set(snap.id, snap.data() as QuestionDoc);
+    }
+  });
+  const answerMap = new Map<string, QuestionAnswerDoc>();
+  answerSnaps.forEach((snap) => {
+    if (snap.exists) {
+      answerMap.set(snap.id, snap.data() as QuestionAnswerDoc);
+    } else {
+      // Backwards-compat: pre-migration questions still carry answers inline
+      const q = questionMap.get(snap.id) as unknown as QuestionAnswerDoc & QuestionDoc;
+      if (q) {
+        answerMap.set(snap.id, {
+          id: snap.id,
+          correctIds:   (q as any).correctIds   ?? [],
+          correctPairs: (q as any).correctPairs ?? [],
+          modelAnswer:  (q as any).modelAnswer  ?? '',
+        });
+      }
+    }
+  });
+  return { questionMap, answerMap };
+}
+
+interface GradedAnswerOut {
+  isCorrect: boolean | null;
+  marksAwarded: number;
+  correctIds?: string[];
+  correctPairs?: CorrectPair[];
+  modelAnswer?: string;
+}
+
+interface ScoresOut {
+  total: number;
+  available: number;
+  percentage: number;
+  passed: boolean;
+  bySection: Array<{
+    sectionId: string;
+    sectionName: string;
+    totalQuestions: number;
+    answeredQuestions: number;
+    marksAwarded: number;
+    marksAvailable: number;
+  }>;
+  requiresManualReview: boolean;
+}
+
+// Core scoring pass over one attempt's answers.
+//   • Answer-key fields are exposed in gradedAnswers ONLY when the assessment
+//     allows review — gradedAnswers is written into the attempt doc, which
+//     the student can read directly, so unconditional exposure leaks the key
+//     regardless of showResults/allowReview (and enables key-harvesting on
+//     multi-attempt exams, since the paper is frozen at publish time).
+//   • invalidatedQuestionIds (regrade flow): those questions award FULL marks
+//     to every attempt, isCorrect stays null ("correctness" is undefined for
+//     an invalidated question). This replaces the old client-side flat bonus
+//     — same totals, but bySection now stays consistent with the total.
+function scoreAttemptAnswers(params: {
+  sections: EffectiveSection[];
+  questionMap: Map<string, QuestionDoc>;
+  answerMap: Map<string, QuestionAnswerDoc>;
+  answers: Record<string, AttemptAnswerDoc> | undefined;
+  passingScore: number | undefined;
+  allowReview: boolean | undefined;
+  invalidatedQuestionIds?: Set<string>;
+}): { scores: ScoresOut; gradedAnswers: Record<string, GradedAnswerOut> } {
+  const { sections, questionMap, answerMap, answers, passingScore, allowReview } = params;
+  const invalidated = params.invalidatedQuestionIds ?? new Set<string>();
+
+  let totalAwarded   = 0;
+  let totalAvailable = 0;
+  let requiresManualReview = false;
+  const bySection: ScoresOut['bySection'] = [];
+  const gradedAnswers: Record<string, GradedAnswerOut> = {};
+
+  const exposeKeys = allowReview === true;
+
+  for (const sec of sections) {
+    let sectionAwarded = 0;
+    let sectionAvailable = 0;
+    let answered = 0;
+
+    for (const aq of sec.questions) {
+      sectionAvailable += aq.marks;
+      totalAvailable   += aq.marks;
+
+      const q   = questionMap.get(aq.questionId);
+      const ans = answerMap.get(aq.questionId);
+      const studentAnswer = answers?.[aq.questionId];
+
+      const exposed: GradedAnswerOut = {
+        isCorrect: null,
+        marksAwarded: 0,
+      };
+      if (exposeKeys && q && ans) {
+        if (q.engine === 'mcq')   exposed.correctIds   = ans.correctIds   ?? [];
+        if (q.engine === 'match') exposed.correctPairs = ans.correctPairs ?? [];
+        if (q.engine === 'text')  exposed.modelAnswer  = ans.modelAnswer  ?? '';
+      }
+
+      if (invalidated.has(aq.questionId)) {
+        // Invalidated question — full marks for everyone, regardless of
+        // whether it was answered (matches the old flat-bonus semantics).
+        if (studentAnswer) answered++;
+        sectionAwarded += aq.marks;
+        totalAwarded   += aq.marks;
+        exposed.marksAwarded = aq.marks;
+        exposed.isCorrect    = null;
+      } else if (studentAnswer && q && ans) {
+        answered++;
+        if (q.engine === 'mcq') {
+          const { multiplier, isCorrect } = scoreMCQMultiplier(q, ans, studentAnswer.value);
+          const award = multiplier * aq.marks;
+          sectionAwarded += award;
+          totalAwarded   += award;
+          exposed.marksAwarded = award;
+          exposed.isCorrect    = isCorrect;
+        } else if (q.engine === 'match') {
+          const { multiplier, isCorrect } = scoreMatchMultiplier(ans, studentAnswer.value);
+          const award = multiplier * aq.marks;
+          sectionAwarded += award;
+          totalAwarded   += award;
+          exposed.marksAwarded = award;
+          exposed.isCorrect    = isCorrect;
+        } else {
+          // text engine — needs human grading
+          requiresManualReview = true;
+        }
+      }
+
+      gradedAnswers[aq.questionId] = exposed;
+    }
+
+    bySection.push({
+      sectionId: sec.id,
+      sectionName: sec.name,
+      totalQuestions: sec.questions.length,
+      answeredQuestions: answered,
+      marksAwarded: sectionAwarded,
+      marksAvailable: sectionAvailable,
+    });
+  }
+
+  const percentage = totalAvailable > 0
+    ? Math.round((totalAwarded / totalAvailable) * 100 * 10) / 10
+    : 0;
+  const passed = passingScore !== undefined
+    ? percentage >= passingScore
+    : true;
+
+  return {
+    scores: {
+      total: totalAwarded,
+      available: totalAvailable,
+      percentage,
+      passed,
+      bySection,
+      requiresManualReview,
+    },
+    gradedAnswers,
+  };
+}
+
 export const gradeAttempt = onCall<GradeAttemptData>(
   { region: 'us-central1' },
   async (request) => {
@@ -399,150 +639,25 @@ export const gradeAttempt = onCall<GradeAttemptData>(
 
     const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
-    const assessment = assessmentSnap.data() as {
-      sections?: Array<{
-        id: string;
-        name: string;
-        questions: Array<{ questionId: string; marks: number }>;
-      }>;
-      passingScore?: number;
-    };
-    const sections = assessment.sections ?? [];
+    const assessment = assessmentSnap.data() as GradingAssessmentDoc;
+
+    const sections = normalizeSections(assessment);
 
     // Collect all question IDs referenced by the assessment
     const qIds = Array.from(new Set(
       sections.flatMap((s) => s.questions.map((q) => q.questionId))
     ));
 
-    // Batch-load questions and answer docs (Firestore getAll caps at 500)
-    const questionRefs = qIds.map((id) => db.collection('questions').doc(id));
-    const answerRefs   = qIds.map((id) => db.collection('questionAnswers').doc(id));
-    const [questionSnaps, answerSnaps] = await Promise.all([
-      qIds.length > 0 ? db.getAll(...questionRefs) : Promise.resolve([]),
-      qIds.length > 0 ? db.getAll(...answerRefs)   : Promise.resolve([]),
-    ]);
+    const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
 
-    const questionMap = new Map<string, QuestionDoc>();
-    questionSnaps.forEach((snap) => {
-      if (snap.exists) {
-        const d = snap.data() as QuestionDoc;
-        questionMap.set(snap.id, d);
-      }
+    const { scores, gradedAnswers } = scoreAttemptAnswers({
+      sections,
+      questionMap,
+      answerMap,
+      answers: attempt.answers,
+      passingScore: assessment.passingScore,
+      allowReview: assessment.allowReview,
     });
-    const answerMap = new Map<string, QuestionAnswerDoc>();
-    answerSnaps.forEach((snap) => {
-      if (snap.exists) {
-        const d = snap.data() as QuestionAnswerDoc;
-        answerMap.set(snap.id, d);
-      } else {
-        // Backwards-compat: pre-migration questions still carry answers inline
-        const q = questionMap.get(snap.id) as unknown as QuestionAnswerDoc & QuestionDoc;
-        if (q) {
-          answerMap.set(snap.id, {
-            id: snap.id,
-            correctIds:   (q as any).correctIds   ?? [],
-            correctPairs: (q as any).correctPairs ?? [],
-            modelAnswer:  (q as any).modelAnswer  ?? '',
-          });
-        }
-      }
-    });
-
-    let totalAwarded   = 0;
-    let totalAvailable = 0;
-    let requiresManualReview = false;
-    const bySection: Array<{
-      sectionId: string;
-      sectionName: string;
-      totalQuestions: number;
-      answeredQuestions: number;
-      marksAwarded: number;
-      marksAvailable: number;
-    }> = [];
-
-    const gradedAnswers: Record<string, {
-      isCorrect: boolean | null;
-      marksAwarded: number;
-      correctIds?: string[];
-      correctPairs?: CorrectPair[];
-      modelAnswer?: string;
-    }> = {};
-
-    for (const sec of sections) {
-      let sectionAwarded = 0;
-      let sectionAvailable = 0;
-      let answered = 0;
-
-      for (const aq of sec.questions) {
-        sectionAvailable += aq.marks;
-        totalAvailable   += aq.marks;
-
-        const q   = questionMap.get(aq.questionId);
-        const ans = answerMap.get(aq.questionId);
-        const studentAnswer = attempt.answers?.[aq.questionId];
-
-        // Always expose correct-answer data so the results page can render it
-        // without students ever being able to read questionAnswers directly.
-        const exposed: typeof gradedAnswers[string] = {
-          isCorrect: null,
-          marksAwarded: 0,
-        };
-        if (q && ans) {
-          if (q.engine === 'mcq')   exposed.correctIds   = ans.correctIds   ?? [];
-          if (q.engine === 'match') exposed.correctPairs = ans.correctPairs ?? [];
-          if (q.engine === 'text')  exposed.modelAnswer  = ans.modelAnswer  ?? '';
-        }
-
-        if (studentAnswer && q && ans) {
-          answered++;
-          if (q.engine === 'mcq') {
-            const { multiplier, isCorrect } = scoreMCQMultiplier(q, ans, studentAnswer.value);
-            const award = multiplier * aq.marks;
-            sectionAwarded += award;
-            totalAwarded   += award;
-            exposed.marksAwarded = award;
-            exposed.isCorrect    = isCorrect;
-          } else if (q.engine === 'match') {
-            const { multiplier, isCorrect } = scoreMatchMultiplier(ans, studentAnswer.value);
-            const award = multiplier * aq.marks;
-            sectionAwarded += award;
-            totalAwarded   += award;
-            exposed.marksAwarded = award;
-            exposed.isCorrect    = isCorrect;
-          } else {
-            // text engine — needs human grading
-            requiresManualReview = true;
-          }
-        }
-
-        gradedAnswers[aq.questionId] = exposed;
-      }
-
-      bySection.push({
-        sectionId: sec.id,
-        sectionName: sec.name,
-        totalQuestions: sec.questions.length,
-        answeredQuestions: answered,
-        marksAwarded: sectionAwarded,
-        marksAvailable: sectionAvailable,
-      });
-    }
-
-    const percentage = totalAvailable > 0
-      ? Math.round((totalAwarded / totalAvailable) * 100 * 10) / 10
-      : 0;
-    const passed = assessment.passingScore !== undefined
-      ? percentage >= assessment.passingScore
-      : true;
-
-    const scores = {
-      total: totalAwarded,
-      available: totalAvailable,
-      percentage,
-      passed,
-      bySection,
-      requiresManualReview,
-    };
 
     const nowIso = new Date().toISOString();
     const status =
@@ -569,6 +684,215 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     await attemptRef.update(updates);
 
     return { ok: true, scores };
+  }
+);
+
+// ══════════════════════════════════════════════════════════════════
+// regradeAttempts — server-side bulk regrade
+//
+// Replaces the client-side regradeAssessmentAttempts path. Runs after a
+// reviewer fixes or invalidates a question: re-scores every FINISHED
+// attempt of the assessment against the CURRENT answer keys, using the
+// exact same scoring code as gradeAttempt (no client duplicate to drift).
+//
+// Reading answer keys moved server-side here is what allows the
+// questionAnswers rules to be locked down to owners only.
+//
+// AuthZ: webOwner regrades everything; institute/faculty regrade only
+// attempts in their own institute (attempts query is scoped by claim).
+// Status, submittedAt, and integrity fields are preserved — only scores,
+// gradedAnswers, and updatedAt change.
+// ══════════════════════════════════════════════════════════════════
+
+interface RegradeAttemptsData {
+  assessmentId: string;
+  invalidatedQuestionIds?: string[];
+}
+
+export const regradeAttempts = onCall<RegradeAttemptsData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+    const callerRole        = request.auth.token.role        as Role   | undefined;
+    const callerInstituteId = request.auth.token.instituteId as string | undefined;
+
+    const isWebOwnerCaller = callerRole === 'webOwner';
+    const isInstituteScoped =
+      (callerRole === 'institute' || callerRole === 'faculty') && !!callerInstituteId;
+    if (!isWebOwnerCaller && !isInstituteScoped) {
+      throw new HttpsError('permission-denied', 'Only graders may regrade attempts.');
+    }
+
+    const { assessmentId, invalidatedQuestionIds } = request.data || ({} as RegradeAttemptsData);
+    if (!assessmentId) throw new HttpsError('invalid-argument', 'assessmentId is required.');
+    if (invalidatedQuestionIds !== undefined
+        && (!Array.isArray(invalidatedQuestionIds)
+            || invalidatedQuestionIds.some((id) => typeof id !== 'string'))) {
+      throw new HttpsError('invalid-argument', 'invalidatedQuestionIds must be an array of strings.');
+    }
+
+    const db = getFirestore();
+
+    const aSnap = await db.collection('assessments').doc(assessmentId).get();
+    if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+    const assessment = aSnap.data() as GradingAssessmentDoc;
+
+    const sections = normalizeSections(assessment);
+    const qIds = Array.from(new Set(
+      sections.flatMap((s) => s.questions.map((q) => q.questionId))
+    ));
+    const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
+
+    const invalidated = new Set(invalidatedQuestionIds ?? []);
+
+    // Attempts to regrade — institute/faculty callers are hard-scoped to
+    // their own institute regardless of what they ask for.
+    let attemptsQuery: FirebaseFirestore.Query = db
+      .collection('attempts')
+      .where('assessmentId', '==', assessmentId);
+    if (!isWebOwnerCaller) {
+      attemptsQuery = attemptsQuery.where('instituteId', '==', callerInstituteId);
+    }
+    const attemptsSnap = await attemptsQuery.get();
+
+    const FINISHED = new Set(['submitted', 'auto_submitted', 'terminated']);
+    const nowIso = new Date().toISOString();
+
+    let updated = 0;
+    let batch = db.batch();
+    let batchSize = 0;
+
+    for (const docSnap of attemptsSnap.docs) {
+      const att = docSnap.data() as {
+        status?: string;
+        isDeleted?: boolean;
+        answers?: Record<string, AttemptAnswerDoc>;
+      };
+      if (!att.status || !FINISHED.has(att.status)) continue;
+      if (att.isDeleted) continue;
+
+      const { scores, gradedAnswers } = scoreAttemptAnswers({
+        sections,
+        questionMap,
+        answerMap,
+        answers: att.answers,
+        passingScore: assessment.passingScore,
+        allowReview: assessment.allowReview,
+        invalidatedQuestionIds: invalidated,
+      });
+
+      batch.update(docSnap.ref, { scores, gradedAnswers, updatedAt: nowIso });
+      updated++;
+      batchSize++;
+      if (batchSize >= 400) { // Firestore batch cap is 500 writes
+        await batch.commit();
+        batch = db.batch();
+        batchSize = 0;
+      }
+    }
+    if (batchSize > 0) await batch.commit();
+
+    return { ok: true, updated };
+  }
+);
+
+// ══════════════════════════════════════════════════════════════════
+// getAnswerKeysForReview — scoped answer-key reads for graders
+//
+// With questionAnswers locked to owners in the Firestore rules, reviewer
+// surfaces (report triage, attempt drill-in) can no longer read keys of
+// questions they don't own — e.g. an institute reviewer judging an
+// "answer is wrong" report on a webOwner-owned question. This callable is
+// the ONLY sanctioned path for those reads, and it is assessment-scoped:
+//
+//   • caller must be webOwner, OR an institute/faculty grader for whom the
+//     assessment is legitimately visible — they own it, or it is published
+//     and assigned to their institute (type 'all' or instituteIds match) —
+//     the exact mirror of the assessments read rule;
+//   • only keys for questions that actually appear IN that assessment are
+//     returned (requested ids are intersected with the paper), so this can
+//     never be used to dump the bank at large;
+//   • students are always denied.
+// ══════════════════════════════════════════════════════════════════
+
+interface GetAnswerKeysData {
+  assessmentId: string;
+  questionIds?: string[]; // optional subset; defaults to the whole paper
+}
+
+export const getAnswerKeysForReview = onCall<GetAnswerKeysData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+    const callerRole        = request.auth.token.role        as Role   | undefined;
+    const callerInstituteId = request.auth.token.instituteId as string | undefined;
+    const callerFacultyId   = request.auth.token.facultyId   as string | undefined;
+
+    if (callerRole !== 'webOwner' && callerRole !== 'institute' && callerRole !== 'faculty') {
+      throw new HttpsError('permission-denied', 'Only graders may read answer keys.');
+    }
+
+    const { assessmentId, questionIds } = request.data || ({} as GetAnswerKeysData);
+    if (!assessmentId) throw new HttpsError('invalid-argument', 'assessmentId is required.');
+    if (questionIds !== undefined
+        && (!Array.isArray(questionIds) || questionIds.some((id) => typeof id !== 'string'))) {
+      throw new HttpsError('invalid-argument', 'questionIds must be an array of strings.');
+    }
+
+    const db = getFirestore();
+    const aSnap = await db.collection('assessments').doc(assessmentId).get();
+    if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+    const assessment = aSnap.data() as GradingAssessmentDoc & {
+      ownerType?: string;
+      ownerId?: string;
+      status?: string;
+      assignedTo?: { type: string; instituteIds?: string[] };
+    };
+
+    if (callerRole !== 'webOwner') {
+      const ownsIt =
+        (callerRole === 'institute'
+          && assessment.ownerType === 'institute'
+          && assessment.ownerId === callerInstituteId)
+        || (callerRole === 'faculty'
+          && assessment.ownerType === 'faculty'
+          && assessment.ownerId === callerFacultyId);
+      const published = assessment.status === 'active' || assessment.status === 'closed';
+      const target = assessment.assignedTo;
+      const assignedToCaller = published && !!target
+        && (target.type === 'all'
+            || (target.type === 'institutes'
+                && !!callerInstituteId
+                && (target.instituteIds ?? []).includes(callerInstituteId)));
+      if (!ownsIt && !assignedToCaller) {
+        throw new HttpsError('permission-denied', 'This assessment is not visible to you.');
+      }
+    }
+
+    // Intersect requested ids with the paper — never leak keys beyond it.
+    const paperIds = new Set(
+      normalizeSections(assessment).flatMap((s) => s.questions.map((q) => q.questionId))
+    );
+    const wanted = (questionIds && questionIds.length > 0)
+      ? questionIds.filter((id) => paperIds.has(id))
+      : Array.from(paperIds);
+
+    const { answerMap } = await loadQuestionAndAnswerMaps(db, wanted);
+
+    const keys: Record<string, { correctIds: string[]; correctPairs: CorrectPair[]; modelAnswer: string }> = {};
+    for (const id of wanted) {
+      const ans = answerMap.get(id);
+      if (ans) {
+        keys[id] = {
+          correctIds:   ans.correctIds   ?? [],
+          correctPairs: ans.correctPairs ?? [],
+          modelAnswer:  ans.modelAnswer  ?? '',
+        };
+      }
+    }
+    return { ok: true, keys };
   }
 );
 
@@ -657,6 +981,7 @@ export const startExam = onCall<StartExamData>(
       attemptOverrides?: Record<string, number>;
       blockedStudents?: string[];
       title?: string;
+      assignedTo?: { type: string; instituteIds?: string[]; studentIds?: string[] };
     };
 
     if (a.status === 'draft') {
@@ -664,6 +989,23 @@ export const startExam = onCall<StartExamData>(
     }
     if (a.blockedStudents?.includes(studentId)) {
       throw new HttpsError('permission-denied', 'You are blocked from this exam.');
+    }
+
+    // Targeting gate — the client briefing filters by assignedTo, but nothing
+    // stopped a student from calling startExam directly with any active
+    // assessment id. Enforce assignment server-side. Legacy docs without
+    // assignedTo are treated as webOwner-global ('all').
+    const target = a.assignedTo;
+    if (target && target.type !== 'all') {
+      const assigned =
+        target.type === 'institutes'
+          ? (target.instituteIds ?? []).includes(instituteId)
+          : target.type === 'students'
+            ? (target.studentIds ?? []).includes(studentId)
+            : false;
+      if (!assigned) {
+        throw new HttpsError('permission-denied', 'This exam is not assigned to you.');
+      }
     }
 
     const serverNow = Date.now();
@@ -727,7 +1069,10 @@ export const startExam = onCall<StartExamData>(
       };
     });
 
-    const id = `attempt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    // Random component FIRST — monotonically increasing document IDs cluster
+    // index writes and hotspot above ~500 creates/sec. Random prefix spreads
+    // them. Timestamp kept (after) for human readability in the console.
+    const id = `attempt_${Math.random().toString(36).slice(2, 9)}_${Date.now()}`;
     const attempt = {
       id,
       assessmentId,

@@ -347,6 +347,53 @@ export async function getAssessmentsByOwner(
   return snap.docs.map((d) => d.data() as Assessment);
 }
 
+// ── Get assessments visible to an institute admin ─────────────────
+// Replaces getAllAssessments() on the institute dashboard, which was an
+// unfiltered collection scan the security rules (correctly) reject for
+// non-webOwner roles. Every query below carries exactly the filters the
+// assessments read rule needs to prove access:
+//   1. assessments the institute OWNS (any status, incl. drafts)
+//   2. published assessments assigned to ALL institutes
+//   3. published assessments whose assignedTo.instituteIds contains us
+// Results are deduplicated by id.
+
+export async function getAssessmentsVisibleToInstitute(
+  instituteId: string
+): Promise<Assessment[]> {
+  const col = collection(db, 'assessments');
+  const publishedStatuses: AssessmentStatus[] = ['active', 'closed'];
+
+  const queries = [
+    // 1. Own assessments (drafts included — owner may always read own docs)
+    query(col,
+      where('ownerType', '==', 'institute'),
+      where('ownerId', '==', instituteId),
+      where('isDeleted', '==', false)),
+    // 2 & 3. Assigned published assessments, one query per status value so
+    // the rule clause `status in ['active','closed']` is provable.
+    ...publishedStatuses.map((s) =>
+      query(col,
+        where('assignedTo.type', '==', 'all'),
+        where('status', '==', s),
+        where('isDeleted', '==', false))),
+    ...publishedStatuses.map((s) =>
+      query(col,
+        where('assignedTo.instituteIds', 'array-contains', instituteId),
+        where('status', '==', s),
+        where('isDeleted', '==', false))),
+  ];
+
+  const snaps = await Promise.all(queries.map((q) => getDocs(q)));
+  const byId = new Map<string, Assessment>();
+  for (const snap of snaps) {
+    for (const d of snap.docs) {
+      const a = d.data() as Assessment;
+      byId.set(a.id, a);
+    }
+  }
+  return [...byId.values()];
+}
+
 // ── Update assessment ─────────────────────────────────────────────
 
 export async function updateAssessment(

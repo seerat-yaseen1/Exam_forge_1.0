@@ -26,6 +26,7 @@ import { getQuestion, type Question } from '../../../lib/questionBankService';
 import {
   startAttempt,
   saveAnswer,
+  saveAnswers,
   submitSection,
   endBreak,
   pickSection,
@@ -75,11 +76,11 @@ if (typeof document !== 'undefined') {
   }
 }
 
-// ════════════════════════════════════════════��═════════════════════
+// ════════════════════════════════════════════  ═════════════════════
 // TYPES
 // ══════════════════════════════════════════════════════════════════
 
-type ShellStatus = 'loading' | 'ready' | 'choosing_section' | 'on_break' | 'submitting_section' | 'submitting_exam' | 'submitted' | 'terminated' | 'error';
+type ShellStatus = 'loading' | 'ready' | 'choosing_section' | 'on_break' | 'submitting_section' | 'submitting_exam' | 'submit_failed' | 'submitted' | 'terminated' | 'error';
 
 type BreakState = {
   justSubmittedSectionId: string;
@@ -536,6 +537,9 @@ export function ExamShell() {
   // true on first entry and is never reset — once we're submitting we're going
   // to the results page.
   const submittingRef = useRef(false);
+  // Remembers the trigger of the last final-submit so the retry button on the
+  // submit_failed screen re-runs grading with the same reason.
+  const lastFinalReasonRef = useRef<'manual' | 'time_expired' | 'violation_limit' | 'window_closed'>('manual');
 
   // ── Navigation state ───────────────────────────────────────────
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
@@ -812,7 +816,11 @@ export function ExamShell() {
   useEffect(() => {
     if (shellStatus !== 'ready' || !assessment?.endDate) return;
     const checkExpiry = () => {
-      if (new Date() > new Date(assessment.endDate!)) {
+      // Anchor to server time via the captured skew — the local clock is
+      // student-controlled. (Enforcement is server-side regardless; this only
+      // decides when the client auto-submits.)
+      const serverNow = Date.now() + (serverSkewRef.current ?? 0);
+      if (serverNow > new Date(assessment.endDate!).getTime()) {
         handleFinalSubmit('window_closed');
       }
     };
@@ -885,17 +893,17 @@ export function ExamShell() {
     answerTimersRef.current.set(questionId, timer);
   }, [questionMap, currentSection]);
 
-  // Flush all pending answer saves immediately
+  // Flush all pending answer saves immediately — as ONE write. The previous
+  // version fired one updateDoc per answered question in parallel against the
+  // same attempt doc, which caused heavy write contention (aborted/retried
+  // commits) exactly at submit time on long papers.
   const flushAnswers = useCallback(async () => {
     for (const [, timer] of answerTimersRef.current) clearTimeout(timer);
     answerTimersRef.current.clear();
 
     const att = attemptRef.current;
     if (!att) return;
-    const answers = localAnswersRef.current;
-    await Promise.allSettled(
-      Object.entries(answers).map(([qId, ans]) => saveAnswer(att.id, qId, ans))
-    );
+    await saveAnswers(att.id, localAnswersRef.current);
   }, []);
 
   // Flush pending answers the instant a freeze lands, so nothing sitting in the
@@ -961,7 +969,13 @@ export function ExamShell() {
     }
 
     if (nextSection && useBreak && breakCfg) {
-      // Enter break — next section's timer will start when student continues
+      // Enter break — next section's timer will start when student continues.
+      // RELEASE THE SUBMIT LOCK: control returns to the student, and the next
+      // section's submit must be able to run. (This lock being left engaged
+      // was the bug that made every multi-section exam unsubmittable past its
+      // first section — doSectionSubmit and handleFinalSubmit both early-
+      // returned forever.)
+      submittingRef.current = false;
       const submittedAtMs = Date.now();
       setBreakState({
         justSubmittedSectionId: sectionId,
@@ -986,6 +1000,7 @@ export function ExamShell() {
       setShellStatus('on_break');
     } else if (nextSection && isStudentChoice) {
       // No break, but student picks the next section themselves.
+      submittingRef.current = false; // release — see note above
       setAttempt((prev) =>
         prev
           ? {
@@ -1000,6 +1015,7 @@ export function ExamShell() {
       setShellStatus('choosing_section');
     } else if (nextSection) {
       // Advance to next section
+      submittingRef.current = false; // release — see note above
       setCurrentSectionIdx(nextIdx);
       setCurrentQIdx(0);
       setShellStatus('ready');
@@ -1055,7 +1071,18 @@ export function ExamShell() {
         nextSectionIdx: bs.nextSectionIdx,
       });
     } catch (e) {
+      // If the server refused (mandatory break not elapsed on the SERVER
+      // clock, or a transient failure), do NOT advance locally — the next
+      // section has no server-side startedAt, and submitSection would later
+      // reject it with 'Section was never started', wedging the exam.
       console.error('[ExamShell] endBreak failed', e);
+      const msg = (e as { message?: string })?.message ?? '';
+      if (msg.includes('Mandatory break') || msg.includes('failed-precondition')) {
+        return; // stay on the break screen; the countdown will retry
+      }
+      setErrorMsg('Could not start the next section. Check your connection and try again.');
+      setShellStatus('error');
+      return;
     }
     const startISO = new Date().toISOString();
     setAttempt((prev) =>
@@ -1162,13 +1189,22 @@ export function ExamShell() {
     const a   = assessmentRef.current;
     if (!att || !a) return;
 
+    lastFinalReasonRef.current = reason;
     setShellStatus('submitting_exam');
     await flushAnswers();
 
     try {
       await gradeAttempt({ attemptId: att.id, reason });
     } catch (e) {
+      // DO NOT navigate to results on failure — the attempt is still
+      // in_progress server-side; showing "submitted" would be a lie and the
+      // student would lose their only chance to retry. Surface a retry
+      // screen instead (answers are already flushed, nothing is lost).
       console.error('[ExamShell] gradeAttempt failed', e);
+      submittingRef.current = false;
+      setErrorMsg('Your exam could not be submitted. Your answers are saved — check your connection and try again.');
+      setShellStatus('submit_failed');
+      return;
     }
 
     // Persist any flags raised during the exam (best-effort; never blocks navigation)
@@ -1325,6 +1361,26 @@ export function ExamShell() {
           style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2 }}
         >
           Return to assessments
+        </button>
+      </div>
+    );
+  }
+
+  if (shellStatus === 'submit_failed') {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
+        <AlertTriangle size={20} strokeWidth={1} style={{ color: '#9B2828' }} />
+        <p className="text-xs mt-4 px-8 text-center" style={{ color: '#9B2828' }}>{errorMsg}</p>
+        <button
+          onClick={() => {
+            if (submittingRef.current) return;
+            submittingRef.current = true;
+            doFinalSubmit(lastFinalReasonRef.current);
+          }}
+          className="text-xs mt-6 px-4 py-2"
+          style={{ background: '#2F2F2B', color: '#FFFFFF', borderRadius: 2 }}
+        >
+          Retry submission
         </button>
       </div>
     );

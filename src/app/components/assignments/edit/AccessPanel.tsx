@@ -3,7 +3,7 @@ import { X, Search } from 'lucide-react';
 import { EditPanelShell, Field } from './EditPanelShell';
 import { editableFields } from './useEditableFields';
 import { updateAssessmentAccess, type Assessment } from '../../../../lib/assessmentService';
-import { getAllStudents, type Student } from '../../../../lib/firebaseService';
+import { getAllStudents, getStudentsByInstitute, type Student } from '../../../../lib/firebaseService';
 
 type Props = {
   assessment: Assessment;
@@ -29,8 +29,16 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
 
   useEffect(() => {
     if (!open) return;
-    getAllStudents().then(setStudents).catch(() => setStudents([]));
-  }, [open]);
+    // An unfiltered students scan is only permitted for webOwner by the
+    // security rules. For institute-owned assessments, scope by the owning
+    // institute so the query is provable (this panel is currently mounted
+    // only from the webOwner edit menu, but keep it role-safe).
+    const fetchStudents =
+      assessment.ownerType === 'institute'
+        ? getStudentsByInstitute(assessment.ownerId)
+        : getAllStudents();
+    fetchStudents.then(setStudents).catch(() => setStudents([]));
+  }, [open, assessment.ownerType, assessment.ownerId]);
 
   const studentMap = useMemo(() => {
     const m = new Map<string, Student>();

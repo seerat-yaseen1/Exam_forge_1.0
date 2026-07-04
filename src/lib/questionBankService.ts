@@ -9,7 +9,8 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from './firebase';
 import { bumpTaxonomyCounts } from './subjectService';
 import { getFlatReceivedQuestions } from './questionShareService';
 
@@ -270,18 +271,64 @@ function emptyAnswerDefaults(): Pick<Question, 'correctIds' | 'correctPairs' | '
   return { correctIds: [], correctPairs: [], modelAnswer: '' };
 }
 
-async function mergeAnswers(ids: string[]): Promise<Map<string, QuestionAnswer>> {
+/**
+ * Batch-load answer docs for a set of question ids.
+ *
+ * RULES ALIGNMENT: questionAnswers reads are owner-scoped (webOwner sees
+ * all; institute/faculty see only their own). Firestore rejects a query
+ * wholesale unless the rule is provable for every possible result, so:
+ *
+ *   • owner provided  → the `in` batches also carry ownerType/ownerId
+ *     equality filters, making the owner clause provable. Use this from
+ *     any getter that already knows whose questions these are.
+ *   • owner omitted   → try the unfiltered batch (works for webOwner);
+ *     if the rules reject it, fall back to per-document gets, which are
+ *     evaluated doc-by-doc — owned docs resolve, non-owned are skipped.
+ *     (Callers therefore degrade gracefully to "no key available" for
+ *     questions the signed-in user doesn't own.)
+ */
+async function mergeAnswers(
+  ids: string[],
+  owner?: { ownerType: QuestionOwnerType; ownerId: string },
+): Promise<Map<string, QuestionAnswer>> {
   const map = new Map<string, QuestionAnswer>();
   if (ids.length === 0) return map;
-  for (let i = 0; i < ids.length; i += 30) {
-    const chunk = ids.slice(i, i + 30);
-    const q = query(collection(db, COL.questionAnswers), where('id', 'in', chunk));
-    const snap = await getDocs(q);
-    snap.docs.forEach((d) => {
-      const ans = d.data() as QuestionAnswer;
-      map.set(ans.id, ans);
-    });
+
+  const runBatched = async (withOwnerFilters: boolean) => {
+    for (let i = 0; i < ids.length; i += 30) {
+      const chunk = ids.slice(i, i + 30);
+      const constraints = [where('id', 'in', chunk)];
+      if (withOwnerFilters && owner) {
+        constraints.push(where('ownerType', '==', owner.ownerType));
+        constraints.push(where('ownerId', '==', owner.ownerId));
+      }
+      const q = query(collection(db, COL.questionAnswers), ...constraints);
+      const snap = await getDocs(q);
+      snap.docs.forEach((d) => {
+        const ans = d.data() as QuestionAnswer;
+        map.set(ans.id, ans);
+      });
+    }
+  };
+
+  try {
+    await runBatched(!!owner);
+    return map;
+  } catch {
+    // Batched query rejected by rules (caller isn't webOwner and no owner
+    // filter matched) — fall back to per-document gets so the caller still
+    // receives keys for every doc they CAN read.
+    map.clear();
   }
+
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const snap = await getDoc(doc(db, COL.questionAnswers, id));
+      if (snap.exists()) map.set(id, snap.data() as QuestionAnswer);
+    } catch {
+      /* not readable by this caller — skip */
+    }
+  }));
   return map;
 }
 
@@ -388,8 +435,16 @@ export async function getQuestion(
   if (data.isDeleted) return null;
 
   if (opts.includeAnswer) {
-    const aSnap = await getDoc(doc(db, COL.questionAnswers, id));
-    return applyAnswer(data, aSnap.exists() ? (aSnap.data() as QuestionAnswer) : null);
+    // Owner-scoped rules: this get succeeds for the caller's own questions
+    // (and everything, for webOwner). For a question the caller doesn't own
+    // the read is denied — degrade to the question without its key instead
+    // of throwing, so preview/report surfaces keep rendering.
+    try {
+      const aSnap = await getDoc(doc(db, COL.questionAnswers, id));
+      return applyAnswer(data, aSnap.exists() ? (aSnap.data() as QuestionAnswer) : null);
+    } catch {
+      return applyAnswer(data, null);
+    }
   }
   return sanitizePublic(data);
 }
@@ -421,6 +476,54 @@ export async function getQuestionsByIds(
 
   const answerMap = await mergeAnswers(results.map((q) => q.id));
   return results.map((q) => applyAnswer(q, answerMap.get(q.id) ?? null));
+}
+
+/**
+ * Fetch answer keys for questions IN a specific assessment via the
+ * getAnswerKeysForReview Cloud Function — the only sanctioned key-read
+ * path for graders reviewing questions they don't own (e.g. an institute
+ * reviewer triaging reports on a webOwner-owned paper). The server
+ * enforces that the assessment is visible to the caller and only ever
+ * returns keys for questions inside that assessment.
+ */
+export async function getAnswerKeysForReview(
+  assessmentId: string,
+  questionIds?: string[],
+): Promise<Map<string, QuestionAnswer>> {
+  const call = httpsCallable<
+    { assessmentId: string; questionIds?: string[] },
+    { ok: true; keys: Record<string, { correctIds: string[]; correctPairs: CorrectPair[]; modelAnswer: string }> }
+  >(functions, 'getAnswerKeysForReview');
+  const res = await call({ assessmentId, questionIds });
+  const map = new Map<string, QuestionAnswer>();
+  for (const [id, k] of Object.entries(res.data.keys)) {
+    map.set(id, {
+      id,
+      correctIds:   k.correctIds,
+      correctPairs: k.correctPairs,
+      modelAnswer:  k.modelAnswer,
+      updatedAt: new Date().toISOString(), // fetch time; attribution fields not returned
+    });
+  }
+  return map;
+}
+
+/**
+ * Batch-fetch questions WITH answer keys for grader review surfaces
+ * (report triage, attempt drill-in), scoped to one assessment. Questions
+ * are fetched key-less, then keys are merged from the review callable —
+ * works for reviewers regardless of who owns the underlying questions.
+ */
+export async function getQuestionsByIdsForReview(
+  assessmentId: string,
+  ids: string[],
+): Promise<Question[]> {
+  if (ids.length === 0) return [];
+  const [questions, keyMap] = await Promise.all([
+    getQuestionsByIds(ids, { includeAnswer: false }),
+    getAnswerKeysForReview(assessmentId, ids).catch(() => new Map<string, QuestionAnswer>()),
+  ]);
+  return questions.map((q) => applyAnswer(q, keyMap.get(q.id) ?? null));
 }
 
 /**
@@ -487,7 +590,9 @@ export async function getQuestionsByOwner(
 
   if (!opts.includeAnswer) return list.map(sanitizePublic);
 
-  const answerMap = await mergeAnswers(list.map((q) => q.id));
+  // Owner filters keep the batched answer query provable under the
+  // owner-scoped questionAnswers rules.
+  const answerMap = await mergeAnswers(list.map((q) => q.id), { ownerType, ownerId });
   return list.map((q) => applyAnswer(q, answerMap.get(q.id) ?? null));
 }
 

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
 import {
-  getAllAssessments,
+  getAssessmentsVisibleToInstitute,
   statusColor,
   formatAssignmentTarget,
   type Assessment,
@@ -137,17 +137,12 @@ export function InstituteAssignmentsPage() {
   useEffect(() => {
     if (!session) return;
     setLoading(true);
-    getAllAssessments()
+    getAssessmentsVisibleToInstitute(session.instituteId)
       .then((all) => {
-        // Show assessments targeting this institute or all students (not faculty-private ones)
-        const relevant = all.filter((a) => {
-          if (a.status === 'draft') return false; // hide drafts from admin view
-          const t = a.assignedTo;
-          if (t.type === 'all') return true;
-          if (t.type === 'institutes') return t.instituteIds.includes(session.instituteId);
-          // 'students' type: include if any student is from this institute (simplified: include all)
-          return true;
-        });
+        // Server queries already scope to: own assessments + published ones
+        // assigned to this institute (or to all). Keep the dashboard view to
+        // published items only (own drafts are edited elsewhere).
+        const relevant = all.filter((a) => a.status !== 'draft');
         relevant.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setAssessments(relevant);
       })

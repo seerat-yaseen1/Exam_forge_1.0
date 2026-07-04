@@ -43,7 +43,9 @@ const STATUS_COLOR: Record<ReportStatus, { bg: string; border: string; text: str
 type Scope =
   | { kind: 'web_owner' }
   | { kind: 'institute'; instituteId: string }
-  | { kind: 'faculty'; facultyId: string };
+  // instituteId required: the questionReports read rule scopes faculty by
+  // instituteId, so the ownerId query must also carry it to be provable.
+  | { kind: 'faculty'; facultyId: string; instituteId: string };
 
 interface Props {
   scope: Scope;
@@ -64,7 +66,7 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
         let list: QuestionReport[] = [];
         if (scope.kind === 'web_owner')      list = await listAllReports();
         else if (scope.kind === 'institute') list = await listReportsByInstitute(scope.instituteId);
-        else                                  list = await listReportsByOwner(scope.facultyId);
+        else                                  list = await listReportsByOwner(scope.facultyId, scope.instituteId);
         setReports(list);
       } catch (e: any) {
         setErrorMsg(e.message || 'Failed to load reports.');

@@ -10,7 +10,6 @@ import {
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
 import {
-  getInstituteByCode,
   getInstituteLogo,
   setInstituteLogo,
 } from '../../lib/firebaseService';
@@ -233,22 +232,23 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
 
   const requestPasswordReset = useCallback(
     async (
-      instituteCode: string
+      adminEmail: string
     ): Promise<{ success: boolean; error?: string; emailSent?: boolean }> => {
+      // Email-based reset. The previous flow looked up the institute by code
+      // via a Firestore query — which (a) runs UNAUTHENTICATED here and is
+      // denied by the security rules (the flow was silently broken), and
+      // (b) leaked whether an institute code exists. Firebase Auth keys the
+      // reset on the email itself; no Firestore read is needed.
       try {
-        const institute = await getInstituteByCode(instituteCode);
-        if (!institute) {
-          return { success: false, error: 'Institute not found with this code.' };
-        }
-        const emailNorm = (institute.adminEmail || '').toLowerCase().trim();
+        const emailNorm = adminEmail.toLowerCase().trim();
         if (!emailNorm) {
-          return { success: false, error: 'Institute has no admin email on file.' };
+          return { success: false, error: 'Please enter the admin email.' };
         }
         await sendPasswordResetEmail(auth, emailNorm);
         return { success: true, emailSent: true };
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code;
-        if (code === 'auth/user-not-found') {
+        if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
           // Don't leak whether the account exists
           return { success: true, emailSent: true };
         }

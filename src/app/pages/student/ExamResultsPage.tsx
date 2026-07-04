@@ -25,7 +25,7 @@ import {
   type AttemptAnswer,
   type GradedAnswer,
 } from '../../../lib/submissionService';
-import { getQuestion, type Question } from '../../../lib/questionBankService';
+import { getExamQuestionsForStudent, type Question } from '../../../lib/questionBankService';
 import {
   listReportsByAttempt,
   type QuestionReport,
@@ -320,17 +320,18 @@ export function ExamResultsPage() {
         setAssessment(a);
         setAttempt(att);
 
-        // Load questions for review (only if allowReview)
+        // Load questions for review (only if allowReview) — one server call;
+        // review mode also returns explanations (server re-verifies the
+        // allowReview + finished-attempt gate). Direct question reads are
+        // denied to students by the rules.
         if (att && a.showResults && a.allowReview) {
-          const allQIds = [...new Set([
+          const allQIds = new Set([
             ...(a.sections ?? []).flatMap((s) => (s.questions ?? []).map((q) => q.questionId)),
             ...(a.questions ?? []).map((q) => q.questionId), // legacy flat shape
-          ])];
-          const results = await Promise.all(
-            allQIds.map((id) => getQuestion(id, { includeAnswer: false }))
-          );
+          ]);
+          const paper = await getExamQuestionsForStudent(a.id, 'review');
           const map = new Map<string, Question>();
-          results.forEach((q) => { if (q) map.set(q.id, q); });
+          paper.forEach((q) => { if (allQIds.has(q.id)) map.set(q.id, q); });
           setQuestionMap(map);
         }
 

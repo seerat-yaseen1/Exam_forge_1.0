@@ -79,13 +79,6 @@ service cloud.firestore {
       return val is string && val.size() > 0;
     }
 
-    function bool(val) {
-      return val is bool;
-    }
-
-    function nat(val) {
-      return val is int && val >= 0;
-    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // webowners/{uid}
@@ -105,22 +98,28 @@ service cloud.firestore {
 
     // ─────────────────────────────────────────────────────────────────────────
     // institutes/{instituteId}
-    // Read: any signed-in user (login flow needs to look up institute by code).
-    // Write: any signed-in user for now (Web Owner UI + first-login flag flip).
-    //        Tightened in Phase 6b.
+    // Read: webOwner (management UI, list queries), or any member of THAT
+    //       institute — every auth context reads its own institute doc by id
+    //       from the claim, so per-doc gets stay provable. The previous
+    //       signedIn() read exposed the full institute directory (names,
+    //       codes, admin emails, activeUntil) to every student on the
+    //       platform. Code→institute lookups for password reset no longer
+    //       exist client-side (reset is email-based, unauthenticated-safe).
     // ─────────────────────────────────────────────────────────────────────────
     match /institutes/{instituteId} {
-      allow read:   if signedIn();
+      allow read:   if isWebOwner()
+                       || (signedIn() && request.auth.token.instituteId == instituteId);
       allow create: if isWebOwner();
       allow update: if isWebOwner() || isInstituteSelf(instituteId);
       allow delete: if isWebOwner();
     }
 
-    // instituteCredentials — password field stripped post-migration; this
-    // collection now only holds firstLoginRequired and migration metadata.
-    // The institute admin flips firstLoginRequired=false on first sign-in.
+    // instituteCredentials — only holds firstLoginRequired + migration
+    // metadata post-migration. Read: webOwner + the institute itself (the
+    // auth context's own per-doc get). Was signedIn() — cross-tenant
+    // metadata leak.
     match /instituteCredentials/{instituteId} {
-      allow read:   if signedIn();
+      allow read:   if isWebOwner() || isInstituteSelf(instituteId);
       allow create: if isWebOwner();
       allow update: if isWebOwner() || isInstituteSelf(instituteId);
       allow delete: if isWebOwner();
@@ -171,7 +170,15 @@ service cloud.firestore {
     }
 
     match /facultyCredentials/{facultyId} {
-      allow read:   if signedIn();
+      // Read: webOwner, the faculty member themself (auth context's own
+      // per-doc get), or their institute admin (resolved via the parent
+      // faculty doc, mirroring the create/update clauses). Was signedIn().
+      allow read:   if isWebOwner()
+                       || isFacultySelf(facultyId)
+                       || (
+                            exists(/databases/$(database)/documents/faculty/$(facultyId))
+                            && isInstituteOf(get(/databases/$(database)/documents/faculty/$(facultyId)).data.instituteId)
+                          );
       allow create: if isWebOwner()
                        || (
                             exists(/databases/$(database)/documents/faculty/$(facultyId))
@@ -221,7 +228,19 @@ service cloud.firestore {
     }
 
     match /studentCredentials/{studentId} {
-      allow read:   if signedIn();
+      // Read: webOwner, the student themself, or institute/faculty of that
+      // student's institute (resolved via the parent student doc, mirroring
+      // the create/update clauses). Was signedIn().
+      allow read:   if isWebOwner()
+                       || isStudentSelf(studentId)
+                       || (
+                            exists(/databases/$(database)/documents/students/$(studentId))
+                            && (
+                                 isInstituteOf(get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                                 || (role() == 'faculty'
+                                     && request.auth.token.instituteId == get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                               )
+                          );
       allow create: if isWebOwner()
                        || (
                             exists(/databases/$(database)/documents/students/$(studentId))
@@ -442,7 +461,17 @@ service cloud.firestore {
     }
 
     match /questions/{id} {
-      allow read:   if signedIn();
+      // Students are DENIED direct reads: published assessments expose
+      // question ids, so `signedIn()` reads let any student dump the whole
+      // bank's content from the console. Students receive question content
+      // ONLY via the getExamQuestions Cloud Function (whitelisted fields,
+      // assessment-scoped, assignment-checked).
+      //
+      // SEAM (deliberate, revisit with the webOwner→institute mirroring
+      // design): institute/faculty can still read any question's CONTENT
+      // (not keys — those are owner-scoped in questionAnswers). Scoping
+      // staff reads requires the grant model to be settled first.
+      allow read:   if isWebOwner() || role() == 'institute' || role() == 'faculty';
       // Legacy questions may lack ownerType — treat as webOwner-owned.
       allow create: if canWriteOwned(request.resource.data.ownerType,
                                      request.resource.data.ownerId);

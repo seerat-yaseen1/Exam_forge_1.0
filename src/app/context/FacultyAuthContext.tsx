@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
-import { getInstituteByCode, getInstituteLogo } from '../../lib/firebaseService';
+import { getInstituteLogo } from '../../lib/firebaseService';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -253,18 +253,16 @@ export function FacultyAuthProvider({ children }: { children: React.ReactNode })
       email: string
     ): Promise<{ success: boolean; error?: string; emailSent?: boolean }> => {
       try {
+        void instituteCode; // kept for API compat; the previous institute-code
+        // pre-check ran an UNAUTHENTICATED Firestore query — denied by the
+        // security rules (flow was silently broken) and it leaked whether a
+        // code exists. Firebase Auth keys the reset on the email alone.
         const emailNorm = email.toLowerCase().trim();
-        const codeNorm = instituteCode.toUpperCase().trim();
-        // Verify institute exists (don't leak account existence beyond that)
-        const institute = await getInstituteByCode(codeNorm);
-        if (!institute) {
-          return { success: false, error: 'Institute not found with this code.' };
-        }
         await sendPasswordResetEmail(auth, emailNorm);
         return { success: true, emailSent: true };
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code;
-        if (code === 'auth/user-not-found') {
+        if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
           return { success: true, emailSent: true };
         }
         console.error('Faculty reset request error:', err);

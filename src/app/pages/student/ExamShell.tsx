@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
-import { getQuestion, type Question } from '../../../lib/questionBankService';
+import { getExamQuestionsForStudent, type Question } from '../../../lib/questionBankService';
 import {
   startAttempt,
   saveAnswer,
@@ -34,6 +34,7 @@ import {
   logViolation,
   enforceIntegrityThreshold,
   MAX_INTEGRITY_WARNINGS,
+  MAX_LOGGED_VIOLATION_EVENTS,
   getAttemptByStudentAndAssessment,
   getServerSkew,
   subscribeToAttempt,
@@ -76,7 +77,7 @@ if (typeof document !== 'undefined') {
   }
 }
 
-// ════════════════════════════════════════════  ═════════════════════
+// ════════════════════════════════════════════��═════════════════════
 // TYPES
 // ══════════════════════════════════════════════════════════════════
 
@@ -540,6 +541,9 @@ export function ExamShell() {
   // Remembers the trigger of the last final-submit so the retry button on the
   // submit_failed screen re-runs grading with the same reason.
   const lastFinalReasonRef = useRef<'manual' | 'time_expired' | 'violation_limit' | 'window_closed'>('manual');
+  // Running count of ALL logged violation events this attempt (init from the
+  // stored integrityLog on load) — drives the detail-logging cap.
+  const totalViolationsRef = useRef(0);
 
   // ── Navigation state ───────────────────────────────────────────
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
@@ -679,15 +683,17 @@ export function ExamShell() {
           if (reordered.length === effSections.length) effSections = reordered;
         }
 
-        // 4. Load all question documents in parallel
+        // 4. Load all question documents — single server call. Students can
+        // no longer read the questions collection directly (rules deny it);
+        // getExamQuestions returns whitelisted, key-less content for exactly
+        // this assessment's paper.
         const allQIds = [...new Set(
           effSections.flatMap((s) => s.questions.map((q) => q.questionId))
         )];
-        const qResults = await Promise.all(
-          allQIds.map((id) => getQuestion(id, { includeAnswer: false }))
-        );
+        const paper = await getExamQuestionsForStudent(a.id, 'exam');
         const qMap = new Map<string, Question>();
-        qResults.forEach((q) => { if (q) qMap.set(q.id, q); });
+        const wanted = new Set(allQIds);
+        paper.forEach((q) => { if (wanted.has(q.id)) qMap.set(q.id, q); });
 
         // 5. Build marks map
         const mMap = new Map<string, number>();
@@ -763,6 +769,7 @@ export function ExamShell() {
         const log = att.integrityLog;
         const existingWarnings = log.tabSwitches + log.focusLosses + log.fullscreenExits;
         setWarningCount(existingWarnings);
+        totalViolationsRef.current = log.totalViolations ?? 0;
 
         setShellStatus('ready');
       } catch (e: any) {
@@ -1248,8 +1255,13 @@ export function ExamShell() {
       setWarningCount(newWarningCount);
     }
 
+    // Detail cap — past MAX_LOGGED_VIOLATION_EVENTS, log counters only so a
+    // violation storm can't balloon the attempt doc toward the 1 MiB limit.
+    totalViolationsRef.current += 1;
+    const skipEventDetail = totalViolationsRef.current > MAX_LOGGED_VIOLATION_EVENTS;
+
     // Log to Firestore
-    await logViolation(att.id, type, detail, isWarningType ? newWarningCount : undefined)
+    await logViolation(att.id, type, detail, isWarningType ? newWarningCount : undefined, { skipEventDetail })
       .catch((e) => console.error('[ExamShell] logViolation failed', e));
 
     // Show overlay based on violation type and warning count

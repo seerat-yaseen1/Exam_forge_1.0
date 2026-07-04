@@ -246,6 +246,25 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
     if (role === 'institute') {
       await db.collection('instituteLogos').doc(uid).delete().catch(() => undefined);
     }
+    if (role === 'student') {
+      // Cascade: academic-hierarchy mappings for a deleted student are pure
+      // orphans — remove them so node rosters don't render ghosts. Attempts
+      // and questionReports are DELIBERATELY kept: they are the institute's
+      // exam records / audit trail.
+      try {
+        const mapSnap = await db.collection('academicMappings')
+          .where('studentId', '==', uid).get();
+        let batch = db.batch();
+        let n = 0;
+        for (const d of mapSnap.docs) {
+          batch.delete(d.ref);
+          if (++n >= 400) { await batch.commit(); batch = db.batch(); n = 0; }
+        }
+        if (n > 0) await batch.commit();
+      } catch (err) {
+        console.error('deleteAuthUser: mapping cascade failed for', uid, err);
+      }
+    }
 
     return { ok: true };
   }
@@ -893,6 +912,135 @@ export const getAnswerKeysForReview = onCall<GetAnswerKeysData>(
       }
     }
     return { ok: true, keys };
+  }
+);
+
+// ══════════════════════════════════════════════════════════════════
+// getExamQuestions — the ONLY path students receive question content
+//
+// The `questions` collection read rule denies students entirely: with
+// direct reads, any signed-in student could fetch ANY question document
+// by id from the browser console — the whole bank's stems and options,
+// across every owner — since assessments (readable when published)
+// expose the question ids. This callable closes that leak:
+//
+//   • students only, and only for assessments they can legitimately sit
+//     (published + assigned to them / their institute / everyone) or have
+//     already attempted (so results review keeps working after an exam
+//     closes or is reassigned);
+//   • field WHITELIST — never returns correctIds / correctPairs /
+//     modelAnswer; `explanation` is included only in review mode, and
+//     review mode requires a FINISHED attempt + allowReview on the
+//     assessment (mirrors the results page's own gate);
+//   • only questions inside that assessment's paper are ever returned.
+//
+// Side benefit: the exam shell previously issued one read per question
+// (N roundtrips); this is a single call for the whole paper.
+// ══════════════════════════════════════════════════════════════════
+
+interface GetExamQuestionsData {
+  assessmentId: string;
+  mode?: 'exam' | 'review';
+}
+
+export const getExamQuestions = onCall<GetExamQuestionsData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const role        = request.auth.token.role        as string | undefined;
+    const studentId   = request.auth.token.studentId   as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    if (role !== 'student' || !studentId || !instituteId) {
+      throw new HttpsError('permission-denied', 'Only students may fetch exam questions here.');
+    }
+
+    const { assessmentId, mode } = request.data || ({} as GetExamQuestionsData);
+    if (!assessmentId) throw new HttpsError('invalid-argument', 'assessmentId is required.');
+
+    const db = getFirestore();
+    const aSnap = await db.collection('assessments').doc(assessmentId).get();
+    if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+    const assessment = aSnap.data() as GradingAssessmentDoc & {
+      status?: string;
+      assignedTo?: { type: string; instituteIds?: string[]; studentIds?: string[] };
+    };
+
+    // AuthZ — assigned & published, OR the student already has an attempt
+    // (covers review after close / unassignment; an attempt is proof they
+    // legitimately sat the paper).
+    const published = assessment.status === 'active' || assessment.status === 'closed';
+    const target = assessment.assignedTo;
+    const assigned = !target
+      || target.type === 'all'
+      || (target.type === 'institutes' && (target.instituteIds ?? []).includes(instituteId))
+      || (target.type === 'students'   && (target.studentIds   ?? []).includes(studentId));
+
+    const attemptsSnap = await db.collection('attempts')
+      .where('studentId', '==', studentId)
+      .where('assessmentId', '==', assessmentId)
+      .get();
+    const hasAttempt = !attemptsSnap.empty;
+    const hasFinishedAttempt = attemptsSnap.docs.some((d) => {
+      const s = (d.data() as { status?: string }).status;
+      return s === 'submitted' || s === 'auto_submitted' || s === 'terminated';
+    });
+
+    if (!(published && assigned) && !hasAttempt) {
+      throw new HttpsError('permission-denied', 'This exam is not available to you.');
+    }
+
+    // Explanation only for post-exam review, and only when the assessment
+    // permits review — same gate the results page applies client-side.
+    const includeExplanation =
+      mode === 'review'
+      && hasFinishedAttempt
+      && (assessment as { allowReview?: boolean }).allowReview === true;
+
+    const qIds = Array.from(new Set(
+      normalizeSections(assessment).flatMap((s) => s.questions.map((q) => q.questionId))
+    ));
+
+    const chunkedGetAll = async (ids: string[]) => {
+      const out: FirebaseFirestore.DocumentSnapshot[] = [];
+      for (let i = 0; i < ids.length; i += 300) {
+        const refs = ids.slice(i, i + 300).map((id) => db.collection('questions').doc(id));
+        out.push(...await db.getAll(...refs));
+      }
+      return out;
+    };
+    const snaps = await chunkedGetAll(qIds);
+
+    // Field WHITELIST — anything not listed here never reaches a student,
+    // including any leaky field added to question docs in the future.
+    const questions = snaps
+      .filter((s) => s.exists)
+      .map((s) => s.data() as Record<string, unknown>)
+      .filter((q) => q.isDeleted !== true)
+      .map((q) => ({
+        id:          q.id,
+        engine:      q.engine,
+        variant:     q.variant ?? null,
+        stem:        q.stem ?? '',
+        stemImage:   q.stemImage ?? null,
+        options:     Array.isArray(q.options) ? q.options : [],
+        pairs:       Array.isArray(q.pairs)   ? q.pairs   : [],
+        subject:     q.subject ?? '',
+        topic:       q.topic ?? '',
+        subjectId:   q.subjectId ?? null,
+        topicId:     q.topicId ?? null,
+        tags:        Array.isArray(q.tags) ? q.tags : [],
+        difficulty:  q.difficulty ?? 'medium',
+        explanation: includeExplanation ? (q.explanation ?? '') : '',
+        // Answer keys NEVER leave through this endpoint.
+        correctIds:   [] as string[],
+        correctPairs: [] as CorrectPair[],
+        modelAnswer:  '',
+        isDeleted:   false,
+        createdAt:   q.createdAt ?? '',
+        updatedAt:   q.updatedAt ?? '',
+      }));
+
+    return { ok: true, questions };
   }
 );
 

@@ -14,8 +14,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
 import { functions } from './firebase';
-import type { Assessment } from './assessmentService';
-import type { Question, CorrectPair } from './questionBankService';
+import type { CorrectPair } from './questionBankService';
 
 // ── Per-question grading data populated server-side by gradeAttempt ─
 // Students can never read questionAnswers directly; this map is the
@@ -438,7 +437,7 @@ export async function getServerSkew(): Promise<number> {
 // ── Grade attempt (server-side) ───────────────────────────────────
 // Calls the gradeAttempt Cloud Function which holds the only legitimate
 // read path for answer keys (questionAnswers is denied to students).
-// Replaces the old client-side calculateScores → submitAttempt pair.
+// All scoring is server-side (gradeAttempt / regradeAttempts).
 
 export type GradeReason =
   | 'manual'
@@ -475,22 +474,6 @@ export async function gradeAttempt(params: {
  * resume guard and the in-shell counter agree on one source of truth.
  */
 export const MAX_INTEGRITY_WARNINGS = 3;
-
-export async function autoTerminate(
-  attemptId: string,
-  reason: string,
-  scores?: AttemptScores,
-): Promise<void> {
-  const updates: Record<string, any> = {
-    status: 'terminated' as AttemptStatus,
-    submittedAt: now(),
-    'integrityLog.autoTerminated': true,
-    'integrityLog.terminatedReason': reason,
-    updatedAt: now(),
-  };
-  if (scores) updates.scores = scores;
-  await updateDoc(doc(db, 'attempts', attemptId), updates);
-}
 
 /**
  * Resume-time defensive check. If an attempt that's still flagged in_progress
@@ -530,16 +513,32 @@ export async function logViolation(
   attemptId: string,
   type: ViolationType,
   detail?: string,
-  warningNumber?: number
+  warningNumber?: number,
+  opts?: { skipEventDetail?: boolean }
 ): Promise<void> {
+  const counterField = `integrityLog.${VIOLATION_COUNTER[type]}`;
+
+  // Detail cap: the violations array grows without bound via arrayUnion; a
+  // hostile client spamming violation events could balloon the attempt doc
+  // toward Firestore's 1 MiB limit and break every subsequent write
+  // (including submission). Past the shell's cap, keep incrementing the
+  // counters (termination logic depends on them) but stop appending event
+  // objects.
+  if (opts?.skipEventDetail) {
+    await updateDoc(doc(db, 'attempts', attemptId), {
+      [counterField]: increment(1),
+      'integrityLog.totalViolations': increment(1),
+      updatedAt: now(),
+    });
+    return;
+  }
+
   const event: ViolationEvent = {
     type,
     timestamp: now(),
     ...(detail ? { detail } : {}),
     ...(warningNumber !== undefined ? { warningNumber } : {}),
   };
-
-  const counterField = `integrityLog.${VIOLATION_COUNTER[type]}`;
 
   await updateDoc(doc(db, 'attempts', attemptId), {
     'integrityLog.violations': arrayUnion(event),
@@ -548,6 +547,10 @@ export async function logViolation(
     updatedAt: now(),
   });
 }
+
+/** Above this many logged events, violation DETAILS stop being appended to
+ *  the attempt doc (counters keep incrementing). Guards the 1 MiB doc cap. */
+export const MAX_LOGGED_VIOLATION_EVENTS = 300;
 
 // ── Freeze attempt ────────────────────────────────────────────────
 // Faculty invigilator pauses a student's exam session.
@@ -784,136 +787,6 @@ export function getBreakState(
     expired: remainingMs <= 0,
     mandatory: cur.breakAfter.mandatory,
   };
-}
-
-// ══════════════════════════════════════════════════════════════════
-// CLIENT-SIDE SCORE CALCULATION
-// ══════════════════════════════════════════════════════════════════
-// Called by ExamShell after submission, before calling submitAttempt.
-// Requires the full Question[] objects (already loaded in ExamShell).
-
-/**
- * @deprecated NO CALLERS — kept temporarily for reference only. All scoring
- * runs server-side in the gradeAttempt / regradeAttempts Cloud Functions
- * (functions/src/index.ts, scoreAttemptAnswers), which are the single source
- * of truth. Do NOT reintroduce client-side scoring: it duplicates logic that
- * will drift, and answer-key reads are owner-scoped by the Firestore rules.
- * Safe to delete in a future cleanup pass.
- */
-export function calculateScores(
-  attempt: Attempt,
-  assessment: Assessment,
-  questions: Question[]
-): AttemptScores {
-  const questionMap = new Map<string, Question>(questions.map((q) => [q.id, q]));
-  let requiresManualReview = false;
-  let totalAwarded = 0;
-  let totalAvailable = 0;
-
-  const bySection: SectionScore[] = [];
-
-  const sections = assessment.sections ?? [];
-
-  for (const sec of sections) {
-    let sectionAwarded = 0;
-    let sectionAvailable = 0;
-    let answered = 0;
-
-    for (const aq of sec.questions) {
-      sectionAvailable += aq.marks;
-      totalAvailable += aq.marks;
-
-      const studentAnswer = attempt.answers[aq.questionId];
-      if (!studentAnswer) continue;
-      answered++;
-
-      const q = questionMap.get(aq.questionId);
-      if (!q) continue;
-
-      if (q.engine === 'mcq') {
-        const marks = scoreMCQ(q, studentAnswer.value);
-        sectionAwarded += marks * aq.marks;
-        totalAwarded += marks * aq.marks;
-      } else if (q.engine === 'match') {
-        const marks = scoreMatch(q, studentAnswer.value);
-        sectionAwarded += marks * aq.marks;
-        totalAwarded += marks * aq.marks;
-      } else {
-        // text engine — needs manual review
-        requiresManualReview = true;
-      }
-    }
-
-    bySection.push({
-      sectionId: sec.id,
-      sectionName: sec.name,
-      totalQuestions: sec.questions.length,
-      answeredQuestions: answered,
-      marksAwarded: sectionAwarded,
-      marksAvailable: sectionAvailable,
-    });
-  }
-
-  const percentage =
-    totalAvailable > 0
-      ? Math.round((totalAwarded / totalAvailable) * 100 * 10) / 10
-      : 0;
-
-  const passed =
-    assessment.passingScore !== undefined
-      ? percentage >= assessment.passingScore
-      : true;
-
-  return {
-    total: totalAwarded,
-    available: totalAvailable,
-    percentage,
-    passed,
-    bySection,
-    requiresManualReview,
-  };
-}
-
-// ── MCQ scoring ───────────────────────────────────────────────────
-// Returns a multiplier in [0, 1]:
-// - single / truefalse / fillblank: 1 if exact match, else 0
-// - multi: partial credit — (correct selections − wrong selections) / total correct
-//          clamped to [0, 1]
-
-function scoreMCQ(q: Question, value: AnswerValue): number {
-  if (q.variant === 'single' || q.variant === 'truefalse' || q.variant === 'fillblank') {
-    const selected = typeof value === 'string' ? value : '';
-    return q.correctIds.includes(selected) ? 1 : 0;
-  }
-
-  if (q.variant === 'multi') {
-    const selected = Array.isArray(value) ? value : [];
-    const correct = new Set(q.correctIds);
-    let hits = 0, wrongs = 0;
-    for (const id of selected) {
-      if (correct.has(id)) hits++;
-      else wrongs++;
-    }
-    const raw = (hits - wrongs) / correct.size;
-    return Math.max(0, raw);
-  }
-
-  return 0;
-}
-
-// ── Match scoring ─────────────────────────────────────────────────
-// Returns a multiplier in [0, 1] based on how many pairs are correct.
-
-function scoreMatch(q: Question, value: AnswerValue): number {
-  if (typeof value !== 'object' || Array.isArray(value)) return 0;
-  const studentMap = value as Record<string, string>;
-  if (q.correctPairs.length === 0) return 0;
-
-  let correct = 0;
-  for (const pair of q.correctPairs) {
-    if (studentMap[pair.leftId] === pair.rightId) correct++;
-  }
-  return correct / q.correctPairs.length;
 }
 
 // ══════════════════════════════════════════════════════════════════

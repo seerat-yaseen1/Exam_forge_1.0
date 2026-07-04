@@ -33,29 +33,23 @@ export function InstituteForgotPasswordPage() {
   const { platformSettings } = useAuth();
 
   const [stage, setStage]                   = useState<Stage>('input');
-  const [instituteCode, setInstituteCode]   = useState('');
+  const [adminEmail, setAdminEmail]         = useState('');
   const [error, setError]                   = useState('');
   const [loading, setLoading]               = useState(false);
   const [emailSent, setEmailSent]           = useState(false);
 
-  const canSubmit = instituteCode.trim().length > 0 && !loading;
+  const canSubmit = adminEmail.trim().length > 0 && !loading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
     setError('');
     setLoading(true);
-    const result = await requestPasswordReset(instituteCode.trim());
+    const result = await requestPasswordReset(adminEmail.trim());
     setLoading(false);
     if (!result.success) { setError(result.error ?? 'An error occurred.'); return; }
     setEmailSent(result.emailSent ?? false);
     setStage('sent');
-  };
-
-  const handleProceed = () => {
-    navigate('/institute/reset-password', {
-      state: { instituteCode: instituteCode.trim() },
-    });
   };
 
   return (
@@ -91,19 +85,19 @@ export function InstituteForgotPasswordPage() {
                   PASSWORD RECOVERY
                 </p>
                 <p className="text-xs mb-6" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
-                  Enter your Institute Code. A 16-character reset code will be sent to the registered admin email.
+                  Enter the registered admin email. If an account exists, a password-reset link will be sent to it.
                 </p>
 
                 <form onSubmit={handleSubmit} noValidate>
                   <div className="mb-5">
                     <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
-                      Institute Code
+                      Admin Email
                     </label>
-                    <input type="text" autoFocus autoComplete="off" autoCapitalize="characters"
-                      value={instituteCode}
-                      onChange={(e) => { setInstituteCode(e.target.value.toUpperCase()); setError(''); }}
-                      disabled={loading} placeholder="e.g. A3B7C2"
-                      style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '0.16em' }}
+                    <input type="email" autoFocus autoComplete="email"
+                      value={adminEmail}
+                      onChange={(e) => { setAdminEmail(e.target.value); setError(''); }}
+                      disabled={loading} placeholder="admin@institute.com"
+                      style={inputStyle}
                       onFocus={onFocus} onBlur={onBlur} />
                   </div>
 
@@ -144,19 +138,15 @@ export function InstituteForgotPasswordPage() {
                   <Mail size={12} strokeWidth={1.5} style={{ color: emailSent ? '#2A6B3A' : '#9A9891', marginTop: 1, flexShrink: 0 }} />
                   <p className="text-xs" style={{ color: emailSent ? '#2A6B3A' : '#9A9891', lineHeight: 1.6 }}>
                     {emailSent
-                      ? `A 16-character reset code has been sent to your registered admin email. It is valid for 1 hour and can only be used once.`
-                      : `Email delivery encountered an issue. Please contact the platform administrator or proceed and enter the code directly.`}
+                      ? `If an account exists for that email, a password-reset link has been sent. Open the link from your inbox to set a new password, then sign in.`
+                      : `Email delivery encountered an issue. Please try again or contact the platform administrator.`}
                   </p>
                 </div>
 
-                <p className="text-xs mb-5" style={{ color: '#9A9891' }}>
-                  Institute Code: <span style={{ color: '#4A4A45', fontFamily: 'monospace', letterSpacing: '0.12em' }}>{instituteCode}</span>
-                </p>
-
-                <button onClick={handleProceed}
+                <button onClick={() => navigate('/institute/login')}
                   className="w-full py-2.5 text-sm mb-3"
                   style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', cursor: 'pointer' }}>
-                  Enter reset code
+                  Back to sign in
                 </button>
               </motion.div>
             )}

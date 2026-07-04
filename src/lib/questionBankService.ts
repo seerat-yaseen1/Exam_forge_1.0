@@ -527,6 +527,28 @@ export async function getQuestionsByIdsForReview(
 }
 
 /**
+ * Fetch an assessment's question CONTENT for a student, via the
+ * getExamQuestions Cloud Function — the only path students receive
+ * question docs, since the `questions` collection read rule denies them
+ * (direct reads let any student dump the whole bank from the console).
+ * Server whitelists fields; keys never arrive. mode 'review' additionally
+ * returns explanations when the assessment allows review and the student
+ * has a finished attempt. One call for the whole paper (previously one
+ * read per question).
+ */
+export async function getExamQuestionsForStudent(
+  assessmentId: string,
+  mode: 'exam' | 'review',
+): Promise<Question[]> {
+  const call = httpsCallable<
+    { assessmentId: string; mode: 'exam' | 'review' },
+    { ok: true; questions: Question[] }
+  >(functions, 'getExamQuestions');
+  const res = await call({ assessmentId, mode });
+  return res.data.questions;
+}
+
+/**
  * Filter a question pool to candidates that share the draft's subject + topic.
  * Used by duplicate detection — scope is intentionally narrow (only same
  * subjectId AND same topicId, both required) to avoid false positives across

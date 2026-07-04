@@ -131,9 +131,18 @@ export function InstituteLoginPage() {
 
             {/* Password */}
             <div className="mb-6">
-              <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+                  Password
+                </label>
+                <Link to="/institute/forgot-password"
+                  className="text-xs transition-colors"
+                  style={{ color: '#9A9891', textDecoration: 'none' }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}

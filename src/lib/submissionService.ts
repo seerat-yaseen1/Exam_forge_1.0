@@ -264,6 +264,23 @@ export type Attempt = {
   resumeRequiresVerification?: boolean;
   lastHeartbeatAt?: string | null;
 
+  // ── Phase 1 (freeze state + timing analytics) ─────────────────
+  freezeState?: {
+    frozen: boolean;
+    reason?: string;
+    since?: string;
+    clearedBy?: string;
+  } | null;
+  timingAnalysis?: {
+    totalAnswers: number;
+    burstLast30s: number;
+    minGapSeconds: number | null;
+    heartbeatGaps: number;
+    maxHeartbeatGapSeconds: number;
+    anomalyScore: number;
+    computedAt: string;
+  } | null;
+
   // ── Soft delete ───────────────────────────────────────────────
   isDeleted?: boolean;         // true = hidden from roster; shown in drawer history
 
@@ -525,9 +542,48 @@ export async function gradeAttempt(params: {
   return res.data;
 }
 
-// (Removed: legacy client-side submitAttempt. Finalisation now runs entirely
-// through the gradeAttempt Cloud Function, which is the only path that may set
-// status/scores/submittedAt — and it computes them server-side.)
+// ── Phase 1 client wrappers ───────────────────────────────────────
+// Thin callable wrappers. The server owns all the logic; these just relay.
+
+/** Heartbeat — call on an interval (~15s) while an attempt is in progress. */
+export async function sendHeartbeat(attemptId: string): Promise<void> {
+  const call = httpsCallable<{ attemptId: string }, { ok: true; ignored?: boolean }>(
+    functions,
+    'examHeartbeat',
+  );
+  try {
+    await call({ attemptId });
+  } catch {
+    // Heartbeat failures are non-fatal to the exam UX — a missed beat simply
+    // shows up server-side as a gap, which is the intended signal.
+  }
+}
+
+/** Report an extension-scan result. Server decides whether to freeze. */
+export async function reportExtensionCheck(params: {
+  attemptId: string;
+  passed: boolean;
+  found?: string[];
+}): Promise<{ ok: true; frozen: boolean }> {
+  const call = httpsCallable<typeof params, { ok: true; frozen: boolean }>(
+    functions,
+    'reportExtensionCheck',
+  );
+  const res = await call(params);
+  return res.data;
+}
+
+/** Attempt to clear a freeze and resume (auto for eligible tiers, else invigilator). */
+export async function verifyAndResume(
+  attemptId: string,
+): Promise<{ ok: true; resumed: boolean; note?: string }> {
+  const call = httpsCallable<{ attemptId: string }, { ok: true; resumed: boolean; note?: string }>(
+    functions,
+    'verifyAndResume',
+  );
+  const res = await call({ attemptId });
+  return res.data;
+}
 
 // ── Auto-terminate ────────────────────────────────────────────────
 // Force-submits with 'terminated' status after max violations reached.

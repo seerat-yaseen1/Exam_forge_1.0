@@ -636,7 +636,11 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       studentId: string;
       instituteId: string;
       status: string;
-      answers: Record<string, AttemptAnswerDoc>;
+      answers: Record<string, AttemptAnswerDoc & { answeredAt?: string }>;
+      lastHeartbeatAt?: string | null;
+      createdAt?: string;
+      freezeState?: { frozen?: boolean } | null;
+      securityConfig?: { tier?: string } | null;
     };
 
     // AuthZ — student owner OR grader in same institute OR web owner
@@ -699,6 +703,51 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       updates[`sectionTimings.${lastSectionId}.submittedAt`]     = nowIso;
       updates[`sectionTimings.${lastSectionId}.timeUsedSeconds`] = lastSectionTimeUsed;
     }
+
+    // ── Freeze flag (Phase 1c) ────────────────────────────────────
+    // Record if this attempt was finalized while still frozen (unresolved
+    // extension freeze). Detective flag for the reviewer — not blocking.
+    if (attempt.freezeState?.frozen === true) {
+      updates['integrityLog.finalizedWhileFrozen'] = true;
+    }
+
+    // ── Timing analytics (Phase 1b) ───────────────────────────────
+    // Detective signal only — recorded for the reviewer, never auto-actioned.
+    // Uses answeredAt (already stored per answer) + lastHeartbeatAt (Phase 1a).
+    const answerTimes = Object.values(attempt.answers ?? {})
+      .map((ans) => (ans.answeredAt ? Date.parse(ans.answeredAt) : NaN))
+      .filter((t) => !isNaN(t))
+      .sort((x, y) => x - y);
+    const submitMs = Date.parse(nowIso);
+    const totalAnswers = answerTimes.length;
+    const burstLast30s = answerTimes.filter((t) => submitMs - t <= 30_000).length;
+    let minGapSeconds: number | null = null;
+    for (let i = 1; i < answerTimes.length; i++) {
+      const gap = (answerTimes[i] - answerTimes[i - 1]) / 1000;
+      if (minGapSeconds === null || gap < minGapSeconds) minGapSeconds = gap;
+    }
+    let heartbeatGaps = 0;
+    let maxHeartbeatGapSeconds = 0;
+    if (attempt.lastHeartbeatAt) {
+      const gapToSubmit = (submitMs - Date.parse(attempt.lastHeartbeatAt)) / 1000;
+      if (gapToSubmit > 60) {
+        heartbeatGaps = 1;
+        maxHeartbeatGapSeconds = Math.round(gapToSubmit);
+      }
+    }
+    let anomalyScore = 0;
+    if (totalAnswers > 0 && burstLast30s / totalAnswers > 0.5) anomalyScore += 40;
+    if (minGapSeconds !== null && minGapSeconds < 1.5 && totalAnswers > 3) anomalyScore += 30;
+    if (heartbeatGaps > 0) anomalyScore += 30;
+    updates.timingAnalysis = {
+      totalAnswers,
+      burstLast30s,
+      minGapSeconds,
+      heartbeatGaps,
+      maxHeartbeatGapSeconds,
+      anomalyScore,
+      computedAt: nowIso,
+    };
 
     await attemptRef.update(updates);
 
@@ -1071,6 +1120,158 @@ export const getServerTime = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     return { serverTime: Date.now() };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
+// PHASE 1 — Server-authoritative enforcement
+// examHeartbeat / reportExtensionCheck / verifyAndResume
+//
+// These give the security tiers real teeth. The client DETECTS and
+// REPORTS; the server DECIDES and RECORDS. None of these trust the
+// browser. App Check enforcement is deferred to a dedicated hardening
+// pass (Option 1) — added later across all callables at once.
+// ══════════════════════════════════════════════════════════════════
+
+// ── examHeartbeat ─────────────────────────────────────────────────
+// Client pings every ~15s while an attempt is in progress. The server
+// stamps lastHeartbeatAt. A gap (heartbeat→submit) is later flagged by
+// gradeAttempt: a student who blocks Firestore to hide violations also
+// stops heartbeating, so the gap becomes a server-visible signal.
+interface HeartbeatData { attemptId: string; }
+
+export const examHeartbeat = onCall<HeartbeatData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const callerStudentId = request.auth.token.studentId as string | undefined;
+    const { attemptId } = request.data || ({} as HeartbeatData);
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    const db = getFirestore();
+    const ref = db.collection('attempts').doc(attemptId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const a = snap.data() as { studentId: string; status: string };
+    if (a.studentId !== callerStudentId) {
+      throw new HttpsError('permission-denied', 'Not your attempt.');
+    }
+    if (a.status !== 'in_progress') {
+      // Ignore heartbeats on finished/frozen attempts — not an error.
+      return { ok: true, ignored: true };
+    }
+    await ref.update({ lastHeartbeatAt: new Date().toISOString() });
+    return { ok: true };
+  },
+);
+
+// ── reportExtensionCheck ──────────────────────────────────────────
+// The client reports the result of an extension scan. The SERVER decides
+// whether to freeze: if a check FAILS during an active attempt on a tier
+// that requires the extension check, the attempt is frozen server-side
+// and resume requires verification (see verifyAndResume).
+interface ReportExtensionCheckData {
+  attemptId: string;
+  passed: boolean;
+  found?: string[];
+}
+
+export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const callerStudentId = request.auth.token.studentId as string | undefined;
+    const { attemptId, passed, found } = request.data || ({} as ReportExtensionCheckData);
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    const db = getFirestore();
+    const ref = db.collection('attempts').doc(attemptId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const a = snap.data() as {
+      studentId: string;
+      status: string;
+      securityConfig?: { tier?: string; requireExtensionCheck?: boolean } | null;
+    };
+    if (a.studentId !== callerStudentId) {
+      throw new HttpsError('permission-denied', 'Not your attempt.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const updates: Record<string, unknown> = {
+      lastExtensionCheck: { at: nowIso, passed: !!passed, found: found ?? [] },
+      updatedAt: nowIso,
+    };
+
+    const tierRequiresCheck = a.securityConfig?.requireExtensionCheck === true;
+    const shouldFreeze = !passed && a.status === 'in_progress' && tierRequiresCheck;
+    if (shouldFreeze) {
+      updates.freezeState = { frozen: true, reason: 'extension_detected', since: nowIso };
+      updates.resumeRequiresVerification = true;
+      updates.status = 'frozen';
+    }
+    await ref.update(updates);
+    return { ok: true, frozen: shouldFreeze };
+  },
+);
+
+// ── verifyAndResume ───────────────────────────────────────────────
+// Clears an extension freeze and resumes the attempt, per the auto-resume
+// policy. Student may self-resume ONLY if the tier is auto-resume AND the
+// latest reported check passed. An invigilator (institute/faculty in the
+// same institute, or webOwner) may always clear.
+interface VerifyAndResumeData { attemptId: string; }
+
+export const verifyAndResume = onCall<VerifyAndResumeData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const callerRole        = request.auth.token.role        as Role   | undefined;
+    const callerStudentId   = request.auth.token.studentId   as string | undefined;
+    const callerInstituteId = request.auth.token.instituteId as string | undefined;
+    const { attemptId } = request.data || ({} as VerifyAndResumeData);
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    const db = getFirestore();
+    const ref = db.collection('attempts').doc(attemptId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const a = snap.data() as {
+      studentId: string;
+      instituteId: string;
+      status: string;
+      lastExtensionCheck?: { passed?: boolean } | null;
+      securityConfig?: { autoResume?: boolean } | null;
+    };
+
+    const isStudentOwner = callerRole === 'student' && callerStudentId === a.studentId;
+    const isInvigilator =
+      callerRole === 'webOwner'
+      || ((callerRole === 'institute' || callerRole === 'faculty')
+          && callerInstituteId === a.instituteId);
+    if (!isStudentOwner && !isInvigilator) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+    if (a.status !== 'frozen') {
+      return { ok: true, resumed: false, note: 'not frozen' };
+    }
+
+    const autoResume   = a.securityConfig?.autoResume === true;
+    const latestPassed = a.lastExtensionCheck?.passed === true;
+    const mayResume = isInvigilator || (isStudentOwner && autoResume && latestPassed);
+    if (!mayResume) {
+      throw new HttpsError('failed-precondition',
+        'RESUME_BLOCKED: verification not satisfied; an invigilator must clear this.');
+    }
+
+    const nowIso = new Date().toISOString();
+    await ref.update({
+      status: 'in_progress',
+      freezeState: { frozen: false, clearedBy: isInvigilator ? 'invigilator' : 'auto', since: nowIso },
+      resumeRequiresVerification: false,
+      updatedAt: nowIso,
+    });
+    return { ok: true, resumed: true };
   },
 );
 

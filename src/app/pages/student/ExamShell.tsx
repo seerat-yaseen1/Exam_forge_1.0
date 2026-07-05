@@ -39,6 +39,7 @@ import {
   getServerSkew,
   subscribeToAttempt,
   registerSession,
+  sendHeartbeat,
   type Attempt,
   type AttemptAnswer,
   type AnswerValue,
@@ -835,6 +836,24 @@ export function ExamShell() {
     const interval = setInterval(checkExpiry, 30_000);
     return () => clearInterval(interval);
   }, [shellStatus, assessment?.endDate]); // eslint-disable-line
+
+  // ── Heartbeat (Phase 1a) ───────────────────────────────────────
+  // For proctored tiers (normal / high_stake), ping the server every ~15s
+  // while the attempt is active. A gap the server sees at grade time is a
+  // tamper/connectivity signal (a student who blocks Firestore to hide
+  // violations also stops heartbeating). Mock tier does not heartbeat.
+  useEffect(() => {
+    if (shellStatus !== 'ready' || !attempt?.id) return;
+    const tier = attempt.securityConfig?.tier;
+    if (tier !== 'normal' && tier !== 'high_stake') return;
+    const beat = () => {
+      const att = attemptRef.current;
+      if (att?.id) void sendHeartbeat(att.id);
+    };
+    beat();
+    const interval = setInterval(beat, 15_000);
+    return () => clearInterval(interval);
+  }, [shellStatus, attempt?.id, attempt?.securityConfig?.tier]); // eslint-disable-line
 
   // ── Derived: current section ───────────────────────────────────
 

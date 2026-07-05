@@ -40,6 +40,8 @@ import {
   subscribeToAttempt,
   registerSession,
   sendHeartbeat,
+  reportExtensionCheck,
+  verifyAndResume,
   type Attempt,
   type AttemptAnswer,
   type AnswerValue,
@@ -233,6 +235,91 @@ function FreezePausedOverlay({ reason }: { reason?: string }) {
             </p>
           )}
         </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// EXTENSION FREEZE OVERLAY (Phase 1c)
+// Shown when the server froze the attempt because a browser extension was
+// detected. The student must remove the extension, then re-scan. If the
+// re-scan passes AND the tier allows auto-resume, the exam continues;
+// otherwise it waits for an invigilator to clear it.
+// ══════════════════════════════════════════════════════════════════
+
+function ExtensionFreezeOverlay({
+  detail,
+  autoResume,
+  onResume,
+  resuming,
+  resumeError,
+}: {
+  detail?: string;
+  autoResume: boolean;
+  onResume: () => void;
+  resuming: boolean;
+  resumeError?: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center px-6"
+      style={{ background: 'rgba(12,12,11,0.92)' }}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 12 }}
+        className="flex flex-col items-center gap-5"
+        style={{ maxWidth: 440, textAlign: 'center' }}
+      >
+        <div className="flex items-center justify-center"
+          style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: 'rgba(212,160,23,0.15)', border: '1px solid rgba(212,160,23,0.35)',
+          }}>
+          <Flag size={22} strokeWidth={1.5} style={{ color: '#F5DFA0' }} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <p className="text-xs" style={{ color: '#F5DFA0', letterSpacing: '0.12em' }}>
+            EXAM PAUSED — EXTENSION DETECTED
+          </p>
+          <p className="text-sm" style={{ color: '#FFFFFF', lineHeight: 1.6 }}>
+            A browser extension was detected and your exam has been paused.
+          </p>
+          <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+            {autoResume
+              ? 'Please disable or remove the extension, then click Re-scan & resume. Your timer is unaffected while paused.'
+              : 'Please disable or remove the extension. An invigilator must clear this pause before you can continue.'}
+          </p>
+          {detail && (
+            <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
+              Detected: {detail}
+            </p>
+          )}
+        </div>
+        {autoResume && (
+          <button
+            type="button"
+            onClick={onResume}
+            disabled={resuming}
+            className="text-xs px-4 py-2 transition-colors"
+            style={{
+              background: resuming ? 'rgba(255,255,255,0.15)' : '#F5DFA0',
+              color: resuming ? 'rgba(255,255,255,0.6)' : '#0C0C0B',
+              borderRadius: 2, cursor: resuming ? 'default' : 'pointer',
+            }}
+          >
+            {resuming ? 'Re-scanning…' : 'Re-scan & resume'}
+          </button>
+        )}
+        {resumeError && (
+          <p className="text-xs" style={{ color: '#E5A5A5', lineHeight: 1.6 }}>
+            {resumeError}
+          </p>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -527,6 +614,12 @@ export function ExamShell() {
   // ── Freeze / session state (synced from Firestore) ─────────────
   const [isFrozen, setIsFrozen]                     = useState(false);
   const [frozenReason, setFrozenReason]             = useState<string | undefined>();
+  // ── Extension freeze (Phase 1c) ────────────────────────────────
+  const [extFrozen, setExtFrozen]                   = useState(false);
+  const [extFreezeDetail, setExtFreezeDetail]       = useState<string | undefined>();
+  const [extResuming, setExtResuming]               = useState(false);
+  const [extResumeError, setExtResumeError]         = useState<string | undefined>();
+  const extReportedRef                              = useRef(false);
   const [frozenAtISO, setFrozenAtISO]               = useState<string | null>(null);
   const [totalFrozenSeconds, setTotalFrozenSeconds] = useState(0);
   const [hasConflict, setHasConflict]               = useState(false);
@@ -814,6 +907,20 @@ export function ExamShell() {
       if (live.activeSessionId && live.activeSessionId !== localSessionId.current) {
         setHasConflict(true);
         setOverlay({ kind: 'session_conflict' });
+      }
+
+      // ── Extension freeze (Phase 1c) ──────────────────────────────
+      // The server sets status='frozen' with freezeState.reason when an
+      // extension is detected on a tier that requires the check. Surface
+      // the extension-specific overlay (distinct from invigilator pause).
+      const extFreeze =
+        live.status === 'frozen' && live.freezeState?.reason === 'extension_detected';
+      if (extFreeze) {
+        setExtFrozen(true);
+        setExtFreezeDetail(live.lastExtensionCheck?.found?.[0]);
+        (document.activeElement as HTMLElement | null)?.blur?.();
+      } else {
+        setExtFrozen(false);
       }
     });
     return () => unsub();
@@ -1283,6 +1390,19 @@ export function ExamShell() {
     await logViolation(att.id, type, detail, isWarningType ? newWarningCount : undefined, { skipEventDetail })
       .catch((e) => console.error('[ExamShell] logViolation failed', e));
 
+    // ── Extension detected (Phase 1c) ──────────────────────────────
+    // Report to the server, which decides whether to freeze the attempt
+    // (only on tiers where requireExtensionCheck is true). Guarded so a
+    // repeated detection doesn't spam the callable while already frozen.
+    if (type === 'extension_detected' && !extReportedRef.current) {
+      extReportedRef.current = true;
+      reportExtensionCheck({ attemptId: att.id, passed: false, found: detail ? [detail] : [] })
+        .catch((e) => {
+          console.error('[ExamShell] reportExtensionCheck failed', e);
+          extReportedRef.current = false; // allow retry on next detection
+        });
+    }
+
     // Show overlay based on violation type and warning count
     if (type === 'fullscreen_exit') {
       // Fullscreen exit handled by onFullscreenChange — don't double-show warning overlay
@@ -1308,6 +1428,39 @@ export function ExamShell() {
         violationType: type,
         warningNumber: newWarningCount as 1 | 2,
       });
+    }
+  }, []);
+
+  // ── Extension-freeze resume (Phase 1c) ─────────────────────────
+  // Re-scan for the extension; if it's gone, report a passing check and
+  // ask the server to resume. Auto-resume succeeds only on eligible tiers
+  // with a passing latest check; otherwise the server tells the student an
+  // invigilator must clear it. The live subscription clears extFrozen when
+  // status returns to in_progress.
+  const handleExtensionResume = useCallback(async () => {
+    const att = attemptRef.current;
+    if (!att) return;
+    setExtResuming(true);
+    setExtResumeError(undefined);
+    try {
+      // Re-scan happens live in ExtensionWatchdog; here we optimistically
+      // report a passing check, then ask to resume. If the extension is still
+      // present, the watchdog will re-fire and re-freeze immediately.
+      await reportExtensionCheck({ attemptId: att.id, passed: true });
+      extReportedRef.current = false; // allow a future re-detection to re-freeze
+      const res = await verifyAndResume(att.id);
+      if (!res.resumed) {
+        setExtResumeError('Waiting for an invigilator to clear this pause.');
+      }
+    } catch (e) {
+      const msg = (e as { message?: string })?.message ?? '';
+      setExtResumeError(
+        msg.includes('RESUME_BLOCKED')
+          ? 'An invigilator must clear this pause before you can continue.'
+          : 'Could not resume. Please ensure the extension is removed and try again.',
+      );
+    } finally {
+      setExtResuming(false);
     }
   }, []);
 
@@ -1722,6 +1875,17 @@ export function ExamShell() {
         {/* Freeze halts the exam; a session conflict is terminal and outranks it. */}
         {isFrozen && !hasConflict && (
           <FreezePausedOverlay key="freeze-paused" reason={frozenReason} />
+        )}
+        {/* Extension freeze (Phase 1c) — server paused for a detected extension. */}
+        {extFrozen && !hasConflict && !isFrozen && (
+          <ExtensionFreezeOverlay
+            key="ext-freeze"
+            detail={extFreezeDetail}
+            autoResume={attempt?.securityConfig?.autoResume === true}
+            onResume={handleExtensionResume}
+            resuming={extResuming}
+            resumeError={extResumeError}
+          />
         )}
       </AnimatePresence>
 

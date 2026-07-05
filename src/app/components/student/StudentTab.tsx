@@ -25,7 +25,6 @@ function formatDate(value: unknown): string {
     ? '—'
     : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-}
 function formatSyncAge(d: Date) {
   const s = Math.floor((Date.now() - d.getTime()) / 1000);
   if (s < 10) return 'just now';

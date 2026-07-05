@@ -160,8 +160,8 @@ export const createAuthUser = onCall<CreateAuthUserData>(
       ...profileSansPassword,
       email,
       uid,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     // Stamp the canonical id field expected by the rest of the app.

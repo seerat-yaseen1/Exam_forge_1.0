@@ -15,8 +15,16 @@ import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function formatDate(value: unknown): string {
+  if (!value) return '—';
+  const d =
+    typeof value === 'object' && value !== null && 'toDate' in value
+      ? (value as { toDate: () => Date }).toDate()
+      : new Date(value as string);
+  return isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 }
 function formatSyncAge(d: Date) {
   const s = Math.floor((Date.now() - d.getTime()) / 1000);

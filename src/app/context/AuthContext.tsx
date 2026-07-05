@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -7,6 +7,11 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  multiFactor,
+  TotpMultiFactorGenerator,
+  TotpSecret,
+  getMultiFactorResolver,
+  type MultiFactorResolver,
   type User as FirebaseUser,
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -37,6 +42,21 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   verifyPassword: (password: string) => Promise<boolean>;
   updatePlatformSettings: (settings: Partial<PlatformSettings>) => void;
+
+  // ── Two-factor authentication (TOTP) — webOwner only ──
+  /** True once a login hits the MFA challenge; the login page shows the code step. */
+  mfaPending: boolean;
+  /** Whether the currently signed-in webOwner has TOTP enrolled. */
+  isMfaEnrolled: () => boolean;
+  /** Begin enrollment: returns the otpauth:// URI (for QR) + shared secret.
+   *  Requires a recent login — call verifyPassword first if it's been a while. */
+  startMfaEnrollment: () => Promise<{ success: boolean; qrUri?: string; secretKey?: string; error?: string }>;
+  /** Finish enrollment by confirming a 6-digit code from the authenticator app. */
+  confirmMfaEnrollment: (verificationCode: string) => Promise<{ success: boolean; error?: string }>;
+  /** Remove TOTP from the account (requires recent login). */
+  disableMfa: () => Promise<{ success: boolean; error?: string }>;
+  /** Complete a login that was interrupted by the MFA challenge. */
+  resolveMfaSignIn: (verificationCode: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -57,6 +77,11 @@ async function loadProfile(fbUser: FirebaseUser): Promise<AuthUser | null> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  // MFA challenge state — set when a login is interrupted by TOTP.
+  const [mfaPending, setMfaPending] = useState(false);
+  const mfaResolverRef = useRef<MultiFactorResolver | null>(null);
+  // Holds the in-progress TOTP secret between startMfaEnrollment and confirm.
+  const totpSecretRef = useRef<TotpSecret | null>(null);
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
     name: 'STRATUM',
     logoUrl: null,
@@ -104,6 +129,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: true };
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code;
+        // TOTP challenge — the password was correct but 2FA is required.
+        // Stash the resolver and signal the login page to show the code step.
+        if (code === 'auth/multi-factor-auth-required') {
+          try {
+            mfaResolverRef.current = getMultiFactorResolver(auth, err as never);
+            setMfaPending(true);
+            return { success: false, error: '__MFA_REQUIRED__' };
+          } catch (resolveErr) {
+            console.error('MFA resolver error:', resolveErr);
+            return { success: false, error: 'Two-factor sign-in could not start. Please try again.' };
+          }
+        }
         if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
           return { success: false, error: 'Incorrect email or password.' };
         }
@@ -187,6 +224,101 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // ── Two-factor (TOTP) ──────────────────────────────────────────────
+
+  const isMfaEnrolled = useCallback((): boolean => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) return false;
+    return multiFactor(fbUser).enrolledFactors.length > 0;
+  }, []);
+
+  const startMfaEnrollment = useCallback(async (): Promise<{ success: boolean; qrUri?: string; secretKey?: string; error?: string }> => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) return { success: false, error: 'Not signed in.' };
+    try {
+      const session = await multiFactor(fbUser).getSession();
+      const secret = await TotpMultiFactorGenerator.generateSecret(session);
+      totpSecretRef.current = secret;
+      const qrUri = secret.generateQrCodeUrl(
+        fbUser.email ?? 'account',
+        platformSettings.name || 'STRATUM',
+      );
+      return { success: true, qrUri, secretKey: secret.secretKey };
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/requires-recent-login') {
+        return { success: false, error: 'Please re-enter your password before enabling 2FA.' };
+      }
+      if (code === 'auth/operation-not-allowed') {
+        return { success: false, error: 'TOTP is not enabled for this project. Enable it in Firebase Console → Authentication → Sign-in method → Multi-factor.' };
+      }
+      console.error('startMfaEnrollment error:', err);
+      return { success: false, error: 'Could not start 2FA setup. Please try again.' };
+    }
+  }, [platformSettings.name]);
+
+  const confirmMfaEnrollment = useCallback(async (verificationCode: string): Promise<{ success: boolean; error?: string }> => {
+    const fbUser = auth.currentUser;
+    const secret = totpSecretRef.current;
+    if (!fbUser) return { success: false, error: 'Not signed in.' };
+    if (!secret) return { success: false, error: 'Setup session expired. Please restart 2FA setup.' };
+    try {
+      const cred = TotpMultiFactorGenerator.assertionForEnrollment(secret, verificationCode.trim());
+      await multiFactor(fbUser).enroll(cred, 'Authenticator app');
+      totpSecretRef.current = null;
+      return { success: true };
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/invalid-verification-code') {
+        return { success: false, error: 'That code is incorrect. Check your authenticator app and try again.' };
+      }
+      console.error('confirmMfaEnrollment error:', err);
+      return { success: false, error: 'Could not confirm the code. Please try again.' };
+    }
+  }, []);
+
+  const disableMfa = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) return { success: false, error: 'Not signed in.' };
+    try {
+      const enrolled = multiFactor(fbUser).enrolledFactors;
+      if (enrolled.length === 0) return { success: true };
+      await multiFactor(fbUser).unenroll(enrolled[0]);
+      return { success: true };
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/requires-recent-login') {
+        return { success: false, error: 'Please re-enter your password before disabling 2FA.' };
+      }
+      console.error('disableMfa error:', err);
+      return { success: false, error: 'Could not disable 2FA. Please try again.' };
+    }
+  }, []);
+
+  const resolveMfaSignIn = useCallback(async (verificationCode: string): Promise<{ success: boolean; error?: string }> => {
+    const resolver = mfaResolverRef.current;
+    if (!resolver) return { success: false, error: 'Your session expired. Please sign in again.' };
+    try {
+      // Find the enrolled TOTP factor from the resolver's hints.
+      const totpHint = resolver.hints.find(
+        (h) => h.factorId === TotpMultiFactorGenerator.FACTOR_ID,
+      );
+      if (!totpHint) return { success: false, error: 'No authenticator app is set up for this account.' };
+      const assertion = TotpMultiFactorGenerator.assertionForSignIn(totpHint.uid, verificationCode.trim());
+      await resolver.resolveSignIn(assertion);
+      mfaResolverRef.current = null;
+      setMfaPending(false);
+      return { success: true };
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/invalid-verification-code') {
+        return { success: false, error: 'That code is incorrect. Please try again.' };
+      }
+      console.error('resolveMfaSignIn error:', err);
+      return { success: false, error: 'Could not verify the code. Please try again.' };
+    }
+  }, []);
+
   const updatePlatformSettings = useCallback((settings: Partial<PlatformSettings>) => {
     setPlatformSettings((prev) => ({ ...prev, ...settings }));
   }, []);
@@ -203,6 +335,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resetPassword,
         changePassword,
         verifyPassword,
+        mfaPending,
+        isMfaEnrolled,
+        startMfaEnrollment,
+        confirmMfaEnrollment,
+        disableMfa,
+        resolveMfaSignIn,
         updatePlatformSettings,
       }}
     >

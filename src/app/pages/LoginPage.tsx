@@ -18,13 +18,15 @@ const inputStyle: React.CSSProperties = {
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { user, login, platformSettings } = useAuth();
+  const { user, login, platformSettings, mfaPending, resolveMfaSignIn } = useAuth();
 
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError]               = useState('');
   const [loading, setLoading]           = useState(false);
+  // Second-factor step
+  const [mfaCode, setMfaCode]           = useState('');
 
   if (user) return <Navigate to="/dashboard" replace />;
 
@@ -38,7 +40,23 @@ export function LoginPage() {
     const result = await login(email, password);
     setLoading(false);
     if (!result.success) {
+      // Not a real error — the account has 2FA and we now need the code.
+      if (result.error === '__MFA_REQUIRED__') { setError(''); return; }
       setError(result.error ?? 'An error occurred.');
+      return;
+    }
+    navigate('/dashboard', { replace: true });
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (mfaCode.trim().length < 6 || loading) return;
+    setError('');
+    setLoading(true);
+    const result = await resolveMfaSignIn(mfaCode);
+    setLoading(false);
+    if (!result.success) {
+      setError(result.error ?? 'Verification failed.');
       return;
     }
     navigate('/dashboard', { replace: true });
@@ -95,9 +113,54 @@ export function LoginPage() {
           }}
         >
           <p className="text-xs mb-6" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
-            WEB OWNER ACCESS
+            {mfaPending ? 'TWO-FACTOR VERIFICATION' : 'WEB OWNER ACCESS'}
           </p>
 
+          {mfaPending ? (
+            <form onSubmit={handleMfaSubmit} noValidate>
+              <p className="text-xs mb-6" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                Enter the 6-digit code from your authenticator app to finish signing in.
+              </p>
+              <div className="mb-6">
+                <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+                  Authentication code
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  maxLength={6}
+                  value={mfaCode}
+                  onChange={(e) => { setMfaCode(e.target.value.replace(/\D/g, '')); setError(''); }}
+                  disabled={loading}
+                  placeholder="000000"
+                  style={{ ...inputStyle, letterSpacing: '0.3em', textAlign: 'center', fontSize: 16 }}
+                  onFocus={onFocus}
+                  onBlur={onBlur}
+                />
+              </div>
+
+              {error && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-4 -mt-2">
+                  <p className="text-xs" style={{ color: '#9B2828' }}>{error}</p>
+                </motion.div>
+              )}
+
+              <button
+                type="submit"
+                disabled={mfaCode.trim().length < 6 || loading}
+                className="w-full py-2.5 text-sm flex items-center justify-center gap-2 transition-opacity"
+                style={{
+                  background: mfaCode.trim().length === 6 && !loading ? '#0C0C0B' : '#C8C7C2',
+                  color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em',
+                  cursor: mfaCode.trim().length === 6 && !loading ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {loading ? (<><Loader2 size={14} className="animate-spin" /><span>Verifying…</span></>) : 'Verify & sign in'}
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} noValidate>
             {/* Email */}
             <div className="mb-4">
@@ -201,6 +264,7 @@ export function LoginPage() {
               )}
             </button>
           </form>
+          )}
         </div>
 
         {/* Role links */}

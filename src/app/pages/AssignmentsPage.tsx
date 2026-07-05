@@ -23,6 +23,7 @@ import {
   formatAssignmentTarget,
   resolveQuestionsForSections,
   validateSelectionRules,
+  applyTierDefaults,
   type Assessment,
   type AssessmentDraft,
   type AssessmentStatus,
@@ -3180,6 +3181,13 @@ function DetailsStep({
   );
   const [showResults, setShowResults] = useState(assessment?.showResults ?? false);
   const [allowReview, setAllowReview] = useState(assessment?.allowReview ?? false);
+  // ── Security tier + delivery mode (Phase 0 wiring) ──────────────
+  const [securityTier, setSecurityTier] = useState<'mock' | 'normal' | 'high_stake'>(
+    assessment?.securityTier ?? 'normal',
+  );
+  const [deliveryMode, setDeliveryMode] = useState<'standard' | 'linear' | 'adaptive'>(
+    assessment?.deliveryMode ?? 'standard',
+  );
   const [saving, setSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
@@ -3352,6 +3360,12 @@ function DetailsStep({
         sectionStartOrder,
         showResults,
         allowReview,
+        // ── Security tier + delivery mode (Phase 0 wiring) ──────────
+        // applyTierDefaults enforces the per-tier floor (high-stake locks
+        // camera on / mobile off / extension on). deliveryMode is chosen
+        // independently. These flow through createAssessment's ...draft spread.
+        ...applyTierDefaults(securityTier),
+        deliveryMode,
         status: targetStatus,
       };
 
@@ -3536,6 +3550,84 @@ function DetailsStep({
             {/* RIGHT COLUMN: SETTINGS */}
             <div className="space-y-3" style={{ minWidth: 0 }}>
               <SectionLabel label="SETTINGS" />
+
+              {/* Security tier */}
+              <div className="space-y-1.5">
+                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                  Security tier
+                </p>
+                <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+                  {([
+                    { key: 'mock' as const,       label: 'Mock' },
+                    { key: 'normal' as const,     label: 'Normal' },
+                    { key: 'high_stake' as const, label: 'High-stake' },
+                  ]).map((opt, i) => {
+                    const active = securityTier === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setSecurityTier(opt.key)}
+                        className="flex-1 text-xs px-2 py-1.5 transition-colors"
+                        style={{
+                          background: active ? '#0C0C0B' : 'transparent',
+                          color: active ? '#FFFFFF' : '#4A4A45',
+                          borderLeft: i === 0 ? 'none' : '1px solid #E3E1DB',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs" style={{ color: '#9A9891' }}>
+                  {securityTier === 'mock'
+                    ? 'Practice mode — no proctoring. Camera off, phones allowed.'
+                    : securityTier === 'high_stake'
+                      ? 'Maximum security — camera required, desktop only, Safe Exam Browser (locked).'
+                      : 'Deterrent proctoring — camera on by default, extension check, desktop by default.'}
+                </p>
+              </div>
+
+              {/* Delivery mode */}
+              <div className="space-y-1.5">
+                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                  Delivery mode
+                </p>
+                <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+                  {([
+                    { key: 'standard' as const, label: 'Standard' },
+                    { key: 'linear' as const,   label: 'Linear' },
+                    { key: 'adaptive' as const, label: 'Adaptive' },
+                  ]).map((opt, i) => {
+                    const active = deliveryMode === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setDeliveryMode(opt.key)}
+                        className="flex-1 text-xs px-2 py-1.5 transition-colors"
+                        style={{
+                          background: active ? '#0C0C0B' : 'transparent',
+                          color: active ? '#FFFFFF' : '#4A4A45',
+                          borderLeft: i === 0 ? 'none' : '1px solid #E3E1DB',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs" style={{ color: '#9A9891' }}>
+                  {deliveryMode === 'linear'
+                    ? 'One question at a time, no going back. (Enforcement lands in a later phase.)'
+                    : deliveryMode === 'adaptive'
+                      ? 'One at a time; difficulty adapts to performance. (Enforcement lands in a later phase.)'
+                      : 'All questions visible; students navigate freely.'}
+                </p>
+              </div>
 
               {/* Section start order */}
               <div className="space-y-1.5">

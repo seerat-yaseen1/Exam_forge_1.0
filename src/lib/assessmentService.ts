@@ -75,6 +75,16 @@ export type AssessmentSection = {
   questions: AssessmentQuestion[]; // resolved at publish time (status → active)
   assignedTopics?: string[];       // "subject::topic" keys pre-assigned in Step 1
   breakAfter?: SectionBreak;       // optional break inserted before the next section
+
+  // ── Reserved (Phase 0) — not yet enforced ─────────────────────────
+  // Later flexibility: min/max time per section. maxTimeMinutes mirrors the
+  // existing timeLimit as the hard cap; minTimeMinutes would prevent leaving
+  // a section before it elapses. questionTimeLimit is for linear/adaptive
+  // per-question timing (Phase 2.5). Declared now so adding the behavior
+  // later needs no attempt/assessment migration.
+  minTimeMinutes?: number;         // minutes; student may not leave before this elapses
+  maxTimeMinutes?: number;         // minutes; hard cap (kept alongside timeLimit for clarity)
+  questionTimeLimit?: number;      // seconds per question; undefined = no per-question cap
 };
 
 // ── Resolution helpers ────────────────────────────────────────────
@@ -274,6 +284,31 @@ export type Assessment = {
   // Enforced server-side in the submitSection Cloud Function.
   sectionGraceSeconds?: number;
 
+  // ── Security tier (Phase 0) ───────────────────────────────────────
+  // Editable freely UNTIL the first attempt starts; frozen thereafter
+  // (see securityLockedAt). undefined tier = legacy → startExam treats it
+  // exactly as today (no camera / no extension gate).
+  securityTier?: 'mock' | 'normal' | 'high_stake';
+  deliveryMode?: 'standard' | 'linear' | 'adaptive';   // undefined = 'standard'
+
+  // Authority-controlled toggles. Tier-aware defaults set at create via
+  // applyTierDefaults(). Effective values are re-derived server-side in
+  // startExam — never trusted raw from the client.
+  autoResume?: boolean;              // normal: auto-clear extension freeze when re-check passes
+  allowMobile?: boolean;             // normal only; high_stake is always desktop-only
+  requireCamera?: boolean;           // mock: off, normal: on, high_stake: locked on
+  requireExtensionCheck?: boolean;   // normal/high_stake pre-exam hard block
+
+  // Overall exam time limit (minutes) — runs ALONGSIDE per-section timeLimit;
+  // whichever expires first ends the exam. Enforced in Phase 1.
+  // undefined = no overall cap.
+  overallTimeLimit?: number;
+
+  // Set by startExam on the FIRST attempt. Presence = security config frozen.
+  // Written only by the Cloud Function (Admin SDK); clients cannot set it
+  // (firestore.rules forbids editing security fields once this is present).
+  securityLockedAt?: string;         // ISO
+
   // System
   isDeleted: boolean;
   createdAt: string;
@@ -292,6 +327,55 @@ export type AssessmentDraft = Omit<
 // ══════════════════════════════════════════════════════════════════
 
 // ── Create assessment ─────────────────────────────────────────────
+
+// ── Tier-aware security defaults (Phase 0) ────────────────────────
+// Call when the author picks/changes a tier in the builder, then merge the
+// returned fields onto the draft before createAssessment. High-stake LOCKS
+// camera/mobile/extension-check regardless of overrides (the tier sets a
+// floor; the authority may only tune above it). deliveryMode is chosen
+// separately and defaults to 'standard'.
+export function applyTierDefaults(
+  tier: 'mock' | 'normal' | 'high_stake',
+  overrides?: {
+    requireCamera?: boolean;
+    allowMobile?: boolean;
+    autoResume?: boolean;
+    requireExtensionCheck?: boolean;
+  },
+): {
+  securityTier: 'mock' | 'normal' | 'high_stake';
+  requireCamera: boolean;
+  allowMobile: boolean;
+  autoResume: boolean;
+  requireExtensionCheck: boolean;
+} {
+  if (tier === 'mock') {
+    return {
+      securityTier: 'mock',
+      requireCamera: overrides?.requireCamera ?? false,        // default OFF
+      allowMobile: overrides?.allowMobile ?? true,             // phones welcome
+      autoResume: overrides?.autoResume ?? true,
+      requireExtensionCheck: overrides?.requireExtensionCheck ?? false,
+    };
+  }
+  if (tier === 'high_stake') {
+    return {
+      securityTier: 'high_stake',
+      requireCamera: true,           // LOCKED on
+      allowMobile: false,            // LOCKED desktop-only
+      autoResume: overrides?.autoResume ?? false,
+      requireExtensionCheck: true,   // LOCKED on
+    };
+  }
+  // normal
+  return {
+    securityTier: 'normal',
+    requireCamera: overrides?.requireCamera ?? true,           // default ON
+    allowMobile: overrides?.allowMobile ?? false,              // default OFF (D-B)
+    autoResume: overrides?.autoResume ?? false,
+    requireExtensionCheck: overrides?.requireExtensionCheck ?? true,
+  };
+}
 
 export async function createAssessment(
   draft: AssessmentDraft

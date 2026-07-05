@@ -1084,6 +1084,7 @@ interface StartExamData {
   shuffleQuestions?: boolean;
   sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
   cameraDeclined?: boolean;
+  deviceClass?: 'desktop' | 'mobile' | 'tablet';
 }
 
 // ── startExam ─────────────────────────────────────────────────────
@@ -1130,13 +1131,68 @@ export const startExam = onCall<StartExamData>(
       blockedStudents?: string[];
       title?: string;
       assignedTo?: { type: string; instituteIds?: string[]; studentIds?: string[] };
+      // Phase 0 — server-authoritative security config:
+      securityTier?: 'mock' | 'normal' | 'high_stake';
+      deliveryMode?: 'standard' | 'linear' | 'adaptive';
+      requireCamera?: boolean;
+      allowMobile?: boolean;
+      autoResume?: boolean;
+      requireExtensionCheck?: boolean;
+      securityLockedAt?: string;
     };
+
+    // ── Effective security config, re-derived SERVER-SIDE (Phase 0) ──
+    // Never trust client-supplied security values. Legacy docs (no
+    // securityTier) behave exactly as today: no camera gate, no extension
+    // gate, mobile left open. High-stake locks camera on / mobile off /
+    // extension on regardless of stored overrides.
+    const isLegacy = a.securityTier === undefined;
+    const tier: 'mock' | 'normal' | 'high_stake' = a.securityTier ?? 'normal';
+    const requireCamera = isLegacy
+      ? false
+      : tier === 'high_stake'
+        ? true
+        : (a.requireCamera ?? (tier === 'mock' ? false : true));
+    const allowMobile = isLegacy
+      ? true
+      : tier === 'high_stake'
+        ? false
+        : (a.allowMobile ?? false);
+    const requireExtensionCheck = isLegacy
+      ? false
+      : tier === 'high_stake'
+        ? true
+        : (a.requireExtensionCheck ?? true);
+    const effectiveAutoResume = isLegacy
+      ? false
+      : tier === 'high_stake'
+        ? false
+        : (a.autoResume ?? false);
 
     if (a.status === 'draft') {
       throw new HttpsError('failed-precondition', 'This assessment is not published.');
     }
     if (a.blockedStudents?.includes(studentId)) {
       throw new HttpsError('permission-denied', 'You are blocked from this exam.');
+    }
+
+    // ── Device policy gate (Phase 0) ──────────────────────────────
+    // Runs before the idempotency check, so a resuming student re-passes it
+    // (safe: same device on resume). allowMobile is re-derived server-side;
+    // high-stake and any allowMobile=false exam refuses non-desktop.
+    const deviceClass = request.data?.deviceClass ?? 'desktop';
+    if (!allowMobile && deviceClass !== 'desktop') {
+      throw new HttpsError(
+        'failed-precondition',
+        'DEVICE_NOT_ALLOWED: this exam must be taken on a desktop or laptop.',
+      );
+    }
+    // ── Camera-required gate (Phase 0) ────────────────────────────
+    if (requireCamera && cameraDeclined === true) {
+      throw new HttpsError(
+        'failed-precondition',
+        'CAMERA_REQUIRED: this exam requires your camera to be enabled.',
+      );
     }
 
     // Targeting gate — the client briefing filters by assignedTo, but nothing
@@ -1186,6 +1242,18 @@ export const startExam = onCall<StartExamData>(
 
     // ── Build frozen state (mirrors legacy startAttempt) ──────────
     const nowIso = new Date().toISOString();
+
+    // ── Freeze the security config on the FIRST attempt (Phase 0) ──
+    // Idempotent: only writes if not already locked. Written via the Admin
+    // SDK, which bypasses firestore.rules — so the function can always stamp
+    // even though clients are forbidden from editing a locked doc's security
+    // fields. Reached only after the idempotency return above, i.e. only when
+    // a brand-new attempt is actually being created.
+    if (!a.securityLockedAt) {
+      await db.collection('assessments').doc(assessmentId)
+        .set({ securityLockedAt: nowIso, updatedAt: nowIso }, { merge: true });
+    }
+
     let ordered = sections;
     if (sectionStartOrder === 'random' || sectionStartOrder === 'student_choice') {
       ordered = [...sections];
@@ -1206,6 +1274,31 @@ export const startExam = onCall<StartExamData>(
         }
       }
       questionOrder[sec.id] = qids;
+    }
+
+    // ── Served-question sequence (Phase 0) ────────────────────────
+    // Append-only source of truth for what the student was actually shown.
+    // Standard mode writes the whole paper now (all unlocked = free nav);
+    // linear/adaptive will append one at a time in Phase 2.5. Grading will
+    // iterate this. Client-supplied sections carry no difficulty field, so
+    // difficulty defaults to 'medium' (display metadata only, non-security).
+    const servedQuestions: Array<{
+      questionId: string;
+      sectionId: string;
+      difficulty: string;
+      servedAt: string;
+      locked: boolean;
+    }> = [];
+    for (const sec of ordered) {
+      for (const qid of questionOrder[sec.id]) {
+        servedQuestions.push({
+          questionId: qid,
+          sectionId: sec.id,
+          difficulty: 'medium',
+          servedAt: nowIso,
+          locked: false,
+        });
+      }
     }
 
     const sectionTimings: Record<string, AttemptSectionTiming> = {};
@@ -1234,6 +1327,7 @@ export const startExam = onCall<StartExamData>(
       sectionIds,
       sectionTimings,
       questionOrder,
+      servedQuestions,
       answers: {},
       integrityLog: {
         tabSwitches: 0, focusLosses: 0, fullscreenExits: 0, copyAttempts: 0,
@@ -1242,6 +1336,17 @@ export const startExam = onCall<StartExamData>(
         extensionEvents: 0, totalViolations: 0, violations: [], autoTerminated: false,
       },
       cameraDeclined: cameraDeclined ?? false,
+      deviceClass,
+      // Frozen security snapshot — the contract this student actually sits
+      // under, independent of any later edit to the assessment (Phase 0).
+      securityConfig: {
+        tier,
+        deliveryMode: a.deliveryMode ?? 'standard',
+        requireCamera,
+        requireExtensionCheck,
+        allowMobile,
+        autoResume: effectiveAutoResume,
+      },
       totalFrozenSeconds: 0,
       serverAnchored: true, // marks this attempt as using server-owned timestamps
       createdAt: nowIso,

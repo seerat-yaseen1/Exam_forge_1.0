@@ -399,8 +399,25 @@ service cloud.firestore {
                                  && request.auth.token.instituteId in resource.data.assignedTo.instituteIds)));
       allow create: if canWriteOwned(request.resource.data.ownerType,
                                      request.resource.data.ownerId);
-      allow update: if canWriteOwned(resource.data.ownerType,
-                                     resource.data.ownerId);
+      // Owners edit freely UNTIL the first attempt sets securityLockedAt
+      // (stamped by the startExam Cloud Function via the Admin SDK, which
+      // bypasses these rules). Once locked, the security-relevant fields are
+      // immutable; schedule / access / cosmetic fields may still change.
+      // Legacy docs (no securityLockedAt) remain fully editable — they carry
+      // no security config to protect.
+      allow update: if canWriteOwned(resource.data.ownerType, resource.data.ownerId)
+                       && (
+                            !('securityLockedAt' in resource.data)
+                            || (
+                                 request.resource.data.securityTier == resource.data.securityTier
+                                 && request.resource.data.deliveryMode == resource.data.deliveryMode
+                                 && request.resource.data.requireCamera == resource.data.requireCamera
+                                 && request.resource.data.allowMobile == resource.data.allowMobile
+                                 && request.resource.data.requireExtensionCheck == resource.data.requireExtensionCheck
+                                 && request.resource.data.autoResume == resource.data.autoResume
+                                 && request.resource.data.securityLockedAt == resource.data.securityLockedAt
+                               )
+                          );
       allow delete: if canWriteOwned(resource.data.ownerType,
                                      resource.data.ownerId);
     }

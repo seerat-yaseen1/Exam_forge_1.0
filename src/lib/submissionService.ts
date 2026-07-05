@@ -37,6 +37,32 @@ function now(): string {
   return new Date().toISOString();
 }
 
+// ── Device-class heuristic (Phase 0) ──────────────────────────────
+// Honest-majority signal only — NOT spoof-proof. Real high-stake device
+// assurance comes from Safe Exam Browser's header check in Phase 3. Used by
+// startAttempt to report the client's device class; the server enforces the
+// device policy against it.
+function detectDeviceClass(): 'desktop' | 'mobile' | 'tablet' {
+  if (typeof navigator === 'undefined') return 'desktop';
+  const ua = navigator.userAgent || '';
+  const touch =
+    typeof window !== 'undefined' &&
+    ('ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0);
+  const minSide =
+    typeof window !== 'undefined' && window.screen
+      ? Math.min(window.screen.width ?? 0, window.screen.height ?? 0)
+      : 0;
+  const isTablet =
+    /iPad|Tablet|PlayBook|Silk/i.test(ua) ||
+    (touch && minSide >= 600 && /Android/i.test(ua) && !/Mobile/i.test(ua));
+  const isMobile =
+    /Mobi|Android.*Mobile|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) ||
+    (touch && minSide > 0 && minSide < 600);
+  if (isTablet) return 'tablet';
+  if (isMobile) return 'mobile';
+  return 'desktop';
+}
+
 function removeUndefined<T extends Record<string, any>>(obj: T): T {
   const out: any = {};
   for (const key in obj) {
@@ -202,6 +228,42 @@ export type Attempt = {
   activeSessionId?: string;    // UUID of the active browser session
   sessionConflictAt?: string;  // ISO; when a second device attempted to join
 
+  // ── Device class (Phase 0) ────────────────────────────────────
+  // Reported by the client at start, validated server-side in startExam.
+  // High-stake (and any exam with allowMobile=false) refuses non-desktop.
+  deviceClass?: 'desktop' | 'mobile' | 'tablet';
+
+  // ── Frozen security snapshot (Phase 0) ────────────────────────
+  // The effective security config copied from the assessment AT START, so
+  // this attempt's integrity behavior + grading use the contract the
+  // student actually sat under, even if the assessment is later re-edited
+  // for a future window.
+  securityConfig?: {
+    tier: 'mock' | 'normal' | 'high_stake';
+    deliveryMode: 'standard' | 'linear' | 'adaptive';
+    requireCamera: boolean;
+    requireExtensionCheck: boolean;
+    allowMobile: boolean;
+    autoResume: boolean;
+  };
+
+  // ── Served-question sequence (Phase 0 shape; behavior later) ───
+  // Append-only source of truth for what the student was actually shown.
+  // standard: written in full at start. linear/adaptive (Phase 2.5):
+  // appended one at a time. Grading iterates THIS, not the frozen paper.
+  servedQuestions?: Array<{
+    questionId: string;
+    sectionId: string;
+    difficulty: string;
+    servedAt: string;   // ISO
+    locked: boolean;    // true once the next question is served (one-way modes)
+  }>;
+
+  // ── Reserved for Phase 1 (extension freeze / heartbeat) ───────
+  lastExtensionCheck?: { at: string; passed: boolean; found?: string[] } | null;
+  resumeRequiresVerification?: boolean;
+  lastHeartbeatAt?: string | null;
+
   // ── Soft delete ───────────────────────────────────────────────
   isDeleted?: boolean;         // true = hidden from roster; shown in drawer history
 
@@ -269,6 +331,7 @@ export async function startAttempt(params: {
       shuffleQuestions: boolean;
       sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
       cameraDeclined?: boolean;
+      deviceClass?: 'desktop' | 'mobile' | 'tablet';
     },
     { ok: true; attempt: Attempt }
   >(functions, 'startExam');
@@ -280,6 +343,7 @@ export async function startAttempt(params: {
       shuffleQuestions: params.shuffleQuestions,
       sectionStartOrder: params.sectionStartOrder,
       cameraDeclined: params.cameraDeclined,
+      deviceClass: detectDeviceClass(),
     });
     return res.data.attempt;
   } catch (e) {

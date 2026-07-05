@@ -18,7 +18,7 @@ export interface Student {
   instituteId: string;
   name: string;
   email: string;
-  role: 'Student';
+  role: 'student';
   status: 'active' | 'disabled';
   firstLoginRequired: boolean;
   group?: string[];
@@ -168,7 +168,7 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
         email: normalizedEmail,
         name: name.trim(),
         instituteId,
-        role: 'Student',
+        role: 'student',
         status,
         firstLoginRequired: false,
         createdAt: now,

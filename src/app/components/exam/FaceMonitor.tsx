@@ -6,10 +6,12 @@
  *   - Face absent   (0 faces for > ABSENT_THRESHOLD_SECS continuous seconds)
  *   - Multi-person  (≥ 2 faces detected at once)
  *
- * Face detection uses face-api.js loaded dynamically from CDN. If the
- * library or models fail to load, the webcam PiP still shows but violations
- * are not logged — this is handled gracefully with a "detection unavailable"
- * indicator.
+ * Face detection uses face-api.js, bundled from npm (no CDN) with the
+ * TinyFaceDetector model weights self-hosted from /models. Loading from our
+ * own origin means blocking a third-party CDN cannot silently disable
+ * detection. If the models fail to load, the webcam PiP still shows but
+ * violations are not logged — handled gracefully with a "detection
+ * unavailable" indicator.
  *
  * If `enabled` is false (student declined camera at briefing) this component
  * renders nothing.
@@ -17,6 +19,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Camera, CameraOff, AlertCircle } from 'lucide-react';
+import * as faceapi from 'face-api.js';
 import type { ViolationType } from '../../../lib/submissionService';
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -24,8 +27,13 @@ import type { ViolationType } from '../../../lib/submissionService';
 const DETECTION_INTERVAL_MS   = 3000;   // run inference every 3 s
 const ABSENT_THRESHOLD_SECS   = 10;     // 10 continuous seconds of 0 faces → violation
 const ABSENT_RELOG_SECS       = 60;     // re-log face absence every 60 s of continuous absence
-const MODEL_URL               = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights/';
-const FACE_API_CDN            = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
+// Self-hosted TinyFaceDetector weights, served from public/models at /models.
+// (Was a jsdelivr CDN URL — moved to our origin so a blocked CDN can't kill
+// detection. The two weight files live in public/models/.)
+const MODEL_URL               = '/models';
+
+// Module-level guard so the (small) model is only loaded once per page.
+let modelsLoaded = false;
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -35,48 +43,38 @@ interface FaceMonitorProps {
   enabled: boolean;                                         // false → camera declined
   active: boolean;                                          // false → pause detection
   onViolation: (type: ViolationType, detail?: string) => void;
+  // Optional: notified whenever detection state changes, so the exam shell
+  // can gate question render on 'ready' for camera-required tiers
+  // (load-then-render — no unmonitored window at the start).
+  onStateChange?: (state: DetectionState) => void;
 }
 
-// ── Load face-api.js dynamically from CDN ─────────────────────────
+// ── Load the self-hosted TinyFaceDetector model ───────────────────
+// face-api.js is bundled from npm (imported above); only the weights need
+// fetching, and they come from our own origin (/models). Loaded once.
 
-async function loadFaceApiScript(): Promise<any> {
-  // Return cached instance if already loaded
-  if ((window as any).__faceapi__loaded) return (window as any).faceapi;
-
-  return new Promise((resolve, reject) => {
-    const existing = document.getElementById('face-api-script');
-    if (existing) {
-      // Script tag exists but might still be loading
-      existing.addEventListener('load', () => {
-        (window as any).__faceapi__loaded = true;
-        resolve((window as any).faceapi);
-      });
-      existing.addEventListener('error', reject);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id  = 'face-api-script';
-    script.src = FACE_API_CDN;
-    script.async = true;
-    script.onload = () => {
-      (window as any).__faceapi__loaded = true;
-      resolve((window as any).faceapi);
-    };
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
+async function loadFaceModels(): Promise<typeof faceapi> {
+  if (!modelsLoaded) {
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    modelsLoaded = true;
+  }
+  return faceapi;
 }
 
 // ── Component ─────────────────────────────────────────────────────
 
-export function FaceMonitor({ enabled, active, onViolation }: FaceMonitorProps) {
+export function FaceMonitor({ enabled, active, onViolation, onStateChange }: FaceMonitorProps) {
   const videoRef    = useRef<HTMLVideoElement>(null);
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const streamRef   = useRef<MediaStream | null>(null);
   const faceApiRef  = useRef<any>(null);
 
   const [detectionState, setDetectionState] = useState<DetectionState>('loading');
+
+  // Notify the parent whenever detection state changes (for load-then-render).
+  const onStateChangeRef = useRef(onStateChange);
+  useEffect(() => { onStateChangeRef.current = onStateChange; }, [onStateChange]);
+  useEffect(() => { onStateChangeRef.current?.(detectionState); }, [detectionState]);
 
   // Face-absence tracking
   const noFaceStartRef      = useRef<number | null>(null);
@@ -115,12 +113,10 @@ export function FaceMonitor({ enabled, active, onViolation }: FaceMonitorProps) 
         await videoRef.current.play().catch(() => {});
       }
 
-      // 2. Load face-api.js
-      let faceapi: any;
+      // 2. Load face-api models (bundled lib + self-hosted weights)
       try {
-        faceapi = await loadFaceApiScript();
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        faceApiRef.current = faceapi;
+        const api = await loadFaceModels();
+        faceApiRef.current = api;
         if (!cancelled) setDetectionState('ready');
       } catch {
         // Camera works but detection unavailable

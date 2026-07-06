@@ -326,6 +326,45 @@ function ExtensionFreezeOverlay({
 }
 
 // ══════════════════════════════════════════════════════════════════
+// FACE GATE OVERLAY (Phase 2 — load-then-render)
+// Brief warm-up shown on camera-required tiers until face detection is ready,
+// so the questions never render during an unmonitored window at the start.
+// ══════════════════════════════════════════════════════════════════
+
+function FaceGateOverlay() {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-40 flex flex-col items-center justify-center px-6"
+      style={{ background: 'rgba(247,246,243,0.97)' }}
+    >
+      <motion.div
+        initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }}
+        className="flex flex-col items-center gap-4"
+        style={{ maxWidth: 380, textAlign: 'center' }}
+      >
+        <div className="flex items-center justify-center"
+          style={{ width: 52, height: 52, borderRadius: '50%', background: '#EFEEE9', border: '1px solid #E3E1DB' }}>
+          <Loader2 size={20} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>
+            PREPARING MONITORING
+          </p>
+          <p className="text-sm" style={{ color: '#4A4A45', lineHeight: 1.6 }}>
+            Setting up webcam monitoring before your exam begins…
+          </p>
+          <p className="text-xs mt-1" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
+            This takes just a moment. Your questions will appear once monitoring is active.
+          </p>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // SESSION CONFLICT OVERLAY
 // ══════════════════════════════════════════════════════════════════
 
@@ -620,6 +659,9 @@ export function ExamShell() {
   const [extResuming, setExtResuming]               = useState(false);
   const [extResumeError, setExtResumeError]         = useState<string | undefined>();
   const extReportedRef                              = useRef(false);
+  // ── Face detection readiness (Phase 2 — load-then-render) ──────
+  const [faceDetectionState, setFaceDetectionState] =
+    useState<'loading' | 'ready' | 'unavailable' | 'denied' | 'error'>('loading');
   const [frozenAtISO, setFrozenAtISO]               = useState<string | null>(null);
   const [totalFrozenSeconds, setTotalFrozenSeconds] = useState(0);
   const [hasConflict, setHasConflict]               = useState(false);
@@ -1612,6 +1654,19 @@ export function ExamShell() {
   }
   const isIntegrityActive = overlay === null && shellStatus === 'ready' && !hasConflict && !isFrozen;
 
+  // ── Load-then-render gate (Phase 2) ────────────────────────────
+  // For camera-required tiers, hold the question area behind a brief
+  // "initializing monitoring" overlay until face detection reaches a settled
+  // state. We only block while state is 'loading' — a terminal failure
+  // ('unavailable'/'denied'/'error'/'ready') releases the gate so a model-load
+  // problem can never trap the student. Only applies when the camera was
+  // actually granted and the tier requires it.
+  const faceGateActive =
+    shellStatus === 'ready'
+    && attempt?.securityConfig?.requireCamera === true
+    && cameraGranted
+    && faceDetectionState === 'loading';
+
   // ══════════════════════════════════════════════════════════════════
   // RENDER: EXAM SHELL
   // ══════════════════════════════════════════════════════════════════
@@ -1753,6 +1808,7 @@ export function ExamShell() {
               enabled={cameraGranted}
               active={isIntegrityActive}
               onViolation={handleViolation}
+              onStateChange={setFaceDetectionState}
             />
           </div>
         </div>
@@ -1886,6 +1942,11 @@ export function ExamShell() {
             resuming={extResuming}
             resumeError={extResumeError}
           />
+        )}
+        {/* Load-then-render gate (Phase 2) — brief monitoring warm-up. Lowest
+            priority: never shown over a conflict / freeze. */}
+        {faceGateActive && !hasConflict && !isFrozen && !extFrozen && (
+          <FaceGateOverlay key="face-gate" />
         )}
       </AnimatePresence>
 

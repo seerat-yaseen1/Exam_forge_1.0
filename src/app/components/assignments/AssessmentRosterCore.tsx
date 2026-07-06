@@ -16,7 +16,7 @@ import {
   CheckCircle2, Clock, PauseCircle, PlayCircle, MonitorSmartphone,
   ChevronRight, X, BookOpen, Search, Activity, WifiOff,
   Ban, CircleSlash, Hash, RotateCcw, XCircle, Minus,
-  FileText, Eye, Trash2, AlertCircle,
+  FileText, Eye, Trash2, AlertCircle, Flag,
 } from 'lucide-react';
 import { getAssessment, blockStudent, unblockStudent, setAttemptOverride, statusColor, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
 import { AssessmentReportsPanel } from './AssessmentReportsPanel';
@@ -1165,6 +1165,22 @@ function AttemptsPanel({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Anomaly flag (Phase 1) — at-a-glance signal without expanding */}
+                    {a.timingAnalysis && (a.timingAnalysis.anomalyScore ?? 0) >= 40 && (
+                      <span
+                        title={`Anomaly score ${a.timingAnalysis.anomalyScore}/100`}
+                        className="flex items-center gap-1 text-xs px-1.5 py-0.5"
+                        style={{
+                          background: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#FBF3F3' : '#FEF9EC',
+                          border: `1px solid ${(a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#E3C9C9' : '#F5DFA0'}`,
+                          borderRadius: 2,
+                          color: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#9B2828' : '#92680A',
+                          fontSize: 9,
+                        }}>
+                        <Flag size={9} strokeWidth={1.5} />
+                        {a.timingAnalysis.anomalyScore}
+                      </span>
+                    )}
                     {scoreStr ? (
                       <span className="text-xs"
                         style={{ color: a.scores?.passed ? '#1E7B3C' : '#9B2828' }}>
@@ -1434,6 +1450,54 @@ function AttemptDrawer({
 
             <div>
               <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>INTEGRITY</p>
+
+              {/* Anomaly score (Phase 1 timing analytics) — headline reviewer signal */}
+              {attempt.timingAnalysis && (() => {
+                const a = attempt.timingAnalysis;
+                const score = a.anomalyScore ?? 0;
+                const band =
+                  score >= 70 ? { bg: '#FBF3F3', bd: '#E3C9C9', fg: '#9B2828', label: 'High anomaly' }
+                  : score >= 40 ? { bg: '#FEF9EC', bd: '#F5DFA0', fg: '#92680A', label: 'Some anomaly' }
+                  : { bg: '#F0F9F4', bd: '#B8E6C8', fg: '#1E7B3C', label: 'Low anomaly' };
+                return (
+                  <div className="mb-2.5">
+                    <div className="flex items-center justify-between px-3 py-2.5 mb-1.5"
+                      style={{ background: band.bg, border: `1px solid ${band.bd}`, borderRadius: 2 }}>
+                      <span className="text-xs" style={{ color: band.fg }}>{band.label}</span>
+                      <span className="text-xs" style={{ color: band.fg, fontWeight: 500 }}>
+                        {score}/100
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {[
+                        { label: 'Answers in final 30s', value: `${a.burstLast30s}/${a.totalAnswers}` },
+                        { label: 'Fastest answer gap', value: a.minGapSeconds !== null ? `${a.minGapSeconds.toFixed(1)}s` : '—' },
+                        ...(a.heartbeatGaps > 0
+                          ? [{ label: 'Connectivity/heartbeat gap', value: `${a.maxHeartbeatGapSeconds}s` }]
+                          : []),
+                      ].map((item) => (
+                        <div key={item.label} className="flex items-center justify-between px-3 py-1.5"
+                          style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                          <span className="text-xs" style={{ color: '#6B6B66' }}>{item.label}</span>
+                          <span className="text-xs" style={{ color: '#4A4A45' }}>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Finalized-while-frozen flag (Phase 1c) */}
+              {(attempt.integrityLog as { finalizedWhileFrozen?: boolean }).finalizedWhileFrozen && (
+                <div className="flex items-center gap-2 px-3 py-2 mb-2.5"
+                  style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+                  <Flag size={11} strokeWidth={1.5} style={{ color: '#9B2828' }} />
+                  <span className="text-xs" style={{ color: '#9B2828' }}>
+                    Submitted while frozen (unresolved extension freeze)
+                  </span>
+                </div>
+              )}
+
               <div className="flex flex-col gap-1.5">
                 {[
                   { label: 'Tab switches', value: attempt.integrityLog.tabSwitches },
@@ -1442,6 +1506,7 @@ function AttemptDrawer({
                   { label: 'Copy attempts', value: attempt.integrityLog.copyAttempts },
                   { label: 'Multi-person events', value: attempt.integrityLog.multiPersonEvents },
                   { label: 'Face absence events', value: attempt.integrityLog.faceAbsenceEvents },
+                  { label: 'Extension events', value: attempt.integrityLog.extensionEvents },
                 ].map((item) => item.value > 0 ? (
                   <div key={item.label} className="flex items-center justify-between px-3 py-2"
                     style={{ background: '#FEF9EC', border: '1px solid #F5DFA0', borderRadius: 2 }}>

@@ -177,6 +177,9 @@ export type IntegrityLog = {
   // Terminal fields
   autoTerminated: boolean;
   terminatedReason?: string;
+  // Phase 1c — set by gradeAttempt if the attempt was finalized while still
+  // frozen (unresolved extension freeze). Reviewer flag.
+  finalizedWhileFrozen?: boolean;
 };
 
 // ── Main attempt document ─────────────────────────────────────────

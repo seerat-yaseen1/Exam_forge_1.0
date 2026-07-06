@@ -19,42 +19,11 @@
 
 import { useEffect, useRef } from 'react';
 import type { ViolationType } from '../../../lib/submissionService';
+import { EXTENSION_FINGERPRINTS } from './extensionScan';
 
-// ── Known extension fingerprints ─────────────────────────────────
-// Each entry: { key (unique id), selector (CSS), label (for the violation log) }
-// Conservative — only extensions that insert visible UI elements.
-
-type Fingerprint = { key: string; selector: string; label: string };
-
-const FINGERPRINTS: Fingerprint[] = [
-  // Grammarly — injects custom elements at body level
-  { key: 'grammarly',  selector: 'grammarly-desktop-integration, grammarly-extension, [data-grammarly-shadow-root]', label: 'Grammarly' },
-  { key: 'gr-button',  selector: 'gr-textarea-button, [data-gramm]', label: 'Grammarly button' },
-
-  // AI sidebar / assistant extensions
-  { key: 'monica',     selector: '#monica-extension-root, [class*="monica-"]', label: 'Monica AI' },
-  { key: 'sider',      selector: '#sider-extension-root, [class^="sider-"]', label: 'Sider AI' },
-  { key: 'maxai',      selector: '#maxai-floating-action-button, [class*="maxai-"]', label: 'MaxAI' },
-  { key: 'glasp',      selector: '[class*="glasp-"], #glasp-extension-root', label: 'Glasp' },
-  { key: 'webchatgpt', selector: '#webchatgpt, [class*="webchatgpt-"]', label: 'WebChatGPT' },
-  { key: 'merlin',     selector: '#merlin-extension-root, [class*="merlin-"]', label: 'Merlin' },
-  { key: 'harpa',      selector: '#harpa-ui, [class*="harpa-"]', label: 'HARPA AI' },
-  { key: 'compose-ai', selector: '[class*="compose-ai-"]', label: 'Compose AI' },
-
-  // Translation / language helpers
-  { key: 'languagetool', selector: '[class*="lt-marker-"], [class*="languagetool-"]', label: 'LanguageTool' },
-
-  // Note / clipping
-  { key: 'notion-clipper', selector: '#notion-web-clipper', label: 'Notion Web Clipper' },
-  { key: 'evernote',       selector: '#evernoteFloater, [class*="evernote-"]', label: 'Evernote' },
-
-  // Password / autofill (visible UI variants)
-  { key: 'lastpass',       selector: 'div[data-lastpass-icon-root], #__lpform_root', label: 'LastPass' },
-  { key: 'dashlane',       selector: 'div[data-dashlane-rid], div[data-dashlane-classification]', label: 'Dashlane' },
-
-  // Generic markers — extensions often append <div id="*-extension-root"> or use shadow DOM
-  { key: 'extension-root', selector: '[id$="-extension-root"], [id^="chrome-extension-"]', label: 'Generic extension root' },
-];
+// Fingerprint list now lives in ./extensionScan so the pre-entry gate on the
+// briefing page and this continuous monitor share one source of truth.
+const FINGERPRINTS = EXTENSION_FINGERPRINTS;
 
 interface ExtensionWatchdogProps {
   active: boolean;
@@ -76,6 +45,12 @@ export function ExtensionWatchdog({
 
   useEffect(() => {
     if (!active) return;
+
+    // Re-arm on (re)activation (Phase 1c): clear the dedupe set so an extension
+    // that was cleared and then re-enabled during a break / reconnect is
+    // detected again on resume. Without this, seenRef persists across the
+    // active→inactive→active cycle and a re-added extension would be missed.
+    seenRef.current.clear();
 
     const scan = () => {
       if (!activeRef.current) return;

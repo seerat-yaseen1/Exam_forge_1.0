@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, type Assessment } from '../../../lib/assessmentService';
+import { scanForExtensionsWithSettle } from '../../components/exam/extensionScan';
 import {
   getAllAttemptsByStudentAndAssessment,
   type Attempt,
@@ -157,6 +158,11 @@ export function ExamBriefingPage() {
   const [cameraDeclined, setCameraDeclined] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [readyToEnter, setReadyToEnter] = useState(false);
+  // ── Extension entry gate (Phase 1c completion) ─────────────────
+  // 'idle' before scan, 'scanning' while checking, 'clean' or 'dirty' after.
+  const [extScanState, setExtScanState] = useState<'idle' | 'scanning' | 'clean' | 'dirty'>('idle');
+  const [extFound, setExtFound] = useState<string[]>([]);
+  const [extScanNonce, setExtScanNonce] = useState(0); // bump to re-scan
 
   // Redirect if not logged in
   useEffect(() => {
@@ -170,11 +176,31 @@ export function ExamBriefingPage() {
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
+  // ── Extension entry scan (Phase 1c) ────────────────────────────
+  // For tiers that require the extension check, scan (with a settle delay to
+  // catch slow-injecting extensions) before allowing entry. Re-runs when
+  // extScanNonce is bumped by the "re-check" button. Tiers that don't require
+  // the check skip straight to 'clean'.
+  useEffect(() => {
+    if (!assessment) return;
+    const required = assessment.requireExtensionCheck === true;
+    if (!required) { setExtScanState('clean'); setExtFound([]); return; }
+    let cancelled = false;
+    setExtScanState('scanning');
+    scanForExtensionsWithSettle().then((found) => {
+      if (cancelled) return;
+      if (found.length > 0) { setExtFound(found); setExtScanState('dirty'); }
+      else { setExtFound([]); setExtScanState('clean'); }
+    });
+    return () => { cancelled = true; };
+  }, [assessment, extScanNonce]);
+
   // Update ready state
   useEffect(() => {
     const cameraOk = cameraState === 'granted' || cameraDeclined;
-    setReadyToEnter(cameraOk);
-  }, [cameraState, cameraDeclined, isFullscreen]);
+    const extensionOk = extScanState === 'clean';
+    setReadyToEnter(cameraOk && extensionOk);
+  }, [cameraState, cameraDeclined, isFullscreen, extScanState]);
 
   // Load assessment + existing attempt
   useEffect(() => {
@@ -310,6 +336,16 @@ export function ExamBriefingPage() {
       setError('__not_yet_open__');
       return;
     }
+    // Click-time extension re-scan (Phase 1c). Catches an extension enabled
+    // AFTER the initial scan passed. If dirty, block entry and surface it.
+    if (assessment?.requireExtensionCheck === true) {
+      const found = await scanForExtensionsWithSettle(300);
+      if (found.length > 0) {
+        setExtFound(found);
+        setExtScanState('dirty');
+        return;
+      }
+    }
     // Try fullscreen one more time
     if (!document.fullscreenElement) {
       try { await document.documentElement.requestFullscreen(); } catch {}
@@ -320,7 +356,7 @@ export function ExamBriefingPage() {
         cameraGranted: cameraState === 'granted',
       },
     });
-  }, [assessmentId, navigate, cameraDeclined, cameraState, assessment?.startDate]);
+  }, [assessmentId, navigate, cameraDeclined, cameraState, assessment?.startDate, assessment?.requireExtensionCheck]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -659,6 +695,52 @@ export function ExamBriefingPage() {
                   </div>
                 </div>
 
+                {/* Extension check (Phase 1c) — only for tiers that require it */}
+                {assessment?.requireExtensionCheck === true && (
+                  <div className="mb-8">
+                    <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                      EXTENSION CHECK
+                    </p>
+                    <div className="px-4 py-3"
+                      style={{
+                        background: extScanState === 'dirty' ? '#FBF3F3' : '#FAFAF8',
+                        border: `1px solid ${extScanState === 'dirty' ? '#E3C9C9' : '#E3E1DB'}`,
+                        borderRadius: 2,
+                      }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {extScanState === 'scanning' && <Loader2 size={13} className="animate-spin" style={{ color: '#9A9891' }} />}
+                          {extScanState === 'clean' && <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />}
+                          {extScanState === 'dirty' && <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />}
+                          {(extScanState === 'idle') && <Shield size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                          <p className="text-xs" style={{ color: extScanState === 'dirty' ? '#9B2828' : '#4A4A45' }}>
+                            {extScanState === 'scanning' && 'Checking for browser extensions…'}
+                            {extScanState === 'clean' && 'No conflicting extensions detected'}
+                            {extScanState === 'dirty' && 'Browser extension detected — remove it to continue'}
+                            {extScanState === 'idle' && 'Extension check pending'}
+                          </p>
+                        </div>
+                        {extScanState === 'dirty' && (
+                          <button
+                            onClick={() => setExtScanNonce((n) => n + 1)}
+                            className="text-xs px-3 py-1.5"
+                            style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}
+                          >
+                            Re-check
+                          </button>
+                        )}
+                      </div>
+                      {extScanState === 'dirty' && extFound.length > 0 && (
+                        <p className="text-xs mt-2" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+                          Detected: {extFound.join(', ')}. Please disable or remove
+                          {extFound.length > 1 ? ' these extensions' : ' this extension'} in your browser,
+                          then click Re-check.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Acknowledgement + enter */}
                 <div
                   className="flex items-center justify-between gap-4 px-5 py-4"
@@ -686,7 +768,11 @@ export function ExamBriefingPage() {
 
                 {!readyToEnter && (
                   <p className="text-xs mt-3 text-center" style={{ color: '#C4C3BD' }}>
-                    Please complete the camera setup above to proceed.
+                    {extScanState === 'dirty'
+                      ? 'Remove the detected extension and re-check to proceed.'
+                      : extScanState === 'scanning'
+                        ? 'Checking your browser before you can enter…'
+                        : 'Please complete the setup above to proceed.'}
                   </p>
                 )}
 

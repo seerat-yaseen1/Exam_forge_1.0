@@ -935,6 +935,14 @@ export function ExamShell() {
     if (!attempt?.id) return;
     const unsub = subscribeToAttempt(attempt.id, (live) => {
       if (!live) return;
+      // Keep server-owned, append-only fields in sync. servedQuestions is the
+      // source of truth for sequential delivery (Phase 2.5) — without this the
+      // client never learns that the server served the next question.
+      setAttempt((prev) => (prev ? {
+        ...prev,
+        servedQuestions: live.servedQuestions ?? prev.servedQuestions,
+        status: live.status ?? prev.status,
+      } : prev));
       // Freeze — invigilator pause: the exam halts and the clock stops.
       // totalFrozenSeconds (credited paused time) always tracks the live doc so
       // the timer resumes fairly the moment the invigilator unfreezes.
@@ -1141,13 +1149,34 @@ export function ExamShell() {
         questionId: currentQId,
         answer: payload,
       });
+
+      // Advance OPTIMISTICALLY from the server's response. Do not wait for the
+      // Firestore subscription to echo servedQuestions back — that round-trip
+      // is slow enough that the student would sit on the (now locked) question
+      // and a second click would hit QUESTION_LOCKED.
       if (res.question) {
         const q = res.question;
         setQuestionMap((prev) => new Map(prev).set(q.id, q));
+        setAttempt((prev) => {
+          if (!prev) return prev;
+          const served = prev.servedQuestions ?? [];
+          // Lock the question just answered, append the newly served one.
+          const locked = served.map((s, i) =>
+            i === served.length - 1 ? { ...s, locked: true } : s);
+          const alreadyAppended = locked.some((s) => s.questionId === q.id);
+          return {
+            ...prev,
+            servedQuestions: alreadyAppended ? locked : [...locked, {
+              questionId: q.id,
+              sectionId: currentSection?.id ?? '',
+              difficulty: (q.difficulty as string) ?? 'medium',
+              servedAt: new Date().toISOString(),
+              locked: false,
+            }],
+          };
+        });
       }
       if (res.sectionComplete) setLinearSectionComplete(true);
-      // servedQuestions grows via the attempt subscription, which advances the
-      // pinned index — no client-side navigation happens.
     } catch (e) {
       const msg = (e as { message?: string })?.message ?? '';
       setLinearError(
@@ -1158,10 +1187,13 @@ export function ExamShell() {
     } finally {
       setLinearAdvancing(false);
     }
-  }, [currentQId, linearAdvancing]);
+  }, [currentQId, linearAdvancing, currentSection]);
 
   // A new section starts fresh (not complete).
   useEffect(() => { setLinearSectionComplete(false); }, [currentSectionIdx]);
+
+  // Clear any advance error once the student is on a new question.
+  useEffect(() => { setLinearError(undefined); }, [currentQId]);
 
   // Flush pending answers the instant a freeze lands, so nothing sitting in the
   // 1.5 s debounce window is lost if the paused tab is later closed.

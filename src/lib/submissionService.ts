@@ -423,7 +423,7 @@ export async function submitSection(params: {
   timeUsedSeconds: number;      // advisory only — server recomputes from its clock
   pauseBeforeNext?: boolean;    // if true, do not advance / start next-section timer
                                 // (used when a break is configured before next section)
-}): Promise<void> {
+}): Promise<{ question: Question | null }> {
   // Server-authoritative: the submitSection Cloud Function computes
   // timeUsedSeconds from the server clock and rejects submits past the section
   // deadline + configured grace. Throws SECTION_DEADLINE_EXCEEDED when late
@@ -436,16 +436,19 @@ export async function submitSection(params: {
       nextSectionIdx: number;
       pauseBeforeNext?: boolean;
     },
-    { ok: true; timeUsedSeconds: number }
+    { ok: true; timeUsedSeconds: number; question: Question | null }
   >(functions, 'submitSection');
 
-  await call({
+  const res = await call({
     attemptId: params.attemptId,
     sectionId: params.sectionId,
     nextSectionId: params.nextSectionId,
     nextSectionIdx: params.nextSectionIdx,
     pauseBeforeNext: params.pauseBeforeNext,
   });
+  // Sequential delivery: when advancing straight into the next section (no
+  // break), the server serves and returns that section's first question.
+  return { question: res.data.question ?? null };
 }
 
 // ── Pick next section (student_choice mode) ───────────────────────
@@ -459,7 +462,7 @@ export async function pickSection(params: {
   pickedSectionId: string;
   currentSectionIds: string[];
   newIdx: number;
-}): Promise<string[]> {
+}): Promise<{ sectionIds: string[]; question: Question | null }> {
   const { attemptId, pickedSectionId, currentSectionIds, newIdx } = params;
   // Compute the desired order client-side; the server validates it's a
   // permutation and stamps the picked section's startedAt with server time.
@@ -468,11 +471,13 @@ export async function pickSection(params: {
 
   const call = httpsCallable<
     { attemptId: string; sectionId: string; reorderedSectionIds: string[] },
-    { ok: true; startedAt: string; sectionIds: string[] }
+    { ok: true; startedAt: string; sectionIds: string[]; question: Question | null }
   >(functions, 'startSection');
 
   const res = await call({ attemptId, sectionId: pickedSectionId, reorderedSectionIds: reordered });
-  return res.data.sectionIds;
+  // In sequential delivery the server serves (and returns) the section's first
+  // question; the client cannot fetch it any other way.
+  return { sectionIds: res.data.sectionIds, question: res.data.question ?? null };
 }
 
 // ── End break and start next section ──────────────────────────────
@@ -484,14 +489,16 @@ export async function endBreak(params: {
   attemptId: string;
   nextSectionId: string;
   nextSectionIdx: number;
-}): Promise<void> {
+}): Promise<{ question: Question | null }> {
   // Server stamps the next section's startedAt and refuses if a mandatory
   // break hasn't elapsed. nextSectionIdx is re-derived server-side.
   const call = httpsCallable<
     { attemptId: string; sectionId: string },
-    { ok: true; startedAt: string; sectionIds: string[] }
+    { ok: true; startedAt: string; sectionIds: string[]; question: Question | null }
   >(functions, 'startSection');
-  await call({ attemptId: params.attemptId, sectionId: params.nextSectionId });
+  const res = await call({ attemptId: params.attemptId, sectionId: params.nextSectionId });
+  // Sequential delivery: the next section's first question comes back here.
+  return { question: res.data.question ?? null };
 }
 
 // ── Server clock skew ─────────────────────────────────────────────

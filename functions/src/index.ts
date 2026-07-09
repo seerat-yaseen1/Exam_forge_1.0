@@ -1850,24 +1850,41 @@ export const startSection = onCall<StartSectionData>(
 
     // ── Serve the section's first question (Phase 2.5, linear/adaptive) ──
     // In sequential delivery the client holds nothing until the server serves.
+    // The question CONTENT is returned in the response — the client cannot
+    // fetch it any other way (getExamQuestions is scoped to servedQuestions,
+    // and it was already called before this section existed).
     // Idempotent: if a question from this section was already served (e.g. a
     // retried call), don't append a duplicate.
     const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
+    let servedQuestion: ReturnType<typeof sanitizeQuestionForStudent> | null = null;
     if (dMode === 'linear' || dMode === 'adaptive') {
       const served = attempt.servedQuestions ?? [];
-      const alreadyServedHere = served.some((s) => s.sectionId === sectionId);
-      const firstQid = attempt.questionOrder?.[sectionId]?.[0];
-      if (!alreadyServedHere && firstQid) {
-        updates.servedQuestions = [
-          ...served,
-          { questionId: firstQid, sectionId, difficulty: 'medium', servedAt: nowIso, locked: false },
-        ];
+      const existingHere = served.find((s) => s.sectionId === sectionId);
+      const firstQid = existingHere?.questionId ?? attempt.questionOrder?.[sectionId]?.[0];
+      if (firstQid) {
+        const qSnap = await db.collection('questions').doc(firstQid).get();
+        if (qSnap.exists) {
+          const qData = qSnap.data() as Record<string, unknown>;
+          servedQuestion = sanitizeQuestionForStudent(qData, false);
+          if (!existingHere) {
+            updates.servedQuestions = [
+              ...served,
+              {
+                questionId: firstQid,
+                sectionId,
+                difficulty: (qData.difficulty as string) ?? 'medium',
+                servedAt: nowIso,
+                locked: false,
+              },
+            ];
+          }
+        }
       }
     }
 
     if (reorderedSectionIds) updates.sectionIds = sectionIds;
     await attemptRef.update(updates);
-    return { ok: true, startedAt: nowIso, sectionIds };
+    return { ok: true, startedAt: nowIso, sectionIds, question: servedQuestion };
   },
 );
 
@@ -1908,6 +1925,13 @@ export const submitSection = onCall<SubmitSectionData>(
       status: string;
       assessmentId: string;
       sectionTimings: Record<string, AttemptSectionTiming>;
+      // Phase 2.5 — serve the next section's first question on advance
+      questionOrder?: Record<string, string[]>;
+      servedQuestions?: Array<{
+        questionId: string; sectionId: string; difficulty: string;
+        servedAt: string; locked: boolean;
+      }>;
+      securityConfig?: { deliveryMode?: string } | null;
     };
     if (attempt.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
@@ -1963,12 +1987,44 @@ export const submitSection = onCall<SubmitSectionData>(
       [`sectionTimings.${sectionId}.timeUsedSeconds`]: timeUsedSeconds,
       updatedAt: nowIso,
     };
+    let nextQuestion: ReturnType<typeof sanitizeQuestionForStudent> | null = null;
     if (nextSectionId && !pauseBeforeNext) {
       updates.currentSectionIdx = nextSectionIdx;
       updates[`sectionTimings.${nextSectionId}.startedAt`] = nowIso;
       updates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
+
+      // ── Serve the next section's first question (Phase 2.5) ──────
+      // This is the no-break advance path: the client goes straight from one
+      // section to the next without startSection, so the question must be
+      // served (and its CONTENT returned) here — the client has no other way
+      // to obtain it, since getExamQuestions is scoped to servedQuestions.
+      const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
+      if (dMode === 'linear' || dMode === 'adaptive') {
+        const served = attempt.servedQuestions ?? [];
+        const existingHere = served.find((s) => s.sectionId === nextSectionId);
+        const firstQid = existingHere?.questionId ?? attempt.questionOrder?.[nextSectionId]?.[0];
+        if (firstQid) {
+          const qSnap = await db.collection('questions').doc(firstQid).get();
+          if (qSnap.exists) {
+            const qData = qSnap.data() as Record<string, unknown>;
+            nextQuestion = sanitizeQuestionForStudent(qData, false);
+            if (!existingHere) {
+              updates.servedQuestions = [
+                ...served,
+                {
+                  questionId: firstQid,
+                  sectionId: nextSectionId,
+                  difficulty: (qData.difficulty as string) ?? 'medium',
+                  servedAt: nowIso,
+                  locked: false,
+                },
+              ];
+            }
+          }
+        }
+      }
     }
     await attemptRef.update(updates);
-    return { ok: true, timeUsedSeconds };
+    return { ok: true, timeUsedSeconds, question: nextQuestion };
   },
 );

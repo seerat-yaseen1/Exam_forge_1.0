@@ -1131,6 +1131,29 @@ export function ExamShell() {
     await saveAnswers(att.id, localAnswersRef.current);
   }, []);
 
+  // ── Sequential delivery: merge a server-served question (Phase 2.5) ──
+  // Puts the content in questionMap AND optimistically records it in
+  // servedQuestions, so the shell renders it immediately instead of waiting
+  // for the Firestore subscription to echo the append back.
+  const mergeServedQuestion = useCallback((q: Question, sectionId: string) => {
+    setQuestionMap((prev) => new Map(prev).set(q.id, q));
+    setAttempt((prev) => {
+      if (!prev) return prev;
+      const served = prev.servedQuestions ?? [];
+      if (served.some((s) => s.questionId === q.id)) return prev;
+      return {
+        ...prev,
+        servedQuestions: [...served, {
+          questionId: q.id,
+          sectionId,
+          difficulty: (q.difficulty as string) ?? 'medium',
+          servedAt: new Date().toISOString(),
+          locked: false,
+        }],
+      };
+    });
+  }, []);
+
   // ── Sequential delivery: submit current answer, receive next question ──
   // One atomic server call. The client cannot advance on its own, cannot go
   // back, and does not know the next question until the server returns it.
@@ -1236,7 +1259,7 @@ export function ExamShell() {
     const pauseBeforeNext = !!nextSection && (useBreak || isStudentChoice);
 
     try {
-      await submitSection({
+      const submitted = await submitSection({
         attemptId: att.id,
         sectionId,
         nextSectionId: nextSection?.id ?? null,
@@ -1244,6 +1267,11 @@ export function ExamShell() {
         timeUsedSeconds,
         pauseBeforeNext,
       });
+      // Sequential delivery (Phase 2.5): advancing straight into the next
+      // section (no break) — the server serves and returns its first question.
+      if (submitted.question && nextSection) {
+        mergeServedQuestion(submitted.question, nextSection.id);
+      }
     } catch (e) {
       const msg = (e as { message?: string })?.message ?? '';
       // A late submit is finalised server-side (section closed at its true
@@ -1354,11 +1382,15 @@ export function ExamShell() {
     // the overlay will gate interaction until the student returns to fullscreen.
     await enforceFullscreenOrPrompt();
     try {
-      await endBreak({
+      const broke = await endBreak({
         attemptId: att.id,
         nextSectionId: bs.nextSectionId,
         nextSectionIdx: bs.nextSectionIdx,
       });
+      // Sequential delivery: the next section's first question arrives here.
+      if (broke.question) {
+        mergeServedQuestion(broke.question, bs.nextSectionId);
+      }
     } catch (e) {
       // If the server refused (mandatory break not elapsed on the SERVER
       // clock, or a transient failure), do NOT advance locally — the next
@@ -1414,12 +1446,18 @@ export function ExamShell() {
       ).length;
       const newIdx = startedCount;
 
-      const reorderedIds = await pickSection({
+      const picked = await pickSection({
         attemptId: att.id,
         pickedSectionId,
         currentSectionIds: att.sectionIds,
         newIdx,
       });
+      const reorderedIds = picked.sectionIds;
+      // Sequential delivery: the server serves this section's first question
+      // and returns its content — merge it so the shell can render it.
+      if (picked.question) {
+        mergeServedQuestion(picked.question, pickedSectionId);
+      }
 
       const startISO = new Date().toISOString();
 

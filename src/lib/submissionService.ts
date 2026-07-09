@@ -14,7 +14,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
 import { functions } from './firebase';
-import type { CorrectPair } from './questionBankService';
+import type { CorrectPair, Question } from './questionBankService';
 
 // ── Per-question grading data populated server-side by gradeAttempt ─
 // Students can never read questionAnswers directly; this map is the
@@ -585,6 +585,37 @@ export async function verifyAndResume(
     'verifyAndResume',
   );
   const res = await call({ attemptId });
+  return res.data;
+}
+
+// ── Phase 2.5: sequential delivery (linear / adaptive) ────────────
+/**
+ * Submit the current question's answer and receive the next question.
+ * ONE atomic server operation: validate → write answer → lock → serve next.
+ * Only for linear/adaptive attempts; standard mode uses saveAnswer().
+ *
+ * `answer: null` means "no answer" (e.g. the per-question timer expired).
+ * The server records nothing for that question — it simply scores 0 — rather
+ * than writing a fake blank that would pollute the timing analytics.
+ *
+ * Returns the next question, or `question: null` with `sectionComplete: true`
+ * when the section has no questions left.
+ */
+export async function submitAnswerAndAdvance(params: {
+  attemptId: string;
+  questionId: string;
+  answer: { type: string; value: unknown } | null;
+}): Promise<{
+  ok: true;
+  question: Question | null;
+  sectionComplete: boolean;
+  lateAnswer: boolean;
+}> {
+  const call = httpsCallable<
+    typeof params,
+    { ok: true; question: Question | null; sectionComplete: boolean; lateAnswer: boolean }
+  >(functions, 'submitAnswerAndAdvance');
+  const res = await call(params);
   return res.data;
 }
 

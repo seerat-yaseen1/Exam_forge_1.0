@@ -434,6 +434,25 @@ service cloud.firestore {
     //     • grader (webOwner, institute or faculty in the same institute) —
     //       any field, any time.
     //   delete: hard-blocked — soft-delete (isDeleted=true) via grader update.
+    // ── Phase 2.5: sequential delivery (linear / adaptive) ──────────
+    // In linear/adaptive the SERVER owns answer writes, via the
+    // submitAnswerAndAdvance callable (Admin SDK → bypasses these rules).
+    // A student must not be able to updateDoc an answer directly, or the
+    // strict-linear lock (and the "never holds the paper" guarantee) would
+    // be trivially bypassable from DevTools. Standard mode keeps its fast
+    // direct client writes; legacy attempts (no securityConfig) behave as
+    // standard, so nothing regresses.
+    function attemptIsSequentialDelivery() {
+      return 'securityConfig' in resource.data
+          && 'deliveryMode' in resource.data.securityConfig
+          && (resource.data.securityConfig.deliveryMode == 'linear'
+              || resource.data.securityConfig.deliveryMode == 'adaptive');
+    }
+    function studentAnswerWriteAllowed() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['answers'])
+          || !attemptIsSequentialDelivery();
+    }
+
     function studentAttemptUpdateFieldsAllowed() {
       // hasOnly() checks TOP-LEVEL keys of the patch. Dot-path writes like
       // `answers.q_xyz` or `integrityLog.tabSwitches` count as changes to the
@@ -470,7 +489,8 @@ service cloud.firestore {
                            && resource.data.studentId == request.auth.token.studentId
                            && resource.data.status == 'in_progress'
                            && request.resource.data.status == 'in_progress'
-                           && studentAttemptUpdateFieldsAllowed())
+                           && studentAttemptUpdateFieldsAllowed()
+                           && studentAnswerWriteAllowed())
                        || ((role() == 'institute' || role() == 'faculty')
                            && request.auth.token.instituteId == resource.data.instituteId);
 

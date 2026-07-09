@@ -992,6 +992,36 @@ interface GetExamQuestionsData {
   mode?: 'exam' | 'review';
 }
 
+// ── Shared student-facing question sanitizer ──────────────────────
+// Single source of truth for the field whitelist. Used by getExamQuestions
+// AND submitAnswerAndAdvance (Phase 2.5) so the two can never drift and a
+// leaky field can never reach a student through either path.
+// Answer keys NEVER leave through these endpoints.
+function sanitizeQuestionForStudent(q: Record<string, unknown>, includeExplanation: boolean) {
+  return {
+    id:          q.id,
+    engine:      q.engine,
+    variant:     q.variant ?? null,
+    stem:        q.stem ?? '',
+    stemImage:   q.stemImage ?? null,
+    options:     Array.isArray(q.options) ? q.options : [],
+    pairs:       Array.isArray(q.pairs)   ? q.pairs   : [],
+    subject:     q.subject ?? '',
+    topic:       q.topic ?? '',
+    subjectId:   q.subjectId ?? null,
+    topicId:     q.topicId ?? null,
+    tags:        Array.isArray(q.tags) ? q.tags : [],
+    difficulty:  q.difficulty ?? 'medium',
+    explanation: includeExplanation ? (q.explanation ?? '') : '',
+    correctIds:   [] as string[],
+    correctPairs: [] as CorrectPair[],
+    modelAnswer:  '',
+    isDeleted:   false,
+    createdAt:   q.createdAt ?? '',
+    updatedAt:   q.updatedAt ?? '',
+  };
+}
+
 export const getExamQuestions = onCall<GetExamQuestionsData>(
   { region: 'us-central1' },
   async (request) => {
@@ -1045,9 +1075,28 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
       && hasFinishedAttempt
       && (assessment as { allowReview?: boolean }).allowReview === true;
 
-    const qIds = Array.from(new Set(
-      normalizeSections(assessment).flatMap((s) => s.questions.map((q) => q.questionId))
-    ));
+    // ── Delivery-mode scoping (Phase 2.5) ─────────────────────────
+    // In linear/adaptive the client must NEVER hold the paper. Only the
+    // questions the server has actually served are returned. Standard mode is
+    // unchanged (whole paper, one call). Legacy attempts (no securityConfig)
+    // fall through to standard behaviour.
+    const liveAttempt = attemptsSnap.docs
+      .map((d) => d.data() as {
+        status?: string;
+        securityConfig?: { deliveryMode?: string } | null;
+        servedQuestions?: Array<{ questionId: string }>;
+        createdAt?: string;
+      })
+      .sort((x, y) => (y.createdAt ?? '').localeCompare(x.createdAt ?? ''))[0];
+    const attemptDeliveryMode = liveAttempt?.securityConfig?.deliveryMode ?? 'standard';
+    const isSequentialDelivery =
+      attemptDeliveryMode === 'linear' || attemptDeliveryMode === 'adaptive';
+
+    const qIds = isSequentialDelivery
+      ? Array.from(new Set((liveAttempt?.servedQuestions ?? []).map((s) => s.questionId)))
+      : Array.from(new Set(
+          normalizeSections(assessment).flatMap((s) => s.questions.map((q) => q.questionId))
+        ));
 
     const chunkedGetAll = async (ids: string[]) => {
       const out: FirebaseFirestore.DocumentSnapshot[] = [];
@@ -1065,29 +1114,7 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
       .filter((s) => s.exists)
       .map((s) => s.data() as Record<string, unknown>)
       .filter((q) => q.isDeleted !== true)
-      .map((q) => ({
-        id:          q.id,
-        engine:      q.engine,
-        variant:     q.variant ?? null,
-        stem:        q.stem ?? '',
-        stemImage:   q.stemImage ?? null,
-        options:     Array.isArray(q.options) ? q.options : [],
-        pairs:       Array.isArray(q.pairs)   ? q.pairs   : [],
-        subject:     q.subject ?? '',
-        topic:       q.topic ?? '',
-        subjectId:   q.subjectId ?? null,
-        topicId:     q.topicId ?? null,
-        tags:        Array.isArray(q.tags) ? q.tags : [],
-        difficulty:  q.difficulty ?? 'medium',
-        explanation: includeExplanation ? (q.explanation ?? '') : '',
-        // Answer keys NEVER leave through this endpoint.
-        correctIds:   [] as string[],
-        correctPairs: [] as CorrectPair[],
-        modelAnswer:  '',
-        isDeleted:   false,
-        createdAt:   q.createdAt ?? '',
-        updatedAt:   q.updatedAt ?? '',
-      }));
+      .map((q) => sanitizeQuestionForStudent(q, includeExplanation));
 
     return { ok: true, questions };
   }
@@ -1272,6 +1299,148 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
       updatedAt: nowIso,
     });
     return { ok: true, resumed: true };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
+// PHASE 2.5 — Sequential delivery (linear; adaptive shares this machinery)
+//
+// submitAnswerAndAdvance: the ONE atomic operation that makes linear real.
+// Answering and advancing happen together, server-side:
+//   validate → write answer → lock it → serve the next question
+// The client never holds the paper (getExamQuestions is scoped to
+// servedQuestions) and cannot answer a locked or unserved question.
+// ══════════════════════════════════════════════════════════════════
+
+interface SubmitAnswerAndAdvanceData {
+  attemptId: string;
+  questionId: string;
+  // null = no answer (e.g. per-question timer expired). We deliberately do NOT
+  // write a blank answer: an unanswered served question already scores 0, and
+  // writing a null value would pollute the timing analytics with a fake
+  // answeredAt. Skipping the write keeps grading unambiguous.
+  answer: { type: string; value: unknown } | null;
+}
+
+export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const role      = request.auth.token.role      as string | undefined;
+    const studentId = request.auth.token.studentId as string | undefined;
+    if (role !== 'student' || !studentId) {
+      throw new HttpsError('permission-denied', 'Only students may answer.');
+    }
+    const { attemptId, questionId, answer } = request.data || ({} as SubmitAnswerAndAdvanceData);
+    if (!attemptId || !questionId) {
+      throw new HttpsError('invalid-argument', 'attemptId and questionId are required.');
+    }
+
+    const db = getFirestore();
+    const attemptRef = db.collection('attempts').doc(attemptId);
+    const attemptSnap = await attemptRef.get();
+    if (!attemptSnap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const attempt = attemptSnap.data() as {
+      studentId: string;
+      status: string;
+      assessmentId: string;
+      questionOrder?: Record<string, string[]>;
+      servedQuestions?: Array<{
+        questionId: string; sectionId: string; difficulty: string;
+        servedAt: string; locked: boolean;
+      }>;
+      securityConfig?: { deliveryMode?: string } | null;
+    };
+
+    if (attempt.studentId !== studentId) {
+      throw new HttpsError('permission-denied', 'Not your attempt.');
+    }
+    if (attempt.status !== 'in_progress') {
+      throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
+    }
+    const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
+    if (dMode !== 'linear' && dMode !== 'adaptive') {
+      throw new HttpsError('failed-precondition',
+        'This exam uses standard delivery; answers are saved directly.');
+    }
+
+    // The question being answered MUST be the current served, unlocked one.
+    // This is what enforces strict-linear: a locked question can never be
+    // revisited, and an unserved question is unknown to the client anyway.
+    const served = attempt.servedQuestions ?? [];
+    const current = served.length > 0 ? served[served.length - 1] : undefined;
+    if (!current || current.questionId !== questionId || current.locked === true) {
+      throw new HttpsError('failed-precondition',
+        'QUESTION_LOCKED: you cannot answer this question.');
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // Per-question timing (authority toggle: section.questionTimeLimit in
+    // seconds; undefined = off). A late answer is RECORDED and FLAGGED, never
+    // rejected — a lag spike must not cost a student their work. The server's
+    // servedAt is the only clock that counts.
+    const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    const assessment = aSnap.exists ? (aSnap.data() as GradingAssessmentDoc) : undefined;
+    const sectionsNorm = assessment ? normalizeSections(assessment) : [];
+    const secDef = sectionsNorm.find((s) => s.id === current.sectionId) as
+      (EffectiveSection & { questionTimeLimit?: number }) | undefined;
+    const qLimit = secDef?.questionTimeLimit;
+    let lateAnswer = false;
+    if (typeof qLimit === 'number' && qLimit > 0) {
+      const elapsedSec = (Date.parse(nowIso) - Date.parse(current.servedAt)) / 1000;
+      if (elapsedSec > qLimit + 5) lateAnswer = true; // 5s grace for latency
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: nowIso };
+
+    // Write the answer server-side (Admin SDK bypasses rules — and the rules
+    // forbid the client from writing answers in sequential delivery).
+    // Firestore rejects `undefined`, so a missing value is normalised to null.
+    if (answer && typeof answer.type === 'string') {
+      updates[`answers.${questionId}`] = {
+        type: answer.type,
+        value: answer.value === undefined ? null : answer.value,
+        sectionId: current.sectionId,
+        answeredAt: nowIso,
+        ...(lateAnswer ? { lateAnswer: true } : {}),
+      };
+    }
+
+    // Lock the answered question, then pick the next one in this section.
+    const nextServed = served.map((s, i) =>
+      i === served.length - 1 ? { ...s, locked: true } : s);
+
+    const orderForSection = attempt.questionOrder?.[current.sectionId] ?? [];
+    const servedIdsInSection = new Set(
+      served.filter((s) => s.sectionId === current.sectionId).map((s) => s.questionId));
+    const nextQid = orderForSection.find((qid) => !servedIdsInSection.has(qid));
+
+    let nextQuestion: ReturnType<typeof sanitizeQuestionForStudent> | null = null;
+    if (nextQid) {
+      const qSnap = await db.collection('questions').doc(nextQid).get();
+      if (qSnap.exists) {
+        const qData = qSnap.data() as Record<string, unknown>;
+        nextServed.push({
+          questionId: nextQid,
+          sectionId: current.sectionId,
+          difficulty: (qData.difficulty as string) ?? 'medium',
+          servedAt: nowIso,
+          locked: false,
+        });
+        nextQuestion = sanitizeQuestionForStudent(qData, false);
+      }
+    }
+
+    updates.servedQuestions = nextServed;
+    await attemptRef.update(updates);
+
+    return {
+      ok: true,
+      question: nextQuestion,          // null when the section is finished
+      sectionComplete: !nextQid,
+      lateAnswer,
+    };
   },
 );
 
@@ -1483,6 +1652,17 @@ export const startExam = onCall<StartExamData>(
     // linear/adaptive will append one at a time in Phase 2.5. Grading will
     // iterate this. Client-supplied sections carry no difficulty field, so
     // difficulty defaults to 'medium' (display metadata only, non-security).
+    // ── Served-question sequence (Phase 0 shape; Phase 2.5 behaviour) ──
+    // Append-only source of truth for what the student was actually shown.
+    // standard  : the whole paper is written now (all unlocked = free nav).
+    // linear    : ONLY the first question of the auto-started section. The rest
+    //             are served one at a time by submitAnswerAndAdvance, so the
+    //             client never holds the paper.
+    // adaptive  : same as linear (ladder picks the next) — Phase 2.5 Stage 4.
+    // Difficulty is display metadata; client-supplied sections carry none, so
+    // it defaults to 'medium' here and is corrected when the server serves.
+    const deliveryMode = a.deliveryMode ?? 'standard';
+    const isSequential = deliveryMode === 'linear' || deliveryMode === 'adaptive';
     const servedQuestions: Array<{
       questionId: string;
       sectionId: string;
@@ -1490,15 +1670,32 @@ export const startExam = onCall<StartExamData>(
       servedAt: string;
       locked: boolean;
     }> = [];
-    for (const sec of ordered) {
-      for (const qid of questionOrder[sec.id]) {
+    if (isSequential) {
+      // Only the first question of the section that auto-starts. If the student
+      // chooses their own section order, nothing is served until startSection.
+      const autoStarts = sectionStartOrder !== 'student_choice';
+      const firstSec = ordered[0];
+      const firstQid = firstSec ? questionOrder[firstSec.id]?.[0] : undefined;
+      if (autoStarts && firstSec && firstQid) {
         servedQuestions.push({
-          questionId: qid,
-          sectionId: sec.id,
+          questionId: firstQid,
+          sectionId: firstSec.id,
           difficulty: 'medium',
           servedAt: nowIso,
           locked: false,
         });
+      }
+    } else {
+      for (const sec of ordered) {
+        for (const qid of questionOrder[sec.id]) {
+          servedQuestions.push({
+            questionId: qid,
+            sectionId: sec.id,
+            difficulty: 'medium',
+            servedAt: nowIso,
+            locked: false,
+          });
+        }
       }
     }
 
@@ -1594,6 +1791,13 @@ export const startSection = onCall<StartSectionData>(
       assessmentId: string;
       sectionIds: string[];
       sectionTimings: Record<string, AttemptSectionTiming>;
+      // Phase 2.5 — needed to serve the section's first question in linear mode
+      questionOrder?: Record<string, string[]>;
+      servedQuestions?: Array<{
+        questionId: string; sectionId: string; difficulty: string;
+        servedAt: string; locked: boolean;
+      }>;
+      securityConfig?: { deliveryMode?: string } | null;
     };
     if (attempt.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
@@ -1643,6 +1847,24 @@ export const startSection = onCall<StartSectionData>(
       [`sectionTimings.${sectionId}.timeUsedSeconds`]: 0,
       updatedAt: nowIso,
     };
+
+    // ── Serve the section's first question (Phase 2.5, linear/adaptive) ──
+    // In sequential delivery the client holds nothing until the server serves.
+    // Idempotent: if a question from this section was already served (e.g. a
+    // retried call), don't append a duplicate.
+    const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
+    if (dMode === 'linear' || dMode === 'adaptive') {
+      const served = attempt.servedQuestions ?? [];
+      const alreadyServedHere = served.some((s) => s.sectionId === sectionId);
+      const firstQid = attempt.questionOrder?.[sectionId]?.[0];
+      if (!alreadyServedHere && firstQid) {
+        updates.servedQuestions = [
+          ...served,
+          { questionId: firstQid, sectionId, difficulty: 'medium', servedAt: nowIso, locked: false },
+        ];
+      }
+    }
+
     if (reorderedSectionIds) updates.sectionIds = sectionIds;
     await attemptRef.update(updates);
     return { ok: true, startedAt: nowIso, sectionIds };

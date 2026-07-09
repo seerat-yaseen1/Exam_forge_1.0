@@ -42,6 +42,7 @@ import {
   sendHeartbeat,
   reportExtensionCheck,
   verifyAndResume,
+  submitAnswerAndAdvance,
   type Attempt,
   type AttemptAnswer,
   type AnswerValue,
@@ -684,6 +685,10 @@ export function ExamShell() {
   // ── Navigation state ───────────────────────────────────────────
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
   const [currentQIdx, setCurrentQIdx]             = useState(0);
+  // ── Sequential delivery state (Phase 2.5) ──────────────────────
+  const [linearSectionComplete, setLinearSectionComplete] = useState(false);
+  const [linearAdvancing, setLinearAdvancing]             = useState(false);
+  const [linearError, setLinearError]                     = useState<string | undefined>();
 
   // ── Answer state ───────────────────────────────────────────────
   const [localAnswers, setLocalAnswers] = useState<Record<string, AttemptAnswer>>({});
@@ -1011,17 +1016,44 @@ export function ExamShell() {
     [effectiveSections, currentSectionIdx]
   );
 
-  const currentSectionQIds = useMemo(
-    () => (attempt && currentSection ? (attempt.questionOrder[currentSection.id] ?? []) : []),
-    [attempt, currentSection]
-  );
+  // ── Sequential delivery (Phase 2.5) ────────────────────────────
+  // In linear/adaptive the server serves one question at a time. The client
+  // holds ONLY what has been served (getExamQuestions is scoped), so the
+  // question list for the section is the servedQuestions slice, not the
+  // (server-side) questionOrder.
+  const isLinear =
+    attempt?.securityConfig?.deliveryMode === 'linear'
+    || attempt?.securityConfig?.deliveryMode === 'adaptive';
+
+  const currentSectionQIds = useMemo(() => {
+    if (!attempt || !currentSection) return [];
+    if (isLinear) {
+      return (attempt.servedQuestions ?? [])
+        .filter((s) => s.sectionId === currentSection.id)
+        .map((s) => s.questionId);
+    }
+    return attempt.questionOrder[currentSection.id] ?? [];
+  }, [attempt, currentSection, isLinear]);
 
   const currentQId = currentSectionQIds[currentQIdx] ?? null;
   const currentQuestion = currentQId ? questionMap.get(currentQId) ?? null : null;
 
+  // In linear mode the student is ALWAYS on the newest served question —
+  // there is no navigation. When the server appends a question (via the
+  // attempt subscription), advance to it.
+  useEffect(() => {
+    if (!isLinear) return;
+    const last = currentSectionQIds.length - 1;
+    if (last >= 0 && currentQIdx !== last) setCurrentQIdx(last);
+  }, [isLinear, currentSectionQIds.length]); // eslint-disable-line
+
   const totalSections = effectiveSections.length || 1;
   const isLastSection = currentSectionIdx >= totalSections - 1;
-  const isLastQuestion = currentQIdx >= currentSectionQIds.length - 1;
+  // Standard: last index of the paper's section. Linear: the SERVER tells us
+  // (sectionComplete) — the client never knows how many questions remain.
+  const isLastQuestion = isLinear
+    ? linearSectionComplete
+    : currentQIdx >= currentSectionQIds.length - 1;
 
   // ── Count unanswered in current section ────────────────────────
 
@@ -1053,6 +1085,12 @@ export function ExamShell() {
     // Immediate local update
     setLocalAnswers((prev) => ({ ...prev, [questionId]: answer }));
 
+    // Sequential delivery (Phase 2.5): the SERVER owns answer writes via
+    // submitAnswerAndAdvance, and firestore.rules reject a direct client
+    // write. Keep the answer local; it is committed when the student advances.
+    const dMode = attemptRef.current?.securityConfig?.deliveryMode;
+    if (dMode === 'linear' || dMode === 'adaptive') return;
+
     // Debounced Firestore write (1500 ms per question)
     const existing = answerTimersRef.current.get(questionId);
     if (existing) clearTimeout(existing);
@@ -1078,8 +1116,52 @@ export function ExamShell() {
 
     const att = attemptRef.current;
     if (!att) return;
+    // Sequential delivery: answers are already committed server-side by
+    // submitAnswerAndAdvance, and a direct write would be rejected by rules.
+    const dMode = att.securityConfig?.deliveryMode;
+    if (dMode === 'linear' || dMode === 'adaptive') return;
     await saveAnswers(att.id, localAnswersRef.current);
   }, []);
+
+  // ── Sequential delivery: submit current answer, receive next question ──
+  // One atomic server call. The client cannot advance on its own, cannot go
+  // back, and does not know the next question until the server returns it.
+  const handleLinearNext = useCallback(async () => {
+    const att = attemptRef.current;
+    if (!att || !currentQId || linearAdvancing) return;
+    setLinearAdvancing(true);
+    setLinearError(undefined);
+    try {
+      const ans = localAnswersRef.current[currentQId];
+      const payload = ans && !isAnswerEmpty(ans)
+        ? { type: ans.type, value: ans.value as unknown }
+        : null; // no answer (or timer expired) → server records nothing, scores 0
+      const res = await submitAnswerAndAdvance({
+        attemptId: att.id,
+        questionId: currentQId,
+        answer: payload,
+      });
+      if (res.question) {
+        const q = res.question;
+        setQuestionMap((prev) => new Map(prev).set(q.id, q));
+      }
+      if (res.sectionComplete) setLinearSectionComplete(true);
+      // servedQuestions grows via the attempt subscription, which advances the
+      // pinned index — no client-side navigation happens.
+    } catch (e) {
+      const msg = (e as { message?: string })?.message ?? '';
+      setLinearError(
+        msg.includes('QUESTION_LOCKED')
+          ? 'This question is already locked and cannot be changed.'
+          : 'Could not save your answer. Check your connection and try again.',
+      );
+    } finally {
+      setLinearAdvancing(false);
+    }
+  }, [currentQId, linearAdvancing]);
+
+  // A new section starts fresh (not complete).
+  useEffect(() => { setLinearSectionComplete(false); }, [currentSectionIdx]);
 
   // Flush pending answers the instant a freeze lands, so nothing sitting in the
   // 1.5 s debounce window is lost if the paused tab is later closed.
@@ -1791,6 +1873,7 @@ export function ExamShell() {
         <div className="flex flex-col" style={{ width: 200, flexShrink: 0 }}>
           {/* Question navigator */}
           <div className="flex-1 overflow-hidden">
+            {!isLinear && (
             <QuestionNavigator
               questionIds={currentSectionQIds}
               answers={localAnswers}
@@ -1800,6 +1883,7 @@ export function ExamShell() {
               totalSections={totalSections}
               currentSectionNumber={currentSectionIdx + 1}
             />
+            )}
           </div>
 
           {/* Webcam PiP */}
@@ -1838,6 +1922,13 @@ export function ExamShell() {
                 className="flex items-center justify-between px-8 py-4 flex-shrink-0"
                 style={{ borderTop: '1px solid #F0EFEB' }}
               >
+                {isLinear ? (
+                  <span className="flex items-center gap-1.5 text-xs px-1 py-2"
+                    style={{ color: '#9A9891' }}>
+                    <Shield size={12} strokeWidth={1.5} />
+                    Answers are final — you cannot return to a question
+                  </span>
+                ) : (
                 <button
                   onClick={() => setCurrentQIdx((i) => Math.max(0, i - 1))}
                   disabled={currentQIdx === 0}
@@ -1851,15 +1942,29 @@ export function ExamShell() {
                   <ChevronLeft size={13} strokeWidth={1.5} />
                   Previous
                 </button>
+                )}
 
-                {/* Centre: answered count */}
+                {/* Centre: answered count (standard) or progress + error (linear) */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: '#C4C3BD' }}>
-                    {currentSectionQIds.length - unansweredInSection}
-                    /{currentSectionQIds.length} answered in this section
-                  </span>
-                  {!isAnswerEmpty(localAnswers[currentQId!]) && (
-                    <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
+                  {isLinear ? (
+                    <>
+                      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+                        Question {currentSectionQIds.length}
+                      </span>
+                      {linearError && (
+                        <span className="text-xs" style={{ color: '#9B2828' }}>{linearError}</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+                        {currentSectionQIds.length - unansweredInSection}
+                        /{currentSectionQIds.length} answered in this section
+                      </span>
+                      {!isAnswerEmpty(localAnswers[currentQId!]) && (
+                        <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -1874,11 +1979,23 @@ export function ExamShell() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => setCurrentQIdx((i) => Math.min(currentSectionQIds.length - 1, i + 1))}
+                    onClick={isLinear
+                      ? handleLinearNext
+                      : () => setCurrentQIdx((i) => Math.min(currentSectionQIds.length - 1, i + 1))}
+                    disabled={isLinear && linearAdvancing}
                     className="flex items-center gap-1.5 text-xs px-4 py-2"
-                    style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, cursor: 'pointer' }}
+                    style={{
+                      border: '1px solid #E3E1DB',
+                      color: isLinear ? '#FFFFFF' : '#4A4A45',
+                      background: isLinear ? '#0C0C0B' : 'transparent',
+                      borderRadius: 2,
+                      opacity: isLinear && linearAdvancing ? 0.5 : 1,
+                      cursor: isLinear && linearAdvancing ? 'default' : 'pointer',
+                    }}
                   >
-                    Next
+                    {isLinear
+                      ? (linearAdvancing ? 'Saving…' : 'Save & next')
+                      : 'Next'}
                     <ChevronRight size={13} strokeWidth={1.5} />
                   </button>
                 )}

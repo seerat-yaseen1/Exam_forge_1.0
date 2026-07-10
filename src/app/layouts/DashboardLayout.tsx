@@ -186,6 +186,7 @@ export function DashboardLayout() {
   const isSubjects = location.pathname.startsWith('/dashboard/subjects');
   const isAssignments = location.pathname.startsWith('/dashboard/assignments');
   const isReports = location.pathname.startsWith('/dashboard/reports');
+  const isSebDiag = location.pathname.startsWith('/dashboard/seb-diagnostics');
 
   return (
     <div className="min-h-screen" style={{ background: '#F7F6F3' }}>
@@ -318,6 +319,15 @@ export function DashboardLayout() {
           icon={<Flag size={13} strokeWidth={1.5} />}
           label="Reports"
           isActive={isReports}
+        />
+        {/* Phase 3 temporary: calibrates SEB header verification. Remove once
+            Stage 2 enforcement is live. Reachable inside SEB, which has no
+            address bar. */}
+        <SidebarNavItem
+          to="/dashboard/seb-diagnostics"
+          icon={<Shield size={13} strokeWidth={1.5} />}
+          label="SEB Diagnostics"
+          isActive={isSebDiag}
         />
       </nav>
 

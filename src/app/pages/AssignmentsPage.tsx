@@ -2127,6 +2127,7 @@ function SetupStep({
   allQuestions,
   subjectPool, setSubjectPool,
   topicPool, setTopicPool,
+  deliveryMode,
 }: {
   title: string; setTitle: (v: string) => void;
   description: string; setDescription: (v: string) => void;
@@ -2145,6 +2146,7 @@ function SetupStep({
   setSubjectPool: React.Dispatch<React.SetStateAction<string[]>>;
   topicPool: string[];
   setTopicPool: React.Dispatch<React.SetStateAction<string[]>>;
+  deliveryMode: 'standard' | 'linear' | 'adaptive';
 }) {
   const [titleError, setTitleError] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
@@ -3291,6 +3293,7 @@ function DetailsStep({
   title, description, subject, status,
   targetType, selectedInstituteIds, selectedStudentIds,
   subjectPool, topicPool,
+  deliveryMode, setDeliveryMode,
 }: {
   mode: 'create' | 'edit';
   assessment: Assessment | null;
@@ -3309,6 +3312,8 @@ function DetailsStep({
   selectedStudentIds: string[];
   subjectPool: string[];
   topicPool: string[];
+  deliveryMode: 'standard' | 'linear' | 'adaptive';
+  setDeliveryMode: React.Dispatch<React.SetStateAction<'standard' | 'linear' | 'adaptive'>>;
 }) {
   const [startDate, setStartDate] = useState(toDateTimeLocal(assessment?.startDate));
   const [endDate, setEndDate] = useState(toDateTimeLocal(assessment?.endDate));
@@ -3324,9 +3329,6 @@ function DetailsStep({
   // ── Security tier + delivery mode (Phase 0 wiring) ──────────────
   const [securityTier, setSecurityTier] = useState<'mock' | 'normal' | 'high_stake'>(
     assessment?.securityTier ?? 'normal',
-  );
-  const [deliveryMode, setDeliveryMode] = useState<'standard' | 'linear' | 'adaptive'>(
-    assessment?.deliveryMode ?? 'standard',
   );
   const [saving, setSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -4011,6 +4013,13 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
   const [subjectPool, setSubjectPool] = useState<string[]>(assessment?.subjectPool ?? []);
   const [topicPool, setTopicPool] = useState<string[]>(assessment?.topicPool ?? []);
 
+  // ── Delivery mode (Phase 0 wiring) — lifted so both Step 1 (Sections,
+  // which conditionally shows the per-question timer) and Step 2 (Details,
+  // which owns the selector) can read/write it. ──────────────────────
+  const [deliveryMode, setDeliveryMode] = useState<'standard' | 'linear' | 'adaptive'>(
+    assessment?.deliveryMode ?? 'standard',
+  );
+
   const [sections, setSections] = useState<SectionDraft[]>(() => {
     if (assessment?.sections && assessment.sections.length > 0) {
       return assessment.sections.map((sec) => ({
@@ -4126,6 +4135,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
               allQuestions={allQuestions}
               subjectPool={subjectPool} setSubjectPool={setSubjectPool}
               topicPool={topicPool} setTopicPool={setTopicPool}
+              deliveryMode={deliveryMode}
             />
           ) : (
             <motion.div key="step2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -4141,6 +4151,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
                 selectedStudentIds={selectedStudentIds}
                 subjectPool={subjectPool}
                 topicPool={topicPool}
+                deliveryMode={deliveryMode} setDeliveryMode={setDeliveryMode}
               />
             </motion.div>
           )}

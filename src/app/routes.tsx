@@ -15,6 +15,7 @@ import { UserManagementPage } from './pages/UserManagementPage';
 import { QuestionsPage } from './pages/QuestionsPage';
 import { SubjectsPage } from './pages/SubjectsPage';
 import { AssignmentsPage } from './pages/AssignmentsPage';
+import { SEBDiagnosticsPage } from './pages/SEBDiagnosticsPage';
 import { AssessmentRosterPage } from './pages/AssessmentRosterPage';
 import { ReportsInboxPage } from './pages/ReportsInboxPage';
 import { InstituteDetailPage } from './pages/InstituteDetailPage';
@@ -76,6 +77,7 @@ export const router = createBrowserRouter([
           { path: 'assignments',                             element: <AssignmentsPage /> },
           { path: 'assignments/:assessmentId/roster',        element: <AssessmentRosterPage /> },
           { path: 'reports',                                 element: <ReportsInboxPage /> },
+          { path: 'seb-diagnostics',                         element: <SEBDiagnosticsPage /> },
         ],
       },
 

@@ -1516,16 +1516,27 @@ export const sebDiagnostics = onCall<SebDiagnosticsData>(
     const origin         = hdr('origin');
     const referer        = hdr('referer');
 
-    // Candidate absolute URLs SEB might have hashed. Fragments are never sent
-    // to a server, so nothing to strip here — but path/query variants matter.
+    // Candidate absolute URLs SEB might have hashed.
+    //
+    // IMPORTANT (learned from the Chrome control run): Cloud Run strips the
+    // function name from originalUrl — `path` arrives as "/" — so
+    // `${host}${path}` reconstructs to ".../" and MISSES the function name.
+    // The browser, however, requested ".../sebDiagnostics". So the reliable
+    // reconstruction is `https://{host}/{functionName}`, which also
+    // generalises to every other callable in Stage 2.
     const pathNoQuery = path.split('?')[0];
+    const fnName = process.env.K_SERVICE ?? 'sebDiagnostics'; // Cloud Run service = function name
     const urlCandidates: Record<string, string> = {
+      // The two that the control run proved are WRONG (kept to show the drift):
       host_full:            `${proto}://${host}${path}`,
       host_noQuery:         `${proto}://${host}${pathNoQuery}`,
-      xfwdHost_full:        xForwardedHost ? `${proto}://${xForwardedHost}${path}` : '',
-      xfwdHost_noQuery:     xForwardedHost ? `${proto}://${xForwardedHost}${pathNoQuery}` : '',
-      // The URL the browser actually typed, if the SDK used cloudfunctions.net
-      cloudfunctions_guess: `https://us-central1-${process.env.GCLOUD_PROJECT ?? ''}.cloudfunctions.net/sebDiagnostics`,
+      // The generalisable forms — these are what Stage 2 will use:
+      host_fnName:          `${proto}://${host}/${fnName}`,
+      host_fnName_httpsFixed: `https://${host}/${fnName}`,
+      xfwdHost_fnName:      xForwardedHost ? `${proto}://${xForwardedHost}/${fnName}` : '',
+      cloudfunctions_guess: `https://us-central1-${process.env.GCLOUD_PROJECT ?? ''}.cloudfunctions.net/${fnName}`,
+      // Trailing-slash variant, in case SEB normalised it that way:
+      host_fnName_slash:    `${proto}://${host}/${fnName}/`,
     };
 
     // If a candidate key was supplied, show which URL form reproduces the
@@ -1549,7 +1560,12 @@ export const sebDiagnostics = onCall<SebDiagnosticsData>(
       receivedConfigKeyHash: received || null,
       urlCandidates,
       matches,               // {} unless candidateConfigKey supplied
-      raw: { host, xForwardedHost, proto, path, origin, referer, method: req.method },
+      raw: {
+        host, xForwardedHost, proto, path, origin, referer, method: req.method,
+        // Confirms how we derive the function name for URL reconstruction.
+        K_SERVICE: process.env.K_SERVICE ?? null,
+        GCLOUD_PROJECT: process.env.GCLOUD_PROJECT ?? null,
+      },
       userAgent: hdr('user-agent') ?? null,
     };
   },

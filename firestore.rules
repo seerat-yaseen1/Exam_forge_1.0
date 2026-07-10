@@ -87,6 +87,16 @@ service cloud.firestore {
     // Plaintext password is no longer stored — Firebase Auth holds the secret.
     // Only Web Owners may mutate; deletes remain hard-blocked.
     // ─────────────────────────────────────────────────────────────────────────
+    // ── Phase 3: platform-wide SEB settings ────────────────────────
+    // Holds the SEB Config Key(s). Only the webOwner may read or write them
+    // from a client. Cloud Functions read via the Admin SDK (bypasses rules),
+    // which is what lets the server verify a request without ever exposing
+    // the keys to a student's browser — the key must stay secret, because
+    // possessing it is what would let an attacker forge the SEB hash.
+    match /platformSettings/{settingId} {
+      allow read, write: if isWebOwner();
+    }
+
     match /webowners/{ownerId} {
       allow read:   if isWebOwner();
       allow create: if isWebOwner() && str(request.resource.data.email) && str(request.resource.data.name);

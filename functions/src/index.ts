@@ -21,6 +21,7 @@
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { createHash } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -1456,6 +1457,104 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
   },
 );
 
+// ══════════════════════════════════════════════════════════════════
+// PHASE 3 — SEB DIAGNOSTIC (Stage 1; temporary, webOwner-only)
+//
+// Enforcement is NOT written yet, on purpose. Two things cannot be settled
+// from documentation and, if guessed wrong, would reject every candidate:
+//   1. Does SEB inject X-SafeExamBrowser-ConfigKeyHash into CROSS-ORIGIN XHR
+//      (our callables live on cloudfunctions.net, the app on Vercel)?
+//   2. What exact absolute URL does SEB use as the hash salt, and can we
+//      reconstruct it byte-for-byte behind Cloud Run's proxy?
+//
+// SEB computes: SHA256(absoluteRequestURL + ConfigKey), URL first, fragment
+// stripped, hex-encoded. A single character of URL drift changes the hash
+// completely. So: run this once inside real SEB, read the truth, then write
+// the verification against it.
+//
+// Returns every plausible URL reconstruction plus the raw SEB headers, and —
+// if a candidate key is supplied — which reconstruction (if any) reproduces
+// the received hash. That last part is what pins Stage 2.
+// ══════════════════════════════════════════════════════════════════
+
+interface SebDiagnosticsData {
+  candidateConfigKey?: string; // optional: test a key against every URL form
+}
+
+export const sebDiagnostics = onCall<SebDiagnosticsData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    if (request.auth.token.role !== 'webOwner') {
+      throw new HttpsError('permission-denied', 'webOwner only.');
+    }
+
+    const req = request.rawRequest as unknown as {
+      headers: Record<string, string | string[] | undefined>;
+      originalUrl?: string;
+      url?: string;
+      method?: string;
+    };
+    const headers = req.headers ?? {};
+    const hdr = (n: string): string | undefined => {
+      const v = headers[n];
+      return Array.isArray(v) ? v[0] : v;
+    };
+
+    // Every SEB header we received, verbatim.
+    const sebHeaders: Record<string, string> = {};
+    for (const [k, v] of Object.entries(headers)) {
+      if (k.toLowerCase().startsWith('x-safeexambrowser')) {
+        sebHeaders[k] = Array.isArray(v) ? v.join(',') : String(v ?? '');
+      }
+    }
+
+    const host           = hdr('host');
+    const xForwardedHost = hdr('x-forwarded-host');
+    const proto          = hdr('x-forwarded-proto') ?? 'https';
+    const path           = req.originalUrl ?? req.url ?? '';
+    const origin         = hdr('origin');
+    const referer        = hdr('referer');
+
+    // Candidate absolute URLs SEB might have hashed. Fragments are never sent
+    // to a server, so nothing to strip here — but path/query variants matter.
+    const pathNoQuery = path.split('?')[0];
+    const urlCandidates: Record<string, string> = {
+      host_full:            `${proto}://${host}${path}`,
+      host_noQuery:         `${proto}://${host}${pathNoQuery}`,
+      xfwdHost_full:        xForwardedHost ? `${proto}://${xForwardedHost}${path}` : '',
+      xfwdHost_noQuery:     xForwardedHost ? `${proto}://${xForwardedHost}${pathNoQuery}` : '',
+      // The URL the browser actually typed, if the SDK used cloudfunctions.net
+      cloudfunctions_guess: `https://us-central1-${process.env.GCLOUD_PROJECT ?? ''}.cloudfunctions.net/sebDiagnostics`,
+    };
+
+    // If a candidate key was supplied, show which URL form reproduces the
+    // received ConfigKeyHash. Whichever matches is the one Stage 2 must use.
+    const received = (sebHeaders['x-safeexambrowser-configkeyhash']
+      ?? sebHeaders['X-SafeExamBrowser-ConfigKeyHash'] ?? '').toLowerCase();
+    const matches: Record<string, boolean> = {};
+    if (request.data?.candidateConfigKey && received) {
+      const key = request.data.candidateConfigKey.trim();
+      for (const [name, url] of Object.entries(urlCandidates)) {
+        if (!url) continue;
+        const h = createHash('sha256').update(url + key, 'utf8').digest('hex');
+        matches[name] = h.toLowerCase() === received;
+      }
+    }
+
+    return {
+      ok: true,
+      sawAnySebHeader: Object.keys(sebHeaders).length > 0,
+      sebHeaders,
+      receivedConfigKeyHash: received || null,
+      urlCandidates,
+      matches,               // {} unless candidateConfigKey supplied
+      raw: { host, xForwardedHost, proto, path, origin, referer, method: req.method },
+      userAgent: hdr('user-agent') ?? null,
+    };
+  },
+);
+
 interface StartExamData {
   assessmentId: string;
   sections: Array<{
@@ -1520,6 +1619,8 @@ export const startExam = onCall<StartExamData>(
       allowMobile?: boolean;
       autoResume?: boolean;
       requireExtensionCheck?: boolean;
+      requireSEB?: boolean;
+      sebConfigKeys?: string[];
       securityLockedAt?: string;
     };
 
@@ -1545,6 +1646,13 @@ export const startExam = onCall<StartExamData>(
       : tier === 'high_stake'
         ? true
         : (a.requireExtensionCheck ?? true);
+    // Phase 3 — SEB requirement, re-derived server-side (never trusted raw).
+    // Legacy assessments (no tier) never require SEB. high_stake defaults to
+    // true but may be disabled by the authority; other tiers are opt-in.
+    const requireSEB = isLegacy
+      ? false
+      : (a.requireSEB ?? (tier === 'high_stake'));
+
     const effectiveAutoResume = isLegacy
       ? false
       : tier === 'high_stake'
@@ -1756,6 +1864,9 @@ export const startExam = onCall<StartExamData>(
         requireExtensionCheck,
         allowMobile,
         autoResume: effectiveAutoResume,
+        // Phase 3 — frozen with the rest of the contract, so toggling the
+        // assessment mid-exam cannot change what this attempt must satisfy.
+        requireSEB,
       },
       totalFrozenSeconds: 0,
       serverAnchored: true, // marks this attempt as using server-owned timestamps

@@ -11,7 +11,8 @@ import {
   arrayRemove,
   deleteField,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from './firebase';
 
 // ══════════════════════════════════════════════════════════════════
 // INTERNAL HELPERS
@@ -299,6 +300,18 @@ export type Assessment = {
   requireCamera?: boolean;           // mock: off, normal: on, high_stake: locked on
   requireExtensionCheck?: boolean;   // normal/high_stake pre-exam hard block
 
+  // ── Phase 3: Safe Exam Browser ─────────────────────────────────
+  // requireSEB: authority toggle. Default ON for high_stake (disable-able),
+  // OFF elsewhere. When true, every exam callable verifies that the request
+  // carries a valid SEB Config Key hash — the only control that reaches
+  // VPNs, remote-desktop and userscript managers.
+  requireSEB?: boolean;
+  // sebConfigKeys: OPTIONAL per-assessment override of the platform-wide
+  // Config Keys. Normally undefined → the platform keys apply. Designed in
+  // now so a per-exam config is a config change, not a migration.
+  // An ARRAY because key rotation needs an overlap window (old + new valid).
+  sebConfigKeys?: string[];
+
   // Overall exam time limit (minutes) — runs ALONGSIDE per-section timeLimit;
   // whichever expires first ends the exam. Enforced in Phase 1.
   // undefined = no overall cap.
@@ -341,6 +354,7 @@ export function applyTierDefaults(
     allowMobile?: boolean;
     autoResume?: boolean;
     requireExtensionCheck?: boolean;
+    requireSEB?: boolean;
   },
 ): {
   securityTier: 'mock' | 'normal' | 'high_stake';
@@ -348,6 +362,7 @@ export function applyTierDefaults(
   allowMobile: boolean;
   autoResume: boolean;
   requireExtensionCheck: boolean;
+  requireSEB: boolean;
 } {
   if (tier === 'mock') {
     return {
@@ -356,6 +371,7 @@ export function applyTierDefaults(
       allowMobile: overrides?.allowMobile ?? true,             // phones welcome
       autoResume: overrides?.autoResume ?? true,
       requireExtensionCheck: overrides?.requireExtensionCheck ?? false,
+      requireSEB: false,                                       // never for practice
     };
   }
   if (tier === 'high_stake') {
@@ -365,6 +381,11 @@ export function applyTierDefaults(
       allowMobile: false,            // LOCKED desktop-only
       autoResume: overrides?.autoResume ?? false,
       requireExtensionCheck: true,   // LOCKED on
+      // Phase 3: SEB is the only real lockdown for high-stake. Default ON,
+      // but (per authority decision) it may be disabled — unlike camera /
+      // mobile / extension, which are locked. Deliberate: a school without
+      // SEB rollout can still run high-stake with the web-tier deterrents.
+      requireSEB: overrides?.requireSEB ?? true,
     };
   }
   // normal
@@ -374,6 +395,7 @@ export function applyTierDefaults(
     allowMobile: overrides?.allowMobile ?? false,              // default OFF (D-B)
     autoResume: overrides?.autoResume ?? false,
     requireExtensionCheck: overrides?.requireExtensionCheck ?? true,
+    requireSEB: overrides?.requireSEB ?? false,                // opt-in only
   };
 }
 
@@ -574,6 +596,10 @@ export async function duplicateAssessment(
         allowMobile: src.allowMobile,
         requireCamera: src.requireCamera,
         requireExtensionCheck: src.requireExtensionCheck,
+        // Phase 3 — a duplicated high-stake exam must not silently lose its
+        // SEB requirement. Copied with the rest of the security contract.
+        requireSEB: src.requireSEB,
+        sebConfigKeys: src.sebConfigKeys,
       }
     : { ...applyTierDefaults('normal'), deliveryMode: 'standard' as const };
 
@@ -618,6 +644,91 @@ export async function duplicateAssessment(
   };
 
   return createAssessment(draft);
+}
+
+// ── Phase 3: platform-wide SEB settings ───────────────────────────
+// Stored at platformSettings/seb. `configKeys` is an ARRAY from day one:
+// rotating a .seb config needs an overlap window where the old and new keys
+// are both accepted (Moodle allows several keys for the same reason).
+//
+// The Config Key is a checksum of the .seb config's settings. It does NOT
+// include the SEB version, so ONE key covers Windows/macOS and all versions —
+// which is why we verify the Config Key rather than the Browser Exam Key.
+
+export type SEBPlatformSettings = {
+  configKeys: string[];
+  updatedAt?: string;
+};
+
+export async function getSEBSettings(): Promise<SEBPlatformSettings> {
+  const snap = await getDoc(doc(db, 'platformSettings', 'seb'));
+  if (!snap.exists()) return { configKeys: [] };
+  const d = snap.data() as Partial<SEBPlatformSettings>;
+  return { configKeys: d.configKeys ?? [], updatedAt: d.updatedAt };
+}
+
+export async function setSEBSettings(configKeys: string[]): Promise<void> {
+  // Normalise: SEB emits lowercase hex; compare case-insensitively later, but
+  // store canonically so the admin UI shows one consistent form.
+  const cleaned = configKeys
+    .map((k) => k.trim().toLowerCase())
+    .filter((k) => /^[0-9a-f]{64}$/.test(k));
+  await setDoc(
+    doc(db, 'platformSettings', 'seb'),
+    { configKeys: cleaned, updatedAt: now() },
+    { merge: true },
+  );
+}
+
+// ── Phase 3: SEB diagnostic (Stage 1, webOwner-only) ──────────────
+/**
+ * Ask the server what it actually received. Run this ONCE from inside a real
+ * Safe Exam Browser to discover (a) whether SEB injects its ConfigKeyHash
+ * header into our cross-origin callables at all, and (b) which absolute-URL
+ * reconstruction reproduces the hash. Enforcement (Stage 2) is written
+ * against these facts rather than guessed.
+ *
+ * Pass the Config Key from the SEB Config Tool as `candidateConfigKey` and
+ * read `matches` — the URL form that reports `true` is the one to verify with.
+ */
+export async function sebDiagnostics(candidateConfigKey?: string): Promise<{
+  ok: true;
+  sawAnySebHeader: boolean;
+  sebHeaders: Record<string, string>;
+  receivedConfigKeyHash: string | null;
+  urlCandidates: Record<string, string>;
+  matches: Record<string, boolean>;
+  raw: Record<string, unknown>;
+  userAgent: string | null;
+}> {
+  const call = httpsCallable<
+    { candidateConfigKey?: string },
+    {
+      ok: true; sawAnySebHeader: boolean; sebHeaders: Record<string, string>;
+      receivedConfigKeyHash: string | null; urlCandidates: Record<string, string>;
+      matches: Record<string, boolean>; raw: Record<string, unknown>; userAgent: string | null;
+    }
+  >(functions, 'sebDiagnostics');
+  const res = await call({ candidateConfigKey });
+  return res.data;
+}
+
+// ── Phase 3: client-side SEB detection (UX ONLY) ──────────────────
+/**
+ * Best-effort detection so the briefing can tell a student "you need SEB".
+ * NEVER a security control: a user agent is trivially spoofed, and a
+ * header-modifying extension can fake the SEB headers. The server's hash
+ * check is the only thing that decides. This exists purely so a student in
+ * Chrome sees a helpful message instead of a cryptic rejection.
+ */
+export function looksLikeSEB(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const hasUA = /\bSEB[\s/]/i.test(ua) || /SafeExamBrowser/i.test(ua);
+  // SEB 3.0+ (macOS/iOS) and 3.4+ (Windows) expose a JS API object.
+  const hasJsApi = typeof (window as unknown as { SafeExamBrowser?: unknown }).SafeExamBrowser
+    !== 'undefined';
+  return hasUA || hasJsApi;
 }
 
 // ── Soft delete assessment ────────────────────────────────────────

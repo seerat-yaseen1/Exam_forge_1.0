@@ -35,18 +35,35 @@ export function SEBDiagnosticsPage() {
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [echo, setEcho] = useState<EchoResult | null>(null);
+  const [echoPost, setEchoPost] = useState<EchoResult | null>(null);
   const [echoRunning, setEchoRunning] = useState(false);
   const [echoError, setEchoError] = useState<string | null>(null);
 
+  // Runs BOTH a GET and a POST. We proved SEB injects its header on a
+  // same-origin GET; enforcement will use POST (constant URL → constant hash
+  // target, and the attempt id travels in the body rather than the query
+  // string). That the header also arrives on POST must be MEASURED, not
+  // assumed — assuming is exactly what the cross-origin attempt got wrong.
   const runEcho = async () => {
     setEchoRunning(true);
     setEchoError(null);
     setEcho(null);
+    setEchoPost(null);
     try {
       const qs = key.trim() ? `?candidateKey=${encodeURIComponent(key.trim())}` : '';
-      const r = await fetch(`/api/seb-echo${qs}`, { cache: 'no-store' });
-      if (!r.ok) throw new Error(`HTTP ${r.status} — is /api/seb-echo deployed?`);
-      setEcho(await r.json());
+      const [g, p] = await Promise.all([
+        fetch(`/api/seb-echo${qs}`, { cache: 'no-store' }),
+        fetch(`/api/seb-echo${qs}`, {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ probe: 'post' }),
+        }),
+      ]);
+      if (!g.ok) throw new Error(`GET failed: HTTP ${g.status} — is /api/seb-echo deployed?`);
+      setEcho(await g.json());
+      if (p.ok) setEchoPost(await p.json());
+      else setEchoError(`POST returned HTTP ${p.status}`);
     } catch (e) {
       setEchoError((e as { message?: string })?.message ?? 'Same-origin check failed.');
     } finally {
@@ -133,10 +150,17 @@ export function SEBDiagnosticsPage() {
               : <AlertTriangle size={15} strokeWidth={1.5} style={{ color: '#92680A', marginTop: 1 }} />}
             <div>
               <p className="text-xs" style={{ color: echo.sawAnySebHeader ? '#1E7B3C' : '#92680A', fontWeight: 500 }}>
-                SAME-ORIGIN (/api/seb-echo): {echo.sawAnySebHeader
-                  ? 'SEB headers received — enforcement can live here.'
-                  : 'No SEB headers on same-origin fetch either.'}
+                SAME-ORIGIN GET (/api/seb-echo): {echo.sawAnySebHeader
+                  ? 'SEB headers received.'
+                  : 'No SEB headers.'}
               </p>
+              {echoPost && (
+                <p className="text-xs mt-1" style={{ color: echoPost.sawAnySebHeader ? '#1E7B3C' : '#9B2828', fontWeight: 500 }}>
+                  SAME-ORIGIN POST: {echoPost.sawAnySebHeader
+                    ? 'SEB headers received — POST is safe to build on.'
+                    : 'NO headers on POST — enforcement must use GET.'}
+                </p>
+              )}
               {Object.entries(echo.matches).some(([, v]) => v) && (
                 <p className="text-xs mt-1" style={{ color: '#1E7B3C' }}>
                   Hash reproduced by URL form: <strong>{Object.entries(echo.matches).find(([, v]) => v)?.[0]}</strong>
@@ -144,10 +168,20 @@ export function SEBDiagnosticsPage() {
               )}
             </div>
           </div>
-          <pre className="text-xs p-3 overflow-auto"
-            style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 320, fontFamily: 'monospace', lineHeight: 1.5 }}>
+          <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>GET RESULT</p>
+          <pre className="text-xs p-3 overflow-auto mb-3"
+            style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 260, fontFamily: 'monospace', lineHeight: 1.5 }}>
             {JSON.stringify(echo, null, 2)}
           </pre>
+          {echoPost && (
+            <>
+              <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>POST RESULT</p>
+              <pre className="text-xs p-3 overflow-auto"
+                style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 260, fontFamily: 'monospace', lineHeight: 1.5 }}>
+                {JSON.stringify(echoPost, null, 2)}
+              </pre>
+            </>
+          )}
         </div>
       )}
 

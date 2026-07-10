@@ -7,6 +7,7 @@ import {
   FileText, CalendarClock, ArrowRight, Timer, Award,
   ChevronRight, Layers, CheckSquare, Square, AlertCircle,
   Shuffle, BarChart2, BookOpen, Lock, Users, Building2, Zap, Infinity as InfinityIcon,
+  Copy,
 } from 'lucide-react';
 import {
   getAllInstitutes,
@@ -19,6 +20,8 @@ import {
   createAssessment,
   updateAssessment,
   softDeleteAssessment,
+  duplicateAssessment,
+  type DuplicateOptions,
   statusColor,
   formatAssignmentTarget,
   resolveQuestionsForSections,
@@ -212,12 +215,13 @@ function FilterBar({ search, setSearch, statusFilter, setStatusFilter }: {
 
 // ── Assessment row ────────────────────────────────────────────────
 
-function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEditor, onDelete, onRoster }: {
+function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEditor, onDelete, onDuplicate, onRoster }: {
   assessment: Assessment;
   onPreview: () => void;
   onPatched: (patch: Partial<Assessment>) => void;
   onOpenLegacyEditor: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   onRoster: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -261,6 +265,7 @@ function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEditor, o
       )}
       <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}><Eye size={13} strokeWidth={1.5} /></button>
       <EditMenu assessment={assessment} onPatched={onPatched} onOpenLegacyEditor={onOpenLegacyEditor} />
+      <button onClick={onDuplicate} title="Duplicate" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}><Copy size={13} strokeWidth={1.5} /></button>
       <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}><Trash2 size={13} strokeWidth={1.5} /></button>
     </div>
   );
@@ -415,6 +420,124 @@ function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd: () => void 
 }
 
 // ── Delete modal ──────────────────────────────────────────────────
+
+// ── Duplicate modal ───────────────────────────────────────────────
+// Lets the author choose what carries over. Student-specific data (attempts,
+// responses, results, reports, activity logs) is NEVER copied — it lives in
+// other collections keyed by assessmentId, so the new copy simply has none.
+
+function DuplicateModal({ assessment, onConfirm, onCancel, duplicating }: {
+  assessment: Assessment;
+  onConfirm: (opts: DuplicateOptions, title: string) => void;
+  onCancel: () => void;
+  duplicating: boolean;
+}) {
+  const [title, setTitle] = useState(`${assessment.title} (Copy)`);
+  const [opts, setOpts] = useState<DuplicateOptions>({
+    includeSections: true,
+    includeQuestions: true,
+    includeSettings: true,
+    includeScheduling: false,   // a copy usually needs a NEW window
+    includeSecurity: true,
+    includeAllocations: false,  // and usually a NEW audience
+  });
+
+  const toggle = (k: keyof DuplicateOptions) =>
+    setOpts((p) => {
+      const next = { ...p, [k]: !p[k] };
+      // Questions live inside sections — can't copy them without the structure.
+      if (k === 'includeSections' && !next.includeSections) next.includeQuestions = false;
+      if (k === 'includeQuestions' && next.includeQuestions) next.includeSections = true;
+      return next;
+    });
+
+  const rows: Array<{ key: keyof DuplicateOptions; label: string; hint: string }> = [
+    { key: 'includeSections',    label: 'Sections',        hint: 'Structure, marks, timers, breaks' },
+    { key: 'includeQuestions',   label: 'Questions',       hint: 'The questions inside each section' },
+    { key: 'includeSettings',    label: 'Settings',        hint: 'Timing, attempts, shuffle, review' },
+    { key: 'includeSecurity',    label: 'Security',        hint: 'Tier, delivery mode, camera, extensions' },
+    { key: 'includeScheduling',  label: 'Scheduling',      hint: 'Start and end dates' },
+    { key: 'includeAllocations', label: 'Allocations',     hint: 'Who the exam is assigned to' },
+  ];
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-60 flex items-center justify-center p-4"
+      style={{ background: 'rgba(12,12,11,0.28)' }} onClick={onCancel}>
+      <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.97, opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md p-6"
+        style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
+
+        <div className="flex items-center gap-2 mb-1">
+          <Copy size={14} strokeWidth={1.5} style={{ color: '#4A4A45' }} />
+          <p className="text-sm" style={{ color: '#0C0C0B' }}>Duplicate assessment</p>
+        </div>
+        <p className="text-xs mb-4" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+          Creates a new <strong style={{ color: '#4A4A45' }}>draft</strong>. Student attempts,
+          responses, results and reports are never copied.
+        </p>
+
+        <label className="text-xs block mb-1.5" style={{ color: '#6B6B66' }}>New title</label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full text-xs px-3 py-2 mb-4"
+          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#0C0C0B' }}
+        />
+
+        <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>COPY OPTIONS</p>
+        <div className="flex flex-col gap-1 mb-5">
+          {rows.map((r) => {
+            const checked = opts[r.key];
+            const disabled = r.key === 'includeQuestions' && !opts.includeSections;
+            return (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => !disabled && toggle(r.key)}
+                className="flex items-start gap-2.5 px-3 py-2 text-left transition-colors"
+                style={{
+                  border: '1px solid #E3E1DB', borderRadius: 2,
+                  background: checked ? '#FAFAF8' : '#FFFFFF',
+                  opacity: disabled ? 0.45 : 1,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                }}>
+                {checked
+                  ? <CheckSquare size={13} strokeWidth={1.5} style={{ color: '#0C0C0B', marginTop: 1 }} />
+                  : <Square size={13} strokeWidth={1.5} style={{ color: '#C4C3BD', marginTop: 1 }} />}
+                <span className="flex flex-col">
+                  <span className="text-xs" style={{ color: '#0C0C0B' }}>{r.label}</span>
+                  <span className="text-xs" style={{ color: '#9A9891' }}>{r.hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={onCancel} disabled={duplicating}
+            className="text-xs px-4 py-2"
+            style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={() => onConfirm(opts, title)} disabled={duplicating || !title.trim()}
+            className="flex items-center gap-1.5 text-xs px-4 py-2"
+            style={{
+              background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2,
+              opacity: duplicating || !title.trim() ? 0.5 : 1,
+              cursor: duplicating ? 'default' : 'pointer',
+            }}>
+            {duplicating
+              ? <><Loader2 size={11} className="animate-spin" /> Duplicating…</>
+              : <><Copy size={11} strokeWidth={1.5} /> Duplicate</>}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
 function DeleteModal({ assessment, onConfirm, onCancel, deleting }: {
   assessment: Assessment; onConfirm: () => void; onCancel: () => void; deleting: boolean;
@@ -4022,6 +4145,8 @@ export function AssignmentsPage() {
   const [previewAssessment, setPreviewAssessment] = useState<Assessment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Assessment | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [duplicateTarget, setDuplicateTarget] = useState<Assessment | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -4060,6 +4185,19 @@ export function AssignmentsPage() {
       setAssessments((prev) => prev.filter((a) => a.id !== deleteTarget.id));
       setDeleteTarget(null);
     } finally { setDeleting(false); }
+  };
+
+  const handleDuplicate = async (opts: DuplicateOptions, title: string) => {
+    if (!duplicateTarget) return;
+    setDuplicating(true);
+    try {
+      const copy = await duplicateAssessment(duplicateTarget.id, opts, title);
+      // Show the new draft at the top of the list immediately.
+      setAssessments((prev) => [copy, ...prev]);
+      setDuplicateTarget(null);
+    } catch (e) {
+      console.error('[AssignmentsPage] duplicate failed', e);
+    } finally { setDuplicating(false); }
   };
 
   const openCreate = () => { setEditTarget(null); setPanelMode('create'); setPanelOpen(true); };
@@ -4127,6 +4265,7 @@ export function AssignmentsPage() {
               onPatched={(patch) => setAssessments((prev) => prev.map((x) => (x.id === a.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } as Assessment : x)))}
               onOpenLegacyEditor={() => openEdit(a)}
               onDelete={() => setDeleteTarget(a)}
+              onDuplicate={() => setDuplicateTarget(a)}
               onRoster={() => navigate(`/dashboard/assignments/${a.id}/roster`)} />
           ))}
           {!loading && filtered.length === 0 && <EmptyState filtered={!!(search || statusFilter)} onAdd={openCreate} />}
@@ -4162,6 +4301,8 @@ export function AssignmentsPage() {
 
       {/* Delete */}
       <AnimatePresence>
+        {duplicateTarget && <DuplicateModal assessment={duplicateTarget} onConfirm={handleDuplicate}
+          onCancel={() => setDuplicateTarget(null)} duplicating={duplicating} />}
         {deleteTarget && <DeleteModal assessment={deleteTarget} onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)} deleting={deleting} />}
       </AnimatePresence>

@@ -13,11 +13,46 @@ import { sebDiagnostics } from '../../lib/assessmentService';
 
 type Result = Awaited<ReturnType<typeof sebDiagnostics>>;
 
+// Same-origin echo (Vercel /api/seb-echo). The cross-origin diagnostic proved
+// SEB does not inject its header into calls to cloudfunctions.net; this checks
+// whether it injects into a fetch() to our OWN origin, which is where Stage 2
+// enforcement will have to live.
+type EchoResult = {
+  ok: true;
+  where: string;
+  sawAnySebHeader: boolean;
+  sebHeaders: Record<string, string>;
+  receivedConfigKeyHash: string | null;
+  urlCandidates: Record<string, string>;
+  matches: Record<string, boolean>;
+  raw: Record<string, unknown>;
+  userAgent: string | null;
+};
+
 export function SEBDiagnosticsPage() {
   const [key, setKey] = useState('');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [echo, setEcho] = useState<EchoResult | null>(null);
+  const [echoRunning, setEchoRunning] = useState(false);
+  const [echoError, setEchoError] = useState<string | null>(null);
+
+  const runEcho = async () => {
+    setEchoRunning(true);
+    setEchoError(null);
+    setEcho(null);
+    try {
+      const qs = key.trim() ? `?candidateKey=${encodeURIComponent(key.trim())}` : '';
+      const r = await fetch(`/api/seb-echo${qs}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`HTTP ${r.status} — is /api/seb-echo deployed?`);
+      setEcho(await r.json());
+    } catch (e) {
+      setEchoError((e as { message?: string })?.message ?? 'Same-origin check failed.');
+    } finally {
+      setEchoRunning(false);
+    }
+  };
 
   const run = async () => {
     setRunning(true);
@@ -68,7 +103,53 @@ export function SEBDiagnosticsPage() {
         >
           {running ? <><Loader2 size={12} className="animate-spin" /> Running…</> : 'Run SEB check'}
         </button>
+        <button
+          onClick={runEcho}
+          disabled={echoRunning}
+          className="flex items-center gap-1.5 text-xs px-4 py-2 flex-shrink-0"
+          style={{ border: '1px solid #0C0C0B', color: '#0C0C0B', borderRadius: 2, cursor: echoRunning ? 'default' : 'pointer', opacity: echoRunning ? 0.5 : 1 }}
+        >
+          {echoRunning ? <><Loader2 size={12} className="animate-spin" /> Checking…</> : 'Same-origin check'}
+        </button>
       </div>
+
+      {/* Same-origin result — this is the one that matters now */}
+      {echoError && (
+        <div className="flex items-start gap-2 px-3 py-2.5 mb-4" style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+          <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828', marginTop: 1 }} />
+          <span className="text-xs" style={{ color: '#9B2828' }}>{echoError}</span>
+        </div>
+      )}
+      {echo && (
+        <div className="mb-5">
+          <div className="flex items-start gap-2 px-4 py-3 mb-2"
+            style={{
+              background: echo.sawAnySebHeader ? '#F0F9F4' : '#FEF9EC',
+              border: `1px solid ${echo.sawAnySebHeader ? '#B8E6C8' : '#F5DFA0'}`,
+              borderRadius: 2,
+            }}>
+            {echo.sawAnySebHeader
+              ? <CheckCircle2 size={15} strokeWidth={1.5} style={{ color: '#1E7B3C', marginTop: 1 }} />
+              : <AlertTriangle size={15} strokeWidth={1.5} style={{ color: '#92680A', marginTop: 1 }} />}
+            <div>
+              <p className="text-xs" style={{ color: echo.sawAnySebHeader ? '#1E7B3C' : '#92680A', fontWeight: 500 }}>
+                SAME-ORIGIN (/api/seb-echo): {echo.sawAnySebHeader
+                  ? 'SEB headers received — enforcement can live here.'
+                  : 'No SEB headers on same-origin fetch either.'}
+              </p>
+              {Object.entries(echo.matches).some(([, v]) => v) && (
+                <p className="text-xs mt-1" style={{ color: '#1E7B3C' }}>
+                  Hash reproduced by URL form: <strong>{Object.entries(echo.matches).find(([, v]) => v)?.[0]}</strong>
+                </p>
+              )}
+            </div>
+          </div>
+          <pre className="text-xs p-3 overflow-auto"
+            style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 320, fontFamily: 'monospace', lineHeight: 1.5 }}>
+            {JSON.stringify(echo, null, 2)}
+          </pre>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 px-3 py-2.5 mb-4" style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>

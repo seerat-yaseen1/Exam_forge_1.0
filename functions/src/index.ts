@@ -21,7 +21,8 @@
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -1571,8 +1572,82 @@ export const sebDiagnostics = onCall<SebDiagnosticsData>(
   },
 );
 
+// ══════════════════════════════════════════════════════════════════
+// PHASE 3 — SEB proof verification (Stage 2)
+//
+// The SEB header never reaches these functions: SEB injects its keys only on
+// same-origin requests to the app's domain (measured, Stage 1). So the app
+// calls /api/seb-verify on Vercel, which checks the ConfigKeyHash and mints a
+// short-lived HMAC token bound to the AUTHENTICATED uid. We verify that token
+// here.
+//
+// Token format: v1.<base64url(JSON{uid,exp,v})>.<hex hmac-sha256 of the b64 part>
+// The signing secret is shared with Vercel and must match exactly.
+//
+// Short TTL is the point: a student who verifies in SEB and then switches to
+// Chrome cannot mint a new token (Chrome sends no SEB header), so access dies
+// within a minute or so.
+// ══════════════════════════════════════════════════════════════════
+
+const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
+
+function verifySebToken(token: string, uid: string, secret: string): void {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3 || parts[0] !== 'v1') {
+    throw new HttpsError('permission-denied', 'SEB_REQUIRED: malformed proof.');
+  }
+  const [, b64, sig] = parts;
+
+  const expected = createHmac('sha256', secret).update(b64).digest('hex');
+  const a = Buffer.from(expected, 'utf8');
+  const b = Buffer.from(sig, 'utf8');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    throw new HttpsError('permission-denied', 'SEB_REQUIRED: proof signature invalid.');
+  }
+
+  let body: { uid?: string; exp?: number };
+  try {
+    body = JSON.parse(Buffer.from(b64, 'base64url').toString('utf8'));
+  } catch {
+    throw new HttpsError('permission-denied', 'SEB_REQUIRED: proof unreadable.');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (typeof body.exp !== 'number' || body.exp <= now) {
+    throw new HttpsError('permission-denied', 'SEB_EXPIRED: re-verify Safe Exam Browser.');
+  }
+  // Binding to the caller is what stops one student in SEB minting proofs for
+  // classmates sitting in Chrome.
+  if (!body.uid || body.uid !== uid) {
+    throw new HttpsError('permission-denied', 'SEB_REQUIRED: proof belongs to another user.');
+  }
+}
+
+/**
+ * No-op unless the attempt's frozen securityConfig requires SEB. Legacy and
+ * mock/normal attempts are entirely unaffected.
+ */
+function assertSEB(
+  sebToken: string | undefined,
+  uid: string,
+  requireSEB: boolean | undefined,
+): void {
+  if (requireSEB !== true) return;
+  const secret = SEB_SIGNING_SECRET.value();
+  if (!secret) {
+    // Fail closed. A missing secret must never read as "SEB satisfied".
+    throw new HttpsError('failed-precondition', 'SEB_NOT_CONFIGURED');
+  }
+  if (!sebToken) {
+    throw new HttpsError('permission-denied', 'SEB_REQUIRED: this exam must be taken in Safe Exam Browser.');
+  }
+  verifySebToken(sebToken, uid, secret);
+}
+
 interface StartExamData {
   assessmentId: string;
+  // Phase 3 — short-lived proof minted by /api/seb-verify on our own origin.
+  sebToken?: string;
   sections: Array<{
     id: string;
     name: string;
@@ -1591,7 +1666,9 @@ interface StartExamData {
 // attempt with server-set timestamps. Idempotent: returns an existing
 // in_progress/frozen attempt if one is present.
 export const startExam = onCall<StartExamData>(
-  { region: 'us-central1' },
+  // Phase 3: the secret must be declared here or SEB_SIGNING_SECRET.value()
+  // is empty at runtime and assertSEB would fail closed on every call.
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role = request.auth.token.role as string | undefined;
@@ -1601,7 +1678,7 @@ export const startExam = onCall<StartExamData>(
       throw new HttpsError('permission-denied', 'Only students may start an exam.');
     }
 
-    const { assessmentId, sections, shuffleQuestions, sectionStartOrder, cameraDeclined } =
+    const { assessmentId, sections, shuffleQuestions, sectionStartOrder, cameraDeclined, sebToken } =
       request.data || ({} as StartExamData);
     if (!assessmentId || !Array.isArray(sections) || sections.length === 0) {
       throw new HttpsError('invalid-argument', 'assessmentId and sections are required.');
@@ -1668,6 +1745,11 @@ export const startExam = onCall<StartExamData>(
     const requireSEB = isLegacy
       ? false
       : (a.requireSEB ?? (tier === 'high_stake'));
+
+    // Phase 3 gate. Uses the SERVER-derived requireSEB, never the client's
+    // claim, and binds the proof to this caller's uid. Placed before any
+    // attempt is created so a non-SEB student never gets an attempt document.
+    assertSEB(sebToken, request.auth.uid, requireSEB);
 
     const effectiveAutoResume = isLegacy
       ? false

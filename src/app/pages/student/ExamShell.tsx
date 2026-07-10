@@ -21,7 +21,7 @@ import {
   CheckCircle2, Shield, Send, Layers, Flag, MonitorSmartphone, Clock,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
-import { getAssessment, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
+import { getAssessment, type Assessment, type AssessmentSection, getSebToken } from '../../../lib/assessmentService';
 import { getExamQuestionsForStudent, type Question } from '../../../lib/questionBankService';
 import {
   startAttempt,
@@ -796,6 +796,26 @@ export function ExamShell() {
             a.maxAttempts ??
             1;
 
+          // ── Phase 3: obtain the SEB proof before starting ──────────
+          // Only when the assessment requires it. The proof is minted by
+          // /api/seb-verify on our own origin (the only place SEB injects its
+          // header). The server re-derives the requirement, so a forged
+          // "not required" from the client changes nothing.
+          let sebToken: string | undefined;
+          if (a.requireSEB === true) {
+            const seb = await getSebToken();
+            if (!seb.ok) {
+              setErrorMsg(
+                seb.error === 'SEB_REQUIRED' || seb.error === 'SEB_CONFIG_MISMATCH'
+                  ? 'This exam must be taken in Safe Exam Browser, using the exam configuration provided by your institute.'
+                  : 'Could not verify Safe Exam Browser. Please reopen the exam from the provided .seb file and try again.',
+              );
+              setShellStatus('error');
+              return;
+            }
+            sebToken = seb.sebToken;
+          }
+
           att = await startAttempt({
             assessmentId: a.id,
             assessmentTitle: a.title,
@@ -811,6 +831,7 @@ export function ExamShell() {
             sectionStartOrder: a.sectionStartOrder,
             cameraDeclined,
             effectiveMaxAttempts,
+            sebToken,
           });
         }
 

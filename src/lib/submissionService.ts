@@ -339,6 +339,10 @@ export async function startAttempt(params: {
   sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
   cameraDeclined?: boolean;
   effectiveMaxAttempts?: number;  // undefined = unlimited
+  // Phase 3 — short-lived SEB proof from /api/seb-verify. Required only when
+  // the assessment demands SEB; the server re-derives that requirement, so an
+  // omitted token on a SEB exam is rejected regardless of what the client says.
+  sebToken?: string;
 }): Promise<Attempt> {
   // Server-authoritative: the startExam Cloud Function owns schedule
   // enforcement (startDate/endDate), the attempt-limit check, and all
@@ -355,6 +359,7 @@ export async function startAttempt(params: {
       sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
       cameraDeclined?: boolean;
       deviceClass?: 'desktop' | 'mobile' | 'tablet';
+      sebToken?: string;
     },
     { ok: true; attempt: Attempt }
   >(functions, 'startExam');
@@ -367,6 +372,7 @@ export async function startAttempt(params: {
       sectionStartOrder: params.sectionStartOrder,
       cameraDeclined: params.cameraDeclined,
       deviceClass: detectDeviceClass(),
+      sebToken: params.sebToken,
     });
     return res.data.attempt;
   } catch (e) {

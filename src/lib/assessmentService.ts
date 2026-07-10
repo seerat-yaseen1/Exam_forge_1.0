@@ -12,7 +12,7 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { db, functions } from './firebase';
+import { db, functions, auth } from './firebase';
 
 // ══════════════════════════════════════════════════════════════════
 // INTERNAL HELPERS
@@ -729,6 +729,43 @@ export function looksLikeSEB(): boolean {
   const hasJsApi = typeof (window as unknown as { SafeExamBrowser?: unknown }).SafeExamBrowser
     !== 'undefined';
   return hasUA || hasJsApi;
+}
+
+// ── Phase 3: obtain a SEB proof from our own origin ───────────────
+/**
+ * Calls /api/seb-verify on THIS origin (where SEB injects its ConfigKeyHash
+ * header — measured; it does not inject into cross-origin Firebase calls).
+ * Vercel checks the hash, authenticates the Firebase ID token, and returns a
+ * short-lived proof bound to this user. Exam callables require that proof.
+ *
+ * Returns null when the caller is not in SEB (or the hash doesn't match), so
+ * the UI can show a specific message instead of a generic failure.
+ */
+export async function getSebToken(): Promise<
+  { ok: true; sebToken: string; expiresAt: number }
+  | { ok: false; error: string }
+> {
+  const user = auth.currentUser;
+  if (!user) return { ok: false, error: 'AUTH_REQUIRED' };
+  try {
+    const idToken = await user.getIdToken();
+    const res = await fetch('/api/seb-verify', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      return { ok: false, error: (data && data.error) || `HTTP_${res.status}` };
+    }
+    return { ok: true, sebToken: data.sebToken, expiresAt: data.expiresAt };
+  } catch {
+    return { ok: false, error: 'SEB_VERIFY_UNREACHABLE' };
+  }
 }
 
 // ── Soft delete assessment ────────────────────────────────────────

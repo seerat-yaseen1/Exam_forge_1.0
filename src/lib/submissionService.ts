@@ -15,6 +15,25 @@ import { httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
 import { functions } from './firebase';
 import type { CorrectPair, Question } from './questionBankService';
+import { ensureSebToken, forceRefreshSebToken } from './assessmentService';
+
+// ── Phase 3 (Stage 2b): attach a SEB proof to every exam callable ──
+// The proof is short-lived, so a call can race its expiry. On SEB_EXPIRED we
+// mint a fresh one and retry ONCE — the student never sees it. Any other error
+// propagates untouched. When SEB isn't required, ensureSebToken() returns
+// undefined and this is a transparent pass-through.
+async function withSeb<T>(fn: (sebToken?: string) => Promise<T>): Promise<T> {
+  const token = await ensureSebToken();
+  try {
+    return await fn(token);
+  } catch (e) {
+    const msg = (e as { message?: string })?.message ?? '';
+    if (msg.includes('SEB_EXPIRED')) {
+      return fn(await forceRefreshSebToken());
+    }
+    throw e;
+  }
+}
 
 // ── Per-question grading data populated server-side by gradeAttempt ─
 // Students can never read questionAnswers directly; this map is the
@@ -444,20 +463,22 @@ export async function submitSection(params: {
       nextSectionId: string | null;
       nextSectionIdx: number;
       pauseBeforeNext?: boolean;
+      sebToken?: string;
     },
     { ok: true; timeUsedSeconds: number; question: Question | null }
   >(functions, 'submitSection');
 
-  const res = await call({
+  const data = await withSeb(async (sebToken) => (await call({
     attemptId: params.attemptId,
     sectionId: params.sectionId,
     nextSectionId: params.nextSectionId,
     nextSectionIdx: params.nextSectionIdx,
     pauseBeforeNext: params.pauseBeforeNext,
-  });
+    sebToken,
+  })).data);
   // Sequential delivery: when advancing straight into the next section (no
   // break), the server serves and returns that section's first question.
-  return { question: res.data.question ?? null };
+  return { question: data.question ?? null };
 }
 
 // ── Pick next section (student_choice mode) ───────────────────────
@@ -479,14 +500,15 @@ export async function pickSection(params: {
   const reordered = [...without.slice(0, newIdx), pickedSectionId, ...without.slice(newIdx)];
 
   const call = httpsCallable<
-    { attemptId: string; sectionId: string; reorderedSectionIds: string[] },
+    { attemptId: string; sectionId: string; reorderedSectionIds: string[]; sebToken?: string },
     { ok: true; startedAt: string; sectionIds: string[]; question: Question | null }
   >(functions, 'startSection');
 
-  const res = await call({ attemptId, sectionId: pickedSectionId, reorderedSectionIds: reordered });
+  const data = await withSeb(async (sebToken) => (await
+    call({ attemptId, sectionId: pickedSectionId, reorderedSectionIds: reordered, sebToken })).data);
   // In sequential delivery the server serves (and returns) the section's first
   // question; the client cannot fetch it any other way.
-  return { sectionIds: res.data.sectionIds, question: res.data.question ?? null };
+  return { sectionIds: data.sectionIds, question: data.question ?? null };
 }
 
 // ── End break and start next section ──────────────────────────────
@@ -502,12 +524,13 @@ export async function endBreak(params: {
   // Server stamps the next section's startedAt and refuses if a mandatory
   // break hasn't elapsed. nextSectionIdx is re-derived server-side.
   const call = httpsCallable<
-    { attemptId: string; sectionId: string },
+    { attemptId: string; sectionId: string; sebToken?: string },
     { ok: true; startedAt: string; sectionIds: string[]; question: Question | null }
   >(functions, 'startSection');
-  const res = await call({ attemptId: params.attemptId, sectionId: params.nextSectionId });
+  const data = await withSeb(async (sebToken) => (await
+    call({ attemptId: params.attemptId, sectionId: params.nextSectionId, sebToken })).data);
   // Sequential delivery: the next section's first question comes back here.
-  return { question: res.data.question ?? null };
+  return { question: data.question ?? null };
 }
 
 // ── Server clock skew ─────────────────────────────────────────────
@@ -553,12 +576,11 @@ export async function gradeAttempt(params: {
   lastSectionId?: string;
   lastSectionTimeUsed?: number;
 }): Promise<{ ok: true; scores: AttemptScores }> {
-  const call = httpsCallable<typeof params, { ok: true; scores: AttemptScores }>(
+  const call = httpsCallable<typeof params & { sebToken?: string }, { ok: true; scores: AttemptScores }>(
     functions,
     'gradeAttempt',
   );
-  const res = await call(params);
-  return res.data;
+  return withSeb(async (sebToken) => (await call({ ...params, sebToken })).data);
 }
 
 // ── Phase 1 client wrappers ───────────────────────────────────────
@@ -566,12 +588,14 @@ export async function gradeAttempt(params: {
 
 /** Heartbeat — call on an interval (~15s) while an attempt is in progress. */
 export async function sendHeartbeat(attemptId: string): Promise<void> {
-  const call = httpsCallable<{ attemptId: string }, { ok: true; ignored?: boolean }>(
+  const call = httpsCallable<{ attemptId: string; sebToken?: string }, { ok: true; ignored?: boolean }>(
     functions,
     'examHeartbeat',
   );
   try {
-    await call({ attemptId });
+    // The heartbeat doubles as the SEB proof refresh: it runs every ~15s,
+    // comfortably inside the ~90s token TTL.
+    await withSeb((sebToken) => call({ attemptId, sebToken }).then(() => undefined));
   } catch {
     // Heartbeat failures are non-fatal to the exam UX — a missed beat simply
     // shows up server-side as a gap, which is the intended signal.
@@ -584,24 +608,24 @@ export async function reportExtensionCheck(params: {
   passed: boolean;
   found?: string[];
 }): Promise<{ ok: true; frozen: boolean }> {
-  const call = httpsCallable<typeof params, { ok: true; frozen: boolean }>(
+  const call = httpsCallable<typeof params & { sebToken?: string }, { ok: true; frozen: boolean }>(
     functions,
     'reportExtensionCheck',
   );
-  const res = await call(params);
-  return res.data;
+  return withSeb(async (sebToken) => (await call({ ...params, sebToken })).data);
 }
 
 /** Attempt to clear a freeze and resume (auto for eligible tiers, else invigilator). */
 export async function verifyAndResume(
   attemptId: string,
 ): Promise<{ ok: true; resumed: boolean; note?: string }> {
-  const call = httpsCallable<{ attemptId: string }, { ok: true; resumed: boolean; note?: string }>(
-    functions,
-    'verifyAndResume',
-  );
-  const res = await call({ attemptId });
-  return res.data;
+  const call = httpsCallable<
+    { attemptId: string; sebToken?: string },
+    { ok: true; resumed: boolean; note?: string }
+  >(functions, 'verifyAndResume');
+  // Invigilators call this from a normal browser; sebRequired is false for
+  // them, so ensureSebToken() yields undefined and the server skips the check.
+  return withSeb(async (sebToken) => (await call({ attemptId, sebToken })).data);
 }
 
 // ── Phase 2.5: sequential delivery (linear / adaptive) ────────────
@@ -628,11 +652,10 @@ export async function submitAnswerAndAdvance(params: {
   lateAnswer: boolean;
 }> {
   const call = httpsCallable<
-    typeof params,
+    typeof params & { sebToken?: string },
     { ok: true; question: Question | null; sectionComplete: boolean; lateAnswer: boolean }
   >(functions, 'submitAnswerAndAdvance');
-  const res = await call(params);
-  return res.data;
+  return withSeb(async (sebToken) => (await call({ ...params, sebToken })).data);
 }
 
 // ── Auto-terminate ────────────────────────────────────────────────

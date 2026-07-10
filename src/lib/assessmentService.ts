@@ -741,10 +741,12 @@ export function looksLikeSEB(): boolean {
  * Returns null when the caller is not in SEB (or the hash doesn't match), so
  * the UI can show a specific message instead of a generic failure.
  */
-export async function getSebToken(): Promise<
-  { ok: true; sebToken: string; expiresAt: number }
-  | { ok: false; error: string }
-> {
+export async function getSebToken(): Promise<{
+  ok: boolean;
+  sebToken?: string;
+  expiresAt?: number;
+  error?: string;
+}> {
   const user = auth.currentUser;
   if (!user) return { ok: false, error: 'AUTH_REQUIRED' };
   try {
@@ -766,6 +768,44 @@ export async function getSebToken(): Promise<
   } catch {
     return { ok: false, error: 'SEB_VERIFY_UNREACHABLE' };
   }
+}
+
+// ── Phase 3: SEB token lifecycle (Stage 2b) ───────────────────────
+// The proof is short-lived by design (~90s) so that quitting SEB and moving to
+// Chrome kills access quickly. That means it must be refreshed transparently,
+// or a student would be rejected mid-answer. We cache it and re-mint when it
+// is close to expiry; the exam's existing 15s heartbeat keeps it warm.
+//
+// `sebRequired` is set once when a SEB exam starts. When false, every helper
+// returns undefined and nothing changes for normal/mock exams.
+
+let sebRequired = false;
+let cachedSeb: { token: string; expiresAt: number } | null = null;
+
+export function setSebRequired(required: boolean): void {
+  sebRequired = required;
+  if (!required) cachedSeb = null;
+}
+
+/** Returns a valid proof, minting one if needed. undefined when SEB isn't required. */
+export async function ensureSebToken(): Promise<string | undefined> {
+  if (!sebRequired) return undefined;
+  const now = Math.floor(Date.now() / 1000);
+  // Refresh with 25s of headroom so an in-flight call can't expire mid-request.
+  if (cachedSeb && cachedSeb.expiresAt - now > 25) return cachedSeb.token;
+  const r = await getSebToken();
+  if (!r.ok || !r.sebToken || !r.expiresAt) {
+    cachedSeb = null;
+    throw new Error(`SEB_REQUIRED:${r.error ?? 'unknown'}`);
+  }
+  cachedSeb = { token: r.sebToken, expiresAt: r.expiresAt };
+  return cachedSeb.token;
+}
+
+/** Discard the cached proof and mint a fresh one (used after SEB_EXPIRED). */
+export async function forceRefreshSebToken(): Promise<string | undefined> {
+  cachedSeb = null;
+  return ensureSebToken();
 }
 
 // ── Soft delete assessment ────────────────────────────────────────

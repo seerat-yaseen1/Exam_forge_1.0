@@ -23,6 +23,10 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { defineSecret } from 'firebase-functions/params';
+
+// Phase 3 — shared with Vercel's /api/seb-verify. Declared at module top so
+// every callable that lists it in `secrets` can reference it (const, not hoisted).
+const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -297,6 +301,7 @@ type GradeReason =
 
 interface GradeAttemptData {
   attemptId: string;
+  sebToken?: string;
   reason: GradeReason;
   terminateReason?: string;
   lastSectionId?: string;
@@ -622,7 +627,7 @@ function scoreAttemptAnswers(params: {
 }
 
 export const gradeAttempt = onCall<GradeAttemptData>(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
@@ -655,7 +660,7 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       lastHeartbeatAt?: string | null;
       createdAt?: string;
       freezeState?: { frozen?: boolean } | null;
-      securityConfig?: { tier?: string } | null;
+      securityConfig?: { tier?: string; requireSEB?: boolean } | null;
     };
 
     // AuthZ — student owner OR grader in same institute OR web owner
@@ -667,6 +672,13 @@ export const gradeAttempt = onCall<GradeAttemptData>(
           && callerInstituteId === attempt.instituteId);
     if (!isStudentOwner && !isGrader) {
       throw new HttpsError('permission-denied', 'Not authorized to grade this attempt.');
+    }
+
+    // Phase 3 — SEB binds the EXAM-TAKER, not staff. A grader finalising or
+    // re-grading an attempt works from a normal browser; requiring SEB of them
+    // would make submitted high-stake attempts ungradeable.
+    if (isStudentOwner) {
+      assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB);
     }
 
     // Idempotency — refuse to re-grade a non-in_progress attempt unless caller
@@ -1004,6 +1016,7 @@ export const getAnswerKeysForReview = onCall<GetAnswerKeysData>(
 
 interface GetExamQuestionsData {
   assessmentId: string;
+  sebToken?: string;
   mode?: 'exam' | 'review';
 }
 
@@ -1038,7 +1051,7 @@ function sanitizeQuestionForStudent(q: Record<string, unknown>, includeExplanati
 }
 
 export const getExamQuestions = onCall<GetExamQuestionsData>(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role        = request.auth.token.role        as string | undefined;
@@ -1098,11 +1111,18 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
     const liveAttempt = attemptsSnap.docs
       .map((d) => d.data() as {
         status?: string;
-        securityConfig?: { deliveryMode?: string } | null;
+        securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
         servedQuestions?: Array<{ questionId: string }>;
         createdAt?: string;
       })
       .sort((x, y) => (y.createdAt ?? '').localeCompare(x.createdAt ?? ''))[0];
+    // Phase 3 — gate the LIVE exam fetch only. 'review' runs after submission,
+    // when the student has quit SEB; requiring SEB there would make results
+    // permanently unviewable.
+    if (mode !== 'review' && liveAttempt?.status === 'in_progress') {
+      assertSEB(request.data?.sebToken, request.auth.uid, liveAttempt?.securityConfig?.requireSEB);
+    }
+
     const attemptDeliveryMode = liveAttempt?.securityConfig?.deliveryMode ?? 'standard';
     const isSequentialDelivery =
       attemptDeliveryMode === 'linear' || attemptDeliveryMode === 'adaptive';
@@ -1180,21 +1200,29 @@ export const getServerTime = onCall(
 // stamps lastHeartbeatAt. A gap (heartbeat→submit) is later flagged by
 // gradeAttempt: a student who blocks Firestore to hide violations also
 // stops heartbeating, so the gap becomes a server-visible signal.
-interface HeartbeatData { attemptId: string; }
+interface HeartbeatData { attemptId: string;   sebToken?: string;
+}
 
 export const examHeartbeat = onCall<HeartbeatData>(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerStudentId = request.auth.token.studentId as string | undefined;
-    const { attemptId } = request.data || ({} as HeartbeatData);
+    const { attemptId, sebToken } = request.data || ({} as HeartbeatData);
     if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
 
     const db = getFirestore();
     const ref = db.collection('attempts').doc(attemptId);
     const snap = await ref.get();
     if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
-    const a = snap.data() as { studentId: string; status: string };
+    const a = snap.data() as {
+      studentId: string; status: string;
+      securityConfig?: { requireSEB?: boolean } | null;
+    };
+    // Phase 3 Stage 2b — the proof must hold for the WHOLE exam, not just the
+    // door. A student who starts in SEB and switches to Chrome fails here
+    // within the token's TTL, because Chrome cannot mint a new proof.
+    assertSEB(sebToken, request.auth.uid, a.securityConfig?.requireSEB);
     if (a.studentId !== callerStudentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
@@ -1214,12 +1242,13 @@ export const examHeartbeat = onCall<HeartbeatData>(
 // and resume requires verification (see verifyAndResume).
 interface ReportExtensionCheckData {
   attemptId: string;
+  sebToken?: string;
   passed: boolean;
   found?: string[];
 }
 
 export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerStudentId = request.auth.token.studentId as string | undefined;
@@ -1233,7 +1262,7 @@ export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
     const a = snap.data() as {
       studentId: string;
       status: string;
-      securityConfig?: { tier?: string; requireExtensionCheck?: boolean } | null;
+      securityConfig?: { tier?: string; requireExtensionCheck?: boolean; requireSEB?: boolean } | null;
     };
     if (a.studentId !== callerStudentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
@@ -1245,6 +1274,7 @@ export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
       updatedAt: nowIso,
     };
 
+    assertSEB(request.data?.sebToken, request.auth.uid, a.securityConfig?.requireSEB);
     const tierRequiresCheck = a.securityConfig?.requireExtensionCheck === true;
     const shouldFreeze = !passed && a.status === 'in_progress' && tierRequiresCheck;
     if (shouldFreeze) {
@@ -1262,10 +1292,10 @@ export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
 // policy. Student may self-resume ONLY if the tier is auto-resume AND the
 // latest reported check passed. An invigilator (institute/faculty in the
 // same institute, or webOwner) may always clear.
-interface VerifyAndResumeData { attemptId: string; }
+interface VerifyAndResumeData { attemptId: string; sebToken?: string; }
 
 export const verifyAndResume = onCall<VerifyAndResumeData>(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerRole        = request.auth.token.role        as Role   | undefined;
@@ -1283,7 +1313,7 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
       instituteId: string;
       status: string;
       lastExtensionCheck?: { passed?: boolean } | null;
-      securityConfig?: { autoResume?: boolean } | null;
+      securityConfig?: { autoResume?: boolean; requireSEB?: boolean } | null;
     };
 
     const isStudentOwner = callerRole === 'student' && callerStudentId === a.studentId;
@@ -1298,6 +1328,12 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
       return { ok: true, resumed: false, note: 'not frozen' };
     }
 
+    // Phase 3 — SEB applies to the EXAM-TAKER only. An invigilator clearing a
+    // freeze does so from their own (normal) browser; requiring SEB of staff
+    // would lock the student out of their exam permanently.
+    if (isStudentOwner) {
+      assertSEB(request.data?.sebToken, request.auth.uid, a.securityConfig?.requireSEB);
+    }
     const autoResume   = a.securityConfig?.autoResume === true;
     const latestPassed = a.lastExtensionCheck?.passed === true;
     const mayResume = isInvigilator || (isStudentOwner && autoResume && latestPassed);
@@ -1329,6 +1365,7 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
 
 interface SubmitAnswerAndAdvanceData {
   attemptId: string;
+  sebToken?: string;
   questionId: string;
   // null = no answer (e.g. per-question timer expired). We deliberately do NOT
   // write a blank answer: an unanswered served question already scores 0, and
@@ -1338,7 +1375,7 @@ interface SubmitAnswerAndAdvanceData {
 }
 
 export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role      = request.auth.token.role      as string | undefined;
@@ -1346,7 +1383,7 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     if (role !== 'student' || !studentId) {
       throw new HttpsError('permission-denied', 'Only students may answer.');
     }
-    const { attemptId, questionId, answer } = request.data || ({} as SubmitAnswerAndAdvanceData);
+    const { attemptId, questionId, answer, sebToken } = request.data || ({} as SubmitAnswerAndAdvanceData);
     if (!attemptId || !questionId) {
       throw new HttpsError('invalid-argument', 'attemptId and questionId are required.');
     }
@@ -1364,7 +1401,7 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
         questionId: string; sectionId: string; difficulty: string;
         servedAt: string; locked: boolean;
       }>;
-      securityConfig?: { deliveryMode?: string } | null;
+      securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
     };
 
     if (attempt.studentId !== studentId) {
@@ -1373,6 +1410,7 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
     }
+    assertSEB(sebToken, request.auth.uid, attempt.securityConfig?.requireSEB);
     const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
     if (dMode !== 'linear' && dMode !== 'adaptive') {
       throw new HttpsError('failed-precondition',
@@ -1589,7 +1627,6 @@ export const sebDiagnostics = onCall<SebDiagnosticsData>(
 // within a minute or so.
 // ══════════════════════════════════════════════════════════════════
 
-const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
 
 function verifySebToken(token: string, uid: string, secret: string): void {
   const parts = String(token || '').split('.');
@@ -1979,6 +2016,7 @@ export const startExam = onCall<StartExamData>(
 
 interface StartSectionData {
   attemptId: string;
+  sebToken?: string;
   sectionId: string;
   reorderedSectionIds?: string[]; // student_choice only — new play order
 }
@@ -1989,7 +2027,7 @@ interface StartSectionData {
 // break resume. Refuses to start a section whose preceding MANDATORY
 // break has not yet elapsed.
 export const startSection = onCall<StartSectionData>(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role = request.auth.token.role as string | undefined;
@@ -2018,11 +2056,12 @@ export const startSection = onCall<StartSectionData>(
         questionId: string; sectionId: string; difficulty: string;
         servedAt: string; locked: boolean;
       }>;
-      securityConfig?: { deliveryMode?: string } | null;
+      securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
     };
     if (attempt.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
+    assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB);
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
     }
@@ -2115,6 +2154,7 @@ interface SubmitSectionData {
   nextSectionId?: string | null;
   nextSectionIdx?: number;
   pauseBeforeNext?: boolean;
+  sebToken?: string;
 }
 
 // ── submitSection ─────────────────────────────────────────────────
@@ -2123,7 +2163,7 @@ interface SubmitSectionData {
 // default 30 s). timeUsedSeconds is computed server-side. When advancing
 // with no break/pick, starts the next section's timer atomically.
 export const submitSection = onCall<SubmitSectionData>(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role = request.auth.token.role as string | undefined;
@@ -2152,7 +2192,7 @@ export const submitSection = onCall<SubmitSectionData>(
         questionId: string; sectionId: string; difficulty: string;
         servedAt: string; locked: boolean;
       }>;
-      securityConfig?: { deliveryMode?: string } | null;
+      securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
     };
     if (attempt.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
@@ -2160,6 +2200,7 @@ export const submitSection = onCall<SubmitSectionData>(
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
     }
+    assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB);
 
     const timing = attempt.sectionTimings[sectionId];
     if (!timing?.startedAt) {

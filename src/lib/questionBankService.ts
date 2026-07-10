@@ -10,6 +10,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import { ensureSebToken } from './assessmentService';
 import { db, functions } from './firebase';
 import { bumpTaxonomyCounts } from './subjectService';
 import { getFlatReceivedQuestions } from './questionShareService';
@@ -541,10 +542,13 @@ export async function getExamQuestionsForStudent(
   mode: 'exam' | 'review',
 ): Promise<Question[]> {
   const call = httpsCallable<
-    { assessmentId: string; mode: 'exam' | 'review' },
+    { assessmentId: string; mode: 'exam' | 'review'; sebToken?: string },
     { ok: true; questions: Question[] }
   >(functions, 'getExamQuestions');
-  const res = await call({ assessmentId, mode });
+  // Phase 3: the live exam fetch carries the SEB proof. Review mode does not
+  // require it (the student has quit SEB by then) but passing it is harmless.
+  const sebToken = await ensureSebToken();
+  const res = await call({ assessmentId, mode, sebToken });
   return res.data.questions;
 }
 

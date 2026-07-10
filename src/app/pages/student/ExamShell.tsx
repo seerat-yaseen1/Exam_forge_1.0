@@ -21,7 +21,7 @@ import {
   CheckCircle2, Shield, Send, Layers, Flag, MonitorSmartphone, Clock,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
-import { getAssessment, type Assessment, type AssessmentSection, getSebToken } from '../../../lib/assessmentService';
+import { getAssessment, type Assessment, type AssessmentSection, getSebToken, setSebRequired } from '../../../lib/assessmentService';
 import { getExamQuestionsForStudent, type Question } from '../../../lib/questionBankService';
 import {
   startAttempt,
@@ -757,6 +757,12 @@ export function ExamShell() {
         const a = await getAssessment(assessmentId);
         if (!a) { setErrorMsg('Assessment not found.'); setShellStatus('error'); return; }
 
+        // ── Phase 3 (Stage 2b): arm the SEB token manager ──────────────
+        // Must happen BEFORE any exam callable runs — including on RESUME,
+        // where no new attempt is created. Every subsequent call (heartbeat,
+        // answers, section submit, question fetch) then carries a fresh proof.
+        setSebRequired(a.requireSEB === true);
+
         // Schedule gate (defense-in-depth) — the briefing already refuses to
         // let a student enter before startDate, but a student who navigates
         // directly to /student/exam/<id>/shell would otherwise bypass that.
@@ -804,7 +810,7 @@ export function ExamShell() {
           let sebToken: string | undefined;
           if (a.requireSEB === true) {
             const seb = await getSebToken();
-            if (!seb.ok) {
+            if (!seb.ok || !seb.sebToken) {
               setErrorMsg(
                 seb.error === 'SEB_REQUIRED' || seb.error === 'SEB_CONFIG_MISMATCH'
                   ? 'This exam must be taken in Safe Exam Browser, using the exam configuration provided by your institute.'

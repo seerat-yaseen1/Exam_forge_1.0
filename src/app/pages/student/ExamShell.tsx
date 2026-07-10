@@ -18,7 +18,7 @@ import { useParams, useNavigate, useLocation } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Loader2, ChevronLeft, ChevronRight, AlertTriangle,
-  CheckCircle2, Shield, Send, Layers, Flag, MonitorSmartphone,
+  CheckCircle2, Shield, Send, Layers, Flag, MonitorSmartphone, Clock,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
@@ -1218,6 +1218,42 @@ export function ExamShell() {
   // Clear any advance error once the student is on a new question.
   useEffect(() => { setLinearError(undefined); }, [currentQId]);
 
+  // ── Per-question timer (Phase 2.5 Stage 3) ─────────────────────
+  // Authority toggle: currentSection.questionTimeLimit (seconds). Undefined =
+  // off. The clock starts from the server's servedAt for the current served
+  // question. On expiry the client auto-advances with whatever is selected
+  // (or nothing) — the server also validates elapsed time and flags a late
+  // answer, so suppressing the client timer gains nothing.
+  const questionTimeLimit = isLinear ? currentSection?.questionTimeLimit : undefined;
+  const currentServedAt = useMemo(() => {
+    if (!attempt || !currentQId) return null;
+    const entry = (attempt.servedQuestions ?? []).find((s) => s.questionId === currentQId);
+    return entry?.servedAt ?? null;
+  }, [attempt, currentQId]);
+
+  const [qSecondsLeft, setQSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!questionTimeLimit || !currentServedAt || isLastQuestion) {
+      setQSecondsLeft(null);
+      return;
+    }
+    const deadline = Date.parse(currentServedAt) + questionTimeLimit * 1000;
+    let fired = false;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setQSecondsLeft(left);
+      if (left <= 0 && !fired) {
+        fired = true;
+        // Auto-advance. handleLinearNext sends the current selection (or null).
+        handleLinearNext();
+      }
+    };
+    tick();
+    const iv = setInterval(tick, 500);
+    return () => clearInterval(iv);
+  }, [questionTimeLimit, currentServedAt, isLastQuestion, handleLinearNext]);
+
   // Flush pending answers the instant a freeze lands, so nothing sitting in the
   // 1.5 s debounce window is lost if the paused tab is later closed.
   const prevFrozenRef = useRef(false);
@@ -2021,6 +2057,18 @@ export function ExamShell() {
                       <span className="text-xs" style={{ color: '#C4C3BD' }}>
                         Question {currentSectionQIds.length}
                       </span>
+                      {qSecondsLeft !== null && (
+                        <span className="flex items-center gap-1 text-xs px-2 py-0.5"
+                          style={{
+                            background: qSecondsLeft <= 10 ? '#FBF3F3' : '#F0F9F4',
+                            border: `1px solid ${qSecondsLeft <= 10 ? '#E3C9C9' : '#B8E6C8'}`,
+                            borderRadius: 2,
+                            color: qSecondsLeft <= 10 ? '#9B2828' : '#1E7B3C',
+                          }}>
+                          <Clock size={10} strokeWidth={1.5} />
+                          {Math.floor(qSecondsLeft / 60)}:{String(qSecondsLeft % 60).padStart(2, '0')}
+                        </span>
+                      )}
                       {linearError && (
                         <span className="text-xs" style={{ color: '#9B2828' }}>{linearError}</span>
                       )}

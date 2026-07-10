@@ -377,13 +377,20 @@ interface GradingAssessmentDoc {
     id: string;
     name: string;
     questions?: Array<{ questionId: string; marks: number }>;
+    // Phase 2.5 Stage 3 — seconds per question (linear/adaptive); undefined = off
+    questionTimeLimit?: number;
   }>;
   questions?: Array<{ questionId: string; marks: number }>;
   passingScore?: number;
   allowReview?: boolean;
 }
 
-type EffectiveSection = { id: string; name: string; questions: Array<{ questionId: string; marks: number }> };
+type EffectiveSection = {
+  id: string;
+  name: string;
+  questions: Array<{ questionId: string; marks: number }>;
+  questionTimeLimit?: number;
+};
 
 // Effective sections — MUST mirror buildEffectiveSections in ExamShell.tsx
 // exactly, or grading diverges from what the student saw.
@@ -401,7 +408,12 @@ function normalizeSections(assessment: GradingAssessmentDoc): EffectiveSection[]
   if (hasResolved) {
     return rawSections
       .filter((s) => (s.questions?.length ?? 0) > 0)
-      .map((s) => ({ id: s.id, name: s.name, questions: s.questions! }));
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        questions: s.questions!,
+        questionTimeLimit: s.questionTimeLimit,
+      }));
   }
   if ((assessment.questions?.length ?? 0) > 0) {
     const flat = assessment.questions!;
@@ -412,6 +424,7 @@ function normalizeSections(assessment: GradingAssessmentDoc): EffectiveSection[]
           id: sec.id,
           name: sec.name,
           questions: flat.slice(i * perSection, (i + 1) * perSection),
+          questionTimeLimit: sec.questionTimeLimit,
         }))
         .filter((s) => s.questions.length > 0);
     }
@@ -1383,8 +1396,7 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     const assessment = aSnap.exists ? (aSnap.data() as GradingAssessmentDoc) : undefined;
     const sectionsNorm = assessment ? normalizeSections(assessment) : [];
-    const secDef = sectionsNorm.find((s) => s.id === current.sectionId) as
-      (EffectiveSection & { questionTimeLimit?: number }) | undefined;
+    const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;
     let lateAnswer = false;
     if (typeof qLimit === 'number' && qLimit > 0) {

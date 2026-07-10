@@ -130,6 +130,9 @@ export type AttemptAnswer = {
   value: AnswerValue;
   answeredAt: string;  // ISO; time of last edit
   sectionId: string;
+  // Phase 2.5 Stage 3 — set by submitAnswerAndAdvance when the per-question
+  // timer had expired (beyond grace) at submit time. Advisory reviewer signal.
+  lateAnswer?: boolean;
 };
 
 // ── Score breakdown ───────────────────────────────────────────────

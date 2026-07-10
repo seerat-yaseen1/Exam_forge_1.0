@@ -53,6 +53,7 @@ type SectionDraft = {
   id: string;
   name: string;
   timeLimit: string;
+  questionTimeLimit: string;   // seconds per question (linear/adaptive); '' = off
   rules: RuleDraft[];
   assignedTopics: string[]; // "subject::topic" keys pre-assigned in Step 1
   breakAfterMinutes: string;  // empty = no break
@@ -2263,7 +2264,7 @@ function SetupStep({
   const addSection = () => {
     setSections((prev) => [
       ...prev,
-      { id: makeSectionId(), name: defaultSectionName(prev.length), timeLimit: '', rules: [], assignedTopics: [], breakAfterMinutes: '', breakMandatory: false },
+      { id: makeSectionId(), name: defaultSectionName(prev.length), timeLimit: '', questionTimeLimit: '', rules: [], assignedTopics: [], breakAfterMinutes: '', breakMandatory: false },
     ]);
   };
 
@@ -2272,8 +2273,8 @@ function SetupStep({
     setSections((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const updateSection = (idx: number, field: 'name' | 'timeLimit', value: string) => {
-    if (field === 'timeLimit') {
+  const updateSection = (idx: number, field: 'name' | 'timeLimit' | 'questionTimeLimit', value: string) => {
+    if (field === 'timeLimit' || field === 'questionTimeLimit') {
       if (value !== '' && (parseInt(value, 10) || 0) < 1) return;
     }
     setSections((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
@@ -2538,6 +2539,22 @@ function SetupStep({
                               />
                               <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>min</span>
                             </div>
+                            {/* Per-question timer (Phase 2.5) — authority toggle.
+                                Only meaningful in sequential delivery; hidden in standard. */}
+                            {deliveryMode !== 'standard' && (
+                              <div className="flex items-center gap-1 flex-shrink-0" title="Seconds per question — auto-advances when it expires. Leave blank for no per-question limit.">
+                                <input
+                                  type="number" value={sec.questionTimeLimit}
+                                  onChange={(e) => updateSection(idx, 'questionTimeLimit', e.target.value)}
+                                  placeholder="—" min="1"
+                                  className="flex-shrink-0 outline-none text-center text-xs"
+                                  style={{ width: 52, padding: '7px 6px', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B', MozAppearance: 'textfield' } as React.CSSProperties}
+                                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                  onKeyDown={(e) => { if (['-', 'e', '+', '.'].includes(e.key)) e.preventDefault(); }}
+                                />
+                                <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>s/q</span>
+                              </div>
+                            )}
                             {/* Topics toggle button */}
                             <button
                               type="button"
@@ -3348,6 +3365,8 @@ function DetailsStep({
       };
       const tl = parseInt(sec.timeLimit, 10);
       if (tl > 0) out.timeLimit = tl;
+      const qtl = parseInt(sec.questionTimeLimit, 10);
+      if (qtl > 0) out.questionTimeLimit = qtl;
       if (idx < sectionDrafts.length - 1 && breakMins > 0) {
         out.breakAfter = { durationMinutes: breakMins, mandatory: sec.breakMandatory };
       }
@@ -3998,6 +4017,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
         id: sec.id,
         name: sec.name,
         timeLimit: sec.timeLimit?.toString() ?? '',
+        questionTimeLimit: sec.questionTimeLimit?.toString() ?? '',
         // Restore assigned topics; fall back to inferring from existing rules for old assessments
         assignedTopics: sec.assignedTopics ?? [...new Set(sec.rules.map((r) => `${r.subject}::${r.topic}`))],
         rules: sec.rules.map((r) => ({
@@ -4018,6 +4038,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
       rules: [],
       assignedTopics: [],
       breakAfterMinutes: '',
+      questionTimeLimit: '',
       breakMandatory: false,
     }];
   });

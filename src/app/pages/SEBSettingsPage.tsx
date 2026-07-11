@@ -18,17 +18,21 @@
  * exactly that so future-you cannot be misled by this page.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import {
   Shield, Loader2, AlertTriangle, Plus, Trash2, Eye, EyeOff,
-  CheckCircle2, ArrowRight, KeyRound,
+  CheckCircle2, ArrowRight, KeyRound, Upload, FileDown,
 } from 'lucide-react';
 import {
   getSEBSettings,
   setSEBSettings,
+  getSEBPublicInfo,
+  uploadPlatformSebFile,
+  removePlatformSebFile,
   type SEBPlatformSettings,
+  type SEBPublicInfo,
 } from '../../lib/assessmentService';
 
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -45,6 +49,13 @@ export function SEBSettingsPage() {
   const [saving, setSaving]     = useState(false);
   const [loadError, setLoadError] = useState('');
 
+  // ── Platform .seb file (Stage 4b) ────────────────────────────────
+  const [fileInfo, setFileInfo]       = useState<SEBPublicInfo>({});
+  const [fileBusy, setFileBusy]       = useState(false);
+  const [fileError, setFileError]     = useState('');
+  const [armedFileRemove, setArmedFileRemove] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [newKey, setNewKey]       = useState('');
   const [inputError, setInputError] = useState('');
   const [revealed, setRevealed]   = useState<Set<string>>(new Set());
@@ -56,7 +67,38 @@ export function SEBSettingsPage() {
       .then(setSettings)
       .catch((e) => setLoadError(e.message || 'Failed to load SEB settings.'))
       .finally(() => setLoading(false));
+    getSEBPublicInfo().then(setFileInfo).catch(() => {});
   }, []);
+
+  const handleFileChosen = useCallback(async (file: File | null) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.seb')) {
+      setFileError('Choose the .seb file saved by the SEB Config Tool.');
+      return;
+    }
+    setFileError('');
+    setFileBusy(true);
+    try {
+      setFileInfo(await uploadPlatformSebFile(file));
+    } catch (e) {
+      setFileError((e as { message?: string })?.message || 'Upload failed.');
+    } finally {
+      setFileBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleFileRemove = useCallback(async () => {
+    if (!armedFileRemove) { setArmedFileRemove(true); return; }
+    setArmedFileRemove(false);
+    setFileBusy(true);
+    try {
+      await removePlatformSebFile();
+      setFileInfo({});
+    } finally {
+      setFileBusy(false);
+    }
+  }, [armedFileRemove]);
 
   const persist = useCallback(async (keys: string[]) => {
     setSaving(true);
@@ -221,6 +263,92 @@ export function SEBSettingsPage() {
                 })}
               </p>
             )}
+          </div>
+
+          {/* Platform .seb file (Stage 4b) */}
+          <div className="mb-8">
+            <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+              PLATFORM .SEB FILE
+            </p>
+            <div className="px-4 py-4"
+              style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+              {fileInfo.configFileUrl ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileDown size={12} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
+                    <div className="min-w-0">
+                      <a href={fileInfo.configFileUrl}
+                        className="text-xs truncate block"
+                        style={{ color: '#0C0C0B', textDecoration: 'underline' }}>
+                        {fileInfo.fileName || 'platform.seb'}
+                      </a>
+                      {fileInfo.updatedAt && (
+                        <p className="text-xs" style={{ color: '#C4C3BD' }}>
+                          Uploaded {new Date(fileInfo.updatedAt).toLocaleString('en-GB', {
+                            day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={fileBusy}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5"
+                      style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: fileBusy ? 'wait' : 'pointer' }}
+                    >
+                      {fileBusy ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} strokeWidth={1.5} />}
+                      Replace
+                    </button>
+                    <button
+                      onClick={handleFileRemove}
+                      disabled={fileBusy}
+                      className="text-xs px-3 py-1.5"
+                      style={{
+                        color: armedFileRemove ? '#FFFFFF' : '#9B2828',
+                        background: armedFileRemove ? '#9B2828' : '#FFFFFF',
+                        border: '1px solid #F2CECE', borderRadius: 2,
+                        cursor: fileBusy ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {armedFileRemove ? 'Confirm remove' : 'Remove'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                    No platform .seb file yet. Upload the file saved by the Config Tool —
+                    every SEB exam using the platform keys will offer it on the briefing
+                    gate automatically.
+                  </p>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={fileBusy}
+                    className="flex items-center gap-1.5 text-xs px-4 py-2 flex-shrink-0"
+                    style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: fileBusy ? 'wait' : 'pointer' }}
+                  >
+                    {fileBusy ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} strokeWidth={1.5} />}
+                    Upload .seb
+                  </button>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".seb"
+                className="hidden"
+                onChange={(e) => handleFileChosen(e.target.files?.[0] ?? null)}
+              />
+              {fileError && (
+                <p className="text-xs mt-2" style={{ color: '#9B2828' }}>{fileError}</p>
+              )}
+              <p className="text-xs mt-3" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                Rotating? Upload the new file AND add its Config Key above in the same
+                sitting — the file and the key must always describe the same configuration.
+              </p>
+            </div>
           </div>
 
           {/* Add key */}

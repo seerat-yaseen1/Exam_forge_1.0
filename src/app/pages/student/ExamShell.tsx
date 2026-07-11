@@ -21,7 +21,7 @@ import {
   CheckCircle2, Shield, Send, Layers, Flag, MonitorSmartphone, Clock,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
-import { getAssessment, type Assessment, type AssessmentSection, getSebToken, setSebRequired } from '../../../lib/assessmentService';
+import { getAssessment, getSEBPublicInfo, type Assessment, type AssessmentSection, getSebToken, setSebRequired } from '../../../lib/assessmentService';
 import { getExamQuestionsForStudent, type Question } from '../../../lib/questionBankService';
 import {
   startAttempt,
@@ -664,6 +664,12 @@ export function ExamShell() {
   // Phase 3 (Stage 3): true when errorMsg is an SEB rejection, so the error
   // screen renders the guided SEB panel instead of the generic message.
   const [errorIsSeb, setErrorIsSeb]         = useState(false);
+  // Stage 4b: platform .seb link fallback for the SEB error panel.
+  const [platformSebUrl, setPlatformSebUrl] = useState('');
+  useEffect(() => {
+    if (!errorIsSeb) return;
+    getSEBPublicInfo().then((i) => setPlatformSebUrl(i.configFileUrl ?? '')).catch(() => {});
+  }, [errorIsSeb]);
   const [assessment, setAssessment]         = useState<Assessment | null>(null);
   // effectiveSections: normalised sections that always have questions populated
   const [effectiveSections, setEffectiveSections] = useState<AssessmentSection[]>([]);
@@ -1868,9 +1874,9 @@ export function ExamShell() {
             >
               Download Safe Exam Browser
             </a>
-            {assessment?.sebConfigFileUrl && (
+            {(assessment?.sebConfigFileUrl || platformSebUrl) && (
               <a
-                href={assessment.sebConfigFileUrl}
+                href={assessment?.sebConfigFileUrl || platformSebUrl}
                 className="text-xs px-4 py-2"
                 style={{ color: '#4A4A45', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', textDecoration: 'none' }}
               >

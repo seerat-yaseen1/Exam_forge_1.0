@@ -22,7 +22,7 @@ import {
   CheckCircle2, Shield, Info, ChevronRight, Clock, Ban, Download,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
-import { getAssessment, getSebToken, type Assessment } from '../../../lib/assessmentService';
+import { getAssessment, getSebToken, getSEBPublicInfo, type Assessment } from '../../../lib/assessmentService';
 import { scanForExtensionsWithSettle } from '../../components/exam/extensionScan';
 import {
   getAllAttemptsByStudentAndAssessment,
@@ -173,6 +173,13 @@ export function ExamBriefingPage() {
   const [sebGate, setSebGate] = useState<'na' | 'checking' | 'verified' | 'blocked'>('na');
   const [sebGateError, setSebGateError] = useState('');
   const [sebNonce, setSebNonce] = useState(0); // bump to re-verify
+  // Stage 4b: platform .seb link fallback (publicSettings/seb — link only,
+  // never keys). Used when the exam has no exam-specific file of its own.
+  const [platformSebUrl, setPlatformSebUrl] = useState('');
+  useEffect(() => {
+    if (assessment?.requireSEB !== true) return;
+    getSEBPublicInfo().then((i) => setPlatformSebUrl(i.configFileUrl ?? '')).catch(() => {});
+  }, [assessment?.requireSEB]);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -784,9 +791,9 @@ export function ExamBriefingPage() {
                               <Download size={11} strokeWidth={1.5} />
                               Download Safe Exam Browser
                             </a>
-                            {assessment.sebConfigFileUrl && (
+                            {(assessment.sebConfigFileUrl || platformSebUrl) && (
                               <a
-                                href={assessment.sebConfigFileUrl}
+                                href={assessment.sebConfigFileUrl || platformSebUrl}
                                 className="flex items-center gap-1.5 text-xs px-4 py-2"
                                 style={{ color: '#4A4A45', border: '1px solid #E3C9C9', borderRadius: 2, background: '#FFFFFF', textDecoration: 'none' }}
                               >

@@ -13,7 +13,13 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { db, functions, auth } from './firebase';
+import { db, functions, auth, storage } from './firebase';
+import {
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from 'firebase/storage';
 
 // ══════════════════════════════════════════════════════════════════
 // INTERNAL HELPERS
@@ -732,6 +738,55 @@ export async function setAssessmentSEBKeys(assessmentId: string, keys: string[])
     keys: cleaned,
     updatedAt: now(),
   });
+}
+
+// ── Phase 3 Stage 4b: SEB config FILES ────────────────────────────
+// The .seb files themselves. Platform file: uploaded once on the SEB settings
+// page, auto-offered on every SEB exam's briefing. Per-exam file: uploaded in
+// the builder alongside that exam's Config Keys. The download link is NOT a
+// secret (students need the file); the key derived from the file's contents
+// is — and that stays in webOwner-only docs.
+
+/** Student-readable platform SEB info (publicSettings/seb) — link only, never keys. */
+export interface SEBPublicInfo {
+  configFileUrl?: string;
+  fileName?: string;
+  updatedAt?: string;
+}
+
+export async function getSEBPublicInfo(): Promise<SEBPublicInfo> {
+  try {
+    const snap = await getDoc(doc(db, 'publicSettings', 'seb'));
+    return snap.exists() ? (snap.data() as SEBPublicInfo) : {};
+  } catch {
+    return {}; // briefing degrades to "provided by your institute" wording
+  }
+}
+
+/** Upload/replace the PLATFORM .seb file and publish its link for students. */
+export async function uploadPlatformSebFile(file: File): Promise<SEBPublicInfo> {
+  const r = storageRef(storage, 'seb-configs/platform.seb');
+  await uploadBytes(r, file, { contentType: 'application/octet-stream' });
+  const url = await getDownloadURL(r);
+  const info: SEBPublicInfo = { configFileUrl: url, fileName: file.name, updatedAt: now() };
+  await setDoc(doc(db, 'publicSettings', 'seb'), info);
+  return info;
+}
+
+export async function removePlatformSebFile(): Promise<void> {
+  await deleteObject(storageRef(storage, 'seb-configs/platform.seb')).catch(() => {});
+  await setDoc(doc(db, 'publicSettings', 'seb'), { updatedAt: now() });
+}
+
+/** Upload/replace a PER-EXAM .seb file. Returns the download URL to store on the assessment. */
+export async function uploadAssessmentSebFile(assessmentId: string, file: File): Promise<string> {
+  const r = storageRef(storage, `seb-configs/assessments/${assessmentId}.seb`);
+  await uploadBytes(r, file, { contentType: 'application/octet-stream' });
+  return getDownloadURL(r);
+}
+
+export async function deleteAssessmentSebFile(assessmentId: string): Promise<void> {
+  await deleteObject(storageRef(storage, `seb-configs/assessments/${assessmentId}.seb`)).catch(() => {});
 }
 
 // ── Phase 3: SEB diagnostic (Stage 1, webOwner-only) ──────────────

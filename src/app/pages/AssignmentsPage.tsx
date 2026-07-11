@@ -29,6 +29,8 @@ import {
   applyTierDefaults,
   getAssessmentSEBKeys,
   setAssessmentSEBKeys,
+  uploadAssessmentSebFile,
+  deleteAssessmentSebFile,
   type Assessment,
   type AssessmentDraft,
   type AssessmentStatus,
@@ -3304,7 +3306,7 @@ function DetailsStep({
   sections: SectionDraft[];
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
   onBack: () => void;
-  onSave: (draft: AssessmentDraft, sebKeys: string[]) => Promise<void>;
+  onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }) => Promise<void>;
   title: string;
   description: string;
   subject: string;
@@ -3347,10 +3349,20 @@ function DetailsStep({
   // doc (students can read that). Non-empty = overrides the platform keys.
   const [sebKeysText, setSebKeysText] = useState('');
   const [sebKeysError, setSebKeysError] = useState('');
+  // Stage 4b: which configuration unlocks this exam.
+  //  'platform' → platform keys + platform .seb file (SEB settings page)
+  //  'custom'   → this exam's own keys + its own uploaded .seb file
+  const [sebConfigSource, setSebConfigSource] = useState<'platform' | 'custom'>(
+    assessment?.sebConfigFileUrl ? 'custom' : 'platform',
+  );
+  const [sebFile, setSebFile] = useState<File | null>(null);
   useEffect(() => {
     if (!assessment?.id) return;
     getAssessmentSEBKeys(assessment.id)
-      .then((k) => setSebKeysText(k.join('\n')))
+      .then((k) => {
+        setSebKeysText(k.join('\n'));
+        if (k.length > 0) setSebConfigSource('custom');
+      })
       .catch(() => {/* leave empty — platform keys apply */});
   }, [assessment?.id]);
   const [saving, setSaving] = useState(false);
@@ -3540,18 +3552,35 @@ function DetailsStep({
         status: targetStatus,
       };
 
-      // Stage 4: per-exam Config Keys — validate before anything is written.
-      const sebKeyLines = sebKeysText
-        .split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean);
-      const badLine = sebKeyLines.find((k) => !/^[0-9a-f]{64}$/.test(k));
-      if (requireSEB && badLine) {
-        setSebKeysError(`Not a valid Config Key (needs 64 hex characters): "${badLine.slice(0, 24)}…"`);
-        setSaving(false);
-        return;
+      // Stage 4/4b: per-exam SEB config — validate before anything is written.
+      const useCustomSeb = requireSEB && sebConfigSource === 'custom';
+      const sebKeyLines = useCustomSeb
+        ? sebKeysText.split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean)
+        : [];
+      if (useCustomSeb) {
+        const badLine = sebKeyLines.find((k) => !/^[0-9a-f]{64}$/.test(k));
+        if (badLine) {
+          setSebKeysError(`Not a valid Config Key (needs 64 hex characters): "${badLine.slice(0, 24)}…"`);
+          setSaving(false);
+          return;
+        }
+        if (sebKeyLines.length === 0) {
+          setSebKeysError('Exam-specific config needs at least one Config Key — paste it from the Config Tool.');
+          setSaving(false);
+          return;
+        }
       }
       setSebKeysError('');
 
-      await onSave(draft, requireSEB ? sebKeyLines : []);
+      // Platform source (or SEB off): the exam carries no file link of its own —
+      // the briefing falls back to the platform .seb published on the SEB page.
+      if (!useCustomSeb) draft.sebConfigFileUrl = '';
+
+      await onSave(draft, {
+        keys: sebKeyLines,
+        file: useCustomSeb ? sebFile : null,
+        clearFile: !useCustomSeb && Boolean(assessment?.sebConfigFileUrl),
+      });
     } finally {
       setSaving(false);
     }
@@ -3805,44 +3834,77 @@ function DetailsStep({
                     <div className="space-y-1.5 px-4 py-3"
                       style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FAFAF8' }}>
                       <p className="text-xs" style={{ color: '#6B6B66' }}>
-                        .seb configuration file link (optional)
+                        SEB configuration for this exam
                       </p>
-                      <input
-                        type="url"
-                        value={sebConfigFileUrl}
-                        onChange={(e) => setSebConfigFileUrl(e.target.value)}
-                        placeholder="https://… (link students use to download the .seb file)"
-                        className="w-full text-xs px-3 py-2"
-                        style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B', outline: 'none' }}
-                      />
-                      <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
-                        Shown on the briefing gate and on SEB-required error screens.
-                        Leave empty if your institute distributes the .seb file directly.
-                      </p>
-                      <p className="text-xs pt-2" style={{ color: '#6B6B66' }}>
-                        Per-exam Config Keys (advanced, optional)
-                      </p>
-                      <textarea
-                        value={sebKeysText}
-                        onChange={(e) => { setSebKeysText(e.target.value); setSebKeysError(''); }}
-                        placeholder="One 64-character Config Key per line. Empty = platform keys apply."
-                        rows={2}
-                        spellCheck={false}
-                        className="w-full text-xs px-3 py-2"
-                        style={{
-                          border: `1px solid ${sebKeysError ? '#F2CECE' : '#E3E1DB'}`,
-                          borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B',
-                          fontFamily: 'ui-monospace, monospace', outline: 'none', resize: 'vertical',
-                        }}
-                      />
-                      {sebKeysError && (
-                        <p className="text-xs" style={{ color: '#9B2828' }}>{sebKeysError}</p>
+                      <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+                        {([
+                          { key: 'platform' as const, label: 'Platform config' },
+                          { key: 'custom' as const,   label: 'Exam-specific config' },
+                        ]).map((opt, i) => {
+                          const active = sebConfigSource === opt.key;
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => { setSebConfigSource(opt.key); setSebKeysError(''); }}
+                              className="flex-1 text-xs px-2 py-1.5 transition-colors"
+                              style={{
+                                background: active ? '#0C0C0B' : 'transparent',
+                                color: active ? '#FFFFFF' : '#4A4A45',
+                                borderLeft: i === 0 ? 'none' : '1px solid #E3E1DB',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {sebConfigSource === 'platform' ? (
+                        <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                          Uses the platform Config Keys and the platform .seb file from the
+                          Safe Exam Browser page. Nothing else to set here.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-xs pt-2" style={{ color: '#6B6B66' }}>
+                            Config Keys for this exam (one per line)
+                          </p>
+                          <textarea
+                            value={sebKeysText}
+                            onChange={(e) => { setSebKeysText(e.target.value); setSebKeysError(''); }}
+                            placeholder="64-character Config Key from the Config Tool — ONLY these keys unlock this exam."
+                            rows={2}
+                            spellCheck={false}
+                            className="w-full text-xs px-3 py-2"
+                            style={{
+                              border: `1px solid ${sebKeysError ? '#F2CECE' : '#E3E1DB'}`,
+                              borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B',
+                              fontFamily: 'ui-monospace, monospace', outline: 'none', resize: 'vertical',
+                            }}
+                          />
+                          {sebKeysError && (
+                            <p className="text-xs" style={{ color: '#9B2828' }}>{sebKeysError}</p>
+                          )}
+                          <p className="text-xs pt-2" style={{ color: '#6B6B66' }}>
+                            .seb file for this exam
+                          </p>
+                          <input
+                            type="file"
+                            accept=".seb"
+                            onChange={(e) => setSebFile(e.target.files?.[0] ?? null)}
+                            className="w-full text-xs"
+                            style={{ color: '#4A4A45' }}
+                          />
+                          <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                            {sebFile
+                              ? `Will upload "${sebFile.name}" on save and offer it on this exam's briefing gate.`
+                              : sebConfigFileUrl
+                                ? 'A .seb file is already uploaded for this exam — choose a file only to replace it.'
+                                : 'Upload the .seb saved by the Config Tool for THIS exam. The file and the keys above must describe the same configuration.'}
+                          </p>
+                        </>
                       )}
-                      <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
-                        When set, ONLY these keys unlock this exam — the platform keys stop
-                        applying to it. Use when one exam needs its own .seb configuration.
-                        Keys are stored separately from the assessment; students can never read them.
-                      </p>
                     </div>
                   )}
                 </div>
@@ -4095,7 +4157,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
   mode: 'create' | 'edit';
   assessment: Assessment | null;
   allQuestions: Question[];
-  onSave: (draft: AssessmentDraft, sebKeys: string[]) => Promise<void>;
+  onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }) => Promise<void>;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -4309,16 +4371,33 @@ export function AssignmentsPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleSave = async (draft: AssessmentDraft, sebKeys: string[] = []) => {
+  const handleSave = async (
+    draft: AssessmentDraft,
+    seb: { keys: string[]; file: File | null; clearFile: boolean } = { keys: [], file: null, clearFile: false },
+  ) => {
+    // Stage 4b: the per-exam .seb file needs the assessment id, which only
+    // exists after creation — hence the upload happens here, not in the pane.
+    const applySebFile = async (id: string): Promise<string | undefined> => {
+      if (seb.clearFile) { await deleteAssessmentSebFile(id).catch(() => {}); return undefined; }
+      if (!seb.file) return undefined;
+      const url = await uploadAssessmentSebFile(id, seb.file);
+      await updateAssessment(id, { sebConfigFileUrl: url });
+      return url;
+    };
+
     if (panelMode === 'create') {
       const saved = await createAssessment(draft);
       // Stage 4: per-exam keys live in a side collection keyed by the id we
       // only have after creation. Empty array deletes/skips the override.
-      await setAssessmentSEBKeys(saved.id, sebKeys).catch(() => {});
+      await setAssessmentSEBKeys(saved.id, seb.keys).catch(() => {});
+      const url = await applySebFile(saved.id).catch(() => undefined);
+      if (url) saved.sebConfigFileUrl = url;
       setAssessments((prev) => [saved, ...prev]);
     } else if (editTarget) {
       await updateAssessment(editTarget.id, draft);
-      await setAssessmentSEBKeys(editTarget.id, sebKeys).catch(() => {});
+      await setAssessmentSEBKeys(editTarget.id, seb.keys).catch(() => {});
+      const uploadedUrl = await applySebFile(editTarget.id).catch(() => undefined);
+      if (uploadedUrl) draft.sebConfigFileUrl = uploadedUrl;
       const totalMarks = draft.questions.reduce((s, q) => s + q.marks, 0);
       const updated = { ...editTarget, ...draft, totalMarks, updatedAt: new Date().toISOString() } as Assessment;
       setAssessments((prev) => prev.map((a) => (a.id === editTarget.id ? updated : a)));

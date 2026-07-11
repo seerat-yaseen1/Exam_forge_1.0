@@ -97,6 +97,16 @@ service cloud.firestore {
       allow read, write: if isWebOwner();
     }
 
+    // ── Phase 3 Stage 4b: student-readable platform SEB info ───────
+    // ONLY the non-secret half: the platform .seb file's download link and
+    // name, so the briefing gate can offer the file. The Config Keys stay in
+    // platformSettings/seb (webOwner-only). Splitting the doc is what lets
+    // students see the link without ever being able to read the keys.
+    match /publicSettings/{settingId} {
+      allow read: if signedIn();
+      allow write: if isWebOwner();
+    }
+
     // ── Phase 3 Stage 4: per-assessment SEB Config Keys ────────────
     // DELIBERATELY a separate collection, NOT a field on the assessment doc:
     // assessments are student-readable, and possessing a Config Key is what

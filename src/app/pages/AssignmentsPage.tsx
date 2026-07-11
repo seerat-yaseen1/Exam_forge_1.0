@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -7,7 +7,7 @@ import {
   FileText, CalendarClock, ArrowRight, Timer, Award,
   ChevronRight, Layers, CheckSquare, Square, AlertCircle,
   Shuffle, BarChart2, BookOpen, Lock, Users, Building2, Zap, Infinity as InfinityIcon,
-  Copy, Shield,
+  Copy, Shield, Upload,
 } from 'lucide-react';
 import {
   getAllInstitutes,
@@ -3356,6 +3356,7 @@ function DetailsStep({
     assessment?.sebConfigFileUrl ? 'custom' : 'platform',
   );
   const [sebFile, setSebFile] = useState<File | null>(null);
+  const sebFileInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!assessment?.id) return;
     getAssessmentSEBKeys(assessment.id)
@@ -3890,12 +3891,46 @@ function DetailsStep({
                             .seb file for this exam
                           </p>
                           <input
+                            ref={sebFileInputRef}
                             type="file"
                             accept=".seb"
-                            onChange={(e) => setSebFile(e.target.files?.[0] ?? null)}
-                            className="w-full text-xs"
-                            style={{ color: '#4A4A45' }}
+                            className="hidden"
+                            onChange={(e) => {
+                              setSebFile(e.target.files?.[0] ?? null);
+                              if (sebFileInputRef.current) sebFileInputRef.current.value = '';
+                            }}
                           />
+                          {sebFile ? (
+                            <div className="w-full flex items-center justify-between gap-3 px-3 py-2"
+                              style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <FileText size={12} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
+                                <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{sebFile.name}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSebFile(null)}
+                                className="p-1 flex-shrink-0"
+                                style={{ color: '#9A9891', background: 'none', border: 'none', cursor: 'pointer' }}
+                                aria-label="Clear chosen file"
+                              >
+                                <X size={12} strokeWidth={1.5} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => sebFileInputRef.current?.click()}
+                              className="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 transition-colors"
+                              style={{
+                                border: '1px dashed #C8C7C2', borderRadius: 2,
+                                background: '#FFFFFF', color: '#4A4A45', cursor: 'pointer',
+                              }}
+                            >
+                              <Upload size={11} strokeWidth={1.5} />
+                              {sebConfigFileUrl ? 'Choose .seb file to replace the current one…' : 'Choose .seb file…'}
+                            </button>
+                          )}
                           <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
                             {sebFile
                               ? `Will upload "${sebFile.name}" on save and offer it on this exam's briefing gate.`

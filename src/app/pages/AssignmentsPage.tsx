@@ -7,7 +7,7 @@ import {
   FileText, CalendarClock, ArrowRight, Timer, Award,
   ChevronRight, Layers, CheckSquare, Square, AlertCircle,
   Shuffle, BarChart2, BookOpen, Lock, Users, Building2, Zap, Infinity as InfinityIcon,
-  Copy,
+  Copy, Shield,
 } from 'lucide-react';
 import {
   getAllInstitutes,
@@ -3330,6 +3330,16 @@ function DetailsStep({
   const [securityTier, setSecurityTier] = useState<'mock' | 'normal' | 'high_stake'>(
     assessment?.securityTier ?? 'normal',
   );
+  // ── Phase 3 (Stage 4): SEB authority toggle + config file link ───
+  // requireSEB is the settled "default ON for high_stake, disable-able"
+  // decision — until now it had no UI and applyTierDefaults reset it on
+  // every save. Initialised from the existing assessment so an edit-save
+  // no longer silently reverts a manual override. For a new assessment the
+  // default follows the initial tier (normal → false).
+  const [requireSEB, setRequireSEB] = useState<boolean>(
+    assessment?.requireSEB ?? (assessment?.securityTier ?? 'normal') === 'high_stake',
+  );
+  const [sebConfigFileUrl, setSebConfigFileUrl] = useState(assessment?.sebConfigFileUrl ?? '');
   const [saving, setSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
@@ -3508,7 +3518,11 @@ function DetailsStep({
         // applyTierDefaults enforces the per-tier floor (high-stake locks
         // camera on / mobile off / extension on). deliveryMode is chosen
         // independently. These flow through createAssessment's ...draft spread.
-        ...applyTierDefaults(securityTier),
+        // Phase 3 (Stage 4): requireSEB now carries the builder's toggle
+        // instead of being reset to the tier default on every save; mock
+        // still forces it false inside applyTierDefaults.
+        ...applyTierDefaults(securityTier, { requireSEB }),
+        sebConfigFileUrl: sebConfigFileUrl.trim(),
         deliveryMode,
         status: targetStatus,
       };
@@ -3711,7 +3725,18 @@ function DetailsStep({
                       <button
                         key={opt.key}
                         type="button"
-                        onClick={() => setSecurityTier(opt.key)}
+                        onClick={() => {
+                          setSecurityTier(opt.key);
+                          // Phase 3 (Stage 4): switching tier re-baselines the
+                          // SEB toggle — back to the original override when
+                          // returning to the assessment's saved tier, else to
+                          // the new tier's default (high_stake ON, others OFF).
+                          setRequireSEB(
+                            opt.key === assessment?.securityTier
+                              ? assessment?.requireSEB ?? opt.key === 'high_stake'
+                              : opt.key === 'high_stake',
+                          );
+                        }}
                         className="flex-1 text-xs px-2 py-1.5 transition-colors"
                         style={{
                           background: active ? '#0C0C0B' : 'transparent',
@@ -3729,10 +3754,51 @@ function DetailsStep({
                   {securityTier === 'mock'
                     ? 'Practice mode — no proctoring. Camera off, phones allowed.'
                     : securityTier === 'high_stake'
-                      ? 'Maximum security — camera required, desktop only, Safe Exam Browser (locked).'
+                      ? 'Maximum security — camera required, desktop only, Safe Exam Browser (default on).'
                       : 'Deterrent proctoring — camera on by default, extension check, desktop by default.'}
                 </p>
               </div>
+
+              {/* ── Phase 3 (Stage 4): Safe Exam Browser ──────────────────
+                  The authority toggle. High-stake defaults ON but is
+                  disable-able (a school without SEB rollout can still run
+                  high-stake with the web-tier deterrents); normal is opt-in;
+                  mock never (applyTierDefaults forces it false). The server
+                  re-derives this from the doc at startExam and freezes it
+                  into the attempt's securityConfig. */}
+              {securityTier !== 'mock' && (
+                <div className="space-y-2">
+                  <SettingsToggle
+                    icon={<Shield size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                    label="Require Safe Exam Browser"
+                    hint={securityTier === 'high_stake'
+                      ? 'Locks the exam to genuine SEB — blocks VPNs, remote desktop, userscripts. Default on for high-stake.'
+                      : 'Opt-in SEB lockdown for this exam. Students need SEB and the .seb config to enter.'}
+                    value={requireSEB}
+                    onChange={setRequireSEB}
+                  />
+                  {requireSEB && (
+                    <div className="space-y-1.5 px-4 py-3"
+                      style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FAFAF8' }}>
+                      <p className="text-xs" style={{ color: '#6B6B66' }}>
+                        .seb configuration file link (optional)
+                      </p>
+                      <input
+                        type="url"
+                        value={sebConfigFileUrl}
+                        onChange={(e) => setSebConfigFileUrl(e.target.value)}
+                        placeholder="https://… (link students use to download the .seb file)"
+                        className="w-full text-xs px-3 py-2"
+                        style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B', outline: 'none' }}
+                      />
+                      <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                        Shown on the briefing gate and on SEB-required error screens.
+                        Leave empty if your institute distributes the .seb file directly.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Delivery mode */}
               <div className="space-y-1.5">

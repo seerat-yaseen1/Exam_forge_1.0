@@ -27,6 +27,8 @@ import {
   resolveQuestionsForSections,
   validateSelectionRules,
   applyTierDefaults,
+  getAssessmentSEBKeys,
+  setAssessmentSEBKeys,
   type Assessment,
   type AssessmentDraft,
   type AssessmentStatus,
@@ -3302,7 +3304,7 @@ function DetailsStep({
   sections: SectionDraft[];
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
   onBack: () => void;
-  onSave: (draft: AssessmentDraft) => Promise<void>;
+  onSave: (draft: AssessmentDraft, sebKeys: string[]) => Promise<void>;
   title: string;
   description: string;
   subject: string;
@@ -3340,6 +3342,17 @@ function DetailsStep({
     assessment?.requireSEB ?? (assessment?.securityTier ?? 'normal') === 'high_stake',
   );
   const [sebConfigFileUrl, setSebConfigFileUrl] = useState(assessment?.sebConfigFileUrl ?? '');
+  // Per-exam Config Keys (Stage 4). Held as one-key-per-line text; stored in
+  // the webOwner-only sebAssessmentKeys collection, never on the assessment
+  // doc (students can read that). Non-empty = overrides the platform keys.
+  const [sebKeysText, setSebKeysText] = useState('');
+  const [sebKeysError, setSebKeysError] = useState('');
+  useEffect(() => {
+    if (!assessment?.id) return;
+    getAssessmentSEBKeys(assessment.id)
+      .then((k) => setSebKeysText(k.join('\n')))
+      .catch(() => {/* leave empty — platform keys apply */});
+  }, [assessment?.id]);
   const [saving, setSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
@@ -3527,7 +3540,18 @@ function DetailsStep({
         status: targetStatus,
       };
 
-      await onSave(draft);
+      // Stage 4: per-exam Config Keys — validate before anything is written.
+      const sebKeyLines = sebKeysText
+        .split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const badLine = sebKeyLines.find((k) => !/^[0-9a-f]{64}$/.test(k));
+      if (requireSEB && badLine) {
+        setSebKeysError(`Not a valid Config Key (needs 64 hex characters): "${badLine.slice(0, 24)}…"`);
+        setSaving(false);
+        return;
+      }
+      setSebKeysError('');
+
+      await onSave(draft, requireSEB ? sebKeyLines : []);
     } finally {
       setSaving(false);
     }
@@ -3795,6 +3819,30 @@ function DetailsStep({
                         Shown on the briefing gate and on SEB-required error screens.
                         Leave empty if your institute distributes the .seb file directly.
                       </p>
+                      <p className="text-xs pt-2" style={{ color: '#6B6B66' }}>
+                        Per-exam Config Keys (advanced, optional)
+                      </p>
+                      <textarea
+                        value={sebKeysText}
+                        onChange={(e) => { setSebKeysText(e.target.value); setSebKeysError(''); }}
+                        placeholder="One 64-character Config Key per line. Empty = platform keys apply."
+                        rows={2}
+                        spellCheck={false}
+                        className="w-full text-xs px-3 py-2"
+                        style={{
+                          border: `1px solid ${sebKeysError ? '#F2CECE' : '#E3E1DB'}`,
+                          borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B',
+                          fontFamily: 'ui-monospace, monospace', outline: 'none', resize: 'vertical',
+                        }}
+                      />
+                      {sebKeysError && (
+                        <p className="text-xs" style={{ color: '#9B2828' }}>{sebKeysError}</p>
+                      )}
+                      <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                        When set, ONLY these keys unlock this exam — the platform keys stop
+                        applying to it. Use when one exam needs its own .seb configuration.
+                        Keys are stored separately from the assessment; students can never read them.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -4047,7 +4095,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
   mode: 'create' | 'edit';
   assessment: Assessment | null;
   allQuestions: Question[];
-  onSave: (draft: AssessmentDraft) => Promise<void>;
+  onSave: (draft: AssessmentDraft, sebKeys: string[]) => Promise<void>;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -4261,12 +4309,16 @@ export function AssignmentsPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleSave = async (draft: AssessmentDraft) => {
+  const handleSave = async (draft: AssessmentDraft, sebKeys: string[] = []) => {
     if (panelMode === 'create') {
       const saved = await createAssessment(draft);
+      // Stage 4: per-exam keys live in a side collection keyed by the id we
+      // only have after creation. Empty array deletes/skips the override.
+      await setAssessmentSEBKeys(saved.id, sebKeys).catch(() => {});
       setAssessments((prev) => [saved, ...prev]);
     } else if (editTarget) {
       await updateAssessment(editTarget.id, draft);
+      await setAssessmentSEBKeys(editTarget.id, sebKeys).catch(() => {});
       const totalMarks = draft.questions.reduce((s, q) => s + q.marks, 0);
       const updated = { ...editTarget, ...draft, totalMarks, updatedAt: new Date().toISOString() } as Assessment;
       setAssessments((prev) => prev.map((a) => (a.id === editTarget.id ? updated : a)));

@@ -793,7 +793,7 @@ export function ExamShell() {
         // Must happen BEFORE any exam callable runs — including on RESUME,
         // where no new attempt is created. Every subsequent call (heartbeat,
         // answers, section submit, question fetch) then carries a fresh proof.
-        setSebRequired(a.requireSEB === true);
+        setSebRequired(a.requireSEB === true, a.id);
 
         // Schedule gate (defense-in-depth) — the briefing already refuses to
         // let a student enter before startDate, but a student who navigates
@@ -841,7 +841,7 @@ export function ExamShell() {
           // "not required" from the client changes nothing.
           let sebToken: string | undefined;
           if (a.requireSEB === true) {
-            const seb = await getSebToken();
+            const seb = await getSebToken(a.id);
             if (!seb.ok || !seb.sebToken) {
               setErrorIsSeb(true);
               setErrorMsg(

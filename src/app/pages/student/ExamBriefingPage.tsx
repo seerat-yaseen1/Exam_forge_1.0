@@ -218,7 +218,7 @@ export function ExamBriefingPage() {
     }
     let cancelled = false;
     setSebGate('checking');
-    getSebToken().then((r) => {
+    getSebToken(assessment.id).then((r) => {
       if (cancelled) return;
       if (r.ok) {
         setSebGate('verified');

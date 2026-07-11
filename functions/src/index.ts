@@ -678,7 +678,7 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     // re-grading an attempt works from a normal browser; requiring SEB of them
     // would make submitted high-stake attempts ungradeable.
     if (isStudentOwner) {
-      assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB);
+      assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
     }
 
     // Idempotency — refuse to re-grade a non-in_progress attempt unless caller
@@ -1120,7 +1120,7 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
     // when the student has quit SEB; requiring SEB there would make results
     // permanently unviewable.
     if (mode !== 'review' && liveAttempt?.status === 'in_progress') {
-      assertSEB(request.data?.sebToken, request.auth.uid, liveAttempt?.securityConfig?.requireSEB);
+      assertSEB(request.data?.sebToken, request.auth.uid, liveAttempt?.securityConfig?.requireSEB, assessmentId);
     }
 
     const attemptDeliveryMode = liveAttempt?.securityConfig?.deliveryMode ?? 'standard';
@@ -1216,13 +1216,13 @@ export const examHeartbeat = onCall<HeartbeatData>(
     const snap = await ref.get();
     if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
     const a = snap.data() as {
-      studentId: string; status: string;
+      studentId: string; status: string; assessmentId: string;
       securityConfig?: { requireSEB?: boolean } | null;
     };
     // Phase 3 Stage 2b — the proof must hold for the WHOLE exam, not just the
     // door. A student who starts in SEB and switches to Chrome fails here
     // within the token's TTL, because Chrome cannot mint a new proof.
-    assertSEB(sebToken, request.auth.uid, a.securityConfig?.requireSEB);
+    assertSEB(sebToken, request.auth.uid, a.securityConfig?.requireSEB, a.assessmentId);
     if (a.studentId !== callerStudentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
@@ -1262,6 +1262,7 @@ export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
     const a = snap.data() as {
       studentId: string;
       status: string;
+      assessmentId: string;
       securityConfig?: { tier?: string; requireExtensionCheck?: boolean; requireSEB?: boolean } | null;
     };
     if (a.studentId !== callerStudentId) {
@@ -1274,7 +1275,7 @@ export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
       updatedAt: nowIso,
     };
 
-    assertSEB(request.data?.sebToken, request.auth.uid, a.securityConfig?.requireSEB);
+    assertSEB(request.data?.sebToken, request.auth.uid, a.securityConfig?.requireSEB, a.assessmentId);
     const tierRequiresCheck = a.securityConfig?.requireExtensionCheck === true;
     const shouldFreeze = !passed && a.status === 'in_progress' && tierRequiresCheck;
     if (shouldFreeze) {
@@ -1312,6 +1313,7 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
       studentId: string;
       instituteId: string;
       status: string;
+      assessmentId: string;
       lastExtensionCheck?: { passed?: boolean } | null;
       securityConfig?: { autoResume?: boolean; requireSEB?: boolean } | null;
     };
@@ -1332,7 +1334,7 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
     // freeze does so from their own (normal) browser; requiring SEB of staff
     // would lock the student out of their exam permanently.
     if (isStudentOwner) {
-      assertSEB(request.data?.sebToken, request.auth.uid, a.securityConfig?.requireSEB);
+      assertSEB(request.data?.sebToken, request.auth.uid, a.securityConfig?.requireSEB, a.assessmentId);
     }
     const autoResume   = a.securityConfig?.autoResume === true;
     const latestPassed = a.lastExtensionCheck?.passed === true;
@@ -1410,7 +1412,7 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
     }
-    assertSEB(sebToken, request.auth.uid, attempt.securityConfig?.requireSEB);
+    assertSEB(sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
     const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
     if (dMode !== 'linear' && dMode !== 'adaptive') {
       throw new HttpsError('failed-precondition',
@@ -1628,7 +1630,7 @@ export const sebDiagnostics = onCall<SebDiagnosticsData>(
 // ══════════════════════════════════════════════════════════════════
 
 
-function verifySebToken(token: string, uid: string, secret: string): void {
+function verifySebToken(token: string, uid: string, secret: string, assessmentId: string): void {
   const parts = String(token || '').split('.');
   if (parts.length !== 3 || parts[0] !== 'v1') {
     throw new HttpsError('permission-denied', 'SEB_REQUIRED: malformed proof.');
@@ -1642,7 +1644,7 @@ function verifySebToken(token: string, uid: string, secret: string): void {
     throw new HttpsError('permission-denied', 'SEB_REQUIRED: proof signature invalid.');
   }
 
-  let body: { uid?: string; exp?: number };
+  let body: { uid?: string; aid?: string; exp?: number };
   try {
     body = JSON.parse(Buffer.from(b64, 'base64url').toString('utf8'));
   } catch {
@@ -1658,6 +1660,19 @@ function verifySebToken(token: string, uid: string, secret: string): void {
   if (!body.uid || body.uid !== uid) {
     throw new HttpsError('permission-denied', 'SEB_REQUIRED: proof belongs to another user.');
   }
+  // Stage 4: binding to the ASSESSMENT is what makes per-exam Config Keys
+  // real — without it, a session verified under the platform config could be
+  // replayed against an exam that demands its own config.
+  // A token without aid is a stale mint from the pre-Stage-4 endpoint (≤90s
+  // window during deploy): SEB_EXPIRED makes the client force-refresh, and the
+  // fresh token carries aid. A token with the WRONG aid is a replay: rejected
+  // outright.
+  if (typeof body.aid !== 'string' || !body.aid) {
+    throw new HttpsError('permission-denied', 'SEB_EXPIRED: re-verify Safe Exam Browser.');
+  }
+  if (body.aid !== assessmentId) {
+    throw new HttpsError('permission-denied', 'SEB_REQUIRED: proof was issued for a different exam.');
+  }
 }
 
 /**
@@ -1668,6 +1683,7 @@ function assertSEB(
   sebToken: string | undefined,
   uid: string,
   requireSEB: boolean | undefined,
+  assessmentId: string,
 ): void {
   if (requireSEB !== true) return;
   const secret = SEB_SIGNING_SECRET.value();
@@ -1678,7 +1694,7 @@ function assertSEB(
   if (!sebToken) {
     throw new HttpsError('permission-denied', 'SEB_REQUIRED: this exam must be taken in Safe Exam Browser.');
   }
-  verifySebToken(sebToken, uid, secret);
+  verifySebToken(sebToken, uid, secret, assessmentId);
 }
 
 interface StartExamData {
@@ -1786,7 +1802,7 @@ export const startExam = onCall<StartExamData>(
     // Phase 3 gate. Uses the SERVER-derived requireSEB, never the client's
     // claim, and binds the proof to this caller's uid. Placed before any
     // attempt is created so a non-SEB student never gets an attempt document.
-    assertSEB(sebToken, request.auth.uid, requireSEB);
+    assertSEB(sebToken, request.auth.uid, requireSEB, assessmentId);
 
     const effectiveAutoResume = isLegacy
       ? false
@@ -2061,7 +2077,7 @@ export const startSection = onCall<StartSectionData>(
     if (attempt.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
-    assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB);
+    assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
     }
@@ -2200,7 +2216,7 @@ export const submitSection = onCall<SubmitSectionData>(
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
     }
-    assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB);
+    assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
 
     const timing = attempt.sectionTimings[sectionId];
     if (!timing?.startedAt) {

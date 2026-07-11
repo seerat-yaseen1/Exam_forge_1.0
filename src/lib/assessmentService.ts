@@ -10,6 +10,7 @@ import {
   arrayUnion,
   arrayRemove,
   deleteField,
+  deleteDoc,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, auth } from './firebase';
@@ -653,7 +654,20 @@ export async function duplicateAssessment(
     attemptOverrides: undefined,
   };
 
-  return createAssessment(draft);
+  const created = await createAssessment(draft);
+
+  // Phase 3 Stage 4: per-exam SEB keys live in a side collection (webOwner
+  // only), so the field copy above cannot carry them — copy the doc when
+  // settings are copied. Best-effort: a duplicated exam without its override
+  // simply falls back to the platform keys.
+  if (options.includeSettings) {
+    try {
+      const srcKeys = await getAssessmentSEBKeys(sourceId);
+      if (srcKeys.length > 0) await setAssessmentSEBKeys(created.id, srcKeys);
+    } catch { /* non-fatal — platform keys apply */ }
+  }
+
+  return created;
 }
 
 // ── Phase 3: platform-wide SEB settings ───────────────────────────
@@ -688,6 +702,36 @@ export async function setSEBSettings(configKeys: string[]): Promise<void> {
     { configKeys: cleaned, updatedAt: now() },
     { merge: true },
   );
+}
+
+// ── Phase 3 Stage 4: per-assessment SEB Config Keys ───────────────
+// Stored in a SEPARATE, webOwner-only collection (sebAssessmentKeys/{id}) and
+// deliberately NOT on the assessment document, which students can read —
+// possessing a Config Key is what lets an attacker forge the SEB hash. The
+// verification endpoint reads this collection with a service account.
+// Resolution there: these keys (when non-empty) OVERRIDE the platform keys.
+
+export async function getAssessmentSEBKeys(assessmentId: string): Promise<string[]> {
+  const snap = await getDoc(doc(db, 'sebAssessmentKeys', assessmentId));
+  if (!snap.exists()) return [];
+  const keys = (snap.data() as { keys?: string[] }).keys;
+  return Array.isArray(keys) ? keys : [];
+}
+
+export async function setAssessmentSEBKeys(assessmentId: string, keys: string[]): Promise<void> {
+  const cleaned = keys
+    .map((k) => k.trim().toLowerCase())
+    .filter((k) => /^[0-9a-f]{64}$/.test(k));
+  if (cleaned.length === 0) {
+    // Empty override = no override: delete the doc so resolution falls back
+    // to the platform keys, rather than leaving an empty doc to reason about.
+    await deleteDoc(doc(db, 'sebAssessmentKeys', assessmentId)).catch(() => {});
+    return;
+  }
+  await setDoc(doc(db, 'sebAssessmentKeys', assessmentId), {
+    keys: cleaned,
+    updatedAt: now(),
+  });
 }
 
 // ── Phase 3: SEB diagnostic (Stage 1, webOwner-only) ──────────────
@@ -751,7 +795,7 @@ export function looksLikeSEB(): boolean {
  * Returns null when the caller is not in SEB (or the hash doesn't match), so
  * the UI can show a specific message instead of a generic failure.
  */
-export async function getSebToken(): Promise<{
+export async function getSebToken(assessmentId: string): Promise<{
   ok: boolean;
   sebToken?: string;
   expiresAt?: number;
@@ -768,7 +812,10 @@ export async function getSebToken(): Promise<{
         'Content-Type': 'application/json',
         Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({}),
+      // Stage 4: the endpoint resolves per-exam Config Keys by assessmentId
+      // and binds the minted token to it — assertSEB rejects a token minted
+      // for a different exam.
+      body: JSON.stringify({ assessmentId }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data?.ok) {
@@ -790,10 +837,12 @@ export async function getSebToken(): Promise<{
 // returns undefined and nothing changes for normal/mock exams.
 
 let sebRequired = false;
+let sebAssessmentId = '';
 let cachedSeb: { token: string; expiresAt: number } | null = null;
 
-export function setSebRequired(required: boolean): void {
+export function setSebRequired(required: boolean, assessmentId = ''): void {
   sebRequired = required;
+  sebAssessmentId = required ? assessmentId : '';
   if (!required) cachedSeb = null;
 }
 
@@ -803,7 +852,7 @@ export async function ensureSebToken(): Promise<string | undefined> {
   const now = Math.floor(Date.now() / 1000);
   // Refresh with 25s of headroom so an in-flight call can't expire mid-request.
   if (cachedSeb && cachedSeb.expiresAt - now > 25) return cachedSeb.token;
-  const r = await getSebToken();
+  const r = await getSebToken(sebAssessmentId);
   if (!r.ok || !r.sebToken || !r.expiresAt) {
     cachedSeb = null;
     throw new Error(`SEB_REQUIRED:${r.error ?? 'unknown'}`);

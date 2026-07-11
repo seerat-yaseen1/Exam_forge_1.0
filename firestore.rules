@@ -97,6 +97,17 @@ service cloud.firestore {
       allow read, write: if isWebOwner();
     }
 
+    // ── Phase 3 Stage 4: per-assessment SEB Config Keys ────────────
+    // DELIBERATELY a separate collection, NOT a field on the assessment doc:
+    // assessments are student-readable, and possessing a Config Key is what
+    // lets an attacker forge the SEB hash. The verification endpoint reads
+    // this collection with a service account (bypasses rules); no student
+    // client ever can. The (unused) Assessment.sebConfigKeys schema field is
+    // retired in favour of this collection.
+    match /sebAssessmentKeys/{assessmentId} {
+      allow read, write: if isWebOwner();
+    }
+
     match /webowners/{ownerId} {
       allow read:   if isWebOwner();
       allow create: if isWebOwner() && str(request.resource.data.email) && str(request.resource.data.name);

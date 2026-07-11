@@ -127,15 +127,18 @@ export function SEBSettingsPage() {
         </p>
       </div>
 
-      {/* Authority banner — remove when Batch 2 makes this page authoritative */}
+      {/* Authority note — Stage 4 (Batch 2): this document IS the source of
+          truth; SEB_CONFIG_KEYS on Vercel is only an emergency fallback. */}
       <div className="flex items-start gap-3 px-4 py-3 mb-6"
-        style={{ background: '#FEF9EC', border: '1px solid #F5DFA0', borderRadius: 2 }}>
-        <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#92680A', flexShrink: 0, marginTop: 1 }} />
-        <p className="text-xs" style={{ color: '#92680A', lineHeight: 1.6 }}>
-          <strong>Enforcement currently reads the SEB_CONFIG_KEYS environment variable on
-          Vercel.</strong> Any change made here must also be made there (comma-separated,
-          then redeploy) until the verification endpoint is switched to read this
-          document directly. Keep the two lists identical.
+        style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}>
+        <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0, marginTop: 1 }} />
+        <p className="text-xs" style={{ color: '#1E7B3C', lineHeight: 1.6 }}>
+          <strong>This page is authoritative.</strong> Verification reads these keys
+          directly (cached briefly — changes are live within ~2 minutes, no redeploy).
+          The SEB_CONFIG_KEYS environment variable on Vercel now serves only as an
+          emergency fallback if this document is unreachable — keep one known-good key
+          in it. Per-exam key overrides, when set in the assessment builder, take
+          precedence over this list for that exam.
         </p>
       </div>
 

@@ -19,10 +19,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Loader2, AlertTriangle, ClipboardList, Timer, Layers,
   Award, Calendar, ArrowRight, Camera, Maximize,
-  CheckCircle2, Shield, Info, ChevronRight, Clock, Ban,
+  CheckCircle2, Shield, Info, ChevronRight, Clock, Ban, Download,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
-import { getAssessment, type Assessment } from '../../../lib/assessmentService';
+import { getAssessment, getSebToken, type Assessment } from '../../../lib/assessmentService';
 import { scanForExtensionsWithSettle } from '../../components/exam/extensionScan';
 import {
   getAllAttemptsByStudentAndAssessment,
@@ -164,6 +164,16 @@ export function ExamBriefingPage() {
   const [extFound, setExtFound] = useState<string[]>([]);
   const [extScanNonce, setExtScanNonce] = useState(0); // bump to re-scan
 
+  // ── SEB entry gate (Phase 3, Stage 3) ────────────────────────────
+  // 'na' when the assessment doesn't require SEB. Otherwise we ask
+  // /api/seb-verify (via getSebToken) whether THIS browser is a genuine
+  // Safe Exam Browser running the correct config. This is a real server
+  // verdict, not user-agent sniffing — a spoofed UA fails here exactly as
+  // it would fail at startExam. UX-only: the server re-checks every call.
+  const [sebGate, setSebGate] = useState<'na' | 'checking' | 'verified' | 'blocked'>('na');
+  const [sebGateError, setSebGateError] = useState('');
+  const [sebNonce, setSebNonce] = useState(0); // bump to re-verify
+
   // Redirect if not logged in
   useEffect(() => {
     if (!session) navigate('/student/login', { replace: true });
@@ -195,12 +205,39 @@ export function ExamBriefingPage() {
     return () => { cancelled = true; };
   }, [assessment, extScanNonce]);
 
+  // ── SEB verification (Phase 3, Stage 3) ─────────────────────────
+  // Runs when the assessment requires SEB; re-runs when sebNonce is bumped
+  // by the "Re-check" button (e.g. after the student reopens via the .seb
+  // file). Assessments without the requirement skip straight to 'na'.
+  useEffect(() => {
+    if (!assessment) return;
+    if (assessment.requireSEB !== true) {
+      setSebGate('na');
+      setSebGateError('');
+      return;
+    }
+    let cancelled = false;
+    setSebGate('checking');
+    getSebToken().then((r) => {
+      if (cancelled) return;
+      if (r.ok) {
+        setSebGate('verified');
+        setSebGateError('');
+      } else {
+        setSebGate('blocked');
+        setSebGateError(r.error ?? '');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [assessment, sebNonce]);
+
   // Update ready state
   useEffect(() => {
     const cameraOk = cameraState === 'granted' || cameraDeclined;
     const extensionOk = extScanState === 'clean';
-    setReadyToEnter(cameraOk && extensionOk);
-  }, [cameraState, cameraDeclined, isFullscreen, extScanState]);
+    const sebOk = sebGate === 'na' || sebGate === 'verified';
+    setReadyToEnter(cameraOk && extensionOk && sebOk);
+  }, [cameraState, cameraDeclined, isFullscreen, extScanState, sebGate]);
 
   // Load assessment + existing attempt
   useEffect(() => {
@@ -695,6 +732,75 @@ export function ExamBriefingPage() {
                   </div>
                 </div>
 
+                {/* Safe Exam Browser gate (Phase 3, Stage 3) */}
+                {assessment?.requireSEB === true && (
+                  <div className="mb-8">
+                    <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                      SAFE EXAM BROWSER
+                    </p>
+                    <div className="px-4 py-3"
+                      style={{
+                        background: sebGate === 'blocked' ? '#FBF3F3' : sebGate === 'verified' ? '#F0F9F4' : '#FAFAF8',
+                        border: `1px solid ${sebGate === 'blocked' ? '#E3C9C9' : sebGate === 'verified' ? '#B8E6C8' : '#E3E1DB'}`,
+                        borderRadius: 2,
+                      }}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          {sebGate === 'checking' && <Loader2 size={13} className="animate-spin" style={{ color: '#9A9891' }} />}
+                          {sebGate === 'verified' && <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />}
+                          {sebGate === 'blocked' && <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />}
+                          {sebGate === 'na' && <Shield size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                          <p className="text-xs" style={{ color: sebGate === 'blocked' ? '#9B2828' : sebGate === 'verified' ? '#1E7B3C' : '#4A4A45' }}>
+                            {sebGate === 'checking' && 'Verifying Safe Exam Browser…'}
+                            {sebGate === 'verified' && 'Safe Exam Browser verified'}
+                            {sebGate === 'blocked' && 'This exam must be taken in Safe Exam Browser'}
+                          </p>
+                        </div>
+                        {sebGate === 'blocked' && (
+                          <button
+                            onClick={() => setSebNonce((n) => n + 1)}
+                            className="text-xs px-3 py-1.5 flex-shrink-0"
+                            style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}
+                          >
+                            Re-check
+                          </button>
+                        )}
+                      </div>
+                      {sebGate === 'blocked' && (
+                        <div className="mt-3" style={{ borderTop: '1px solid #E3C9C9', paddingTop: 12 }}>
+                          <p className="text-xs mb-3" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+                            {sebGateError === 'SEB_CONFIG_MISMATCH'
+                              ? 'Safe Exam Browser was detected, but it is not running the exam configuration for this platform. Close SEB and reopen the exam using the .seb configuration file provided by your institute.'
+                              : 'You are not currently in Safe Exam Browser. Install SEB, then open the exam by double-clicking the .seb configuration file provided by your institute — it will launch SEB and bring you back to this page.'}
+                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <a
+                              href="https://safeexambrowser.org/download_en.html"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-xs px-4 py-2"
+                              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, textDecoration: 'none' }}
+                            >
+                              <Download size={11} strokeWidth={1.5} />
+                              Download Safe Exam Browser
+                            </a>
+                            {assessment.sebConfigFileUrl && (
+                              <a
+                                href={assessment.sebConfigFileUrl}
+                                className="flex items-center gap-1.5 text-xs px-4 py-2"
+                                style={{ color: '#4A4A45', border: '1px solid #E3C9C9', borderRadius: 2, background: '#FFFFFF', textDecoration: 'none' }}
+                              >
+                                <Download size={11} strokeWidth={1.5} />
+                                Exam configuration (.seb)
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Extension check (Phase 1c) — only for tiers that require it */}
                 {assessment?.requireExtensionCheck === true && (
                   <div className="mb-8">
@@ -768,11 +874,15 @@ export function ExamBriefingPage() {
 
                 {!readyToEnter && (
                   <p className="text-xs mt-3 text-center" style={{ color: '#C4C3BD' }}>
-                    {extScanState === 'dirty'
-                      ? 'Remove the detected extension and re-check to proceed.'
-                      : extScanState === 'scanning'
-                        ? 'Checking your browser before you can enter…'
-                        : 'Please complete the setup above to proceed.'}
+                    {sebGate === 'blocked'
+                      ? 'Open this exam in Safe Exam Browser to proceed.'
+                      : sebGate === 'checking'
+                        ? 'Verifying Safe Exam Browser…'
+                        : extScanState === 'dirty'
+                          ? 'Remove the detected extension and re-check to proceed.'
+                          : extScanState === 'scanning'
+                            ? 'Checking your browser before you can enter…'
+                            : 'Please complete the setup above to proceed.'}
                   </p>
                 )}
 

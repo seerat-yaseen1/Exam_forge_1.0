@@ -51,6 +51,7 @@ import { StudentAssessmentsPage } from './pages/student/StudentAssessmentsPage';
 import { ExamBriefingPage } from './pages/student/ExamBriefingPage';
 import { ExamShell } from './pages/student/ExamShell';
 import { ExamResultsPage } from './pages/student/ExamResultsPage';
+import { SebQuitPage } from './pages/student/SebQuitPage';
 
 export const router = createBrowserRouter([
   {
@@ -156,6 +157,13 @@ export const router = createBrowserRouter([
           },
         ],
       },
+
+      // ── SEB quit target (Phase 3, Stage 3) ────────────────────────
+      // Public, no auth: the .seb config's quit URL points here so SEB
+      // closes on navigation. If quit URL isn't configured, the page shows
+      // manual quit instructions instead. Must stay ABOVE the catch-all —
+      // a redirect to /login would break the quit navigation.
+      { path: '/seb-quit', element: <SebQuitPage /> },
 
       // ── Catch-all ─────────────────────────────────────────────────
       { path: '*', element: <Navigate to="/login" replace /> },

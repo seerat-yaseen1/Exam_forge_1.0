@@ -389,6 +389,31 @@ export function ExamResultsPage() {
         <p className="text-xs" style={{ color: '#9A9891' }}>Results</p>
       </div>
 
+      {/* ── Phase 3 (Stage 3): SEB quit link ──────────────────────────
+          For SEB exams the student is still locked inside Safe Exam Browser
+          when they land here. Navigating to /seb-quit closes SEB when the
+          .seb config's quit URL points at that route; otherwise the page it
+          lands on explains how to quit manually. */}
+      {!loading && assessment?.requireSEB === true &&
+        attempt && attempt.status !== 'in_progress' && attempt.status !== 'frozen' && (
+        <div className="flex items-center justify-between gap-4 px-4 py-3 mb-6"
+          style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}>
+          <div className="flex items-center gap-3">
+            <Shield size={13} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
+            <p className="text-xs" style={{ color: '#1E7B3C' }}>
+              Your exam is submitted. You can now close Safe Exam Browser.
+            </p>
+          </div>
+          <button
+            onClick={() => { window.location.assign('/seb-quit'); }}
+            className="text-xs px-4 py-2 flex-shrink-0"
+            style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}
+          >
+            Close Safe Exam Browser
+          </button>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
 
         {loading && (

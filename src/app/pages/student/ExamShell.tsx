@@ -125,6 +125,29 @@ function generateSessionId(): string {
   return fresh;
 }
 
+// ── SEB error translation (Phase 3, Stage 3) ──────────────────────
+// The server and the token manager both fail-closed with machine-readable
+// messages ('SEB_REQUIRED: …', 'SEB_EXPIRED: …', 'SEB_REQUIRED:SEB_CONFIG_MISMATCH').
+// Fail-closed must never mean fail-cryptic: this maps every SEB rejection to
+// guidance a student can act on. Returns null for non-SEB errors so callers
+// fall through to their existing handling.
+function sebFriendlyMessage(raw: string): string | null {
+  if (!raw.includes('SEB_')) return null;
+  if (raw.includes('SEB_CONFIG_MISMATCH')) {
+    return 'Safe Exam Browser was detected, but it is not running the correct exam configuration. Close SEB and reopen the exam from the .seb configuration file provided by your institute.';
+  }
+  if (raw.includes('SEB_EXPIRED')) {
+    return 'Your Safe Exam Browser session could not be re-verified. Please stay in Safe Exam Browser and try again — your answers are saved.';
+  }
+  if (raw.includes('SEB_VERIFY_UNREACHABLE')) {
+    return 'Could not reach the Safe Exam Browser verification service. Check your connection and try again — your answers are saved.';
+  }
+  if (raw.includes('SEB_REQUIRED')) {
+    return 'This exam must be taken in Safe Exam Browser. Open the exam from the .seb configuration file provided by your institute, then resume — your progress is saved.';
+  }
+  return null;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
@@ -638,6 +661,9 @@ export function ExamShell() {
   // ── Core data ──────────────────────────────────────────────────
   const [shellStatus, setShellStatus]       = useState<ShellStatus>('loading');
   const [errorMsg, setErrorMsg]             = useState('');
+  // Phase 3 (Stage 3): true when errorMsg is an SEB rejection, so the error
+  // screen renders the guided SEB panel instead of the generic message.
+  const [errorIsSeb, setErrorIsSeb]         = useState(false);
   const [assessment, setAssessment]         = useState<Assessment | null>(null);
   // effectiveSections: normalised sections that always have questions populated
   const [effectiveSections, setEffectiveSections] = useState<AssessmentSection[]>([]);
@@ -757,6 +783,12 @@ export function ExamShell() {
         const a = await getAssessment(assessmentId);
         if (!a) { setErrorMsg('Assessment not found.'); setShellStatus('error'); return; }
 
+        // Phase 3 (Stage 3): expose the assessment to the error screens
+        // immediately — the SEB_REQUIRED panel needs `sebConfigFileUrl` even
+        // when the load aborts before the main setup completes. Safe: every
+        // render below 'error' is still gated on shellStatus.
+        setAssessment(a);
+
         // ── Phase 3 (Stage 2b): arm the SEB token manager ──────────────
         // Must happen BEFORE any exam callable runs — including on RESUME,
         // where no new attempt is created. Every subsequent call (heartbeat,
@@ -811,6 +843,7 @@ export function ExamShell() {
           if (a.requireSEB === true) {
             const seb = await getSebToken();
             if (!seb.ok || !seb.sebToken) {
+              setErrorIsSeb(true);
               setErrorMsg(
                 seb.error === 'SEB_REQUIRED' || seb.error === 'SEB_CONFIG_MISMATCH'
                   ? 'This exam must be taken in Safe Exam Browser, using the exam configuration provided by your institute.'
@@ -943,7 +976,13 @@ export function ExamShell() {
       } catch (e: any) {
         console.error('[ExamShell] load error', e);
         const msg: string = e.message ?? '';
-        if (msg.startsWith('ATTEMPT_LIMIT_EXCEEDED')) {
+        const seb = sebFriendlyMessage(msg);
+        if (seb) {
+          // Phase 3 (Stage 3): fail-closed, never cryptic — a raw
+          // 'SEB_REQUIRED:SEB_REQUIRED' tells the student nothing.
+          setErrorIsSeb(true);
+          setErrorMsg(seb);
+        } else if (msg.startsWith('ATTEMPT_LIMIT_EXCEEDED')) {
           const [, used, max] = msg.split(':');
           setErrorMsg(`Attempt limit reached — you have used ${used} of ${max} allowed attempts for this assessment.`);
         } else {
@@ -1592,7 +1631,15 @@ export function ExamShell() {
       // screen instead (answers are already flushed, nothing is lost).
       console.error('[ExamShell] gradeAttempt failed', e);
       submittingRef.current = false;
-      setErrorMsg('Your exam could not be submitted. Your answers are saved — check your connection and try again.');
+      const sebMsg = sebFriendlyMessage((e as { message?: string })?.message ?? '');
+      setErrorMsg(
+        sebMsg
+          // Phase 3 (Stage 3): SEB rejection at submit time (e.g. the student
+          // left SEB before submitting). Answers are flushed; retrying from
+          // inside SEB succeeds.
+          ? `${sebMsg} Then press Retry submission.`
+          : 'Your exam could not be submitted. Your answers are saved — check your connection and try again.',
+      );
       setShellStatus('submit_failed');
       return;
     }
@@ -1712,9 +1759,10 @@ export function ExamShell() {
     } catch (e) {
       const msg = (e as { message?: string })?.message ?? '';
       setExtResumeError(
-        msg.includes('RESUME_BLOCKED')
-          ? 'An invigilator must clear this pause before you can continue.'
-          : 'Could not resume. Please ensure the extension is removed and try again.',
+        sebFriendlyMessage(msg)
+          ?? (msg.includes('RESUME_BLOCKED')
+            ? 'An invigilator must clear this pause before you can continue.'
+            : 'Could not resume. Please ensure the extension is removed and try again.'),
       );
     } finally {
       setExtResuming(false);
@@ -1792,6 +1840,54 @@ export function ExamShell() {
   }
 
   if (shellStatus === 'error') {
+    // Phase 3 (Stage 3): SEB rejections get a guided panel — what happened,
+    // what to do, where to get SEB and the config — never a raw error code.
+    if (errorIsSeb) {
+      return (
+        <div className="fixed inset-0 flex flex-col items-center justify-center px-6" style={{ background: '#F7F6F3' }}>
+          <div className="flex items-center justify-center mb-5"
+            style={{ width: 52, height: 52, borderRadius: '50%', background: '#FBF3F3', border: '1px solid #E3C9C9' }}>
+            <AlertTriangle size={22} strokeWidth={1} style={{ color: '#9B2828' }} />
+          </div>
+          <p className="text-xs mb-2" style={{ color: '#9B2828', letterSpacing: '0.1em' }}>
+            SAFE EXAM BROWSER REQUIRED
+          </p>
+          <p className="text-xs text-center mb-1" style={{ color: '#4A4A45', lineHeight: 1.7, maxWidth: 420 }}>
+            {errorMsg}
+          </p>
+          <p className="text-xs text-center mb-6" style={{ color: '#9A9891', lineHeight: 1.6, maxWidth: 420 }}>
+            Your progress is saved — resuming inside Safe Exam Browser continues where you left off.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            <a
+              href="https://safeexambrowser.org/download_en.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs px-4 py-2"
+              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, textDecoration: 'none' }}
+            >
+              Download Safe Exam Browser
+            </a>
+            {assessment?.sebConfigFileUrl && (
+              <a
+                href={assessment.sebConfigFileUrl}
+                className="text-xs px-4 py-2"
+                style={{ color: '#4A4A45', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', textDecoration: 'none' }}
+              >
+                Exam configuration (.seb)
+              </a>
+            )}
+            <button
+              onClick={() => navigate('/student/assessments')}
+              className="text-xs px-4 py-2"
+              style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF', cursor: 'pointer' }}
+            >
+              Return to assessments
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
         <AlertTriangle size={20} strokeWidth={1} style={{ color: '#9B2828' }} />

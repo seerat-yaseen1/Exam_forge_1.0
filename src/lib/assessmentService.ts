@@ -311,6 +311,15 @@ export type Assessment = {
   // now so a per-exam config is a config change, not a migration.
   // An ARRAY because key rotation needs an overlap window (old + new valid).
   sebConfigKeys?: string[];
+  // sebConfigFileUrl: OPTIONAL link to the .seb configuration file for this
+  // exam (Stage 3). Shown to students on the briefing gate and on SEB_REQUIRED
+  // error screens. When absent, the UI tells the student to use the .seb file
+  // distributed by their institute. Builder UI for this field is Stage 4;
+  // until then the webOwner can set it directly on the assessment document.
+  // NOTE: the .seb file is student-facing BY DESIGN (they need it to sit the
+  // exam) — secrecy comes from distributing it close to exam time and
+  // rotating the config between sittings, not from hiding the link.
+  sebConfigFileUrl?: string;
 
   // Overall exam time limit (minutes) — runs ALONGSIDE per-section timeLimit;
   // whichever expires first ends the exam. Enforced in Phase 1.
@@ -600,6 +609,7 @@ export async function duplicateAssessment(
         // SEB requirement. Copied with the rest of the security contract.
         requireSEB: src.requireSEB,
         sebConfigKeys: src.sebConfigKeys,
+        sebConfigFileUrl: src.sebConfigFileUrl,
       }
     : { ...applyTierDefaults('normal'), deliveryMode: 'standard' as const };
 

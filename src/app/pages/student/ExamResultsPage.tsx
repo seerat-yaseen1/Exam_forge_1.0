@@ -404,13 +404,18 @@ export function ExamResultsPage() {
               Your exam is submitted. You can now close Safe Exam Browser.
             </p>
           </div>
-          <button
-            onClick={() => { window.location.assign('/seb-quit'); }}
+          {/* A REAL anchor, not a JS navigation: SEB's quit-link detection
+              hooks link navigations to the configured quit URL — the docs'
+              usage is a link on the post-exam summary page, and JS-initiated
+              location changes are not reliably detected on all SEB versions.
+              Absolute href so it matches the configured URL exactly. */}
+          <a
+            href={`${window.location.origin}/seb-quit`}
             className="text-xs px-4 py-2 flex-shrink-0"
-            style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}
+            style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, textDecoration: 'none' }}
           >
             Close Safe Exam Browser
-          </button>
+          </a>
         </div>
       )}
 

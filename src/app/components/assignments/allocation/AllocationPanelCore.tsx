@@ -20,11 +20,11 @@ import {
   loadHierarchyBundle,
   nodeRowsOfType,
   nodeTypeCounts,
-  resolvePreviewScaffold,
+  previewAllocation,
   type AllocationDraft,
   type AllocationNodeType,
-  type AllocationPreviewResult,
   type HierarchyBundle,
+  type ResolvePreviewResponse,
 } from '../../../../lib/allocationService';
 import type { Institute } from '../../../../lib/firebaseService';
 import { NodePickerModal } from './NodePickerModal';
@@ -40,9 +40,14 @@ const selectStyle: React.CSSProperties = {
 type Props = {
   draft: AllocationDraft;
   setDraft: (d: AllocationDraft) => void;
+  /** Present in edit mode (assessment already exists). Absent in create mode —
+      preview runs against a placeholder id, commit happens post-save. */
+  assessmentId?: string;
+  /** Current committed allocation version (0 if none). */
+  version?: number;
 };
 
-export function AllocationPanelCore({ draft, setDraft }: Props) {
+export function AllocationPanelCore({ draft, setDraft, assessmentId, version = 0 }: Props) {
   const [institutes, setInstitutes] = useState<Institute[]>([]);
   const [loadingInstitutes, setLoadingInstitutes] = useState(true);
 
@@ -50,8 +55,9 @@ export function AllocationPanelCore({ draft, setDraft }: Props) {
   const [loadingBundle, setLoadingBundle] = useState(false);
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [preview, setPreview] = useState<AllocationPreviewResult | null>(null);
+  const [preview, setPreview] = useState<ResolvePreviewResponse | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Institutes ───────────────────────────────────────────────────
@@ -86,19 +92,45 @@ export function AllocationPanelCore({ draft, setDraft }: Props) {
     [rows, draft.nodeIds],
   );
 
-  // ── Debounced preview resolution (scaffold — in-memory after bundle load) ──
+  // node id → display name, for the preview's per-node breakdown (server
+  // returns counts keyed by nodeId; names live in the loaded rows).
+  const nodeNameOf = useMemo(() => {
+    const m = new Map<string, string>();
+    rows.forEach((r) => m.set(r.id, r.name));
+    if (draft.nodeType === 'institute') m.set(draft.instituteId, draft.instituteName);
+    return m;
+  }, [rows, draft.nodeType, draft.instituteId, draft.instituteName]);
+
+  // ── Debounced server-side preview (resolveAllocation dry-run) ────
+  // In create mode we don't yet have an assessment id; the dry-run only reads
+  // hierarchy + mappings (never the assessment), so a stable placeholder id
+  // gives an accurate count. The real commit happens after save with the real id.
+  const previewAssessmentId = assessmentId ?? '__preview__';
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    const ready = bundle && draft.nodeType &&
+    const ready = draft.nodeType &&
       (draft.nodeType === 'institute' || draft.nodeIds.length > 0);
-    if (!ready) { setPreview(null); setResolving(false); return; }
+    if (!ready) { setPreview(null); setResolving(false); setPreviewError(null); return; }
     setResolving(true);
-    debounceRef.current = setTimeout(() => {
-      setPreview(resolvePreviewScaffold(bundle!, draft.nodeType as AllocationNodeType, draft.nodeIds));
-      setResolving(false);
-    }, 150);
+    setPreviewError(null);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await previewAllocation(
+          previewAssessmentId,
+          draft.nodeType as AllocationNodeType,
+          draft.nodeIds,
+          version,
+        );
+        setPreview(res);
+      } catch (e: any) {
+        setPreview(null);
+        setPreviewError(e?.message ?? 'Could not resolve this selection.');
+      } finally {
+        setResolving(false);
+      }
+    }, 600);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [bundle, draft.nodeType, draft.nodeIds]);
+  }, [previewAssessmentId, draft.nodeType, draft.nodeIds, version]);
 
   // ── Handlers ─────────────────────────────────────────────────────
   const chooseInstitute = (id: string) => {
@@ -207,9 +239,20 @@ export function AllocationPanelCore({ draft, setDraft }: Props) {
         </div>
       )}
 
-      {/* 4 · Live preview */}
+      {/* 4 · Live preview (server dry-run) */}
+      {previewError && (
+        <div className="text-xs px-4 py-3" style={{ border: '1px solid #F2CECE', background: '#FDF5F5', borderRadius: 3, color: '#9B2828' }}>
+          {previewError}
+        </div>
+      )}
       {(resolving || preview) && (
-        <AllocationPreview loading={resolving} result={preview} nodeTypeLabel={typeLabel || 'node'} />
+        <AllocationPreview
+          loading={resolving}
+          result={preview}
+          nodeTypeLabel={typeLabel || 'node'}
+          nodeNameOf={nodeNameOf}
+          assessmentId={assessmentId}
+        />
       )}
 
       {/* Picker */}

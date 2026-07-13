@@ -40,7 +40,7 @@ import {
 import { getAllQuestions, type Question } from '../../lib/questionBankService';
 import { getAllSubjects, type Subject } from '../../lib/subjectService';
 import { AllocationPanelCore } from '../components/assignments/allocation/AllocationPanelCore';
-import { emptyAllocationDraft, type AllocationDraft } from '../../lib/allocationService';
+import { emptyAllocationDraft, getAllocation, commitAllocation, type AllocationDraft, type AllocationNodeType } from '../../lib/allocationService';
 import { EditMenu } from '../components/assignments/edit/EditMenu';
 
 // ── Local draft types ─────────────────────────────────────────────
@@ -3267,7 +3267,7 @@ function DetailsStep({
   sections: SectionDraft[];
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
   onBack: () => void;
-  onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }) => Promise<void>;
+  onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }, allocation: { mode: 'legacy' | 'rules'; nodeType: AllocationNodeType | ''; nodeIds: string[]; expectedVersion: number }) => Promise<void>;
   title: string;
   description: string;
   subject: string;
@@ -3342,6 +3342,27 @@ function DetailsStep({
   // resolveAllocation callable lands in Phase B (see plans/ALLOCATION_SYSTEM_PLAN.md).
   const [hierarchyMode, setHierarchyMode] = useState(false);
   const [allocationDraft, setAllocationDraft] = useState<AllocationDraft>(emptyAllocationDraft);
+  const [allocationVersion, setAllocationVersion] = useState(0);
+
+  // Edit mode: if this assessment already uses rule-based allocation, hydrate
+  // the draft + version from the stored allocation doc so edits build on it.
+  useEffect(() => {
+    if (mode !== 'edit' || !assessment?.id) return;
+    if ((assessment as { allocationMode?: string }).allocationMode !== 'rules') return;
+    let cancelled = false;
+    getAllocation(assessment.id).then((a) => {
+      if (cancelled || !a) return;
+      setHierarchyMode(true);
+      setAllocationVersion(a.version);
+      setAllocationDraft({
+        instituteId: a.instituteId === '*' ? '' : a.instituteId,
+        instituteName: a.nodes[0]?.breadcrumb?.split(' › ')[0] ?? '',
+        nodeType: a.nodeType,
+        nodeIds: a.nodeIds,
+      });
+    });
+    return () => { cancelled = true; };
+  }, [mode, assessment?.id]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
 
@@ -3389,14 +3410,18 @@ function DetailsStep({
   const [pendingPublish, setPendingPublish] = useState<{ warnings: string[] } | null>(null);
 
   const handleSave = async (overrideStatus?: AssessmentStatus, bypassSoftWarnings = false) => {
-    // D2 stub: rule-based allocation cannot be saved yet — the resolveAllocation
-    // callable (Phase B) is the only legal writer of allocation data. Never
-    // fake this client-side (system plan invariant 9).
+    // Phase C: hierarchy allocation now commits (via resolveAllocation) after
+    // the assessment is saved and its id exists. Here we only guard that a
+    // selection was actually made — the empty/validation cases are surfaced by
+    // the live preview, and the commit itself re-validates server-side.
     if (hierarchyMode) {
-      setValidationErrors([
-        'Hierarchy-based allocation is preview-only for now — saving it arrives with the backend phase. Switch "Assign To" back to All Students / Specific Institutes / Specific Students to save this assessment, or keep exploring the preview.',
-      ]);
-      return;
+      if (!allocationDraft.nodeType ||
+          (allocationDraft.nodeType !== 'institute' && allocationDraft.nodeIds.length === 0)) {
+        setValidationErrors([
+          'Choose who takes this exam before saving — pick a target level and at least one node, or switch "Assign To" back to a legacy option.',
+        ]);
+        return;
+      }
     }
     setValidationErrors([]);
     const targetStatus: AssessmentStatus = overrideStatus ?? status;
@@ -3561,10 +3586,43 @@ function DetailsStep({
       // the briefing falls back to the platform .seb published on the SEB page.
       if (!useCustomSeb) draft.sebConfigFileUrl = '';
 
+      // Phase C — high_stake publish-readiness checklist. Only gates PUBLISH
+      // (status → active), never draft saves. The .seb quit-URL is configured
+      // inside the SEB config file itself, so it's surfaced as a reminder line
+      // rather than a programmatic check (we can't parse the uploaded file).
+      const publishing = (overrideStatus ?? status) === 'active';
+      if (publishing && securityTier === 'high_stake') {
+        const missing: string[] = [];
+        const hasFile = useCustomSeb && (Boolean(sebFile) || Boolean(sebConfigFileUrl));
+        const hasKeys = useCustomSeb && sebKeyLines.length > 0;
+        if (requireSEB && !hasKeys) missing.push('a per-exam SEB Config Key');
+        if (requireSEB && !hasFile) missing.push('an uploaded .seb configuration file');
+        if (hierarchyMode &&
+            (!allocationDraft.nodeType ||
+             (allocationDraft.nodeType !== 'institute' && allocationDraft.nodeIds.length === 0))) {
+          missing.push('a non-empty allocation');
+        }
+        if (missing.length > 0) {
+          setValidationErrors([
+            `A high-stake exam can't be published until it has: ${missing.join(', ')}.`,
+            ...(requireSEB && hasFile
+              ? ['Reminder: confirm the .seb file has a Quit URL configured so students can exit the exam cleanly.']
+              : []),
+          ]);
+          setSaving(false);
+          return;
+        }
+      }
+
       await onSave(draft, {
         keys: sebKeyLines,
         file: useCustomSeb ? sebFile : null,
         clearFile: !useCustomSeb && Boolean(assessment?.sebConfigFileUrl),
+      }, {
+        mode: hierarchyMode ? 'rules' : 'legacy',
+        nodeType: allocationDraft.nodeType,
+        nodeIds: allocationDraft.nodeIds,
+        expectedVersion: allocationVersion,
       });
     } finally {
       setSaving(false);
@@ -4139,9 +4197,14 @@ function DetailsStep({
                 </LockedFieldWrapper>
               )}
 
-              {/* D2 — the rule-based allocation surface (preview-only until Phase B) */}
+              {/* Phase C — rule-based allocation surface (server-resolved) */}
               {hierarchyMode && mut.targetType && (
-                <AllocationPanelCore draft={allocationDraft} setDraft={setAllocationDraft} />
+                <AllocationPanelCore
+                  draft={allocationDraft}
+                  setDraft={setAllocationDraft}
+                  assessmentId={mode === 'edit' ? assessment?.id : undefined}
+                  version={allocationVersion}
+                />
               )}
             </div>
           </div>
@@ -4275,7 +4338,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
   mode: 'create' | 'edit';
   assessment: Assessment | null;
   allQuestions: Question[];
-  onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }) => Promise<void>;
+  onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }, allocation: { mode: 'legacy' | 'rules'; nodeType: AllocationNodeType | ''; nodeIds: string[]; expectedVersion: number }) => Promise<void>;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -4495,6 +4558,8 @@ export function AssignmentsPage() {
   const handleSave = async (
     draft: AssessmentDraft,
     seb: { keys: string[]; file: File | null; clearFile: boolean } = { keys: [], file: null, clearFile: false },
+    allocation: { mode: 'legacy' | 'rules'; nodeType: AllocationNodeType | ''; nodeIds: string[]; expectedVersion: number } =
+      { mode: 'legacy', nodeType: '', nodeIds: [], expectedVersion: 0 },
   ) => {
     // Stage 4b: the per-exam .seb file needs the assessment id, which only
     // exists after creation — hence the upload happens here, not in the pane.
@@ -4506,6 +4571,15 @@ export function AssignmentsPage() {
       return url;
     };
 
+    // Phase C: rule-based allocation commits AFTER the assessment id exists —
+    // same reason as the .seb file. resolveAllocation stamps allocationMode
+    // and materializes the member list; it re-validates server-side and throws
+    // on empty / archived / cross-institute / version-mismatch.
+    const applyAllocation = async (id: string): Promise<void> => {
+      if (allocation.mode !== 'rules' || !allocation.nodeType) return;
+      await commitAllocation(id, allocation.nodeType, allocation.nodeIds, allocation.expectedVersion);
+    };
+
     if (panelMode === 'create') {
       const saved = await createAssessment(draft);
       // Stage 4: per-exam keys live in a side collection keyed by the id we
@@ -4513,14 +4587,21 @@ export function AssignmentsPage() {
       await setAssessmentSEBKeys(saved.id, seb.keys).catch(() => {});
       const url = await applySebFile(saved.id).catch(() => undefined);
       if (url) saved.sebConfigFileUrl = url;
+      // Allocation commit is NOT swallowed — a failure (archived node, empty,
+      // version mismatch) must surface. The assessment already exists as a
+      // draft WITHOUT allocationMode, so it's a safe legacy doc until re-saved.
+      await applyAllocation(saved.id);
+      if (allocation.mode === 'rules') (saved as { allocationMode?: string }).allocationMode = 'rules';
       setAssessments((prev) => [saved, ...prev]);
     } else if (editTarget) {
       await updateAssessment(editTarget.id, draft);
       await setAssessmentSEBKeys(editTarget.id, seb.keys).catch(() => {});
       const uploadedUrl = await applySebFile(editTarget.id).catch(() => undefined);
       if (uploadedUrl) draft.sebConfigFileUrl = uploadedUrl;
+      await applyAllocation(editTarget.id);
       const totalMarks = draft.questions.reduce((s, q) => s + q.marks, 0);
       const updated = { ...editTarget, ...draft, totalMarks, updatedAt: new Date().toISOString() } as Assessment;
+      if (allocation.mode === 'rules') (updated as { allocationMode?: string }).allocationMode = 'rules';
       setAssessments((prev) => prev.map((a) => (a.id === editTarget.id ? updated : a)));
     }
     setPanelOpen(false);

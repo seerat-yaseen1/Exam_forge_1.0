@@ -1,18 +1,20 @@
 // ══════════════════════════════════════════════════════════════════
-// ALLOCATION SERVICE — client-side support for rule-based allocation
-// (Phase D2 of plans/ALLOCATION_SYSTEM_PLAN.md)
+// ALLOCATION SERVICE — client support for rule-based allocation
+// (Phase C of plans/ALLOCATION_SYSTEM_PLAN.md)
 //
-// PERMANENT parts of this file: types, hierarchy bundle loading,
-// breadcrumb construction, node-row shaping. The picker and preview
-// need these regardless of where resolution runs.
+// PERMANENT: types, hierarchy bundle loading, breadcrumb construction,
+// node-row shaping (the PICKER needs these locally regardless of where
+// resolution runs).
 //
-// ⚠️ SCAFFOLD (THROWAWAY) parts are marked with [SCAFFOLD] below:
-// preview RESOLUTION currently runs in the browser so the UI can be
-// exercised before the backend exists. In Phase B/C this is replaced
-// by the `resolveAllocation` callable (dry-run mode) and DELETED.
-// Nothing in this file ever WRITES — commit is server-only by design
-// (system plan invariant 9).
+// Phase C: the D2 client scaffold resolver is GONE. Preview and commit
+// now call the `resolveAllocation` Cloud Function (dry-run / commit);
+// manual adds call `addManualMember`; the resolved list pages through
+// `getAllocationPreviewPage`. Nothing here writes directly — commit is
+// server-only by design (system plan invariant 9).
 // ══════════════════════════════════════════════════════════════════
+
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './firebase';
 
 import {
   firestoreQuery,
@@ -234,10 +236,17 @@ function breadcrumbFor(bundle: HierarchyBundle, node: AnyNode): { crumb: string;
  * All active nodes of one type in the institute, shaped for the picker —
  * breadcrumb, parent grouping, ancestors for filter chips, and a resolved
  * per-node student count.
+ *
+ * NOTE: the per-node count here is a LOCAL, display-only estimate computed
+ * from the already-loaded bundle so the picker rows show a number without a
+ * round-trip. The AUTHORITATIVE counts come from resolveAllocation(dryRun)
+ * once nodes are selected (system plan §3a). Picker counts and server counts
+ * agree by construction (same upward-membership rule), but the server is the
+ * source of truth.
  */
 export function nodeRowsOfType(bundle: HierarchyBundle, t: AllocationNodeType): AllocationNodeRow[] {
   if (t === 'institute') return []; // institute mode has no sub-node list
-  const memberSets = memberSetsByNode(bundle, t);
+  const memberSets = localMemberSetsByNode(bundle, t);
   return collectionFor(bundle, t).map((n) => {
     const { crumb, parentName } = breadcrumbFor(bundle, n);
     const ancestors: Record<string, string | null> = {};
@@ -250,6 +259,35 @@ export function nodeRowsOfType(bundle: HierarchyBundle, t: AllocationNodeType): 
       studentCount: memberSets.get(n.id)?.size ?? 0,
     };
   }).sort((a, b) => a.breadcrumb.localeCompare(b.breadcrumb) || a.name.localeCompare(b.name));
+}
+
+/** Local, display-only member set per node (drives picker row counts). */
+function localMemberSetsByNode(bundle: HierarchyBundle, t: Exclude<AllocationNodeType, 'institute'>): Map<string, Set<string>> {
+  const byMappedNode = new Map<string, string[]>();
+  bundle.mappings.forEach((m) => {
+    const arr = byMappedNode.get(m.nodeId) ?? [];
+    arr.push(m.studentId);
+    byMappedNode.set(m.nodeId, arr);
+  });
+  const below = ALLOCATION_TYPE_ORDER.slice(ALLOCATION_TYPE_ORDER.indexOf(t) + 1) as
+    Exclude<AllocationNodeType, 'institute'>[];
+  const field = LEVEL_ID_FIELD[t];
+  const out = new Map<string, Set<string>>();
+  collectionFor(bundle, t).forEach((n) => {
+    const set = new Set<string>();
+    (byMappedNode.get(n.id) ?? []).forEach((sid) => set.add(sid));
+    if (t !== 'group') {
+      below.forEach((childType) => {
+        collectionFor(bundle, childType).forEach((c) => {
+          if ((c as any)[field] === n.id && (c as any).status !== 'archived') {
+            (byMappedNode.get(c.id) ?? []).forEach((sid) => set.add(sid));
+          }
+        });
+      });
+    }
+    out.set(n.id, set);
+  });
+  return out;
 }
 
 /** How many nodes of each type exist — drives the node-type selector's counts. */
@@ -268,105 +306,100 @@ export function nodeTypeCounts(bundle: HierarchyBundle): Record<AllocationNodeTy
   };
 }
 
-// ── [SCAFFOLD] Resolution — replaced by the server dry-run in Phase B ──
-// Mirrors the system-plan algorithm §3a-3: a node's member set = students
-// with a mapping AT the node or at any DESCENDANT node (descendants found
-// via the denormalized ancestor-id fields every doc carries). Union across
-// the selected nodes; per-student via-node attribution retained.
+// ── Server callables (Phase C) ─────────────────────────────────────
 
-function descendantIds(bundle: HierarchyBundle, t: Exclude<AllocationNodeType, 'institute'>, nodeId: string): Set<string> {
-  const ids = new Set<string>([nodeId]);
-  if (t === 'group') return ids; // leaf
-  const field = LEVEL_ID_FIELD[t];
-  const below = ALLOCATION_TYPE_ORDER.slice(ALLOCATION_TYPE_ORDER.indexOf(t) + 1) as
-    Exclude<AllocationNodeType, 'institute'>[];
-  below.forEach((childType) => {
-    collectionFor(bundle, childType).forEach((n) => {
-      if ((n as any)[field] === nodeId) ids.add(n.id);
-    });
-  });
-  return ids;
-}
+export type ResolvePreviewResponse = {
+  valid: boolean;
+  errors: string[];
+  commitBlockers: string[];
+  warnings: string[];
+  resolvedCount: number;
+  byNode: { nodeId: string; count: number }[];
+  deltaCounts: { added: number; removed: number };
+  sampleStudents: { id: string; name: string; email: string }[];
+  isLive: boolean;
+};
 
-/** [SCAFFOLD] Unique member set per node of type t (drives per-row counts). */
-function memberSetsByNode(bundle: HierarchyBundle, t: Exclude<AllocationNodeType, 'institute'>): Map<string, Set<string>> {
-  const out = new Map<string, Set<string>>();
-  // Precompute mapping-node → students once.
-  const byMappedNode = new Map<string, string[]>();
-  bundle.mappings.forEach((m) => {
-    const arr = byMappedNode.get(m.nodeId) ?? [];
-    arr.push(m.studentId);
-    byMappedNode.set(m.nodeId, arr);
-  });
-  collectionFor(bundle, t).forEach((n) => {
-    const set = new Set<string>();
-    descendantIds(bundle, t, n.id).forEach((did) => {
-      (byMappedNode.get(did) ?? []).forEach((sid) => set.add(sid));
-    });
-    out.set(n.id, set);
-  });
-  return out;
-}
+export type ResolveCommitResponse = {
+  version: number;
+  resolvedCount: number;
+  deltaCounts: { added: number; removed: number };
+};
 
-/**
- * [SCAFFOLD] Client-side preview resolution — union of the selected nodes,
- * with via-node attribution. Institute mode = every student of the institute
- * (mapped or not), matching system-plan D2/D8 semantics.
- * DELETED in Phase C when the UI switches to resolveAllocation(dryRun).
- */
-export function resolvePreviewScaffold(
-  bundle: HierarchyBundle,
+/** Dry-run preview — the live footer's source of truth (replaces the scaffold). */
+export async function previewAllocation(
+  assessmentId: string,
   nodeType: AllocationNodeType,
   nodeIds: string[],
-): AllocationPreviewResult {
-  const studentInfo = new Map(bundle.students.map((s) => [s.id, s]));
+  expectedVersion: number,
+): Promise<ResolvePreviewResponse> {
+  const call = httpsCallable<
+    { assessmentId: string; nodeType: string; nodeIds: string[]; expectedVersion: number; dryRun: boolean },
+    ResolvePreviewResponse
+  >(functions, 'resolveAllocation');
+  const res = await call({ assessmentId, nodeType, nodeIds, expectedVersion, dryRun: true });
+  return res.data;
+}
 
-  if (nodeType === 'institute') {
-    const students = bundle.students.map((s) => ({
-      id: s.id, name: s.name ?? s.id, email: s.email ?? '', viaNodeIds: [bundle.instituteId],
-    }));
-    return {
-      count: students.length,
-      byNode: [{ nodeId: bundle.instituteId, name: 'Entire institute', breadcrumb: '', count: students.length }],
-      students,
-    };
-  }
+/** Commit — the only write path. Throws on validation / version-mismatch / live-shrink. */
+export async function commitAllocation(
+  assessmentId: string,
+  nodeType: AllocationNodeType,
+  nodeIds: string[],
+  expectedVersion: number,
+): Promise<ResolveCommitResponse> {
+  const call = httpsCallable<
+    { assessmentId: string; nodeType: string; nodeIds: string[]; expectedVersion: number; dryRun: boolean },
+    ResolveCommitResponse
+  >(functions, 'resolveAllocation');
+  const res = await call({ assessmentId, nodeType, nodeIds, expectedVersion, dryRun: false });
+  return res.data;
+}
 
-  const t = nodeType as Exclude<AllocationNodeType, 'institute'>;
-  const rows = new Map(nodeRowsOfType(bundle, t).map((r) => [r.id, r]));
-  const via = new Map<string, Set<string>>(); // studentId → selected nodeIds
-  const byNode: AllocationPreviewResult['byNode'] = [];
+/** Roster "Add student" — idempotent, webOwner-only, external/retest escape hatch. */
+export async function addManualMember(
+  assessmentId: string,
+  studentId: string,
+): Promise<{ ok: boolean; alreadyMember: boolean; source?: string }> {
+  const call = httpsCallable<
+    { assessmentId: string; studentId: string },
+    { ok: boolean; alreadyMember: boolean; source?: string }
+  >(functions, 'addManualMember');
+  const res = await call({ assessmentId, studentId });
+  return res.data;
+}
 
-  const byMappedNode = new Map<string, string[]>();
-  bundle.mappings.forEach((m) => {
-    const arr = byMappedNode.get(m.nodeId) ?? [];
-    arr.push(m.studentId);
-    byMappedNode.set(m.nodeId, arr);
-  });
+export type AllocationMemberRow = {
+  docId: string; studentId: string; instituteId: string; source: string;
+  viaNodeIds: string[]; addedBy: string; createdAt: string; name: string; email: string;
+};
 
-  nodeIds.forEach((nid) => {
-    const set = new Set<string>();
-    descendantIds(bundle, t, nid).forEach((did) => {
-      (byMappedNode.get(did) ?? []).forEach((sid) => set.add(sid));
-    });
-    set.forEach((sid) => {
-      const v = via.get(sid) ?? new Set<string>();
-      v.add(nid);
-      via.set(sid, v);
-    });
-    const row = rows.get(nid);
-    byNode.push({
-      nodeId: nid,
-      name: row?.name ?? nid,
-      breadcrumb: row?.breadcrumb ?? '',
-      count: set.size,
-    });
-  });
+/** Paged resolved-list reads — never downloads the whole list at once. */
+export async function getAllocationPreviewPage(
+  assessmentId: string,
+  opts: { limit?: number; cursor?: string; source?: 'rules' | 'manual' } = {},
+): Promise<{ rows: AllocationMemberRow[]; nextCursor: string | null }> {
+  const call = httpsCallable<
+    { assessmentId: string; limit?: number; cursor?: string; source?: 'rules' | 'manual' },
+    { rows: AllocationMemberRow[]; nextCursor: string | null }
+  >(functions, 'getAllocationPreviewPage');
+  const res = await call({ assessmentId, ...opts });
+  return res.data;
+}
 
-  const students: AllocationPreviewStudent[] = [...via.entries()].map(([sid, v]) => {
-    const s = studentInfo.get(sid);
-    return { id: sid, name: s?.name ?? sid, email: s?.email ?? '', viaNodeIds: [...v] };
-  }).sort((a, b) => a.name.localeCompare(b.name));
-
-  return { count: students.length, byNode: byNode.sort((a, b) => b.count - a.count), students };
+/** Read the stored allocation doc (version + node summaries) for edit mode. */
+export async function getAllocation(assessmentId: string): Promise<{
+  version: number; nodeType: AllocationNodeType; nodeIds: string[];
+  nodes: { nodeId: string; nodeName: string; breadcrumb: string; instituteId: string }[];
+  resolvedCount: number; manualCount: number; instituteId: string;
+} | null> {
+  const snap = await firestoreQuery<any>('allocations', 'assessmentId', '==', assessmentId);
+  const doc = snap[0];
+  if (!doc) return null;
+  return {
+    version: doc.version ?? 0,
+    nodeType: doc.nodeType, nodeIds: doc.nodeIds ?? [], nodes: doc.nodes ?? [],
+    resolvedCount: doc.resolvedCount ?? 0, manualCount: doc.manualCount ?? 0,
+    instituteId: doc.instituteId ?? '',
+  };
 }

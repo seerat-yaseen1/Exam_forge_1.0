@@ -1772,7 +1772,9 @@ export const startExam = onCall<StartExamData>(
       blockedStudents?: string[];
       title?: string;
       assignedTo?: { type: string; instituteIds?: string[]; studentIds?: string[] };
-      // Phase 0 — server-authoritative security config:
+      // Phase C — when 'rules', targeting is enforced by the materialized
+      // assessmentMembers list instead of assignedTo (both paths coexist).
+      allocationMode?: string;
       securityTier?: 'mock' | 'normal' | 'high_stake';
       deliveryMode?: 'standard' | 'linear' | 'adaptive';
       requireCamera?: boolean;
@@ -1850,20 +1852,41 @@ export const startExam = onCall<StartExamData>(
       );
     }
 
-    // Targeting gate — the client briefing filters by assignedTo, but nothing
+    // Targeting gate — the client briefing filters targeting, but nothing
     // stopped a student from calling startExam directly with any active
-    // assessment id. Enforce assignment server-side. Legacy docs without
-    // assignedTo are treated as webOwner-global ('all').
-    const target = a.assignedTo;
-    if (target && target.type !== 'all') {
-      const assigned =
-        target.type === 'institutes'
-          ? (target.instituteIds ?? []).includes(instituteId)
-          : target.type === 'students'
-            ? (target.studentIds ?? []).includes(studentId)
-            : false;
-      if (!assigned) {
+    // assessment id. Enforce server-side.
+    //
+    // Phase C — two paths, chosen per-assessment by allocationMode:
+    //   'rules' → the materialized assessmentMembers list is authoritative
+    //             (O(1) doc-id lookup; the resolveAllocation / addManualMember
+    //             callables are its only writers).
+    //   else   → legacy assignedTo gate, byte-for-byte unchanged. Legacy docs
+    //            without assignedTo are treated as webOwner-global ('all').
+    // Enumeration hardening: a not-assigned student gets the SAME uniform
+    // denial as not-found / not-open, so probing reveals nothing.
+    let admittedAllocationVersion: number | null = null;
+    let admittedAllocationSource: string | null = null;
+    if (a.allocationMode === 'rules') {
+      const memberSnap = await db.collection('assessmentMembers')
+        .doc(`${assessmentId}_${studentId}`)
+        .get();
+      if (!memberSnap.exists || memberSnap.get('active') !== true) {
         throw new HttpsError('permission-denied', 'This exam is not assigned to you.');
+      }
+      admittedAllocationVersion = Number(memberSnap.get('admittedByVersion') ?? 0);
+      admittedAllocationSource = String(memberSnap.get('source') ?? 'rules');
+    } else {
+      const target = a.assignedTo;
+      if (target && target.type !== 'all') {
+        const assigned =
+          target.type === 'institutes'
+            ? (target.instituteIds ?? []).includes(instituteId)
+            : target.type === 'students'
+              ? (target.studentIds ?? []).includes(studentId)
+              : false;
+        if (!assigned) {
+          throw new HttpsError('permission-denied', 'This exam is not assigned to you.');
+        }
       }
     }
 
@@ -2035,6 +2058,11 @@ export const startExam = onCall<StartExamData>(
       },
       totalFrozenSeconds: 0,
       serverAnchored: true, // marks this attempt as using server-owned timestamps
+      // Phase C — allocation provenance: which materialization admitted this
+      // student, and whether via rules or a manual roster add. null on the
+      // legacy assignedTo path. Answers "why could X sit this exam?" forever.
+      allocationVersion: admittedAllocationVersion,
+      allocationSource: admittedAllocationSource,
       createdAt: nowIso,
       updatedAt: nowIso,
     };

@@ -281,6 +281,10 @@ export type Assessment = {
   // Checked as a gate in ExamBriefingPage; does not affect existing attempts
   blockedStudents?: string[];   // array of studentIds
 
+  // Phase C — when 'rules', targeting comes from the materialized
+  // assessmentMembers list, not assignedTo. undefined = legacy path.
+  allocationMode?: 'rules';
+
   // Attempt limits
   // maxAttempts: undefined = unlimited; integer = max finished attempts allowed
   // attemptOverrides: per-student override of maxAttempts
@@ -1022,13 +1026,43 @@ export async function getAssessmentsForStudent(
     ...closedSnap.docs.map((d) => d.data() as Assessment),
   ];
 
-  return all.filter((a) => {
+  // Legacy-path docs: filter by assignedTo exactly as before. Rule-path docs
+  // (allocationMode === 'rules') are handled via the membership query below —
+  // exclude them here so assignedTo, which no longer governs them, can't leak
+  // one in or wrongly hide one.
+  const legacyVisible = all.filter((a) => {
+    if (a.allocationMode === 'rules') return false;
     const t = a.assignedTo;
+    if (!t) return true; // pre-assignedTo legacy docs = webOwner-global
     if (t.type === 'all') return true;
     if (t.type === 'institutes') return t.instituteIds.includes(instituteId);
     if (t.type === 'students') return t.studentIds.includes(studentId);
     return false;
   });
+
+  // Rule-path discovery: the student's own membership docs (rules enforce that
+  // a student may read only their own). Join back to the active/closed docs we
+  // already fetched — no extra assessment reads.
+  const byId = new Map<string, Assessment>();
+  [...activeSnap.docs, ...closedSnap.docs].forEach((d) => byId.set(d.id, d.data() as Assessment));
+  let ruleVisible: Assessment[] = [];
+  try {
+    const memberSnap = await getDocs(query(
+      collection(db, 'assessmentMembers'),
+      where('studentId', '==', studentId),
+      where('active', '==', true),
+    ));
+    ruleVisible = memberSnap.docs
+      .map((m) => byId.get(String(m.get('assessmentId'))))
+      .filter((a): a is Assessment => Boolean(a) && a!.allocationMode === 'rules');
+  } catch {
+    ruleVisible = []; // never let discovery of new-path exams break the legacy list
+  }
+
+  // Merge, dedupe by id.
+  const merged = new Map<string, Assessment>();
+  [...legacyVisible, ...ruleVisible].forEach((a) => merged.set(a.id, a));
+  return [...merged.values()];
 }
 
 // ══════════════════════════════════════════════════════════════════

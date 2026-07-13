@@ -995,6 +995,115 @@ export async function getMappingsByNode(nodeId: string): Promise<AcademicMapping
   return firestoreQuery<AcademicMapping>('academicMappings', 'nodeId', '==', nodeId);
 }
 
+// ── Descendant-aware roster (user management) ──────────────────────
+// A student mapped to a Group is a member of that group's Section, Semester,
+// Year, Batch, Program, Level and School too — but each mapping doc lives only
+// at the LEAF the admin picked. getMappingsByNode returns just the direct
+// mappings; this returns direct PLUS every mapping at a descendant node, so a
+// node roster shows everyone who belongs at or below it.
+//
+// Descendants are resolved from the hierarchy collections (which carry
+// ancestor ids); mappings themselves only store nodeId/nodeType, so we first
+// collect the descendant node-ids, then fetch mappings for that id set. This
+// is the same downward walk the allocation resolver uses — reused read-side.
+
+// Collection name for each node level.
+const NODE_COLLECTION: Record<NodeLevel, string> = {
+  school: 'schools',
+  academicLevel: 'academicLevels',
+  program: 'programs',
+  academicSession: 'academicSessions',
+  academicYear: 'academicYears',
+  semester: 'semesters',
+  course: 'courses',
+  section: 'sections',
+  group: 'groups',
+};
+
+// The ancestor-id field a descendant collection carries for a given level.
+const NODE_ANCESTOR_FIELD: Record<Exclude<NodeLevel, 'group'>, string> = {
+  school: 'schoolId',
+  academicLevel: 'levelId',
+  program: 'programId',
+  academicSession: 'sessionId',
+  academicYear: 'yearId',
+  semester: 'semesterId',
+  course: 'courseId',
+  section: 'sectionId',
+};
+
+const NODE_ORDER: NodeLevel[] = [
+  'school', 'academicLevel', 'program', 'academicSession',
+  'academicYear', 'semester', 'course', 'section', 'group',
+];
+
+// One mapping tagged with whether it sits AT the target node (removable here)
+// or below it (inherited — read-only at this level; remove at its own node).
+export type RosterMember = AcademicMapping & {
+  membership: 'direct' | 'inherited';
+};
+
+// Collect all descendant node-ids of the given node (across every lower level).
+// Uses the denormalized ancestor field on each collection — one query per level.
+async function collectDescendantNodeIds(nodeId: string, nodeType: NodeLevel): Promise<string[]> {
+  if (nodeType === 'group') return []; // leaf — no descendants
+  const field = NODE_ANCESTOR_FIELD[nodeType as Exclude<NodeLevel, 'group'>];
+  const below = NODE_ORDER.slice(NODE_ORDER.indexOf(nodeType) + 1);
+  const ids: string[] = [];
+  await Promise.all(below.map(async (lvl) => {
+    const rows = await firestoreQuery<{ id: string; status?: string }>(NODE_COLLECTION[lvl], field, '==', nodeId);
+    rows.forEach((r) => { if (r.status !== 'archived') ids.push(r.id); });
+  }));
+  return ids;
+}
+
+// Fetch mappings for a set of node-ids, chunked into 'in' queries (limit 30).
+async function mappingsForNodeIds(nodeIds: string[]): Promise<AcademicMapping[]> {
+  if (nodeIds.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < nodeIds.length; i += 30) chunks.push(nodeIds.slice(i, i + 30));
+  const results = await Promise.all(
+    chunks.map((c) =>
+      getDocs(query(collection(db, 'academicMappings'), where('nodeId', 'in', c)))
+        .then((snap) => snap.docs.map((d) => ({ ...d.data(), id: d.id }) as AcademicMapping))
+        .catch(() => [] as AcademicMapping[]),
+    ),
+  );
+  return results.flat();
+}
+
+// Direct + inherited members for a node. Deduped by studentId: a student who is
+// mapped BOTH directly here and via a descendant shows once, as 'direct'.
+export async function getStudentsAtOrBelowNode(
+  nodeId: string,
+  nodeType: NodeLevel,
+): Promise<RosterMember[]> {
+  const [direct, descendantIds] = await Promise.all([
+    getMappingsByNode(nodeId),
+    collectDescendantNodeIds(nodeId, nodeType),
+  ]);
+  const inherited = await mappingsForNodeIds(descendantIds);
+
+  const byStudent = new Map<string, RosterMember>();
+  // Inherited first, so a direct mapping overwrites and wins the 'direct' tag.
+  inherited.forEach((m) => {
+    if (!byStudent.has(m.studentId)) byStudent.set(m.studentId, { ...m, membership: 'inherited' });
+  });
+  direct.forEach((m) => byStudent.set(m.studentId, { ...m, membership: 'direct' }));
+
+  return [...byStudent.values()].sort((a, b) =>
+    (a.studentName || '').localeCompare(b.studentName || ''));
+}
+
+// Count only — for lazy levels we still call the same walk, but callers may
+// prefer to defer it. Kept as a thin wrapper so intent reads clearly.
+export async function countStudentsAtOrBelowNode(
+  nodeId: string,
+  nodeType: NodeLevel,
+): Promise<number> {
+  return (await getStudentsAtOrBelowNode(nodeId, nodeType)).length;
+}
+
 // All mappings for a given student — used in the student profile view.
 export async function getMappingsByStudent(studentId: string): Promise<AcademicMapping[]> {
   return firestoreQuery<AcademicMapping>('academicMappings', 'studentId', '==', studentId);

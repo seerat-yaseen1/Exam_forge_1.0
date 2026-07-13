@@ -39,6 +39,8 @@ import {
 } from '../../lib/assessmentService';
 import { getAllQuestions, type Question } from '../../lib/questionBankService';
 import { getAllSubjects, type Subject } from '../../lib/subjectService';
+import { AllocationPanelCore } from '../components/assignments/allocation/AllocationPanelCore';
+import { emptyAllocationDraft, type AllocationDraft } from '../../lib/allocationService';
 import { EditMenu } from '../components/assignments/edit/EditMenu';
 
 // ── Local draft types ─────────────────────────────────────────────
@@ -2123,9 +2125,6 @@ function TopicPickerPhase({
 function SetupStep({
   title, setTitle, description, setDescription,
   subject, setSubject, status, setStatus,
-  targetType, setTargetType,
-  selectedInstituteIds, setSelectedInstituteIds,
-  selectedStudentIds, setSelectedStudentIds,
   sections, setSections,
   onContinue, originalStatus,
   allQuestions,
@@ -2137,10 +2136,6 @@ function SetupStep({
   description: string; setDescription: (v: string) => void;
   subject: string; setSubject: (v: string) => void;
   status: AssessmentStatus; setStatus: (v: AssessmentStatus) => void;
-  targetType: 'all' | 'institutes' | 'students';
-  setTargetType: (v: 'all' | 'institutes' | 'students') => void;
-  selectedInstituteIds: string[]; setSelectedInstituteIds: (ids: string[]) => void;
-  selectedStudentIds: string[]; setSelectedStudentIds: (ids: string[]) => void;
   sections: SectionDraft[];
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
   onContinue: () => void;
@@ -2155,7 +2150,6 @@ function SetupStep({
   const [titleError, setTitleError] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const mut = mutabilityFor(originalStatus);
-  const lockReason = originalStatus === 'active' ? 'test is live' : 'test is closed';
 
   // ── Subject docs (Phase 1) ────────────────────────────────────
   const [allSubjectDocs, setAllSubjectDocs] = useState<Subject[]>([]);
@@ -2313,7 +2307,7 @@ function SetupStep({
               style={{ width: 28, height: 28, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA' }}>
               <Layers size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
             </div>
-            <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 1 OF 2</p>
+            <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 1 OF 3</p>
           </div>
           <h2 className="text-base mb-1" style={{ color: '#0C0C0B' }}>Assessment Setup</h2>
           <p className="text-xs" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
@@ -2339,8 +2333,8 @@ function SetupStep({
           <div className="space-y-5">
             <SectionLabel label="BASICS" />
 
-            {/* Row 1: Title · Subject · Assign To */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Row 1: Title · Subject — targeting now lives in Step 3 (Allocation) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <Field label="Title" required>
                 <input
                   type="text" value={title}
@@ -2355,42 +2349,6 @@ function SetupStep({
                 <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
                   style={{ ...inputStyle, fontSize: 13, padding: '9px 12px' }} placeholder="e.g., Mathematics" />
               </Field>
-
-              {mut.targetType ? (
-                <Field label="Assign To">
-                  <select
-                    value={targetType}
-                    onChange={(e) => setTargetType(e.target.value as 'all' | 'institutes' | 'students')}
-                    style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}
-                  >
-                    <option value="all">All Students</option>
-                    <option value="institutes">Specific Institutes</option>
-                    <option value="students">Specific Students</option>
-                  </select>
-                  {targetType === 'institutes' && (
-                    <InstitutePicker selectedIds={selectedInstituteIds} onChange={setSelectedInstituteIds} locked={false} />
-                  )}
-                  {targetType === 'students' && (
-                    <StudentPicker selectedIds={selectedStudentIds} onChange={setSelectedStudentIds} locked={false} />
-                  )}
-                </Field>
-              ) : (
-                <LockedFieldWrapper label="Assign To" reason={lockReason}>
-                  <div>
-                    <select value={targetType} readOnly style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}>
-                      <option value="all">All Students</option>
-                      <option value="institutes">Specific Institutes</option>
-                      <option value="students">Specific Students</option>
-                    </select>
-                    {targetType === 'institutes' && (
-                      <InstitutePicker selectedIds={selectedInstituteIds} onChange={setSelectedInstituteIds} locked={true} />
-                    )}
-                    {targetType === 'students' && (
-                      <StudentPicker selectedIds={selectedStudentIds} onChange={setSelectedStudentIds} locked={true} />
-                    )}
-                  </div>
-                </LockedFieldWrapper>
-              )}
             </div>
 
             {/* Row 2: Description (full-width) */}
@@ -3295,9 +3253,12 @@ function StudentPicker({
 function DetailsStep({
   mode, assessment, originalStatus, allQuestions, sections, setSections, onBack, onSave,
   title, description, subject, status,
-  targetType, selectedInstituteIds, selectedStudentIds,
+  targetType, setTargetType,
+  selectedInstituteIds, setSelectedInstituteIds,
+  selectedStudentIds, setSelectedStudentIds,
   subjectPool, topicPool,
   deliveryMode, setDeliveryMode,
+  allocationPhase, onContinueToAllocation, onBackToRules,
 }: {
   mode: 'create' | 'edit';
   assessment: Assessment | null;
@@ -3312,12 +3273,18 @@ function DetailsStep({
   subject: string;
   status: AssessmentStatus;
   targetType: 'all' | 'institutes' | 'students';
-  selectedInstituteIds: string[];
-  selectedStudentIds: string[];
+  setTargetType: (v: 'all' | 'institutes' | 'students') => void;
+  selectedInstituteIds: string[]; setSelectedInstituteIds: (ids: string[]) => void;
+  selectedStudentIds: string[]; setSelectedStudentIds: (ids: string[]) => void;
   subjectPool: string[];
   topicPool: string[];
   deliveryMode: 'standard' | 'linear' | 'adaptive';
   setDeliveryMode: React.Dispatch<React.SetStateAction<'standard' | 'linear' | 'adaptive'>>;
+  /* Step 3 (Allocation) — the component stays mounted across steps 2↔3 so all
+     local settings state (dates, toggles, SEB config) survives navigation. */
+  allocationPhase: boolean;
+  onContinueToAllocation: () => void;
+  onBackToRules: () => void;
 }) {
   const [startDate, setStartDate] = useState(toDateTimeLocal(assessment?.startDate));
   const [endDate, setEndDate] = useState(toDateTimeLocal(assessment?.endDate));
@@ -3367,6 +3334,14 @@ function DetailsStep({
       .catch(() => {/* leave empty — platform keys apply */});
   }, [assessment?.id]);
   const [saving, setSaving] = useState(false);
+
+  // ── D2: rule-based allocation (Step 3 "By Hierarchy" mode) ────────
+  // Draft lives HERE (not in the panel) so it survives 2↔3 navigation —
+  // DetailsStep stays mounted across those steps. While hierarchyMode is
+  // on, saving is blocked: commit is server-only by design and the
+  // resolveAllocation callable lands in Phase B (see plans/ALLOCATION_SYSTEM_PLAN.md).
+  const [hierarchyMode, setHierarchyMode] = useState(false);
+  const [allocationDraft, setAllocationDraft] = useState<AllocationDraft>(emptyAllocationDraft);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
 
@@ -3414,6 +3389,15 @@ function DetailsStep({
   const [pendingPublish, setPendingPublish] = useState<{ warnings: string[] } | null>(null);
 
   const handleSave = async (overrideStatus?: AssessmentStatus, bypassSoftWarnings = false) => {
+    // D2 stub: rule-based allocation cannot be saved yet — the resolveAllocation
+    // callable (Phase B) is the only legal writer of allocation data. Never
+    // fake this client-side (system plan invariant 9).
+    if (hierarchyMode) {
+      setValidationErrors([
+        'Hierarchy-based allocation is preview-only for now — saving it arrives with the backend phase. Switch "Assign To" back to All Students / Specific Institutes / Specific Students to save this assessment, or keep exploring the preview.',
+      ]);
+      return;
+    }
     setValidationErrors([]);
     const targetStatus: AssessmentStatus = overrideStatus ?? status;
 
@@ -3591,6 +3575,8 @@ function DetailsStep({
 
   return (
     <div className="flex flex-col">
+      {!allocationPhase ? (
+      <>
 
       {/* ── TOP: Schedule + Grading + Section Limits | Settings (fixed natural height) ── */}
       <div className="flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB', background: '#FAFAF8' }}>
@@ -3604,7 +3590,7 @@ function DetailsStep({
               <X size={11} strokeWidth={1.5} /> Back to Setup
             </button>
             <span style={{ color: '#DDDBD5', fontSize: 10 }}>·</span>
-            <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 2 OF 2 — RULES &amp; SETTINGS</p>
+            <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 2 OF 3 — RULES &amp; SETTINGS</p>
           </div>
 
           {/* Two-column layout: left stacks Schedule/Grading/Section Limits, right holds Settings.
@@ -4066,42 +4052,139 @@ function DetailsStep({
         topicPool={topicPool}
       />
 
-      {/* Bottom save bar */}
+      {/* Bottom bar — rules phase hands off to Step 3 (Allocation). Saving now
+          happens there, so this bar only advances the wizard. */}
       <div className="flex items-center justify-end gap-3 px-12 py-5 mt-8"
         style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
-        {(() => {
-          // Edit mode on a live or closed assessment: status is locked, single Save Changes.
-          const lockedStatus = mode === 'edit' && (originalStatus === 'active' || originalStatus === 'closed');
-          if (lockedStatus) {
-            return (
-              <button onClick={() => handleSave()} disabled={saving}
-                className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                {saving
-                  ? <><Loader2 size={11} className="animate-spin" /> Saving…</>
-                  : <><CheckCircle2 size={11} /> Save Changes</>}
-              </button>
-            );
-          }
-          // Create mode, or edit on a draft: offer Save as Draft + Publish.
-          const draftLabel = mode === 'create' ? 'Save as Draft' : 'Save Draft';
-          const publishLabel = mode === 'create' ? 'Create & Publish' : 'Save & Publish';
-          return (
-            <>
-              <button onClick={() => handleSave('draft')} disabled={saving}
-                className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                style={{ background: '#FFFFFF', color: '#0C0C0B', border: '1px solid #0C0C0B', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                {saving ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : <>{draftLabel}</>}
-              </button>
-              <button onClick={() => handleSave('active')} disabled={saving}
-                className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                {saving ? <><Loader2 size={11} className="animate-spin" /> Publishing…</> : <><CheckCircle2 size={11} /> {publishLabel}</>}
-              </button>
-            </>
-          );
-        })()}
+        <button onClick={onContinueToAllocation}
+          className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}>
+          Continue to Allocation <ChevronRight size={12} strokeWidth={2} />
+        </button>
       </div>
+
+      </>
+      ) : (
+
+      /* ══ STEP 3 — ALLOCATION ═══════════════════════════════════════
+         The Assign To block relocated from Step 1 Basics (D1). Behavior is
+         byte-identical to the old control: same three legacy modes, same
+         pickers, same mutability lock. The rule-based mode (D2) mounts here
+         later as a fourth option. DetailsStep stays mounted across 2↔3, so
+         handleSave and all settings state work unchanged from this phase. */
+      <motion.div key="allocation-phase" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={{ duration: 0.18 }} className="flex flex-col flex-1">
+
+        <div className="flex-shrink-0" style={{ background: '#FAFAF8' }}>
+          <div style={{ padding: '20px 48px 24px' }}>
+
+            {/* Back link */}
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={onBackToRules}
+                className="flex items-center gap-1 text-xs transition-opacity hover:opacity-60"
+                style={{ color: '#B0AEA8' }}>
+                <X size={11} strokeWidth={1.5} /> Back to Rules &amp; Settings
+              </button>
+              <span style={{ color: '#DDDBD5', fontSize: 10 }}>·</span>
+              <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 3 OF 3 — ALLOCATION</p>
+            </div>
+
+            <div className="space-y-5" style={{ maxWidth: hierarchyMode ? 920 : 560 }}>
+              <div>
+                <SectionLabel label="ALLOCATION" />
+                <p className="text-xs mt-2" style={{ color: '#9A9891' }}>
+                  Choose who takes this exam. Saving and publishing happen from this step.
+                </p>
+              </div>
+
+              {mut.targetType ? (
+                <Field label="Assign To">
+                  <select
+                    value={hierarchyMode ? 'hierarchy' : targetType}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === 'hierarchy') { setHierarchyMode(true); return; }
+                      setHierarchyMode(false);
+                      setTargetType(v as 'all' | 'institutes' | 'students');
+                    }}
+                    style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}
+                  >
+                    <option value="all">All Students</option>
+                    <option value="institutes">Specific Institutes</option>
+                    <option value="students">Specific Students</option>
+                    <option value="hierarchy">By Hierarchy — sections, groups, courses… (preview)</option>
+                  </select>
+                  {!hierarchyMode && targetType === 'institutes' && (
+                    <InstitutePicker selectedIds={selectedInstituteIds} onChange={setSelectedInstituteIds} locked={false} />
+                  )}
+                  {!hierarchyMode && targetType === 'students' && (
+                    <StudentPicker selectedIds={selectedStudentIds} onChange={setSelectedStudentIds} locked={false} />
+                  )}
+                </Field>
+              ) : (
+                <LockedFieldWrapper label="Assign To" reason={lockReason}>
+                  <div>
+                    <select value={targetType} readOnly style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}>
+                      <option value="all">All Students</option>
+                      <option value="institutes">Specific Institutes</option>
+                      <option value="students">Specific Students</option>
+                    </select>
+                    {targetType === 'institutes' && (
+                      <InstitutePicker selectedIds={selectedInstituteIds} onChange={setSelectedInstituteIds} locked={true} />
+                    )}
+                    {targetType === 'students' && (
+                      <StudentPicker selectedIds={selectedStudentIds} onChange={setSelectedStudentIds} locked={true} />
+                    )}
+                  </div>
+                </LockedFieldWrapper>
+              )}
+
+              {/* D2 — the rule-based allocation surface (preview-only until Phase B) */}
+              {hierarchyMode && mut.targetType && (
+                <AllocationPanelCore draft={allocationDraft} setDraft={setAllocationDraft} />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Save bar — moved verbatim from the rules phase */}
+        <div className="flex items-center justify-end gap-3 px-12 py-5 mt-auto"
+          style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+          {(() => {
+            // Edit mode on a live or closed assessment: status is locked, single Save Changes.
+            const lockedStatus = mode === 'edit' && (originalStatus === 'active' || originalStatus === 'closed');
+            if (lockedStatus) {
+              return (
+                <button onClick={() => handleSave()} disabled={saving}
+                  className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+                  style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  {saving
+                    ? <><Loader2 size={11} className="animate-spin" /> Saving…</>
+                    : <><CheckCircle2 size={11} /> Save Changes</>}
+                </button>
+              );
+            }
+            // Create mode, or edit on a draft: offer Save as Draft + Publish.
+            const draftLabel = mode === 'create' ? 'Save as Draft' : 'Save Draft';
+            const publishLabel = mode === 'create' ? 'Create & Publish' : 'Save & Publish';
+            return (
+              <>
+                <button onClick={() => handleSave('draft')} disabled={saving}
+                  className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+                  style={{ background: '#FFFFFF', color: '#0C0C0B', border: '1px solid #0C0C0B', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  {saving ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : <>{draftLabel}</>}
+                </button>
+                <button onClick={() => handleSave('active')} disabled={saving}
+                  className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+                  style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  {saving ? <><Loader2 size={11} className="animate-spin" /> Publishing…</> : <><CheckCircle2 size={11} /> {publishLabel}</>}
+                </button>
+              </>
+            );
+          })()}
+        </div>
+      </motion.div>
+      )}
 
       {/* Validation-error modal (hard-block) */}
       {validationErrors.length > 0 && (
@@ -4195,7 +4278,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
   onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }) => Promise<void>;
   onClose: () => void;
 }) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Lock body scroll while the panel is open so the page underneath doesn't
   // contribute its own scrollbar alongside the panel's scrollbar.
@@ -4291,7 +4374,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
           </p>
           {/* Step indicator */}
           <div className="flex items-center gap-1.5">
-            {[1, 2].map((n, i) => (
+            {[1, 2, 3].map((n, i) => (
               <React.Fragment key={n}>
                 {i > 0 && <div style={{ width: 16, height: 1, background: step >= n ? '#0C0C0B' : '#E3E1DB' }} />}
                 <div className="flex items-center justify-center"
@@ -4304,7 +4387,7 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
         </div>
 
         {/* Center */}
-        {step === 2 && grandTotalQ > 0 && (
+        {step >= 2 && grandTotalQ > 0 && (
           <span className="text-xs px-2.5 py-1"
             style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}>
             {sections.length} section{sections.length !== 1 ? 's' : ''} · {grandTotalQ} Q · {grandTotalMarks} marks
@@ -4337,9 +4420,6 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
               description={description} setDescription={setDescription}
               subject={subject} setSubject={setSubject}
               status={status} setStatus={setStatus}
-              targetType={targetType} setTargetType={setTargetType}
-              selectedInstituteIds={selectedInstituteIds} setSelectedInstituteIds={setSelectedInstituteIds}
-              selectedStudentIds={selectedStudentIds} setSelectedStudentIds={setSelectedStudentIds}
               sections={sections} setSections={setSections}
               onContinue={() => setStep(2)}
               originalStatus={assessment?.status}
@@ -4349,6 +4429,9 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
               deliveryMode={deliveryMode}
             />
           ) : (
+            /* Steps 2 and 3 share one keyed wrapper so DetailsStep never
+               remounts across 2↔3 — its local settings state (dates, toggles,
+               SEB config) must survive Back navigation from Allocation. */
             <motion.div key="step2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }} className="flex-1 overflow-y-auto flex flex-col">
               <DetailsStep
@@ -4357,12 +4440,15 @@ function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
                 sections={sections} setSections={setSections}
                 onBack={() => setStep(1)} onSave={onSave}
                 title={title} description={description} subject={subject} status={status}
-                targetType={targetType}
-                selectedInstituteIds={selectedInstituteIds}
-                selectedStudentIds={selectedStudentIds}
+                targetType={targetType} setTargetType={setTargetType}
+                selectedInstituteIds={selectedInstituteIds} setSelectedInstituteIds={setSelectedInstituteIds}
+                selectedStudentIds={selectedStudentIds} setSelectedStudentIds={setSelectedStudentIds}
                 subjectPool={subjectPool}
                 topicPool={topicPool}
                 deliveryMode={deliveryMode} setDeliveryMode={setDeliveryMode}
+                allocationPhase={step === 3}
+                onContinueToAllocation={() => setStep(3)}
+                onBackToRules={() => setStep(2)}
               />
             </motion.div>
           )}

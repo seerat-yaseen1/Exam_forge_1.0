@@ -265,12 +265,19 @@ Enforced server-side; mirrored as a visible checklist in the builder so failure 
 
 ## 8 · Build phases (each independently deployable; stop-anywhere safe)
 
+> Order revised (owner decision, Jul 12): **UI-first** — D1 → D2 → B → C → E. During D2 the
+> preview counts run on a client-side scaffold resolver (read-only, clearly marked throwaway)
+> and the Confirm/commit action is stubbed — client writes to allocation collections are
+> forbidden by design (invariant 9), so no membership data exists until B lands. The scaffold
+> is deleted when B wires in; the harness still gates before any real membership write.
+
 | Phase | Contents | Deploy surface | Gate |
 |---|---|---|---|
 | **A** ✅ | This document + `ALLOCATION_UI_PLAN.md` | none | Owner sign-off |
+| **D1** ✅ | Builder wizard 2→3 steps: legacy Assign To relocated from Step 1 Basics to new Step 3 (Allocation); zero behavior change; webOwner builder only | frontend auto-deploy | Visual verification |
+| **D2** | Allocation panel UI per `ALLOCATION_UI_PLAN.md` §2–§6 (fourth "By hierarchy" mode in Step 3 + edit-flow AccessPanel), preview on scaffold, commit stubbed | frontend auto-deploy | Manual E2E on staging data |
 | **B** | Pure resolver core + synthetic-world harness + sweep; `resolveAllocation`, `addManualMember`, `getAllocationPreviewPage`; rules + indexes | `--only functions:resolveAllocation,functions:addManualMember,functions:getAllocationPreviewPage` + `firestore:rules,firestore:indexes` | Sweep zero-defect |
-| **C** | `startExam` gate + provenance + enumeration hardening; `allocationService` + `StudentAssessmentsPage` merge; publish gate | `--only functions:startExam` + frontend auto-deploy | Emulator pass incl. legacy regression |
-| **D** | Allocation panel UI per `ALLOCATION_UI_PLAN.md` §2–§6 | frontend auto-deploy | Manual E2E on staging data |
+| **C** | `startExam` gate + provenance + enumeration hardening; `allocationService` + `StudentAssessmentsPage` merge; publish gate; D2 scaffold deleted, UI wired to server dry-run/commit | `--only functions:startExam` + frontend auto-deploy | Emulator pass incl. legacy regression |
 | **E** | Roster integration (member-list population, "Add student", allocation history strip) per UI plan §7–§8 | frontend auto-deploy | — |
 
 Per workflow: full-file deliveries, change-summary block on top, Cloud Shell always `git pull` first + explicit flags; any functions change ships the entire `functions/src/index.ts`.
@@ -302,6 +309,8 @@ Per workflow: full-file deliveries, change-summary block on top, Cloud Shell alw
 | Notifications for added students | Materialization/manual-add audit deltas are the natural event source |
 | Per-institute schedule windows; eligibility/re-attempt selectors | Additive on the same shape |
 | Legacy→rules migration tooling | Both paths coexist indefinitely; migration optional forever |
+| Open electives (courses enrolling students across programs) | v1 keeps strict tree semantics. Convention: host open electives under a dedicated neutral node so program-level targeting stays unpolluted; target electives directly by course (always correct). The real fix — splitting HOME structure from ENROLLMENT — is a hierarchy redesign the allocation system survives unchanged, since it resolves whatever the mappings say |
+| Session → Batch rename | Display-label change only (`NODE_LEVEL_LABELS`); allocation UI inherits it automatically. Never rename `sessionId` fields or the `academicSessions` collection |
 
 ---
 

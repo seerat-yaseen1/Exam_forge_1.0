@@ -28,7 +28,21 @@ src/lib/allocationService.ts   // client wrappers for the callables + member/aud
 
 ---
 
-## 2 · Access panel — targeting mode
+## 2 · Where allocation lives — two mount points
+
+**Create flow (D1, shipped):** the webOwner builder wizard is now **three steps** — Step 1 Setup
+(Basics + Subjects→Topics→Sections), Step 2 Rules & Settings, **Step 3 Allocation**. The legacy
+Assign To control (All Students / Specific Institutes / Specific Students, with its mutability
+lock) was relocated from Step 1 Basics to Step 3 with zero behavior change; Save/Publish moved
+with it. Implementation note: `DetailsStep` stays mounted across steps 2↔3 (`allocationPhase`
+prop) so its local settings state survives Back navigation. D2 adds the fourth mode —
+"By hierarchy" — to this step, mounting `AllocationPanelCore`.
+
+**Edit flow (corrected during D2):** `AccessPanel` turned out to be the *blocked-students*
+editor, not targeting — edit-flow targeting already goes through this same wizard. Step 3 is
+therefore the SINGLE mount point for the allocation surface; no second mount exists.
+
+## 2a · Access panel — targeting mode
 
 **State A — legacy assessment (default, all existing):** today's UI exactly. On assessments with NO attempts and NO rule allocation, a quiet "Switch to rule-based allocation" link; switching shows a one-time explainer and takes effect only on the first materialization — until that commit the assessment stays fully legacy. No auto-conversion, ever.
 

@@ -437,6 +437,10 @@ service cloud.firestore {
       // Legacy docs (no securityLockedAt) remain fully editable — they carry
       // no security config to protect.
       allow update: if canWriteOwned(resource.data.ownerType, resource.data.ownerId)
+                       // allocationMode is stamped by the resolveAllocation Cloud
+                       // Function (Admin SDK) — clients may never set or change it.
+                       && request.resource.data.get('allocationMode', null)
+                            == resource.data.get('allocationMode', null)
                        && (
                             !('securityLockedAt' in resource.data)
                             || (
@@ -693,6 +697,38 @@ service cloud.firestore {
       allow create: if canWriteEnrollment(request.resource.data.assessmentId);
       allow update: if canWriteEnrollment(resource.data.assessmentId);
       allow delete: if canWriteEnrollment(resource.data.assessmentId);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // ALLOCATION SYSTEM (Phase B — plans/ALLOCATION_SYSTEM_PLAN.md)
+    // All three collections are written EXCLUSIVELY by Cloud Functions via the
+    // Admin SDK (which bypasses these rules). Every client write is denied —
+    // including the Web Owner's. That is the design, not an oversight:
+    // membership may only change through resolveAllocation / addManualMember
+    // so that every change is validated, versioned, and audited.
+    // ═════════════════════════════════════════════════════════════════════════
+
+    // allocations/{assessmentId} — the allocation definition + summaries.
+    match /allocations/{assessmentId} {
+      allow read:  if isWebOwner();
+      allow write: if false;
+    }
+
+    // assessmentMembers/{assessmentId_studentId} — the materialized list.
+    // Students may read ONLY their own membership docs — this is what powers
+    // the dashboard's "which exams am I allocated to?" query (Phase C).
+    match /assessmentMembers/{id} {
+      allow read:  if isWebOwner()
+                      || (role() == 'student'
+                          && resource.data.studentId == request.auth.token.studentId);
+      allow write: if false;
+    }
+
+    // allocationAudit/{autoId} — append-only history. Immutable to EVERY
+    // client principal, including the Web Owner: there is nothing to edit.
+    match /allocationAudit/{id} {
+      allow read:  if isWebOwner();
+      allow write: if false;
     }
 
     // ═════════════════════════════════════════════════════════════════════════

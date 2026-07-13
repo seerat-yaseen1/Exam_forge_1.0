@@ -28,6 +28,20 @@ import { defineSecret } from 'firebase-functions/params';
 // every callable that lists it in `secrets` can reference it (const, not hoisted).
 const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
 import { initializeApp } from 'firebase-admin/app';
+import {
+  ANCESTOR_FIELD,
+  AUDIT_DELTA_ID_CAP,
+  COLLECTION_OF,
+  chunk,
+  resolveCore,
+  typesBelow,
+  type AllocNodeType,
+  type CoreDescendant,
+  type CoreInput,
+  type CoreMapping,
+  type CoreSelectedNode,
+  type SubNodeType,
+} from './allocationCore';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
@@ -2304,5 +2318,519 @@ export const submitSection = onCall<SubmitSectionData>(
     }
     await attemptRef.update(updates);
     return { ok: true, timeUsedSeconds, question: nextQuestion };
+  },
+);
+// ═══════════════════════════════════════════════════════════════════════════
+// ALLOCATION SYSTEM — Phase B (plans/ALLOCATION_SYSTEM_PLAN.md)
+//
+// Three callables, webOwner-only in v1:
+//   resolveAllocation      — dry-run preview AND transactional commit; ONE
+//                            code path (invariant 3), version-preconditioned
+//                            (the concurrent-admins race, handled here once).
+//   addManualMember        — the roster "Add student" flow; idempotent.
+//   getAllocationPreviewPage — paged member reads with student-name join.
+//
+// Writers: these functions are the ONLY writers of allocations/,
+// assessmentMembers/, allocationAudit/ and assessments.allocationMode —
+// firestore.rules denies every client write to all four (invariant 9).
+// Pure resolution semantics live in ./allocationCore (swept headlessly).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ALLOC_TXN_MEMBER_WRITE_CAP = 380; // headroom under the 500-op transaction limit
+
+function requireWebOwner(request: { auth?: { token?: Record<string, unknown> } | null }): void {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+  if ((request.auth.token as { role?: string } | undefined)?.role !== 'webOwner') {
+    throw new HttpsError('permission-denied', 'Only the Web Owner may manage allocation.');
+  }
+}
+
+/** Fetch selected node docs + expansion inputs and hand them to the pure core. */
+async function fetchCoreInput(
+  db: FirebaseFirestore.Firestore,
+  assessmentId: string,
+  nodeType: AllocNodeType,
+  nodeIds: string[],
+): Promise<{ core: CoreInput; selectedDocs: Map<string, FirebaseFirestore.DocumentData> }> {
+  const selectedDocs = new Map<string, FirebaseFirestore.DocumentData>();
+  const selected: CoreSelectedNode[] = [];
+
+  const col = nodeType === 'institute' ? 'institutes' : COLLECTION_OF[nodeType as SubNodeType];
+  const refs = nodeIds.map((id) => db.collection(col).doc(id));
+  const snaps = refs.length > 0 ? await db.getAll(...refs) : [];
+  snaps.forEach((snap) => {
+    if (!snap.exists) return;
+    const d = snap.data() as Record<string, unknown>;
+    selectedDocs.set(snap.id, d);
+    selected.push({
+      id: snap.id,
+      name: String(d.name ?? snap.id),
+      // Institutes carry no status field — treat them as active.
+      status: nodeType === 'institute' ? 'active' : String(d.status ?? 'active'),
+      instituteId: nodeType === 'institute' ? snap.id : String(d.instituteId ?? ''),
+    });
+  });
+
+  const descendants: CoreDescendant[] = [];
+  const mappings: CoreMapping[] = [];
+  let instituteStudents: { id: string; instituteId: string }[] | undefined;
+
+  if (nodeType === 'institute') {
+    instituteStudents = [];
+    for (const instId of nodeIds) {
+      const stuSnap = await db.collection('students').where('instituteId', '==', instId).get();
+      stuSnap.docs.forEach((doc) => instituteStudents!.push({ id: doc.id, instituteId: instId }));
+    }
+  } else {
+    // Expansion: every collection BELOW nodeType, keyed by our ancestor field.
+    const field = ANCESTOR_FIELD[nodeType as SubNodeType];
+    for (const belowType of typesBelow(nodeType)) {
+      for (const ids of chunk(nodeIds)) {
+        const snap = await db.collection(COLLECTION_OF[belowType]).where(field, 'in', ids).get();
+        snap.docs.forEach((doc) => {
+          const d = doc.data() as Record<string, unknown>;
+          descendants.push({
+            id: doc.id,
+            status: String(d.status ?? 'active'),
+            parentSelectedId: String(d[field] ?? ''),
+          });
+        });
+      }
+    }
+    const activeDescIds = descendants.filter((d) => d.status === 'active').map((d) => d.id);
+    const allMappingNodeIds = [...nodeIds, ...activeDescIds];
+    for (const ids of chunk(allMappingNodeIds)) {
+      const snap = await db.collection('academicMappings').where('nodeId', 'in', ids).get();
+      snap.docs.forEach((doc) => {
+        const d = doc.data() as Record<string, unknown>;
+        mappings.push({
+          studentId: String(d.studentId ?? ''),
+          nodeId: String(d.nodeId ?? ''),
+          instituteId: String(d.instituteId ?? ''),
+        });
+      });
+    }
+  }
+
+  // Delta base: existing RULES-sourced members only. Manual members never
+  // enter the core, so sync cannot touch them (invariant 2).
+  const currentSnap = await db.collection('assessmentMembers')
+    .where('assessmentId', '==', assessmentId)
+    .where('source', '==', 'rules')
+    .get();
+  const currentRulesMemberIds = currentSnap.docs.map((d) => String(d.get('studentId')));
+
+  return {
+    core: {
+      nodeType,
+      requestedIds: nodeIds,
+      selected,
+      descendants,
+      mappings,
+      instituteStudents,
+      currentRulesMemberIds,
+    },
+    selectedDocs,
+  };
+}
+
+/** Denormalize name + breadcrumb for each selected node (audit survives renames). */
+async function buildNodeSummaries(
+  db: FirebaseFirestore.Firestore,
+  nodeType: AllocNodeType,
+  nodeIds: string[],
+  selectedDocs: Map<string, FirebaseFirestore.DocumentData>,
+): Promise<{ nodeId: string; nodeName: string; breadcrumb: string; instituteId: string }[]> {
+  if (nodeType === 'institute') {
+    return nodeIds.map((id) => ({
+      nodeId: id,
+      nodeName: String(selectedDocs.get(id)?.name ?? id),
+      breadcrumb: '',
+      instituteId: id,
+    }));
+  }
+  // Collect unique ancestor ids (in hierarchy order) across all selected nodes.
+  const ancestorOrder: { field: string; col: string }[] = [
+    { field: 'schoolId', col: 'schools' },
+    { field: 'levelId', col: 'academicLevels' },
+    { field: 'programId', col: 'programs' },
+    { field: 'sessionId', col: 'academicSessions' },
+    { field: 'yearId', col: 'academicYears' },
+    { field: 'semesterId', col: 'semesters' },
+    { field: 'courseId', col: 'courses' },
+    { field: 'sectionId', col: 'sections' },
+  ];
+  const wanted = new Map<string, string>(); // ancestorId → collection
+  selectedDocs.forEach((d) => {
+    ancestorOrder.forEach(({ field, col }) => {
+      const id = d[field];
+      if (typeof id === 'string' && id) wanted.set(id, col);
+    });
+  });
+  const nameOf = new Map<string, string>();
+  const entries = [...wanted.entries()];
+  for (const batch of chunk(entries, 100)) {
+    const snaps = await db.getAll(...batch.map(([id, col]) => db.collection(col).doc(id)));
+    snaps.forEach((s) => { if (s.exists) nameOf.set(s.id, String(s.get('name') ?? s.id)); });
+  }
+  return nodeIds.map((id) => {
+    const d = selectedDocs.get(id) ?? {};
+    const parts: string[] = [];
+    ancestorOrder.forEach(({ field }) => {
+      const aid = (d as Record<string, unknown>)[field];
+      if (typeof aid === 'string' && aid && nameOf.has(aid)) parts.push(nameOf.get(aid)!);
+    });
+    return {
+      nodeId: id,
+      nodeName: String((d as Record<string, unknown>).name ?? id),
+      breadcrumb: parts.join(' › '),
+      instituteId: String((d as Record<string, unknown>).instituteId ?? ''),
+    };
+  });
+}
+
+interface ResolveAllocationData {
+  assessmentId: string;
+  nodeType: AllocNodeType;
+  nodeIds: string[];
+  expectedVersion: number;
+  dryRun: boolean;
+}
+
+export const resolveAllocation = onCall<ResolveAllocationData>(
+  { region: 'us-central1' },
+  async (request) => {
+    requireWebOwner(request);
+    const { assessmentId, nodeType, nodeIds, expectedVersion, dryRun } =
+      request.data || ({} as ResolveAllocationData);
+
+    if (!assessmentId || typeof assessmentId !== 'string') {
+      throw new HttpsError('invalid-argument', 'assessmentId is required.');
+    }
+    if (!Array.isArray(nodeIds) || nodeIds.some((id) => typeof id !== 'string')) {
+      throw new HttpsError('invalid-argument', 'nodeIds must be an array of ids.');
+    }
+    if (typeof expectedVersion !== 'number' || expectedVersion < 0) {
+      throw new HttpsError('invalid-argument', 'expectedVersion is required (0 for a first materialization).');
+    }
+
+    const db = getFirestore();
+    const assessmentRef = db.collection('assessments').doc(assessmentId);
+    const aSnap = await assessmentRef.get();
+    if (!aSnap.exists || aSnap.get('isDeleted') === true) {
+      throw new HttpsError('not-found', 'Assessment not found.');
+    }
+
+    const { core, selectedDocs } = await fetchCoreInput(db, assessmentId, nodeType, nodeIds);
+    const result = resolveCore(core);
+
+    // Live-shrink guard (system plan D7): while an exam is ACTIVE the list may
+    // only grow. Draft/closed assessments may shrink freely — that's editing.
+    const isActive = aSnap.get('status') === 'active';
+    const liveShrink = isActive && result.delta.removed.length > 0;
+
+    if (dryRun) {
+      // Sample of the ADDED students with display names (capped — never the
+      // whole list in one response; getAllocationPreviewPage pages the rest).
+      const sampleIds = result.delta.added.slice(0, 50);
+      const sampleStudents: { id: string; name: string; email: string }[] = [];
+      for (const ids of chunk(sampleIds, 100)) {
+        const snaps = await db.getAll(...ids.map((id) => db.collection('students').doc(id)));
+        snaps.forEach((s) => {
+          if (s.exists) sampleStudents.push({
+            id: s.id,
+            name: String(s.get('name') ?? s.id),
+            email: String(s.get('email') ?? ''),
+          });
+        });
+      }
+      return {
+        valid: result.errors.length === 0,
+        errors: result.errors,
+        commitBlockers: liveShrink
+          ? [...result.commitBlockers,
+             `This exam is LIVE — the new selection would remove ${result.delta.removed.length} student(s). Removals while live aren't supported.`]
+          : result.commitBlockers,
+        warnings: result.warnings,
+        resolvedCount: result.members.length,
+        byNode: result.byNode,
+        deltaCounts: { added: result.delta.added.length, removed: result.delta.removed.length },
+        sampleStudents,
+        isLive: isActive,
+      };
+    }
+
+    // ── COMMIT ──────────────────────────────────────────────────────
+    if (result.errors.length > 0) {
+      throw new HttpsError('failed-precondition', result.errors.join(' '));
+    }
+    if (result.commitBlockers.length > 0) {
+      throw new HttpsError('failed-precondition', result.commitBlockers.join(' '));
+    }
+    if (liveShrink) {
+      throw new HttpsError(
+        'failed-precondition',
+        'This exam is LIVE — the new selection would remove students. Removals while live are not supported.',
+      );
+    }
+
+    const nodes = await buildNodeSummaries(db, nodeType, nodeIds, selectedDocs);
+    const memberByStudent = new Map(result.members.map((m) => [m.studentId, m]));
+    const nowIso = new Date().toISOString();
+    const callerUid = request.auth!.uid;
+    const allocationRef = db.collection('allocations').doc(assessmentId);
+    const auditRef = db.collection('allocationAudit').doc();
+    const instituteIds = [...new Set(result.members.map((m) => m.instituteId).filter(Boolean))].sort();
+    const smallDelta =
+      result.delta.added.length + result.delta.removed.length <= ALLOC_TXN_MEMBER_WRITE_CAP;
+
+    const newVersion = await db.runTransaction(async (txn) => {
+      const [allocSnap, freshA] = await Promise.all([txn.get(allocationRef), txn.get(assessmentRef)]);
+      const currentVersion = allocSnap.exists ? Number(allocSnap.get('version') ?? 0) : 0;
+      if (currentVersion !== expectedVersion) {
+        throw new HttpsError('aborted', 'ALLOCATION_CHANGED — the allocation was modified elsewhere. Re-preview and try again.');
+      }
+      // Re-check liveness INSIDE the transaction (it may have flipped since the read above).
+      if (freshA.get('status') === 'active' && result.delta.removed.length > 0) {
+        throw new HttpsError('failed-precondition', 'This exam is LIVE — removals are not supported.');
+      }
+
+      const version = currentVersion + 1;
+      txn.set(allocationRef, {
+        assessmentId,
+        ownerType: 'webOwner',
+        version,
+        status: 'confirmed',
+        nodeType,
+        nodeIds,
+        nodes,
+        instituteId: nodeType === 'institute' ? '*' : (nodes[0]?.instituteId ?? ''),
+        resolvedCount: result.members.length,
+        resolvedInstituteIds: instituteIds,
+        lastMaterializedAt: nowIso,
+        lastMaterializedBy: callerUid,
+        ...(allocSnap.exists ? {} : { createdAt: nowIso }),
+        updatedAt: nowIso,
+        materializing: !smallDelta,
+      }, { merge: true });
+
+      if (freshA.get('allocationMode') !== 'rules') {
+        txn.set(assessmentRef, { allocationMode: 'rules' }, { merge: true });
+      }
+
+      if (smallDelta) {
+        result.delta.added.forEach((sid) => {
+          const m = memberByStudent.get(sid)!;
+          txn.set(db.collection('assessmentMembers').doc(`${assessmentId}_${sid}`), {
+            assessmentId,
+            studentId: sid,
+            instituteId: m.instituteId,
+            source: 'rules',
+            active: true,
+            viaNodeIds: m.viaNodeIds,
+            admittedByVersion: version,
+            addedBy: callerUid,
+            createdAt: nowIso,
+          });
+        });
+        result.delta.removed.forEach((sid) => {
+          txn.delete(db.collection('assessmentMembers').doc(`${assessmentId}_${sid}`));
+        });
+      }
+
+      txn.set(auditRef, {
+        assessmentId,
+        version,
+        actorUid: callerUid,
+        actorRole: 'webOwner',
+        action: allocSnap.exists ? (result.delta.removed.length > 0 || result.delta.added.length > 0 ? 'sync' : 'materialize') : 'create',
+        delta: {
+          addedStudentIds: result.delta.added.slice(0, AUDIT_DELTA_ID_CAP),
+          removedStudentIds: result.delta.removed.slice(0, AUDIT_DELTA_ID_CAP),
+        },
+        deltaCounts: { added: result.delta.added.length, removed: result.delta.removed.length },
+        truncated:
+          result.delta.added.length > AUDIT_DELTA_ID_CAP ||
+          result.delta.removed.length > AUDIT_DELTA_ID_CAP,
+        allocationSnapshot: { nodeType, nodeIds, nodes },
+        manualStudent: null,
+        isLive: freshA.get('status') === 'active',
+        at: nowIso,
+      });
+
+      return version;
+    });
+
+    // Large-delta overflow: member docs land via BulkWriter AFTER the txn.
+    // Safe because a partially-written window only means "not admitted YET" —
+    // a member doc either exists or it doesn't (additions), and removals only
+    // occur on non-active assessments (guarded above).
+    if (!smallDelta) {
+      const writer = db.bulkWriter();
+      result.delta.added.forEach((sid) => {
+        const m = memberByStudent.get(sid)!;
+        writer.set(db.collection('assessmentMembers').doc(`${assessmentId}_${sid}`), {
+          assessmentId,
+          studentId: sid,
+          instituteId: m.instituteId,
+          source: 'rules',
+          active: true,
+          viaNodeIds: m.viaNodeIds,
+          admittedByVersion: newVersion,
+          addedBy: callerUid,
+          createdAt: nowIso,
+        });
+      });
+      result.delta.removed.forEach((sid) => {
+        writer.delete(db.collection('assessmentMembers').doc(`${assessmentId}_${sid}`));
+      });
+      await writer.close();
+      await allocationRef.update({ materializing: false });
+    }
+
+    return {
+      version: newVersion,
+      resolvedCount: result.members.length,
+      deltaCounts: { added: result.delta.added.length, removed: result.delta.removed.length },
+    };
+  },
+);
+
+interface AddManualMemberData {
+  assessmentId: string;
+  studentId: string;
+}
+
+export const addManualMember = onCall<AddManualMemberData>(
+  { region: 'us-central1' },
+  async (request) => {
+    requireWebOwner(request);
+    const { assessmentId, studentId } = request.data || ({} as AddManualMemberData);
+    if (!assessmentId || !studentId) {
+      throw new HttpsError('invalid-argument', 'assessmentId and studentId are required.');
+    }
+
+    const db = getFirestore();
+    const aSnap = await db.collection('assessments').doc(assessmentId).get();
+    if (!aSnap.exists || aSnap.get('isDeleted') === true) {
+      throw new HttpsError('not-found', 'Assessment not found.');
+    }
+    if (aSnap.get('allocationMode') !== 'rules') {
+      throw new HttpsError('failed-precondition', 'Manual members apply to rule-allocated assessments only. Use the legacy targeting controls otherwise.');
+    }
+    // Deliberately NO same-institute requirement: this is the external/retest
+    // escape hatch (system plan D8), and it is webOwner-only by construction.
+    const sSnap = await db.collection('students').doc(studentId).get();
+    if (!sSnap.exists) throw new HttpsError('not-found', 'Student not found.');
+
+    const memberRef = db.collection('assessmentMembers').doc(`${assessmentId}_${studentId}`);
+    const existing = await memberRef.get();
+    if (existing.exists) {
+      // Idempotent: already a member (via rules or a previous manual add) —
+      // no duplicate doc, no duplicate audit entry.
+      return { ok: true, alreadyMember: true, source: existing.get('source') };
+    }
+
+    const nowIso = new Date().toISOString();
+    const allocSnap = await db.collection('allocations').doc(assessmentId).get();
+    const version = allocSnap.exists ? Number(allocSnap.get('version') ?? 0) : 0;
+
+    const batch = db.batch();
+    batch.set(memberRef, {
+      assessmentId,
+      studentId,
+      instituteId: String(sSnap.get('instituteId') ?? ''),
+      source: 'manual',
+      active: true,
+      viaNodeIds: [],
+      admittedByVersion: version,
+      addedBy: request.auth!.uid,
+      createdAt: nowIso,
+    });
+    batch.set(db.collection('allocationAudit').doc(), {
+      assessmentId,
+      version,
+      actorUid: request.auth!.uid,
+      actorRole: 'webOwner',
+      action: 'manual_add',
+      delta: { addedStudentIds: [studentId], removedStudentIds: [] },
+      deltaCounts: { added: 1, removed: 0 },
+      truncated: false,
+      allocationSnapshot: null,
+      manualStudent: { studentId, name: String(sSnap.get('name') ?? studentId) },
+      isLive: aSnap.get('status') === 'active',
+      at: nowIso,
+    });
+    batch.update(db.collection('allocations').doc(assessmentId),
+      allocSnap.exists ? { manualCount: FieldValue.increment(1), updatedAt: nowIso } : {});
+    if (!allocSnap.exists) {
+      // Rule-path assessment without an allocation doc shouldn't happen
+      // (allocationMode is set by resolveAllocation), but never fail the add
+      // over a missing summary counter.
+      batch.set(db.collection('allocations').doc(assessmentId), {
+        assessmentId, manualCount: 1, updatedAt: nowIso,
+      }, { merge: true });
+    }
+    await batch.commit();
+
+    return { ok: true, alreadyMember: false };
+  },
+);
+
+interface GetAllocationPreviewPageData {
+  assessmentId: string;
+  limit?: number;
+  cursor?: string;          // last member doc id from the previous page
+  source?: 'rules' | 'manual';
+}
+
+export const getAllocationPreviewPage = onCall<GetAllocationPreviewPageData>(
+  { region: 'us-central1' },
+  async (request) => {
+    requireWebOwner(request);
+    const { assessmentId, limit, cursor, source } = request.data || ({} as GetAllocationPreviewPageData);
+    if (!assessmentId) throw new HttpsError('invalid-argument', 'assessmentId is required.');
+    const pageSize = Math.min(Math.max(Number(limit) || 100, 1), 200);
+
+    const db = getFirestore();
+    let q = db.collection('assessmentMembers')
+      .where('assessmentId', '==', assessmentId) as FirebaseFirestore.Query;
+    if (source === 'rules' || source === 'manual') q = q.where('source', '==', source);
+    q = q.orderBy('__name__').limit(pageSize);
+    if (cursor && typeof cursor === 'string') {
+      q = q.startAfter(db.collection('assessmentMembers').doc(cursor));
+    }
+    const snap = await q.get();
+
+    // Join display names for exactly this page (never the whole list).
+    const rowsRaw = snap.docs.map((d) => ({
+      docId: d.id,
+      studentId: String(d.get('studentId')),
+      instituteId: String(d.get('instituteId') ?? ''),
+      source: String(d.get('source')),
+      viaNodeIds: (d.get('viaNodeIds') as string[] | undefined) ?? [],
+      addedBy: String(d.get('addedBy') ?? ''),
+      createdAt: String(d.get('createdAt') ?? ''),
+    }));
+    const nameOf = new Map<string, { name: string; email: string }>();
+    for (const ids of chunk(rowsRaw.map((r) => r.studentId), 100)) {
+      const snaps = await db.getAll(...ids.map((id) => db.collection('students').doc(id)));
+      snaps.forEach((s) => {
+        if (s.exists) nameOf.set(s.id, {
+          name: String(s.get('name') ?? s.id),
+          email: String(s.get('email') ?? ''),
+        });
+      });
+    }
+    const rows = rowsRaw.map((r) => ({
+      ...r,
+      name: nameOf.get(r.studentId)?.name ?? r.studentId,
+      email: nameOf.get(r.studentId)?.email ?? '',
+    }));
+
+    return {
+      rows,
+      nextCursor: snap.docs.length === pageSize ? snap.docs[snap.docs.length - 1].id : null,
+    };
   },
 );

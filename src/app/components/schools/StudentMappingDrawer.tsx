@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  X, Search, Loader2, Users, Check, AlertTriangle, UserMinus, UserPlus,
+  X, Search, Loader2, Users, Check, UserMinus, UserPlus,
 } from 'lucide-react';
 import {
   getStudentsByInstitute,
   getMappingsByNode,
-  getExistingMappings,
+  getMappingsByStudent,
   createMapping,
   deleteMapping,
   generateId,
@@ -35,9 +35,6 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
 
   // Selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  // Per-student warning: studentId → warning message
-  const [warnings, setWarnings] = useState<Map<string, string>>(new Map());
-
   // Saving
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -51,12 +48,18 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
     [existingMappings]
   );
 
+  // B-1 — cross-node membership: a student may be in MULTIPLE sections/groups.
+  // Map studentId → their OTHER placements (excluding this node), so an admin
+  // sees "already in Section A · Group 2" while assigning and avoids accidental
+  // double-placement. Multiple membership is allowed by design — this is
+  // transparency, not a block.
+  const [otherPlacements, setOtherPlacements] = useState<Map<string, string[]>>(new Map());
+
   // ── Fetch data ──────────────────────────────────────────────────
 
   useEffect(() => {
     if (!open) return;
     setSelected(new Set());
-    setWarnings(new Map());
     setSuccessCount(null);
     setSearch('');
     setLoading(true);
@@ -67,9 +70,33 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
       .then(([studs, maps]) => {
         setStudents(studs.filter((s) => s.status === 'active'));
         setExistingMappings(maps);
+        // Load each student's other placements (section/group level only —
+        // those are the meaningful "also assigned here" signals). Fire-and-
+        // forget: the list renders immediately, placement chips fill in after.
+        loadOtherPlacements(studs.filter((s) => s.status === 'active').map((s) => s.id));
       })
       .finally(() => setLoading(false));
   }, [open, nodeId, instituteId]);
+
+  // Load other section/group placements for the visible students.
+  const loadOtherPlacements = async (studentIds: string[]) => {
+    const map = new Map<string, string[]>();
+    // Cap the lookup to keep it light on very large institutes; the rest still
+    // assign fine, they just won't show the chip until reopened/searched.
+    const capped = studentIds.slice(0, 300);
+    await Promise.all(capped.map(async (sid) => {
+      try {
+        const mine = await getMappingsByStudent(sid);
+        const others = mine
+          .filter((m) => m.nodeId !== nodeId &&
+            (m.nodeType === 'section' || m.nodeType === 'group'))
+          .map((m) => m.nodeName)
+          .filter(Boolean);
+        if (others.length > 0) map.set(sid, others);
+      } catch { /* non-fatal — chip just won't show */ }
+    }));
+    setOtherPlacements(map);
+  };
 
   // ── Filtered students ───────────────────────────────────────────
 
@@ -99,15 +126,10 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
     if (selected.size === 0) return;
     setSaving(true);
 
-    // Check each selected student for existing mappings to this node
-    const warnMap = new Map<string, string>();
-    for (const studentId of selected) {
-      const existing = await getExistingMappings(studentId, nodeId);
-      if (existing.length > 0) {
-        warnMap.set(studentId, `Already assigned to this ${NODE_LEVEL_LABELS[nodeType].toLowerCase()}. The new mapping will also be added.`);
-      }
-    }
-    setWarnings(warnMap);
+    // Note: same-node duplicates can't occur here — already-mapped students are
+    // unselectable (toggleStudent guard). Multiple membership across DIFFERENT
+    // nodes is allowed and expected; the placement chips show where else a
+    // student sits so this is a deliberate choice, not an accident.
 
     // Create mappings for all selected students
     const now = new Date().toISOString();
@@ -253,24 +275,6 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
                       />
                     </div>
 
-                    {/* Warnings */}
-                    <AnimatePresence>
-                      {warnings.size > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                          className="flex items-start gap-2 px-3 py-2.5 mb-3 rounded"
-                          style={{ background: '#FFFBF0', border: '1px solid #F0D080' }}
-                        >
-                          <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#8B5E1A', flexShrink: 0, marginTop: 1 }} />
-                          <div>
-                            <p className="text-xs" style={{ color: '#8B5E1A' }}>
-                              {warnings.size} student{warnings.size > 1 ? 's were' : ' was'} already assigned to this node. The new assignment{warnings.size > 1 ? 's have' : ' has'} also been added.
-                            </p>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
                     {/* Success notice */}
                     <AnimatePresence>
                       {successCount !== null && (
@@ -333,6 +337,18 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{student.name}</p>
                                 <p className="text-xs truncate" style={{ color: '#9A9891' }}>{student.email}</p>
+                                {(() => {
+                                  const places = otherPlacements.get(student.id);
+                                  if (!places || places.length === 0) return null;
+                                  const shown = places.slice(0, 2).join(' · ');
+                                  const extra = places.length > 2 ? ` +${places.length - 2}` : '';
+                                  return (
+                                    <p className="text-xs truncate mt-0.5" style={{ color: '#B08A3E' }}
+                                      title={places.join(' · ')}>
+                                      also in: {shown}{extra}
+                                    </p>
+                                  );
+                                })()}
                               </div>
 
                               {isMapped && (

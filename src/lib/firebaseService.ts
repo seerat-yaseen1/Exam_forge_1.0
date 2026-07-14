@@ -517,7 +517,7 @@ export const NODE_LEVEL_LABELS: Record<NodeLevel, string> = {
   school: 'School',
   academicLevel: 'Level',
   program: 'Program',
-  academicSession: 'Session',
+  academicSession: 'Batch',
   academicYear: 'Year',
   semester: 'Semester',
   course: 'Course',

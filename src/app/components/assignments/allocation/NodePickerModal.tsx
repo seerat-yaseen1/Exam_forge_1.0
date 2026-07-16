@@ -35,8 +35,16 @@ export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfi
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
 
   // Ancestor levels ABOVE the picked type — the only legal filters (never the picked type itself).
+  // Ancestor levels ABOVE the picked type — the only legal filters (never the
+  // picked type itself). B-2: `course` isn't in the spine, but a course still
+  // hangs under a semester/year, so its filters are the spine above semester.
   const filterLevels = useMemo(() => {
+    if (nodeType === 'course') {
+      return ['school', 'academicLevel', 'program', 'academicSession', 'academicYear', 'semester'] as
+        Exclude<AllocationNodeType, 'institute'>[];
+    }
     const idx = ALLOCATION_TYPE_ORDER.indexOf(nodeType);
+    if (idx < 0) return [] as Exclude<AllocationNodeType, 'institute'>[];
     return ALLOCATION_TYPE_ORDER.slice(1, idx) as Exclude<AllocationNodeType, 'institute'>[];
   }, [nodeType]);
 

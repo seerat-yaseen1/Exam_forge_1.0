@@ -58,7 +58,14 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
         onSaved({ ...editing, name: trimName, meta: trimCode });
       } else {
         const id = generateId();
-        const semesterId = directToYear ? null : (ancestry.semesterId ?? null);
+        // B-2 placement (Option A — inferred from which parent id is set):
+        //   section context  → section-level course (sectionId set)
+        //   directToYear     → whole-year course (semesterId null)
+        //   otherwise        → whole-semester course
+        const isSectionLevel = Boolean(ancestry.sectionId);
+        const semesterId = isSectionLevel
+          ? (ancestry.semesterId ?? null)
+          : directToYear ? null : (ancestry.semesterId ?? null);
         await createCourse({
           id,
           instituteId,
@@ -68,6 +75,7 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
           sessionId: ancestry.sessionId!,
           yearId: ancestry.yearId!,
           semesterId,
+          ...(isSectionLevel ? { sectionId: ancestry.sectionId } : {}),
           name: trimName,
           code: trimCode,
           status: 'active',
@@ -83,11 +91,13 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
     }
   };
 
-  const parentLabel = directToYear
-    ? 'This course will be attached directly to the year (no semester).'
-    : ancestry.semesterId
-      ? 'This course will be attached to the selected semester.'
-      : 'This course will be attached to the year.';
+  const parentLabel = ancestry.sectionId
+    ? 'This course will be attached to the selected section.'
+    : directToYear
+      ? 'This course will be attached directly to the year (no semester).'
+      : ancestry.semesterId
+        ? 'This course will be attached to the selected semester.'
+        : 'This course will be attached to the year.';
 
   return (
     <AnimatePresence>

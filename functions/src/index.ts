@@ -2409,6 +2409,74 @@ async function fetchCoreInput(
       const stuSnap = await db.collection('students').where('instituteId', '==', instId).get();
       stuSnap.docs.forEach((doc) => instituteStudents!.push({ id: doc.id, instituteId: instId }));
     }
+  } else if (nodeType === 'course') {
+    // B-2: course left the spine. A course is an OFFERING that resolves SIDEWAYS
+    // to the section(s) it's attached to, then normally down to students:
+    //   section-level course (has sectionId) → that one section
+    //   whole-semester course (semesterId set) → all sections of that semester
+    //   whole-year course (semesterId null)   → all sections directly under the year
+    // We treat those resolved sections as the descendants, plus their groups.
+    const sectionIds = new Set<string>();
+    for (const [, d] of selectedDocs) {
+      const secId = d.sectionId as string | undefined;
+      const semId = d.semesterId as string | null | undefined;
+      const yrId = d.yearId as string | undefined;
+      if (secId) {
+        sectionIds.add(secId);
+      } else if (semId) {
+        const secs = await db.collection('sections').where('semesterId', '==', semId).get();
+        secs.docs.forEach((s) => sectionIds.add(s.id));
+      } else if (yrId) {
+        const secs = await db.collection('sections').where('yearId', '==', yrId).get();
+        secs.docs.forEach((s) => { if (s.get('semesterId') == null) sectionIds.add(s.id); });
+      }
+    }
+    // The resolved sections + their groups become the descendants, each
+    // attributed to the selected course that reaches it (via-attribution credits
+    // the course). A student under multiple selected courses dedupes in the core.
+    const sectionDocs = sectionIds.size > 0
+      ? await db.getAll(...[...sectionIds].map((sid) => db.collection('sections').doc(sid)))
+      : [];
+    const activeSectionIds: string[] = [];
+    sectionDocs.forEach((s) => {
+      if (!s.exists) return;
+      const active = String(s.get('status') ?? 'active') === 'active';
+      // Attribute this section to the course(s) that reach it.
+      let owner = '';
+      for (const [cid, d] of selectedDocs) {
+        const secId = d.sectionId as string | undefined;
+        const semId = d.semesterId as string | null | undefined;
+        const yrId = d.yearId as string | undefined;
+        if (secId === s.id) { owner = cid; break; }
+        if (!secId && semId && s.get('semesterId') === semId) { owner = cid; break; }
+        if (!secId && !semId && yrId && s.get('yearId') === yrId && s.get('semesterId') == null) { owner = cid; break; }
+      }
+      descendants.push({ id: s.id, status: active ? 'active' : 'archived', parentSelectedId: owner || nodeIds[0] });
+      if (active) activeSectionIds.push(s.id);
+    });
+    // Groups under those sections.
+    for (const ids of chunk(activeSectionIds)) {
+      const gsnap = await db.collection('groups').where('sectionId', 'in', ids).get();
+      gsnap.docs.forEach((g) => {
+        const active = String(g.get('status') ?? 'active') === 'active';
+        descendants.push({ id: g.id, status: active ? 'active' : 'archived', parentSelectedId: g.get('sectionId') as string });
+      });
+    }
+    // Mappings at the resolved sections + groups (the course node itself holds
+    // no direct student mappings in the new model).
+    const activeDescIds = descendants.filter((d) => d.status === 'active').map((d) => d.id);
+    for (const ids of chunk(activeDescIds)) {
+      if (ids.length === 0) continue;
+      const snap = await db.collection('academicMappings').where('nodeId', 'in', ids).get();
+      snap.docs.forEach((doc) => {
+        const d = doc.data() as Record<string, unknown>;
+        mappings.push({
+          studentId: String(d.studentId ?? ''),
+          nodeId: String(d.nodeId ?? ''),
+          instituteId: String(d.instituteId ?? ''),
+        });
+      });
+    }
   } else {
     // Expansion: every collection BELOW nodeType, keyed by our ancestor field.
     const field = ANCESTOR_FIELD[nodeType as SubNodeType];

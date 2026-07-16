@@ -184,12 +184,32 @@ export function resolveCore(input: CoreInput): CoreResult {
       (byInst.get(inst.id) ?? []).forEach((sid) => admit(sid, inst.id, inst.id));
     });
   } else {
-    // nodeId → owning selected node: itself, or the selected ancestor it descends from.
-    const owner = new Map<string, string>();
-    selected.forEach((n) => owner.set(n.id, n.id));
+    // nodeId → the SELECTED node it belongs to. A descendant may point at
+    // another descendant rather than straight at a selected node (B-2: a course
+    // resolves sideways to sections, whose groups then point at those sections),
+    // so we chain transitively up to the selected root. Iterating to a fixed
+    // point also makes the result independent of descendant array order.
+    const selectedIds = new Set(selected.map((n) => n.id));
+    const parentOf = new Map<string, string>();
     input.descendants.forEach((d) => {
       if (d.status !== 'active') return;               // archived descendants excluded
-      if (owner.has(d.parentSelectedId)) owner.set(d.id, d.parentSelectedId);
+      parentOf.set(d.id, d.parentSelectedId);
+    });
+    const owner = new Map<string, string>();
+    selected.forEach((n) => owner.set(n.id, n.id));
+    const rootOf = (id: string): string | undefined => {
+      let cur: string | undefined = id;
+      const seen = new Set<string>();
+      while (cur && !selectedIds.has(cur)) {
+        if (seen.has(cur)) return undefined;            // cycle guard
+        seen.add(cur);
+        cur = parentOf.get(cur);
+      }
+      return cur && selectedIds.has(cur) ? cur : undefined;
+    };
+    parentOf.forEach((_p, id) => {
+      const root = rootOf(id);
+      if (root) owner.set(id, root);
     });
     input.mappings.forEach((m) => {
       const own = owner.get(m.nodeId);

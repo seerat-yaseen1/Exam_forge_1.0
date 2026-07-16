@@ -330,4 +330,37 @@ console.log(`  ✓ P6 delta correctness across syncs (manual ids structurally in
   console.log('  ✓ P10 cross-institute selection rejected');
 }
 
+// ── Property 11 (B-2): course resolves SIDEWAYS to its sections ────
+// The fetch layer feeds sections-as-descendants attributed to the course, and
+// groups attributed to their section. The core must chain group→section→course
+// transitively so every student is credited via the COURSE node.
+{
+  const input = {
+    nodeType: 'course', requestedIds: ['C1'],
+    selected: [{ id: 'C1', name: 'DS', status: 'active', instituteId: 'I1' }],
+    descendants: [
+      { id: 'SecA', status: 'active', parentSelectedId: 'C1' },
+      { id: 'SecB', status: 'active', parentSelectedId: 'C1' },
+      { id: 'G1', status: 'active', parentSelectedId: 'SecA' },
+      { id: 'GArch', status: 'archived', parentSelectedId: 'SecA' },
+    ],
+    mappings: [
+      { studentId: 's1', nodeId: 'G1', instituteId: 'I1' },
+      { studentId: 's2', nodeId: 'SecA', instituteId: 'I1' },
+      { studentId: 's3', nodeId: 'SecB', instituteId: 'I1' },
+      { studentId: 'sArch', nodeId: 'GArch', instituteId: 'I1' },
+    ],
+    currentRulesMemberIds: [],
+  };
+  const r = C.resolveCore(input);
+  ok(r.errors.length === 0, 'course resolution errored');
+  ok(r.members.map((m) => m.studentId).sort().join(',') === 's1,s2,s3', 'course must include section+group students, exclude archived');
+  r.members.forEach((m) => ok(m.viaNodeIds.includes('C1'), 'course attribution must chain to the course node'));
+  // order independence: shuffle descendants
+  const shuffled = { ...input, descendants: shuffle([...input.descendants]) };
+  const r2 = C.resolveCore(shuffled);
+  ok(JSON.stringify(r.members) === JSON.stringify(r2.members), 'course resolution must not depend on descendant order');
+  console.log('  \u2713 P11 course resolves sideways (section+group, via-course attribution, order-independent)');
+}
+
 console.log(`\nALL PROPERTIES PASSED — ${checks} assertions across ${cases}+ generated cases · zero defects`);

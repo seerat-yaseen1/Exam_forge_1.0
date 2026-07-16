@@ -531,10 +531,12 @@ export const NODE_CHILD_LEVEL: Partial<Record<NodeLevel, NodeLevel>> = {
   academicLevel: 'program',
   program: 'academicSession',
   academicSession: 'academicYear',
-  academicYear: 'semester',   // or 'course' when year has no semesters
-  semester: 'course',
-  course: 'section',
+  academicYear: 'semester',   // or 'section' directly when the year has no semesters
+  // B-2: sections hang off the semester (or year), NOT off a course. Course is
+  // an offering shown in a side panel, never a drill-through parent.
+  semester: 'section',
   section: 'group',
+  // course removed from the primary child chain — it's a side-panel offering.
   // group has no children — only student mappings
 };
 
@@ -635,6 +637,10 @@ export type Course = {
   sessionId: string;
   yearId: string;
   semesterId: string | null;
+  // B-2: course is now an OFFERING attached beside the spine. Placement is
+  // inferred (Option A): sectionId set → section-level (this section only);
+  // else semesterId set → whole-semester; else yearId → whole-year.
+  sectionId?: string | null;
   name: string;
   code: string;
   status: 'active' | 'archived';
@@ -653,7 +659,9 @@ export type Section = {
   sessionId: string;
   yearId: string;
   semesterId: string | null;
-  courseId: string;
+  // B-2: course left the spine — a section's parent is its semester (or year
+  // when annual). courseId is now optional legacy metadata, not a parent link.
+  courseId?: string;
   name: string;
   status: 'active' | 'archived';
   createdAt: string;
@@ -671,7 +679,7 @@ export type Group = {
   sessionId: string;
   yearId: string;
   semesterId: string | null;
-  courseId: string;
+  courseId?: string;   // B-2: optional legacy metadata (parent is sectionId)
   sectionId: string;
   name: string;
   status: 'active' | 'archived';
@@ -940,6 +948,26 @@ export async function getSectionsByCourse(courseId: string): Promise<Section[]> 
   return getActiveChildren<Section>('sections', 'courseId', courseId);
 }
 
+// ── B-2: parent-based section fetchers (section's real parent is semester/year) ──
+
+// Sections directly under a semester (semesterized programs).
+export async function getSectionsBySemester(semesterId: string): Promise<Section[]> {
+  return getActiveChildren<Section>('sections', 'semesterId', semesterId);
+}
+
+// Sections directly under a year with NO semester (annual programs).
+// Firestore can't query "semesterId == null" via getActiveChildren's ==, so we
+// fetch by year and filter the null-semester ones client-side.
+export async function getSectionsByYearDirect(yearId: string): Promise<Section[]> {
+  const all = await getActiveChildren<Section>('sections', 'yearId', yearId);
+  return all.filter((s) => s.semesterId == null);
+}
+
+// Section-level courses (offerings attached to one section).
+export async function getCoursesBySection(sectionId: string): Promise<Course[]> {
+  return getActiveChildren<Course>('courses', 'sectionId', sectionId);
+}
+
 export async function createSection(data: Section): Promise<void> {
   return firestoreSet<Section>('sections', data.id, data);
 }
@@ -1032,9 +1060,12 @@ const NODE_ANCESTOR_FIELD: Record<Exclude<NodeLevel, 'group'>, string> = {
   section: 'sectionId',
 };
 
+// B-2: `course` is NOT part of the spine — a section's parent is its semester
+// (or year). A course is an offering attached beside the spine, so it is never
+// walked *through* to reach sections. Course rosters resolve via their sections.
 const NODE_ORDER: NodeLevel[] = [
   'school', 'academicLevel', 'program', 'academicSession',
-  'academicYear', 'semester', 'course', 'section', 'group',
+  'academicYear', 'semester', 'section', 'group',
 ];
 
 // One mapping tagged with whether it sits AT the target node (removable here)
@@ -1047,6 +1078,29 @@ export type RosterMember = AcademicMapping & {
 // Uses the denormalized ancestor field on each collection — one query per level.
 async function collectDescendantNodeIds(nodeId: string, nodeType: NodeLevel): Promise<string[]> {
   if (nodeType === 'group') return []; // leaf — no descendants
+
+  // B-2: a course is an offering beside the spine. Its "descendants" are the
+  // section(s) it's attached to (and their groups), resolved sideways:
+  //   sectionId set → that section; semesterId set → the semester's sections;
+  //   else → sections directly under the year (annual programs).
+  if (nodeType === 'course') {
+    const course = await firestoreGet<Course>('courses', nodeId);
+    if (!course) return [];
+    let sections: Section[] = [];
+    if (course.sectionId) {
+      const one = await firestoreGet<Section>('sections', course.sectionId);
+      sections = one && one.status !== 'archived' ? [one] : [];
+    } else if (course.semesterId) {
+      sections = await getSectionsBySemester(course.semesterId);
+    } else {
+      sections = await getSectionsByYearDirect(course.yearId);
+    }
+    const ids = sections.map((s) => s.id);
+    const groupLists = await Promise.all(ids.map((sid) => getGroupsBySection(sid)));
+    groupLists.forEach((gs) => gs.forEach((g) => ids.push(g.id)));
+    return ids;
+  }
+
   const field = NODE_ANCESTOR_FIELD[nodeType as Exclude<NodeLevel, 'group'>];
   const below = NODE_ORDER.slice(NODE_ORDER.indexOf(nodeType) + 1);
   const ids: string[] = [];

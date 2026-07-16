@@ -224,9 +224,25 @@ async function createNode(
     case 'academicYear':
       return createAcademicYear({ ...base, schoolId: ancestry.schoolId!, levelId: ancestry.levelId!, programId: ancestry.programId!, sessionId: ancestry.sessionId! });
     case 'section':
-      return createSection({ ...base, schoolId: ancestry.schoolId!, levelId: ancestry.levelId!, programId: ancestry.programId!, sessionId: ancestry.sessionId!, yearId: ancestry.yearId!, semesterId: ancestry.semesterId ?? null, courseId: ancestry.courseId! });
+      // B-2: a section's parent is its semester (or year when annual). courseId
+      // is no longer a required parent — it's optional legacy metadata, only set
+      // if the caller explicitly passed one.
+      return createSection({
+        ...base,
+        schoolId: ancestry.schoolId!, levelId: ancestry.levelId!, programId: ancestry.programId!,
+        sessionId: ancestry.sessionId!, yearId: ancestry.yearId!,
+        semesterId: ancestry.semesterId ?? null,
+        ...(ancestry.courseId ? { courseId: ancestry.courseId } : {}),
+      });
     case 'group':
-      return createGroup({ ...base, schoolId: ancestry.schoolId!, levelId: ancestry.levelId!, programId: ancestry.programId!, sessionId: ancestry.sessionId!, yearId: ancestry.yearId!, semesterId: ancestry.semesterId ?? null, courseId: ancestry.courseId!, sectionId: ancestry.sectionId! });
+      return createGroup({
+        ...base,
+        schoolId: ancestry.schoolId!, levelId: ancestry.levelId!, programId: ancestry.programId!,
+        sessionId: ancestry.sessionId!, yearId: ancestry.yearId!,
+        semesterId: ancestry.semesterId ?? null,
+        sectionId: ancestry.sectionId!,
+        ...(ancestry.courseId ? { courseId: ancestry.courseId } : {}),
+      });
     default:
       throw new Error(`${level} must be created through a specialized drawer`);
   }

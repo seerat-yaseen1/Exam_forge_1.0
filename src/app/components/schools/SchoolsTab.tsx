@@ -14,6 +14,9 @@ import {
   getSemestersByYear,
   getCoursesByYear,
   getCoursesBySemester,
+  getCoursesBySection,
+  getSectionsBySemester,
+  getSectionsByYearDirect,
   getSectionsByCourse,
   getGroupsBySection,
   // Archive functions
@@ -110,6 +113,8 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
   const [items, setItems] = useState<HierarchyItem[]>([]);
   // Only populated when at Year level: direct courses (no semester)
   const [directCourses, setDirectCourses] = useState<HierarchyItem[]>([]);
+  // B-2: sections that hang directly off a YEAR (annual programs, no semester).
+  const [directSections, setDirectSections] = useState<HierarchyItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Drawers
@@ -124,7 +129,9 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
   const isLeafView = currentParentLevel === 'group';
   const currentAncestry: AncestryMap = currentParent?.ancestry ?? {};
 
-  // What level of items we're listing (primary panel)
+  // What level of items we're listing (primary panel).
+  // B-2: a semester now lists SECTIONS (not courses); a year lists semesters
+  // when it has them, else sections directly. Course is never a primary level.
   const listedLevel: NodeLevel = isRootView
     ? 'school'
     : isYearView
@@ -134,6 +141,8 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
   // ── Fetch ──────────────────────────────────────────────────────
 
   const fetchItems = useCallback(async () => {
+    // Reset side panels each navigation; only year/semester/section repopulate them.
+    setDirectSections([]);
     if (isLeafView) { setItems([]); setDirectCourses([]); return; }
     setLoading(true);
     try {
@@ -169,31 +178,40 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
             break;
           }
           case 'academicYear': {
-            // Primary: semesters; Secondary: direct courses (no semesterId)
-            const [sems, courses] = await Promise.all([
+            // B-2: a year may be semesterized OR annual (or both).
+            //   items          = semesters
+            //   directSections = sections straight under the year (semesterId null)
+            //   directCourses  = year-level courses (offerings)
+            const [sems, dSections, courses] = await Promise.all([
               getSemestersByYear(parentId),
+              getSectionsByYearDirect(parentId),
               getCoursesByYear(parentId),
             ]);
             setItems(sems.map((s) => toItem(s, 'semester')));
+            setDirectSections(dSections.map((s) => toItem(s, 'section')));
             setDirectCourses(courses.map((c) => toItem(c, 'course')));
             break;
           }
           case 'semester': {
-            const courses = await getCoursesBySemester(parentId);
-            setItems(courses.map((c) => toItem(c, 'course')));
-            setDirectCourses([]);
-            break;
-          }
-          case 'course': {
-            const sections = await getSectionsByCourse(parentId);
+            // B-2: sections live under the semester now (not under a course).
+            //   primary   = sections
+            //   secondary = semester-level courses (whole-cohort offerings)
+            const [sections, courses] = await Promise.all([
+              getSectionsBySemester(parentId),
+              getCoursesBySemester(parentId),
+            ]);
             setItems(sections.map((s) => toItem(s, 'section')));
-            setDirectCourses([]);
+            setDirectCourses(courses.map((c) => toItem(c, 'course')));
             break;
           }
           case 'section': {
-            const groups = await getGroupsBySection(parentId);
+            // B-2: groups (primary) + section-level courses (secondary).
+            const [groups, courses] = await Promise.all([
+              getGroupsBySection(parentId),
+              getCoursesBySection(parentId),
+            ]);
             setItems(groups.map((g) => toItem(g, 'group')));
-            setDirectCourses([]);
+            setDirectCourses(courses.map((c) => toItem(c, 'course')));
             break;
           }
           default: break;
@@ -254,14 +272,27 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
 
   const handleAdd = () => {
     if (isYearView) {
+      // Year primary add = a semester (annual-program sections are added via
+      // the direct-sections affordance below).
       setDrawer({ type: 'semester' });
-    } else if (listedLevel === 'course') {
-      setDrawer({ type: 'course' });
     } else {
+      // semester → section, section → group, etc.
       setDrawer({ type: 'node', level: listedLevel });
     }
   };
 
+  // Add a section directly under a year (annual programs, no semester).
+  const handleAddDirectSection = () => {
+    setDrawer({ type: 'node', level: 'section' });
+  };
+
+  // Course placement (B-2): courses are offerings attached beside the spine.
+  //   year view    → whole-year course (directToYear)
+  //   semester view→ whole-semester course
+  //   section view → section-level course
+  const handleAddCourse = () => {
+    setDrawer({ type: 'course', directToYear: isYearView });
+  };
   const handleAddDirectCourse = () => {
     setDrawer({ type: 'course', directToYear: true });
   };
@@ -305,10 +336,9 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
       {/* Breadcrumb */}
       <HierarchyBreadcrumb stack={stack} onRoot={handleRoot} onCrumb={handleCrumb} />
 
-      {/* ── Year view: two sections ── */}
+      {/* ── Year view: semesters + direct sections + year courses ── */}
       {isYearView ? (
         <div className="space-y-8">
-          {/* Semesters */}
           <HierarchyPanel
             level="semester"
             items={items}
@@ -322,17 +352,60 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
             onArchive={(id) => handleArchive(id, 'semester')}
           />
 
-          {/* Direct Courses */}
+          {/* Sections directly under the year (annual programs, no semester) */}
+          <HierarchyPanel
+            level="section"
+            items={directSections}
+            loading={loading}
+            sectionTitle="Sections (no semester)"
+            addLabel="Add Section"
+            readOnly={readOnly}
+            onSelect={handleSelect}
+            onAdd={handleAddDirectSection}
+            onEdit={(item) => handleEdit(item, false)}
+            onArchive={(id) => handleArchive(id, 'section')}
+          />
+
+          {/* Year-level courses (offerings, no semester) */}
           <HierarchyPanel
             level="course"
             items={directCourses}
             loading={loading}
-            sectionTitle="Direct Courses (no semester)"
-            addLabel="Add Direct Course"
+            sectionTitle="Courses (whole year)"
+            addLabel="Add Course"
             readOnly={readOnly}
             onSelect={handleSelect}
             onAdd={handleAddDirectCourse}
             onEdit={(item) => handleEdit(item, true)}
+            onArchive={(id) => handleArchive(id, 'course')}
+          />
+        </div>
+      ) : (currentParentLevel === 'semester' || currentParentLevel === 'section') ? (
+        /* ── Semester or Section view: primary panel + courses side panel ── */
+        <div className="space-y-8">
+          <HierarchyPanel
+            level={listedLevel}
+            items={items}
+            loading={loading}
+            isLeaf={listedLevel === 'group'}
+            readOnly={readOnly}
+            onSelect={handleSelect}
+            onAdd={handleAdd}
+            onEdit={(item) => handleEdit(item, false)}
+            onArchive={(id) => handleArchive(id, listedLevel)}
+          />
+
+          {/* Courses attached at this level (offerings, not a drill-through) */}
+          <HierarchyPanel
+            level="course"
+            items={directCourses}
+            loading={loading}
+            sectionTitle={currentParentLevel === 'semester' ? 'Courses (whole semester)' : 'Courses (this section)'}
+            addLabel="Add Course"
+            readOnly={readOnly}
+            onSelect={handleSelect}
+            onAdd={handleAddCourse}
+            onEdit={(item) => handleEdit(item, false)}
             onArchive={(id) => handleArchive(id, 'course')}
           />
         </div>

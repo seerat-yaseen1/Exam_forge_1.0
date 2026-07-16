@@ -46,8 +46,20 @@ export const ALLOCATION_NODE_TYPE_LABELS: Record<AllocationNodeType, string> = {
   ...NODE_LEVEL_LABELS,
 };
 
-/** Ordered top→bottom. Filters for a picked type are exactly the types ABOVE it. */
+/**
+ * The SPINE, ordered top→bottom. Filters for a picked type are exactly the types
+ * ABOVE it. B-2: `course` is NOT in the spine — it's an offering attached beside
+ * it (semester-level or section-level) and resolves sideways to its sections.
+ * It remains selectable (see ALLOCATION_SELECTABLE_TYPES) but never acts as an
+ * ancestor of section.
+ */
 export const ALLOCATION_TYPE_ORDER: AllocationNodeType[] = [
+  'institute', 'school', 'academicLevel', 'program', 'academicSession',
+  'academicYear', 'semester', 'section', 'group',
+];
+
+/** What the target-level picker offers: the spine + course (sideways-resolving). */
+export const ALLOCATION_SELECTABLE_TYPES: AllocationNodeType[] = [
   'institute', 'school', 'academicLevel', 'program', 'academicSession',
   'academicYear', 'semester', 'course', 'section', 'group',
 ];
@@ -216,7 +228,7 @@ const ANCESTOR_FIELDS_IN_ORDER: { type: AllocationNodeType; field: keyof AnyNode
   { type: 'academicSession', field: 'sessionId' },
   { type: 'academicYear', field: 'yearId' },
   { type: 'semester', field: 'semesterId' },
-  { type: 'course', field: 'courseId' },
+  // B-2: course removed — it is not an ancestor of section anymore.
   { type: 'section', field: 'sectionId' },
 ];
 
@@ -269,10 +281,36 @@ function localMemberSetsByNode(bundle: HierarchyBundle, t: Exclude<AllocationNod
     arr.push(m.studentId);
     byMappedNode.set(m.nodeId, arr);
   });
+  const out = new Map<string, Set<string>>();
+
+  // B-2: course is an OFFERING, not a spine ancestor. It resolves SIDEWAYS to
+  // the section(s) it's attached to, then down to those sections' groups.
+  //   sectionId set → that section; semesterId set → all sections of the
+  //   semester; else → sections directly under the year.
+  if (t === 'course') {
+    const activeSections = bundle.sections.filter((s) => (s as any).status !== 'archived');
+    const activeGroups = bundle.groups.filter((g) => (g as any).status !== 'archived');
+    bundle.courses.forEach((c: any) => {
+      const set = new Set<string>();
+      const secs = c.sectionId
+        ? activeSections.filter((s) => s.id === c.sectionId)
+        : c.semesterId
+          ? activeSections.filter((s) => s.semesterId === c.semesterId)
+          : activeSections.filter((s) => s.yearId === c.yearId && s.semesterId == null);
+      secs.forEach((s) => {
+        (byMappedNode.get(s.id) ?? []).forEach((sid) => set.add(sid));
+        activeGroups.filter((g) => g.sectionId === s.id).forEach((g) => {
+          (byMappedNode.get(g.id) ?? []).forEach((sid) => set.add(sid));
+        });
+      });
+      out.set(c.id, set);
+    });
+    return out;
+  }
+
   const below = ALLOCATION_TYPE_ORDER.slice(ALLOCATION_TYPE_ORDER.indexOf(t) + 1) as
     Exclude<AllocationNodeType, 'institute'>[];
   const field = LEVEL_ID_FIELD[t];
-  const out = new Map<string, Set<string>>();
   collectionFor(bundle, t).forEach((n) => {
     const set = new Set<string>();
     (byMappedNode.get(n.id) ?? []).forEach((sid) => set.add(sid));

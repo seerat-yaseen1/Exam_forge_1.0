@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Pencil, Plus, X } from 'lucide-react';
 import {
   ALLOCATION_NODE_TYPE_LABELS,
-  ALLOCATION_TYPE_ORDER,
+  ALLOCATION_SELECTABLE_TYPES,
   emptyAllocationDraft,
   listInstitutesForAllocation,
   loadHierarchyBundle,
@@ -177,7 +177,7 @@ export function AllocationPanelCore({ draft, setDraft, assessmentId, version = 0
             <>
               <select value={draft.nodeType} onChange={(e) => chooseType(e.target.value as AllocationNodeType | '')} style={selectStyle}>
                 <option value="">Select what to target…</option>
-                {ALLOCATION_TYPE_ORDER.map((t) => {
+                {ALLOCATION_SELECTABLE_TYPES.map((t) => {
                   const n = t === 'institute' ? null : typeCounts?.[t] ?? 0;
                   const disabled = t !== 'institute' && (n ?? 0) === 0;
                   return (

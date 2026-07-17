@@ -12,17 +12,20 @@ rules_version = '2';
 //   { role: 'faculty',   instituteId, facultyId }
 //   { role: 'student',   instituteId, studentId }
 //
-// Phase 6 (this file) is INTENTIONALLY PRAGMATIC:
-//   ✅ Reads & writes require request.auth != null (closes public-read hole)
+// Phase 6+ (this file) — role-scoped, not merely authenticated:
+//   ✅ Reads & writes require request.auth != null (public-read hole closed)
 //   ✅ webowners can only be written by Web Owners; deletion always blocked
-//   ✅ Credential collections (institute/faculty/student) require auth
-//   ✅ Test collections are completely blocked
-//   ✅ Unknown collection paths fall through to default deny
+//   ✅ Credential collections (institute/faculty/student) scoped by claim
+//   ✅ Assessment / question / attempt / answer-key rules scoped by owner
+//      and by materialized membership (see attempts + assessments blocks)
+//   ✅ Academic hierarchy + mappings reads scoped to staff / own-student
+//      (Audit N8, 2026-07-17)
+//   ✅ Test collections blocked; unknown paths fall through to default deny
 //
-// Phase 6b will tighten the academic / assessment / attempt rules to scope
-// writes by claim (e.g. only the Institute Admin for that institute can mutate
-// its own institute doc). For now any signed-in user can read/write the bulk
-// data — this matches existing app behaviour while removing public access.
+// Remaining deferrals are tracked in REMEDIATION_PLAN.md, not here (so this
+// header can't drift stale again): per-institute scoping of individual staff
+// hierarchy reads waits on the repo split (queries need instituteId filters),
+// and the legacy assignedTo path is retired with N6.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 service cloud.firestore {
@@ -73,6 +76,17 @@ service cloud.firestore {
       return signedIn()
         && role() == 'student'
         && request.auth.token.studentId == studentId;
+    }
+
+    // Any staff principal (non-student). Role-only conditions are provable
+    // for every query shape, which is what lets Batch B scope the academic
+    // collections without touching the parent-keyed client queries
+    // (levels-by-school, programs-by-level, …). Full per-institute staff
+    // scoping is deferred to the repo split (Batch F5), when those queries
+    // gain instituteId filters — see REMEDIATION_PLAN.md.
+    function isStaff() {
+      return signedIn()
+        && (role() == 'webOwner' || role() == 'institute' || role() == 'faculty');
     }
 
     function str(val) {
@@ -193,9 +207,11 @@ service cloud.firestore {
                            && request.auth.token.instituteId == resource.data.instituteId);
       allow create: if isWebOwner()
                        || isInstituteOf(request.resource.data.instituteId);
+      // N4: isFacultySelf removed from update — no client code self-writes
+      // the profile doc (contexts write facultyCredentials only), and the
+      // clause let any faculty member set canCreateStudents on themselves.
       allow update: if isWebOwner()
-                       || isInstituteOf(resource.data.instituteId)
-                       || isFacultySelf(facultyId);
+                       || isInstituteOf(resource.data.instituteId);
       allow delete: if isWebOwner()
                        || isInstituteOf(resource.data.instituteId);
     }
@@ -250,8 +266,10 @@ service cloud.firestore {
       allow update: if isWebOwner()
                        || isInstituteOf(resource.data.instituteId)
                        || (role() == 'faculty'
-                           && request.auth.token.instituteId == resource.data.instituteId)
-                       || isStudentSelf(studentId);
+                           && request.auth.token.instituteId == resource.data.instituteId);
+      // N4: isStudentSelf removed from update — no client code self-writes
+      // the profile doc (contexts write studentCredentials only), and the
+      // clause let a disabled student flip their own status back to active.
       allow delete: if isWebOwner()
                        || isInstituteOf(resource.data.instituteId)
                        || (role() == 'faculty'
@@ -321,61 +339,66 @@ service cloud.firestore {
     }
 
     match /schools/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /academicLevels/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /programs/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /academicSessions/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /academicYears/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /semesters/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /courses/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /sections/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /groups/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if canWriteAcademic(resource.data.instituteId);
       allow delete: if false;
     }
     match /academicMappings/{id} {
-      allow read:   if signedIn();
+      // N8: was signedIn() — any student could enumerate every institute's
+      // student→node directory. Students keep reading their OWN mappings
+      // (profile + landing pages query where studentId == claim; provable).
+      allow read:   if isStaff()
+                       || (role() == 'student'
+                           && resource.data.studentId == request.auth.token.studentId);
       allow create: if canWriteAcademic(request.resource.data.instituteId);
       allow update: if false;     // mappings are immutable
       allow delete: if canWriteAcademic(resource.data.instituteId);
@@ -622,19 +645,19 @@ service cloud.firestore {
 
     // questionBanks — owned by Web Owner only (no instituteId on the doc).
     match /questionBanks/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // L-b: students have no reason to enumerate share/grant metadata
       allow create, update, delete: if isWebOwner();
     }
 
     // bankGrants (Web Owner → Institute) — only Web Owner mutates.
     match /bankGrants/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // L-b: students have no reason to enumerate share/grant metadata
       allow create, update, delete: if isWebOwner();
     }
 
     // instituteGrants (Institute Admin → Faculty within the same institute).
     match /instituteGrants/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // L-b: students have no reason to enumerate share/grant metadata
       allow create: if isWebOwner()
                        || isInstituteOf(request.resource.data.instituteId);
       allow update: if isWebOwner()
@@ -658,7 +681,7 @@ service cloud.firestore {
             && request.auth.token.facultyId   == d.sharedBy);
     }
     match /questionShares/{id} {
-      allow read:   if signedIn();
+      allow read:   if isStaff();   // L-b: students have no reason to enumerate share/grant metadata
       allow create: if canWriteShare(request.resource.data);
       allow update: if canWriteShare(resource.data);
       allow delete: if canWriteShare(resource.data);
@@ -687,9 +710,14 @@ service cloud.firestore {
                      || ((role() == 'institute' || role() == 'faculty')
                          && resource.data.instituteId is string
                          && request.auth.token.instituteId == resource.data.instituteId);
+      // L-c: a student's report may not carry another institute's id (was
+      // injectable noise into that institute's inbox). Tolerates absence —
+      // reports on webOwner-owned exams may omit instituteId.
       allow create: if isWebOwner()
                        || (role() == 'student'
-                           && request.resource.data.studentId == request.auth.token.studentId);
+                           && request.resource.data.studentId == request.auth.token.studentId
+                           && (!('instituteId' in request.resource.data)
+                               || request.resource.data.instituteId == request.auth.token.instituteId));
       allow update: if canResolveReport(resource.data);
       allow delete: if isWebOwner();
     }
@@ -706,27 +734,12 @@ service cloud.firestore {
       allow create, update, delete: if isWebOwner();
     }
 
-    // enrollments/{assessmentId_studentId}
-    //   read: any signed-in user (student needs to see own; grader sees roster)
-    //   write: assessment owner (resolved via get() on assessments/{assessmentId})
-    function canWriteEnrollment(assessmentId) {
-      return isWebOwner()
-        || (
-             exists(/databases/$(database)/documents/assessments/$(assessmentId))
-             && canWriteOwned(
-                  get(/databases/$(database)/documents/assessments/$(assessmentId)).data.ownerType,
-                  get(/databases/$(database)/documents/assessments/$(assessmentId)).data.ownerId
-                )
-           );
-    }
+    // enrollments — RETIRED (L-a, 2026-07-17). Zero client callers remain;
+    // membership went to assessmentMembers (rules mode) / assignedTo (legacy).
+    // Explicit deny kept as a tombstone so a stray write fails loudly here
+    // rather than falling through to the default.
     match /enrollments/{id} {
-      allow read:   if isWebOwner()
-                       || (role() == 'student'
-                           && resource.data.studentId == request.auth.token.studentId)
-                       || canWriteEnrollment(resource.data.assessmentId);
-      allow create: if canWriteEnrollment(request.resource.data.assessmentId);
-      allow update: if canWriteEnrollment(resource.data.assessmentId);
-      allow delete: if canWriteEnrollment(resource.data.assessmentId);
+      allow read, write: if false;
     }
 
     // ═════════════════════════════════════════════════════════════════════════

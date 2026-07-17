@@ -72,11 +72,11 @@ export function ResultsExportModal({
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState<string | null>(null);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     setBusy(true);
     setError(null);
     try {
-      downloadResultsExport({
+      await downloadResultsExport({
         assessment,
         students,
         attempts,

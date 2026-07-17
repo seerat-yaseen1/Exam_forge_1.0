@@ -9,7 +9,6 @@
  *   2. resolveSubjects() — subject resolution against registry (async, done in UI layer)
  */
 
-import * as XLSX from 'xlsx';
 import { type QuestionDraft } from './QuestionTypeEngine';
 import { type Subject, resolveSubject, normalizeSubject } from '../../../lib/subjectService';
 import { type Difficulty, type Question, findDuplicateCandidates } from '../../../lib/questionBankService';
@@ -366,6 +365,13 @@ function parseMatchRow(raw: Record<string, string>, rowIndex: number): ParsedRow
 // WORKBOOK ENTRY POINT
 // ══════════════════════════════════════════════════════════════════
 
+// Lazy xlsx (Remediation plan Batch E / ext #19): the ~142 KB gzip sheet
+// library loads on first actual use (template download / file parse /
+// export), not with the page chunk that happens to render this component.
+type XlsxModule = typeof import('xlsx');
+let xlsxPromise: Promise<XlsxModule> | null = null;
+const loadXlsx = () => (xlsxPromise ??= import('xlsx'));
+
 /**
  * Parse an XLSX ArrayBuffer into structured rows.
  *
@@ -374,7 +380,8 @@ function parseMatchRow(raw: Record<string, string>, rowIndex: number): ParsedRow
  *   - Rows matching INSTRUCTION_MARKERS
  *   - Row 2 of each sheet (template instruction row, always skipped)
  */
-export function parseWorkbook(buffer: ArrayBuffer): ParsedWorkbook {
+export async function parseWorkbook(buffer: ArrayBuffer): Promise<ParsedWorkbook> {
+  const XLSX = await loadXlsx();
   const wb = XLSX.read(buffer, { type: 'array' });
 
   const result: ParsedWorkbook = {
@@ -515,7 +522,8 @@ export function resolveSubjectsInRows(
 // ══════════════════════════════════════════════════════════════════
 
 /** Generate and trigger download of the XLSX template with example rows. */
-export function downloadTemplate(): void {
+export async function downloadTemplate(): Promise<void> {
+  const XLSX = await loadXlsx();
   const wb = XLSX.utils.book_new();
 
   // ── MCQ sheet ──────────────────────────────────────────────────

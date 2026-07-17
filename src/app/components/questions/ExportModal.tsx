@@ -4,7 +4,6 @@ import {
   X, Download, FileDown, FileJson, Filter,
   CheckCircle2, Loader2,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { type Question, type Difficulty, difficultyColor, questionTypeBadge } from '../../../lib/questionBankService';
 import { type Subject } from '../../../lib/subjectService';
 
@@ -143,7 +142,15 @@ function TagFilterInput({
 
 // ── XLSX export ───────────────────────────────────────────────────────────────
 
-function questionsToXLSX(questions: Question[]): void {
+// Lazy xlsx (Remediation plan Batch E / ext #19): the ~142 KB gzip sheet
+// library loads on first actual use (template download / file parse /
+// export), not with the page chunk that happens to render this component.
+type XlsxModule = typeof import('xlsx');
+let xlsxPromise: Promise<XlsxModule> | null = null;
+const loadXlsx = () => (xlsxPromise ??= import('xlsx'));
+
+async function questionsToXLSX(questions: Question[]): Promise<void> {
+  const XLSX = await loadXlsx();
   const wb = XLSX.utils.book_new();
 
   const mcq   = questions.filter((q) => q.engine === 'mcq');

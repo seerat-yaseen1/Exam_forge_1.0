@@ -723,10 +723,11 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
     });
   }, []);
 
-  const handleFile = useCallback((buffer: ArrayBuffer) => {
+  const handleFile = useCallback(async (buffer: ArrayBuffer) => {
     setParseErr(null);
     try {
-      const raw = parseWorkbook(buffer);
+      // parseWorkbook is async since Batch E (lazy xlsx) — see bulkUploadParser.
+      const raw = await parseWorkbook(buffer);
       if (raw.sheetsFound.length === 0) {
         setParseErr('No recognised sheets found (expected MCQ, Text, or Match). Check your template.');
         return;

@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import * as XLSX from 'xlsx';
 import {
   X, Download, Upload, AlertTriangle, Check, Loader2,
   CheckCircle2, XCircle, FileSpreadsheet, ArrowRight,
@@ -72,7 +71,15 @@ function validateRows(rows: { name: string; email: string }[], existingEmails: S
   });
 }
 
-function downloadTemplate() {
+// Lazy xlsx (Remediation plan Batch E / ext #19): the ~142 KB gzip sheet
+// library loads on first actual use (template download / file parse /
+// export), not with the page chunk that happens to render this component.
+type XlsxModule = typeof import('xlsx');
+let xlsxPromise: Promise<XlsxModule> | null = null;
+const loadXlsx = () => (xlsxPromise ??= import('xlsx'));
+
+async function downloadTemplate() {
+  const XLSX = await loadXlsx();
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([
     ['Name', 'Email'],
@@ -117,6 +124,7 @@ export function BulkFacultyModal({
     }
     try {
       const buffer = await file.arrayBuffer();
+      const XLSX = await loadXlsx();
       const wb = XLSX.read(buffer, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<any>(ws, { defval: '' });

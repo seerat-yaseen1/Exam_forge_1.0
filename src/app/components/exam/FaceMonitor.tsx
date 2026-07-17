@@ -19,7 +19,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Camera, CameraOff, AlertCircle } from 'lucide-react';
-import * as faceapi from 'face-api.js';
+import type * as faceapi from 'face-api.js';
 import type { ViolationType } from '../../../lib/submissionService';
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ const ABSENT_RELOG_SECS       = 60;     // re-log face absence every 60 s of con
 const MODEL_URL               = '/models';
 
 // Module-level guard so the (small) model is only loaded once per page.
-let modelsLoaded = false;
+let faceapiModule: typeof faceapi | null = null;
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -49,16 +49,20 @@ interface FaceMonitorProps {
   onStateChange?: (state: DetectionState) => void;
 }
 
-// ── Load the self-hosted TinyFaceDetector model ───────────────────
-// face-api.js is bundled from npm (imported above); only the weights need
-// fetching, and they come from our own origin (/models). Loaded once.
+// ── Load face-api + the self-hosted TinyFaceDetector model ────────
+// Batch E / ext #19: face-api.js (~600 KB min) is dynamically imported on
+// first use, so it lives in its own chunk and only students entering a
+// camera-tier exam ever download it — it no longer rides inside the exam
+// shell chunk. The top-of-file import is `import type` (erased at build).
+// Weights still come from our own origin (/models). Both loaded once.
 
 async function loadFaceModels(): Promise<typeof faceapi> {
-  if (!modelsLoaded) {
-    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-    modelsLoaded = true;
+  if (!faceapiModule) {
+    const mod = await import('face-api.js');
+    await mod.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    faceapiModule = mod;
   }
-  return faceapi;
+  return faceapiModule;
 }
 
 // ── Component ─────────────────────────────────────────────────────

@@ -36,10 +36,16 @@
  *            apart so the browser doesn't swallow them.
  */
 
-import * as XLSX from 'xlsx';
 import type { Assessment } from './assessmentService';
 import type { Student } from './firebaseService';
 import type { Attempt, AttemptStatus } from './submissionService';
+
+// Lazy xlsx (Remediation plan Batch E / ext #19): the ~142 KB gzip sheet
+// library loads on first actual use (template download / file parse /
+// export), not with the page chunk that happens to render this component.
+type XlsxModule = typeof import('xlsx');
+let xlsxPromise: Promise<XlsxModule> | null = null;
+const loadXlsx = () => (xlsxPromise ??= import('xlsx'));
 
 // ── Options ───────────────────────────────────────────────────────
 
@@ -299,15 +305,16 @@ function downloadBlob(content: BlobPart, filename: string, mime: string): void {
  *
  * Returns the number of exported attempt rows (for the toast).
  */
-export function downloadResultsExport(params: {
+export async function downloadResultsExport(params: {
   assessment: Assessment;
   students: Student[];
   attempts: Attempt[];
   blockedStudentIds: Set<string>;
   options: ResultsExportOptions;
-}): number {
+}): Promise<number> {
   const { assessment, students, attempts, blockedStudentIds, options } = params;
 
+  const XLSX = await loadXlsx();
   const { exported, notAttempted } = selectExportRows(students, attempts, options.scope);
 
   const summaryRows   = buildSummaryRows(exported, notAttempted, blockedStudentIds, options.scope);

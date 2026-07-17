@@ -120,6 +120,23 @@ export const createAuthUser = onCall<CreateAuthUserData>(
     if (!profile?.email || !profile?.name) {
       throw new HttpsError('invalid-argument', 'Profile must include email and name.');
     }
+    // ext #16 (server half, identity paths): the bulk student/faculty upload
+    // modals validate rows client-side only — anything reaching this endpoint
+    // is re-validated here so a crafted call can't create malformed accounts.
+    // (Question bulk-upload validation is a separate rules-side design.)
+    {
+      const emailStr = String(profile.email).trim();
+      const nameStr  = String(profile.name).trim();
+      if (emailStr.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
+        throw new HttpsError('invalid-argument', 'Invalid email address.');
+      }
+      if (nameStr.length < 1 || nameStr.length > 120) {
+        throw new HttpsError('invalid-argument', 'Name must be between 1 and 120 characters.');
+      }
+      if (password.length > 128) {
+        throw new HttpsError('invalid-argument', 'Password must be at most 128 characters.');
+      }
+    }
 
     // For faculty / student, instituteId must be supplied explicitly.
     if ((role === 'faculty' || role === 'student') && !providedInstituteId) {
@@ -423,6 +440,35 @@ interface GradingAssessmentDoc {
   questions?: Array<{ questionId: string; marks: number }>;
   passingScore?: number;
   allowReview?: boolean;
+  // N5 final form (2026-07-17) — audience-scoped visibility. When present,
+  // these arrays are authoritative; when absent (legacy docs), the old
+  // booleans govern (see reviewAudienceAllows).
+  allowReviewTo?: unknown;
+  showResultsTo?: unknown;
+}
+
+// ── Visibility audiences (N5 final form) ──────────────────────────
+// Owner-controlled, per-assessment: who may see correct answers.
+//   allowReviewTo present → the array is authoritative per audience.
+//   allowReviewTo absent  → legacy: the allowReview boolean governs
+//     EVERYONE. Staff key access mirrors student access (staff ≤ students
+//     symmetry) — this deliberately closes audit N5 for legacy docs too:
+//     an allowReview:false exam exposes keys to no one, instead of to every
+//     assigned institute's staff while live. Keys students already hold
+//     (written into their attempts when they may review) are the floor;
+//     granting staff less than students is only enforceable at the key
+//     endpoint, not inside student-readable attempt docs.
+type VisibilityAudience = 'students' | 'institute' | 'faculty';
+
+function reviewAudienceAllows(
+  assessment: { allowReview?: boolean; allowReviewTo?: unknown },
+  audience: VisibilityAudience,
+): boolean {
+  const list = Array.isArray(assessment.allowReviewTo)
+    ? (assessment.allowReviewTo as unknown[]).filter((x): x is string => typeof x === 'string')
+    : null;
+  if (list) return list.includes(audience);
+  return assessment.allowReview === true;
 }
 
 type EffectiveSection = {
@@ -559,10 +605,10 @@ function scoreAttemptAnswers(params: {
   answerMap: Map<string, QuestionAnswerDoc>;
   answers: Record<string, AttemptAnswerDoc> | undefined;
   passingScore: number | undefined;
-  allowReview: boolean | undefined;
+  exposeKeysToStudent: boolean;
   invalidatedQuestionIds?: Set<string>;
 }): { scores: ScoresOut; gradedAnswers: Record<string, GradedAnswerOut> } {
-  const { sections, questionMap, answerMap, answers, passingScore, allowReview } = params;
+  const { sections, questionMap, answerMap, answers, passingScore, exposeKeysToStudent } = params;
   const invalidated = params.invalidatedQuestionIds ?? new Set<string>();
 
   let totalAwarded   = 0;
@@ -571,7 +617,7 @@ function scoreAttemptAnswers(params: {
   const bySection: ScoresOut['bySection'] = [];
   const gradedAnswers: Record<string, GradedAnswerOut> = {};
 
-  const exposeKeys = allowReview === true;
+  const exposeKeys = exposeKeysToStudent;
 
   for (const sec of sections) {
     let sectionAwarded = 0;
@@ -747,7 +793,9 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       answerMap,
       answers: attempt.answers,
       passingScore: assessment.passingScore,
-      allowReview: assessment.allowReview,
+      // Keys land in the student's own attempt only when STUDENTS are in
+      // the review audience (N5 final form).
+      exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
     });
 
     const nowIso = new Date().toISOString();
@@ -914,7 +962,7 @@ export const regradeAttempts = onCall<RegradeAttemptsData>(
         answerMap,
         answers: att.answers,
         passingScore: assessment.passingScore,
-        allowReview: assessment.allowReview,
+        exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
         invalidatedQuestionIds: invalidated,
       });
 
@@ -1002,7 +1050,16 @@ export const getAnswerKeysForReview = onCall<GetAnswerKeysData>(
             || (target.type === 'institutes'
                 && !!callerInstituteId
                 && (target.instituteIds ?? []).includes(callerInstituteId)));
-      if (!ownsIt && !assignedToCaller) {
+      // N5 final form: non-owner staff get keys ONLY when the exam owner has
+      // put their audience in allowReviewTo (or, on legacy docs, when the
+      // allowReview boolean is on — the same access students have). Being
+      // assigned/published alone no longer exports the key set; exam status
+      // (active vs closed) is irrelevant once the audience allows it, which
+      // is the point: the owner's flag is the consent, not the clock.
+      const audience: VisibilityAudience =
+        callerRole === 'institute' ? 'institute' : 'faculty';
+      const staffMayReview = reviewAudienceAllows(assessment, audience);
+      if (!ownsIt && !(assignedToCaller && staffMayReview)) {
         throw new HttpsError('permission-denied', 'This assessment is not visible to you.');
       }
     }
@@ -1154,12 +1211,15 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
       throw new HttpsError('permission-denied', 'This exam is not available to you.');
     }
 
-    // Explanation only for post-exam review, and only when the assessment
-    // permits review — same gate the results page applies client-side.
+    // Explanation only for post-exam review, and only when STUDENTS are in
+    // the assessment's review audience (N5 final form) — same gate
+    // gradeAttempt applies when writing keys into the attempt.
     const includeExplanation =
       mode === 'review'
       && hasFinishedAttempt
-      && (assessment as { allowReview?: boolean }).allowReview === true;
+      && reviewAudienceAllows(
+           assessment as { allowReview?: boolean; allowReviewTo?: unknown },
+           'students');
 
     // ── Delivery-mode scoping (Phase 2.5) ─────────────────────────
     // In linear/adaptive the client must NEVER hold the paper. Only the

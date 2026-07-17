@@ -1,22 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Exam Forge 1.0</title>
+    <meta name="description" content="This platform offers a secure and streamlined login experience for Web Owners, ensuring strict access control and immediate updates for brand identity." />
+    <meta name="robots" content="noindex, nofollow" />
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Exam Forge 1.0</title>
-      <meta name="description" content="This platform offers a secure and streamlined login experience for Web Owners, ensuring strict access control and immediate updates for brand identity." />
-      <meta name="robots" content="noindex, nofollow" />
-      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
-      
-    </head>
+    <!--
+      Fonts (Remediation plan Batch C / ext #17).
+      Previously imported from inside src/styles/fonts.css with @import, which
+      is the worst place for it: the browser can't see the font request until
+      the CSS bundle has downloaded AND parsed, so it serialises
+      HTML → CSS → font instead of firing in parallel. Declaring it here lets
+      the preconnect open the TLS handshake to the font CDN during HTML parse,
+      and display=swap means text paints in the fallback face immediately
+      rather than staying invisible while Inter arrives.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" />
 
-    <body>
-      
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-      
-    </body>
-  </html>
-  
+    <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

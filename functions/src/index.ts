@@ -136,6 +136,25 @@ export const createAuthUser = onCall<CreateAuthUserData>(
 
     authorizeCaller(callerRole, callerInstituteId, role, targetInstituteId);
 
+    // ── 3b. Faculty per-member gate (Audit 2026-07-17, N4) ────────
+    // canCreateStudents was previously enforced only in the UI, which made
+    // the institute admin's toggle decorative — any faculty account could
+    // call this endpoint directly. The flag on the caller's own faculty doc
+    // is now the server-side source of truth. Institute admins and the Web
+    // Owner are not gated by it.
+    if (callerRole === 'faculty') {
+      const callerFacultyId = request.auth.token.facultyId as string | undefined;
+      const facultySnap = callerFacultyId
+        ? await getFirestore().collection('faculty').doc(callerFacultyId).get()
+        : null;
+      if (!facultySnap?.exists || facultySnap.get('canCreateStudents') !== true) {
+        throw new HttpsError(
+          'permission-denied',
+          'Student creation is not enabled for your account. Ask your institute admin to enable it.',
+        );
+      }
+    }
+
     const email = String(profile.email).toLowerCase().trim();
 
     // ── 4. Create Firebase Auth user
@@ -695,9 +714,17 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
     }
 
-    // Idempotency — refuse to re-grade a non-in_progress attempt unless caller
-    // is a grader (manual regrade) or this is a terminate flow.
-    if (attempt.status !== 'in_progress' && !isGrader && reason !== 'terminated') {
+    // Idempotency — a non-grader may never re-finalise a finished attempt.
+    // (Audit 2026-07-17, N9: the previous `reason !== 'terminated'` exception
+    // let a student flip their own SUBMITTED attempt to 'terminated' with
+    // attacker-chosen reason text. The exception existed for the race where
+    // the shell's terminate call lands after an auto-submit already graded
+    // the attempt — that race is now an idempotent no-op instead of a
+    // status rewrite. Graders keep manual regrade rights.)
+    if (attempt.status !== 'in_progress' && !isGrader) {
+      if (reason === 'terminated') {
+        return { ok: true, alreadyFinalized: true, status: attempt.status };
+      }
       throw new HttpsError('failed-precondition', 'Attempt already finalised.');
     }
 
@@ -1089,12 +1116,29 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
     // AuthZ — assigned & published, OR the student already has an attempt
     // (covers review after close / unassignment; an attempt is proof they
     // legitimately sat the paper).
+    //
+    // Phase C / Audit 2026-07-17, N2 — mirror startExam's two-path gate:
+    //   'rules' → the materialized assessmentMembers list is authoritative.
+    //             resolveAllocation stamps allocationMode but does NOT clear
+    //             the stale assignedTo left on the doc, so checking only
+    //             assignedTo here leaked the full paper content of a
+    //             rules-allocated exam (commonly assignedTo.type 'all') to
+    //             every student on the platform while it was active.
+    //   else    → legacy assignedTo gate, byte-for-byte unchanged.
     const published = assessment.status === 'active' || assessment.status === 'closed';
-    const target = assessment.assignedTo;
-    const assigned = !target
-      || target.type === 'all'
-      || (target.type === 'institutes' && (target.instituteIds ?? []).includes(instituteId))
-      || (target.type === 'students'   && (target.studentIds   ?? []).includes(studentId));
+    let assigned: boolean;
+    if ((assessment as { allocationMode?: string }).allocationMode === 'rules') {
+      const memberSnap = await db.collection('assessmentMembers')
+        .doc(`${assessmentId}_${studentId}`)
+        .get();
+      assigned = memberSnap.exists && memberSnap.get('active') === true;
+    } else {
+      const target = assessment.assignedTo;
+      assigned = !target
+        || target.type === 'all'
+        || (target.type === 'institutes' && (target.instituteIds ?? []).includes(instituteId))
+        || (target.type === 'students'   && (target.studentIds   ?? []).includes(studentId));
+    }
 
     const attemptsSnap = await db.collection('attempts')
       .where('studentId', '==', studentId)
@@ -2928,5 +2972,33 @@ export const getAllocationPreviewPage = onCall<GetAllocationPreviewPageData>(
       rows,
       nextCursor: snap.docs.length === pageSize ? snap.docs[snap.docs.length - 1].id : null,
     };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
+// SESSION REVOCATION (Remediation plan Batch A, issue #12)
+// ══════════════════════════════════════════════════════════════════
+// revokeSessions — invalidates every refresh token for the CALLER's own
+// account, signing out all other devices. Wired to the "Sign out of all
+// other devices" action on the Security pages, and intended to be called
+// after a successful password change so a stolen session doesn't outlive
+// the credential that created it.
+//
+// Self-only by design: no admin variant here. Revoking OTHER users'
+// sessions (e.g. webOwner force-logout of a compromised account) should be
+// added as a separate, explicitly-authorised callable when needed.
+//
+// Note: ID tokens already minted stay valid up to 1h (Firebase constant);
+// revocation bites at the next token refresh. The caller's CURRENT session
+// also gets revoked — the client should re-authenticate or treat its own
+// session as ending, which is acceptable for both trigger paths (password
+// change re-prompts; explicit "sign out everywhere" expects it).
+
+export const revokeSessions = onCall(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    await getAuth().revokeRefreshTokens(request.auth.uid);
+    return { ok: true, revokedAt: new Date().toISOString() };
   },
 );

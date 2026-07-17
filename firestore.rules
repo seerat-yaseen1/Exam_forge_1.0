@@ -458,17 +458,33 @@ service cloud.firestore {
     }
 
     // attempts/{id}
-    //   create: student creating their own attempt; webOwner override.
+    //   create: webOwner only (manual-repair escape hatch). Attempt docs are
+    //     created EXCLUSIVELY by the startExam Cloud Function (Admin SDK,
+    //     bypasses these rules) — students must NOT be able to create them
+    //     directly, or a forged doc with status:'submitted' + fabricated
+    //     scores would land straight in the roster and results pages, which
+    //     trust the doc. (Audit 2026-07-17, N1: the previous C1 fix hardened
+    //     updates but left the student create clause open.)
     //   update:
     //     • student — only while in_progress, and only on a whitelisted set of
     //       fields the exam shell needs (answers, timings, integrity log,
     //       session tracking). Status transitions, scores, gradedAnswers,
     //       submittedAt, freeze fields, and identity fields are OFF-LIMITS to
     //       the student client; those are written by the gradeAttempt Cloud
-    //       Function (admin SDK, bypasses these rules) and by grader UIs.
-    //     • grader (webOwner, institute or faculty in the same institute) —
-    //       any field, any time.
-    //   delete: hard-blocked — soft-delete (isDeleted=true) via grader update.
+    //       Function (admin SDK, bypasses these rules).
+    //     • institute / faculty (same institute as the attempt) — ONLY the
+    //       invigilation fields their UIs actually write: freeze/unfreeze
+    //       (frozenAt, frozenBy, frozenReason, totalFrozenSeconds), soft-delete
+    //       (isDeleted), and updatedAt. Scores, gradedAnswers, answers and
+    //       status are staff-immutable at this layer — grading flows ONLY
+    //       through the gradeAttempt / regradeAttempts Cloud Functions, for
+    //       every role. Frozen state is frozenAt != null; status is never
+    //       touched by freeze. (Audit 2026-07-17, N3: without this whitelist,
+    //       staff at any participating institute could silently rewrite
+    //       grades on attempts of exams they don't own, e.g. webOwner-run
+    //       platform exams.)
+    //     • webOwner — unrestricted (platform owner; manual repair).
+    //   delete: hard-blocked — soft-delete (isDeleted=true) via staff update.
     // ── Phase 2.5: sequential delivery (linear / adaptive) ──────────
     // In linear/adaptive the SERVER owns answer writes, via the
     // submitAnswerAndAdvance callable (Admin SDK → bypasses these rules).
@@ -486,6 +502,21 @@ service cloud.firestore {
     function studentAnswerWriteAllowed() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['answers'])
           || !attemptIsSequentialDelivery();
+    }
+
+    // Staff (institute / faculty) invigilation whitelist — the ONLY fields
+    // their client code writes (verified against submissionService.ts:
+    // freezeAttempt, unfreezeAttempt, softDeleteAttempt). hasOnly() gates
+    // top-level keys of the patch, same mechanism as the student whitelist.
+    function staffAttemptUpdateFieldsAllowed() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'frozenAt',
+        'frozenBy',
+        'frozenReason',
+        'totalFrozenSeconds',
+        'isDeleted',
+        'updatedAt'
+      ]);
     }
 
     function studentAttemptUpdateFieldsAllowed() {
@@ -515,9 +546,7 @@ service cloud.firestore {
                      || ((role() == 'institute' || role() == 'faculty')
                          && request.auth.token.instituteId == resource.data.instituteId);
 
-      allow create: if isWebOwner()
-                       || (role() == 'student'
-                           && request.resource.data.studentId == request.auth.token.studentId);
+      allow create: if isWebOwner();
 
       allow update: if isWebOwner()
                        || (role() == 'student'
@@ -527,7 +556,8 @@ service cloud.firestore {
                            && studentAttemptUpdateFieldsAllowed()
                            && studentAnswerWriteAllowed())
                        || ((role() == 'institute' || role() == 'faculty')
-                           && request.auth.token.instituteId == resource.data.instituteId);
+                           && request.auth.token.instituteId == resource.data.instituteId
+                           && staffAttemptUpdateFieldsAllowed());
 
       allow delete: if false;
     }

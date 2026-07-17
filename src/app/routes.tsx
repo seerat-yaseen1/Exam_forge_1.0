@@ -1,58 +1,78 @@
+import { lazy } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router';
+
+// ── Eager: the router shell ───────────────────────────────────────
+// Roots (auth-context providers) and dashboard layouts stay in the main
+// chunk on purpose. Both sit ABOVE the pages in the route tree, so making
+// them lazy would create a request waterfall (root chunk → layout chunk →
+// page chunk) on every first navigation. They are small; the pages are not.
 import { InstituteRoot } from './pages/institute/InstituteRoot';
 import { Root } from './Root';
-import { LoginPage } from './pages/LoginPage';
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
-import { ResetPasswordActionPage } from './pages/ResetPasswordActionPage';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { InstituteDashboardLayout } from './layouts/InstituteDashboardLayout';
 import { FacultyDashboardLayout } from './layouts/FacultyDashboardLayout';
 import { StudentDashboardLayout } from './layouts/StudentDashboardLayout';
-import { LandingPage } from './pages/LandingPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { SecurityPage } from './pages/SecurityPage';
-import { UserManagementPage } from './pages/UserManagementPage';
-import { QuestionsPage } from './pages/QuestionsPage';
-import { SubjectsPage } from './pages/SubjectsPage';
-import { AssignmentsPage } from './pages/AssignmentsPage';
-import { SEBDiagnosticsPage } from './pages/SEBDiagnosticsPage';
-import { SEBSettingsPage } from './pages/SEBSettingsPage';
-import { AssessmentRosterPage } from './pages/AssessmentRosterPage';
-import { ReportsInboxPage } from './pages/ReportsInboxPage';
-import { InstituteDetailPage } from './pages/InstituteDetailPage';
-import { InstituteLoginPage } from './pages/institute/InstituteLoginPage';
-import { InstituteChangePasswordPage } from './pages/institute/InstituteChangePasswordPage';
-import { InstituteForgotPasswordPage } from './pages/institute/InstituteForgotPasswordPage';
-import { InstituteLandingPage } from './pages/institute/InstituteLandingPage';
-import { InstituteProfilePage } from './pages/institute/InstituteProfilePage';
-import { InstituteSecurityPage } from './pages/institute/InstituteSecurityPage';
-import { InstituteQuestionsPage } from './pages/institute/InstituteQuestionsPage';
-import { InstituteAssignmentsPage } from './pages/institute/InstituteAssignmentsPage';
-import { InstituteAssessmentRosterPage } from './pages/institute/InstituteAssessmentRosterPage';
-import { InstituteReportsInboxPage } from './pages/institute/InstituteReportsInboxPage';
 import { FacultyRoot } from './pages/faculty/FacultyRoot';
-import { FacultyLoginPage } from './pages/faculty/FacultyLoginPage';
-import { FacultyChangePasswordPage } from './pages/faculty/FacultyChangePasswordPage';
-import { FacultyForgotPasswordPage } from './pages/faculty/FacultyForgotPasswordPage';
-import { FacultyLandingPage } from './pages/faculty/FacultyLandingPage';
-import { FacultyProfilePage } from './pages/faculty/FacultyProfilePage';
-import { FacultySecurityPage } from './pages/faculty/FacultySecurityPage';
-import { FacultyQuestionsPage } from './pages/faculty/FacultyQuestionsPage';
-import { FacultyAssignmentsPage } from './pages/faculty/FacultyAssignmentsPage';
-import { FacultyAssessmentRosterPage } from './pages/faculty/FacultyAssessmentRosterPage';
-import { FacultyReportsInboxPage } from './pages/faculty/FacultyReportsInboxPage';
 import { StudentRoot } from './pages/student/StudentRoot';
-import { StudentLoginPage } from './pages/student/StudentLoginPage';
-import { StudentChangePasswordPage } from './pages/student/StudentChangePasswordPage';
-import { StudentForgotPasswordPage } from './pages/student/StudentForgotPasswordPage';
-import { StudentLandingPage } from './pages/student/StudentLandingPage';
-import { StudentProfilePage } from './pages/student/StudentProfilePage';
-import { StudentSecurityPage } from './pages/student/StudentSecurityPage';
-import { StudentAssessmentsPage } from './pages/student/StudentAssessmentsPage';
-import { ExamBriefingPage } from './pages/student/ExamBriefingPage';
-import { ExamShell } from './pages/student/ExamShell';
-import { ExamResultsPage } from './pages/student/ExamResultsPage';
-import { SebQuitPage } from './pages/student/SebQuitPage';
+
+// ── Lazy: every page ──────────────────────────────────────────────
+// Remediation plan Batch C / ext #18. Each page becomes its own chunk, so a
+// student never downloads the Web Owner's assignment builder and nobody
+// downloads the exam shell until they enter an exam.
+//
+// The .then() unwrap is required because pages use NAMED exports and
+// React.lazy expects a module whose `default` is the component. Writing it
+// out per page (rather than via a generic helper) keeps each component's
+// prop types intact — ResetPasswordActionPage takes a `role` prop that a
+// helper returning ComponentType<any> would silently stop checking.
+//
+// Suspense boundary: App.tsx wraps RouterProvider — see the note there.
+const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordActionPage = lazy(() => import('./pages/ResetPasswordActionPage').then((m) => ({ default: m.ResetPasswordActionPage })));
+const LandingPage = lazy(() => import('./pages/LandingPage').then((m) => ({ default: m.LandingPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const SecurityPage = lazy(() => import('./pages/SecurityPage').then((m) => ({ default: m.SecurityPage })));
+const UserManagementPage = lazy(() => import('./pages/UserManagementPage').then((m) => ({ default: m.UserManagementPage })));
+const QuestionsPage = lazy(() => import('./pages/QuestionsPage').then((m) => ({ default: m.QuestionsPage })));
+const SubjectsPage = lazy(() => import('./pages/SubjectsPage').then((m) => ({ default: m.SubjectsPage })));
+const AssignmentsPage = lazy(() => import('./pages/AssignmentsPage').then((m) => ({ default: m.AssignmentsPage })));
+const SEBDiagnosticsPage = lazy(() => import('./pages/SEBDiagnosticsPage').then((m) => ({ default: m.SEBDiagnosticsPage })));
+const SEBSettingsPage = lazy(() => import('./pages/SEBSettingsPage').then((m) => ({ default: m.SEBSettingsPage })));
+const AssessmentRosterPage = lazy(() => import('./pages/AssessmentRosterPage').then((m) => ({ default: m.AssessmentRosterPage })));
+const ReportsInboxPage = lazy(() => import('./pages/ReportsInboxPage').then((m) => ({ default: m.ReportsInboxPage })));
+const InstituteDetailPage = lazy(() => import('./pages/InstituteDetailPage').then((m) => ({ default: m.InstituteDetailPage })));
+const InstituteLoginPage = lazy(() => import('./pages/institute/InstituteLoginPage').then((m) => ({ default: m.InstituteLoginPage })));
+const InstituteChangePasswordPage = lazy(() => import('./pages/institute/InstituteChangePasswordPage').then((m) => ({ default: m.InstituteChangePasswordPage })));
+const InstituteForgotPasswordPage = lazy(() => import('./pages/institute/InstituteForgotPasswordPage').then((m) => ({ default: m.InstituteForgotPasswordPage })));
+const InstituteLandingPage = lazy(() => import('./pages/institute/InstituteLandingPage').then((m) => ({ default: m.InstituteLandingPage })));
+const InstituteProfilePage = lazy(() => import('./pages/institute/InstituteProfilePage').then((m) => ({ default: m.InstituteProfilePage })));
+const InstituteSecurityPage = lazy(() => import('./pages/institute/InstituteSecurityPage').then((m) => ({ default: m.InstituteSecurityPage })));
+const InstituteQuestionsPage = lazy(() => import('./pages/institute/InstituteQuestionsPage').then((m) => ({ default: m.InstituteQuestionsPage })));
+const InstituteAssignmentsPage = lazy(() => import('./pages/institute/InstituteAssignmentsPage').then((m) => ({ default: m.InstituteAssignmentsPage })));
+const InstituteAssessmentRosterPage = lazy(() => import('./pages/institute/InstituteAssessmentRosterPage').then((m) => ({ default: m.InstituteAssessmentRosterPage })));
+const InstituteReportsInboxPage = lazy(() => import('./pages/institute/InstituteReportsInboxPage').then((m) => ({ default: m.InstituteReportsInboxPage })));
+const FacultyLoginPage = lazy(() => import('./pages/faculty/FacultyLoginPage').then((m) => ({ default: m.FacultyLoginPage })));
+const FacultyChangePasswordPage = lazy(() => import('./pages/faculty/FacultyChangePasswordPage').then((m) => ({ default: m.FacultyChangePasswordPage })));
+const FacultyForgotPasswordPage = lazy(() => import('./pages/faculty/FacultyForgotPasswordPage').then((m) => ({ default: m.FacultyForgotPasswordPage })));
+const FacultyLandingPage = lazy(() => import('./pages/faculty/FacultyLandingPage').then((m) => ({ default: m.FacultyLandingPage })));
+const FacultyProfilePage = lazy(() => import('./pages/faculty/FacultyProfilePage').then((m) => ({ default: m.FacultyProfilePage })));
+const FacultySecurityPage = lazy(() => import('./pages/faculty/FacultySecurityPage').then((m) => ({ default: m.FacultySecurityPage })));
+const FacultyQuestionsPage = lazy(() => import('./pages/faculty/FacultyQuestionsPage').then((m) => ({ default: m.FacultyQuestionsPage })));
+const FacultyAssignmentsPage = lazy(() => import('./pages/faculty/FacultyAssignmentsPage').then((m) => ({ default: m.FacultyAssignmentsPage })));
+const FacultyAssessmentRosterPage = lazy(() => import('./pages/faculty/FacultyAssessmentRosterPage').then((m) => ({ default: m.FacultyAssessmentRosterPage })));
+const FacultyReportsInboxPage = lazy(() => import('./pages/faculty/FacultyReportsInboxPage').then((m) => ({ default: m.FacultyReportsInboxPage })));
+const StudentLoginPage = lazy(() => import('./pages/student/StudentLoginPage').then((m) => ({ default: m.StudentLoginPage })));
+const StudentChangePasswordPage = lazy(() => import('./pages/student/StudentChangePasswordPage').then((m) => ({ default: m.StudentChangePasswordPage })));
+const StudentForgotPasswordPage = lazy(() => import('./pages/student/StudentForgotPasswordPage').then((m) => ({ default: m.StudentForgotPasswordPage })));
+const StudentLandingPage = lazy(() => import('./pages/student/StudentLandingPage').then((m) => ({ default: m.StudentLandingPage })));
+const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage').then((m) => ({ default: m.StudentProfilePage })));
+const StudentSecurityPage = lazy(() => import('./pages/student/StudentSecurityPage').then((m) => ({ default: m.StudentSecurityPage })));
+const StudentAssessmentsPage = lazy(() => import('./pages/student/StudentAssessmentsPage').then((m) => ({ default: m.StudentAssessmentsPage })));
+const ExamBriefingPage = lazy(() => import('./pages/student/ExamBriefingPage').then((m) => ({ default: m.ExamBriefingPage })));
+const ExamShell = lazy(() => import('./pages/student/ExamShell').then((m) => ({ default: m.ExamShell })));
+const ExamResultsPage = lazy(() => import('./pages/student/ExamResultsPage').then((m) => ({ default: m.ExamResultsPage })));
+const SebQuitPage = lazy(() => import('./pages/student/SebQuitPage').then((m) => ({ default: m.SebQuitPage })));
 
 export const router = createBrowserRouter([
   {

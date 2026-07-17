@@ -179,9 +179,10 @@ export function ResultsExportModal({
           </div>
 
           <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
-            Covers all <strong style={{ color: '#4A4A45' }}>{students.length}</strong> allocated
-            students — those who never attempted appear as “Not attempted”. Deleted attempts
-            are excluded, matching the live roster.
+            Covers all <strong style={{ color: '#4A4A45' }}>{students.length}</strong>{' '}
+            allocated student{students.length === 1 ? '' : 's'} — those who never attempted
+            appear as “Not attempted”. Deleted attempts are excluded, matching the live
+            roster.
           </p>
 
           {error && (

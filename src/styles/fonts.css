@@ -1,4 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+/*
+  Font face is loaded via <link rel="preconnect"> + <link rel="stylesheet">
+  in index.html, NOT with @import here (Remediation plan Batch C / ext #17).
+  An @import inside a bundled stylesheet is render-blocking and serialised:
+  the browser only discovers the font request after this CSS has downloaded
+  and parsed. Keep the declaration in index.html; keep the tokens here.
+*/
 
 :root {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;

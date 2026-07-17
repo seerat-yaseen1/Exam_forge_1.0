@@ -16,7 +16,7 @@ import {
   CheckCircle2, Clock, PauseCircle, PlayCircle, MonitorSmartphone,
   ChevronRight, X, BookOpen, Search, Activity, WifiOff,
   Ban, CircleSlash, Hash, RotateCcw, XCircle, Minus,
-  FileText, Eye, Trash2, AlertCircle, Flag,
+  FileText, Eye, Trash2, AlertCircle, Flag, Download,
 } from 'lucide-react';
 import { getAssessment, blockStudent, unblockStudent, setAttemptOverride, statusColor, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
 import { AssessmentReportsPanel } from './AssessmentReportsPanel';
@@ -37,6 +37,7 @@ import {
   type GradedAnswer,
 } from '../../../lib/submissionService';
 import { getQuestionsByIdsForReview, type Question } from '../../../lib/questionBankService';
+import { ResultsExportModal } from './ResultsExportModal';
 
 // ══════════════════════════════════════════════════════════════════
 // TYPES
@@ -1795,6 +1796,7 @@ export function AssessmentRosterCore({
   const [pendingUnblock,  setPendingUnblock]  = useState<{ studentId: string; studentName: string } | null>(null);
   const [pendingDelete,   setPendingDelete]   = useState<{ attemptId: string; attemptNumber: number } | null>(null);
   const [deleteLoading,   setDeleteLoading]   = useState(false);
+  const [showExport,      setShowExport]      = useState(false);
 
   // Per-second tick to drive the "On break" countdown pill on roster rows.
   // A single shared timer avoids one interval per row.
@@ -2100,6 +2102,17 @@ export function AssessmentRosterCore({
               {v === 'roster' ? 'Roster' : 'Reports'}
             </button>
           ))}
+          {/* Export results — one implementation, all three staff roles. */}
+          <button
+            onClick={() => setShowExport(true)}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 ml-auto transition-opacity hover:opacity-70"
+            style={{
+              borderRadius: 2, cursor: 'pointer',
+              color: '#4A4A45', border: '1px solid #E3E1DB', background: 'transparent',
+            }}
+          >
+            <Download size={11} strokeWidth={1.5} /> Export
+          </button>
         </div>
       </div>
 
@@ -2271,6 +2284,15 @@ export function AssessmentRosterCore({
             loading={deleteLoading}
             onConfirm={() => executeSoftDelete(pendingDelete.attemptId)}
             onCancel={() => setPendingDelete(null)}
+          />
+        )}
+        {showExport && assessment && (
+          <ResultsExportModal
+            assessment={assessment}
+            students={students}
+            attempts={attempts}
+            blockedStudentIds={blockedSet}
+            onClose={() => setShowExport(false)}
           />
         )}
       </AnimatePresence>

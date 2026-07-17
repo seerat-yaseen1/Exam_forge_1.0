@@ -32,6 +32,12 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
 
   const canPageList = Boolean(assessmentId);
 
+  // Node id → display name. Defined before the hooks below that use it.
+  const nameFor = (id: string) => nodeNameOf.get(id) ?? id;
+
+  // Committed member docs only exist AFTER a save. Before that, the dry-run's
+  // sampleStudents is the only view of who resolved — render that instead of an
+  // empty list, so a non-zero count never sits above "no students".
   useEffect(() => {
     if (!expanded || !canPageList || rows.length > 0) return;
     setLoadingList(true);
@@ -39,6 +45,12 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
       .then((r) => { setRows(r.rows); setCursor(r.nextCursor); })
       .finally(() => setLoadingList(false));
   }, [expanded, canPageList, assessmentId, rows.length]);
+
+  // Reset the committed cache when the selection changes — otherwise stale rows
+  // from a previous node choice linger behind a fresh count.
+  useEffect(() => {
+    setRows([]); setCursor(null);
+  }, [result?.resolvedCount, result?.byNode?.length]);
 
   const loadMore = () => {
     if (!cursor || !assessmentId) return;
@@ -48,11 +60,40 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
       .finally(() => setLoadingList(false));
   };
 
+  // One row shape for both sources: committed member docs (post-save, paged and
+  // authoritative) or the dry-run sample (pre-save, capped at 50 by the server).
+  type DisplayRow = {
+    key: string; name: string; email: string; via: string; pending: boolean;
+  };
+  const committedRows: DisplayRow[] = useMemo(
+    () => rows.map((r) => ({
+      key: r.docId,
+      name: r.name,
+      email: r.email,
+      via: r.source === 'manual' ? 'added manually' : `via ${r.viaNodeIds.map(nameFor).join(', ')}`,
+      pending: false,
+    })),
+    [rows, nodeNameOf],
+  );
+  const sampleRows: DisplayRow[] = useMemo(
+    () => (result?.sampleStudents ?? []).map((s) => ({
+      key: `sample_${s.id}`,
+      name: s.name,
+      email: s.email,
+      via: 'will be added on save',
+      pending: true,
+    })),
+    [result],
+  );
+  // Committed rows win once loaded; otherwise show what the dry-run resolved.
+  const displayRows = committedRows.length > 0 ? committedRows : sampleRows;
+  const showingPending = committedRows.length === 0 && sampleRows.length > 0;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q));
-  }, [rows, search]);
+    if (!q) return displayRows;
+    return displayRows.filter((r) => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q));
+  }, [displayRows, search]);
 
   if (loading) {
     return (
@@ -65,7 +106,6 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
   if (!result) return null;
 
   const blockers = result.commitBlockers ?? [];
-  const nameFor = (id: string) => nodeNameOf.get(id) ?? id;
 
   return (
     <div style={{ border: `1px solid ${LINE}`, borderRadius: 3, background: '#FFFFFF' }}>
@@ -127,10 +167,19 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
             className="w-full flex items-center gap-1.5 px-5 py-2.5 text-xs transition-colors hover:bg-[#FAFAF8]"
             style={{ color: MUTED }}>
             {expanded ? <ChevronDown size={12} strokeWidth={1.5} /> : <ChevronRight size={12} strokeWidth={1.5} />}
-            View allocated students
+            {showingPending ? 'View students to be allocated' : 'View allocated students'}
           </button>
           {expanded && (
             <div style={{ borderTop: `1px solid ${LINE}` }}>
+              {/* Pre-save notice: these resolved on the server but aren't committed yet. */}
+              {showingPending && (
+                <p className="text-xs px-5 py-2" style={{ background: '#FAFAF8', borderBottom: `1px solid ${LINE}`, color: MUTED }}>
+                  Not saved yet — these students will be allocated when you save.
+                  {result.resolvedCount > sampleRows.length && (
+                    <> Showing the first {sampleRows.length} of {result.resolvedCount.toLocaleString()}.</>
+                  )}
+                </p>
+              )}
               <div className="flex items-center gap-2 px-5 py-2" style={{ borderBottom: `1px solid ${LINE}`, background: '#FAFAF8' }}>
                 <Search size={11} strokeWidth={1.5} style={{ color: FAINT }} />
                 <input value={search} onChange={(e) => setSearch(e.target.value)}
@@ -139,13 +188,13 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
               </div>
               <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                 {filtered.map((s) => (
-                  <div key={s.docId} className="flex items-baseline justify-between gap-3 px-5 py-1.5 text-xs"
+                  <div key={s.key} className="flex items-baseline justify-between gap-3 px-5 py-1.5 text-xs"
                     style={{ borderBottom: '1px solid #F1F0EC' }}>
                     <span className="min-w-0 truncate" style={{ color: INK }}>
                       {s.name} <span style={{ color: FAINT }}>· {s.email}</span>
                     </span>
                     <span className="flex-shrink-0 truncate" style={{ color: FAINT, maxWidth: 220 }}>
-                      {s.source === 'manual' ? 'added manually' : `via ${s.viaNodeIds.map(nameFor).join(', ')}`}
+                      {s.via}
                     </span>
                   </div>
                 ))}
@@ -154,22 +203,61 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
                     <Loader2 size={11} className="animate-spin" /> Loading…
                   </p>
                 )}
-                {cursor && !loadingList && (
+                {cursor && !loadingList && !showingPending && (
                   <button onClick={loadMore} className="text-xs px-5 py-2 hover:opacity-70" style={{ color: INK }}>
                     Load more
                   </button>
                 )}
                 {!loadingList && filtered.length === 0 && (
-                  <p className="text-xs text-center py-6" style={{ color: MUTED }}>No members loaded yet.</p>
+                  <p className="text-xs text-center py-6" style={{ color: MUTED }}>
+                    {search.trim()
+                      ? 'No students match that search.'
+                      : result.resolvedCount > 0
+                        ? 'Save this assessment to allocate these students.'
+                        : 'This selection resolves to no students.'}
+                  </p>
                 )}
               </div>
             </div>
           )}
         </>
       ) : (
-        <p className="text-xs px-5 py-2.5" style={{ color: FAINT }}>
-          The full student list becomes browsable after you save this assessment.
-        </p>
+        /* Create mode (no assessment id yet) — the dry-run sample still shows. */
+        <>
+          <button onClick={() => setExpanded((v) => !v)}
+            className="w-full flex items-center gap-1.5 px-5 py-2.5 text-xs transition-colors hover:bg-[#FAFAF8]"
+            style={{ color: MUTED }}>
+            {expanded ? <ChevronDown size={12} strokeWidth={1.5} /> : <ChevronRight size={12} strokeWidth={1.5} />}
+            View students to be allocated
+          </button>
+          {expanded && (
+            <div style={{ borderTop: `1px solid ${LINE}` }}>
+              <p className="text-xs px-5 py-2" style={{ background: '#FAFAF8', borderBottom: `1px solid ${LINE}`, color: MUTED }}>
+                Not saved yet — these students will be allocated when you save.
+                {result.resolvedCount > sampleRows.length && (
+                  <> Showing the first {sampleRows.length} of {result.resolvedCount.toLocaleString()}.</>
+                )}
+              </p>
+              <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                {sampleRows.map((s) => (
+                  <div key={s.key} className="flex items-baseline justify-between gap-3 px-5 py-1.5 text-xs"
+                    style={{ borderBottom: '1px solid #F1F0EC' }}>
+                    <span className="min-w-0 truncate" style={{ color: INK }}>
+                      {s.name} <span style={{ color: FAINT }}>· {s.email}</span>
+                    </span>
+                  </div>
+                ))}
+                {sampleRows.length === 0 && (
+                  <p className="text-xs text-center py-6" style={{ color: MUTED }}>
+                    {result.resolvedCount > 0
+                      ? 'Resolved students will be listed here.'
+                      : 'This selection resolves to no students.'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -12,7 +12,10 @@ import { storage } from '../../../lib/firebase';
 import { ImageIcon, X, Loader2, Upload } from 'lucide-react';
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
-const ACCEPT    = 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml';
+// SVG dropped (external review #4): scriptable format, and storage rules now
+// reject it server-side. Existing uploaded SVGs keep rendering (rules gate
+// writes, not reads).
+const ACCEPT    = 'image/jpeg,image/png,image/gif,image/webp';
 
 function randomPath(file: File): string {
   const ext = file.name.split('.').pop() ?? 'jpg';

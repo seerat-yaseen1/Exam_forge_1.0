@@ -419,6 +419,16 @@ service cloud.firestore {
             && request.auth.token.facultyId == ownerId);
     }
 
+    // Tenant stamp check for question docs (permission-model Phase 0):
+    // institute/faculty-authored content must be stamped with the writer's
+    // own institute; webOwner content must carry no stamp. Evaluated on the
+    // FINAL doc state (create payload / post-merge update result).
+    function questionInstituteStampOk(d) {
+      return d.get('ownerType', 'webOwner') == 'webOwner'
+        ? !('instituteId' in d)
+        : d.get('instituteId', '') == request.auth.token.instituteId;
+    }
+
     match /assessments/{id} {
       // Read access:
       //   • webOwner — always (owns all content)
@@ -592,17 +602,48 @@ service cloud.firestore {
       // ONLY via the getExamQuestions Cloud Function (whitelisted fields,
       // assessment-scoped, assignment-checked).
       //
-      // SEAM (deliberate, revisit with the webOwner→institute mirroring
-      // design): institute/faculty can still read any question's CONTENT
-      // (not keys — those are owner-scoped in questionAnswers). Scoping
-      // staff reads requires the grant model to be settled first.
-      allow read:   if isWebOwner() || role() == 'institute' || role() == 'faculty';
+      // TENANT FENCE (permission-model Phase 0 — replaces the former SEAM
+      // that let any institute/faculty read any question's content):
+      // staff read = webOwner content + anything authored inside the
+      // caller's OWN institute. Cross-institute content is unreadable.
+      // Fine-grained "shared with me" visibility (grants / peer shares)
+      // stays enforced in the service layer, exactly like grants today —
+      // this wall is what rules can enforce cheaply and provably.
+      //
+      //   • instituteId is the tenant stamp: present on institute- and
+      //     faculty-authored questions (faculty stamps carry their
+      //     institute), absent on webOwner content. The backfill script
+      //     stamps legacy and pre-fence docs.
+      //   • legacy docs (no ownerType) read as webOwner-owned via .get().
+      //   • query provability: own-bank pages filter ownerType+ownerId
+      //     (own branch); grant + review batches filter
+      //     ownerType=='webOwner'; peer-share batches filter
+      //     instituteId==caller's. Unfiltered scans are webOwner-only.
+      allow read: if isWebOwner()
+                  || (role() == 'institute'
+                      && (resource.data.get('ownerType', 'webOwner') == 'webOwner'
+                          || resource.data.get('instituteId', '') == request.auth.token.instituteId
+                          || (resource.data.get('ownerType', '') == 'institute'
+                              && resource.data.get('ownerId', '') == request.auth.token.instituteId)))
+                  || (role() == 'faculty'
+                      && (resource.data.get('ownerType', 'webOwner') == 'webOwner'
+                          || resource.data.get('instituteId', '') == request.auth.token.instituteId
+                          || (resource.data.get('ownerType', '') == 'faculty'
+                              && resource.data.get('ownerId', '') == request.auth.token.facultyId)));
       // Legacy questions may lack ownerType — treat as webOwner-owned.
+      // Stamp validation: institute/faculty-authored docs must carry the
+      // AUTHOR's own institute as instituteId (prevents planting a question
+      // into another tenant's visibility); webOwner content never carries
+      // one. Enforced on the FINAL doc state for both create and update
+      // (updates are partial merges client-side, so backfilled stamps
+      // survive edits untouched).
       allow create: if canWriteOwned(request.resource.data.ownerType,
-                                     request.resource.data.ownerId);
+                                     request.resource.data.ownerId)
+                    && questionInstituteStampOk(request.resource.data);
       allow update: if canWriteOwned(
                           resource.data.get('ownerType', 'webOwner'),
-                          resource.data.get('ownerId',   'webOwner'));
+                          resource.data.get('ownerId',   'webOwner'))
+                    && questionInstituteStampOk(request.resource.data);
       allow delete: if canWriteOwned(
                           resource.data.get('ownerType', 'webOwner'),
                           resource.data.get('ownerId',   'webOwner'));

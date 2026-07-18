@@ -5,10 +5,15 @@ service firebase.storage {
 
     match /question-images/{allPaths=**} {
       allow read: if request.auth != null;
+      // Content-type tightened (external review #4): SVG dropped — it's a
+      // scriptable format and the declared type is client-controlled anyway,
+      // so the least we do is refuse the dangerous label. Existing SVG
+      // uploads keep being served (this gates writes only). ImageUploader's
+      // accept list mirrors this set.
       allow write: if request.auth != null
                    && request.auth.token.role in ['webOwner', 'institute', 'faculty']
                    && request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
+                   && request.resource.contentType.matches('image/(png|jpe?g|gif|webp)');
     }
 
     // ── Phase 3 Stage 4b: SEB configuration files ──────────────────

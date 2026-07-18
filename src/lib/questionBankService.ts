@@ -133,6 +133,12 @@ export type Question = {
   // ownerType missing / undefined → treated as 'webOwner' (backward compat)
   ownerType?: QuestionOwnerType;
   ownerId?: string;            // instituteId, facultyId, or 'webOwner'
+  // Tenant stamp (permission-model Phase 0): the institute this question was
+  // authored INSIDE. Present on institute- and faculty-authored questions
+  // (faculty stamps carry their institute, not themselves); ABSENT on
+  // webOwner content. Rules use it for the cross-tenant read fence and
+  // validate it on create/update; the backfill script stamps legacy docs.
+  instituteId?: string;
 
   // ── System ──
   isDeleted: boolean;
@@ -458,12 +464,23 @@ export async function getQuestion(
 export async function getQuestionsByIds(
   ids: string[],
   opts: QuestionReadOpts = { includeAnswer: true },
+  // Tenant-fence query provability (permission-model Phase 0): under the
+  // scoped read rules an `in` batch with no owner constraint is unprovable
+  // and fails outright for institute/faculty callers. Callers therefore
+  // declare what they're fetching:
+  //   { ownerType: 'webOwner' }   — grant + review paths (platform content)
+  //   { instituteId }             — peer-share paths (content inside my institute)
+  // webOwner-role surfaces stay unscoped (their reads are unrestricted).
+  scope?: { ownerType: 'webOwner' } | { instituteId: string },
 ): Promise<Question[]> {
   if (ids.length === 0) return [];
   const results: Question[] = [];
   for (let i = 0; i < ids.length; i += 30) {
     const chunk = ids.slice(i, i + 30);
-    const q = query(collection(db, COL.questions), where('id', 'in', chunk));
+    const constraints = [where('id', 'in', chunk)];
+    if (scope && 'ownerType' in scope) constraints.push(where('ownerType', '==', scope.ownerType));
+    if (scope && 'instituteId' in scope) constraints.push(where('instituteId', '==', scope.instituteId));
+    const q = query(collection(db, COL.questions), ...constraints);
     const snap = await getDocs(q);
     snap.docs.forEach((d) => {
       const data = d.data() as Question;
@@ -521,7 +538,11 @@ export async function getQuestionsByIdsForReview(
 ): Promise<Question[]> {
   if (ids.length === 0) return [];
   const [questions, keyMap] = await Promise.all([
-    getQuestionsByIds(ids, { includeAnswer: false }),
+    // Exams are webOwner-built today, so every paper's questions are
+    // webOwner-owned — declared for tenant-fence provability. When exam
+    // building mirrors to institutes/faculty, derive this scope from the
+    // assessment's owner instead.
+    getQuestionsByIds(ids, { includeAnswer: false }, { ownerType: 'webOwner' }),
     getAnswerKeysForReview(assessmentId, ids).catch(() => new Map<string, QuestionAnswer>()),
   ]);
   return questions.map((q) => applyAnswer(q, keyMap.get(q.id) ?? null));
@@ -1040,7 +1061,9 @@ export async function getQuestionsForInstitute(
   const resolved: ResolvedInstituteAccess[] = [];
 
   for (const grant of grants) {
-    const questions = await getQuestionsByIds(grant.snapshotQuestionIds);
+    // Bank grants only ever snapshot webOwner banks — declare it so the
+    // batch is provable under the tenant-fence read rules.
+    const questions = await getQuestionsByIds(grant.snapshotQuestionIds, undefined, { ownerType: 'webOwner' });
     resolved.push({ grant, questions });
   }
 
@@ -1081,7 +1104,8 @@ export async function getQuestionsForFaculty(
     const parentGrant = parentSnap.data() as BankGrant;
     if (parentGrant.isRevoked) continue;
 
-    const questions = await getQuestionsByIds(grant.questionIds);
+    // Institute grants are subsets of a webOwner bank grant — same scope.
+    const questions = await getQuestionsByIds(grant.questionIds, undefined, { ownerType: 'webOwner' });
     resolved.push({ grant, parentGrant, questions });
   }
 
@@ -1242,6 +1266,9 @@ export function buildEmptyMatch(): Omit<Question, 'id' | 'isDeleted' | 'createdA
 export async function getDuplicateCheckPool(
   ownerType?: QuestionOwnerType,
   ownerId?: string,
+  // Caller's institute — needed so the received-shares bucket can run a
+  // provable same-institute batch under the tenant-fence rules.
+  instituteId?: string,
 ): Promise<Question[]> {
   // Web owner (or unknown context) → the global/owner bank, as before.
   if (!ownerType || !ownerId || ownerType === 'webOwner') {
@@ -1258,7 +1285,7 @@ export async function getDuplicateCheckPool(
     } else if (ownerType === 'faculty') {
       buckets.push(await getQuestionsByOwner('faculty', ownerId));
       buckets.push(await getFlatQuestionsForFaculty(ownerId));
-      const received = await getFlatReceivedQuestions(ownerId);
+      const received = await getFlatReceivedQuestions(ownerId, instituteId);
       buckets.push(received.questions);
     }
   } catch (err) {

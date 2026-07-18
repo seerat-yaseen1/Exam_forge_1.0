@@ -48,11 +48,12 @@ function AliasRow({
 // ── Subject card ──────────────────────────────────────────────────────────────
 
 function SubjectCard({
-  subject, onUpdated, onDeleted,
+  subject, onUpdated, onDeleted, canEdit = true,
 }: {
   subject: Subject;
   onUpdated: (s: Subject) => void;
   onDeleted: (id: string) => void;
+  canEdit?: boolean;
 }) {
   const [expanded,     setExpanded]     = useState(false);
   const [renaming,     setRenaming]     = useState(false);
@@ -137,6 +138,7 @@ function SubjectCard({
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-sm" style={{ color: '#0C0C0B' }}>{subject.name}</span>
+              {canEdit && (
               <button
                 type="button" onClick={() => { setRenaming(true); setNewName(subject.name); }}
                 className="transition-opacity hover:opacity-60" title="Rename"
@@ -144,6 +146,7 @@ function SubjectCard({
               >
                 <Pencil size={11} strokeWidth={1.5} />
               </button>
+              )}
             </div>
           )}
           {renameErr && <p className="text-xs mt-1" style={{ color: '#9B2828' }}>{renameErr}</p>}
@@ -185,15 +188,22 @@ function SubjectCard({
               <span className="text-xs" style={{ color: '#C4C3BD' }}>No aliases yet.</span>
             )}
             {subject.aliases.map((a) => (
-              <AliasRow
-                key={a} alias={a}
-                onRemove={() => submitRemoveAlias(a)}
-                removing={removingAlias === a}
-              />
+              canEdit ? (
+                <AliasRow
+                  key={a} alias={a}
+                  onRemove={() => submitRemoveAlias(a)}
+                  removing={removingAlias === a}
+                />
+              ) : (
+                <span key={a} className="text-xs px-2 py-0.5" style={{ background: '#F0EFEB', color: '#6B6A64', borderRadius: 2 }}>
+                  {a}
+                </span>
+              )
             ))}
           </div>
 
-          {/* Add alias */}
+          {/* Add alias (maintenance) */}
+          {canEdit && (
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -217,6 +227,7 @@ function SubjectCard({
               Add
             </button>
           </div>
+          )}
         </div>
       )}
     </div>
@@ -449,7 +460,19 @@ function MergeModal({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function SubjectManager() {
+export function SubjectManager({
+  canMaintain = true,
+  onSubjectsChange,
+}: {
+  // Permission-model Phase 0: subject taxonomy is GLOBAL, so maintenance
+  // (create / rename / alias / merge / refresh counts — the last two run
+  // full question-collection scans the tenant-fence rules deny to
+  // non-webOwner staff) is webOwner-only for now. Institute/faculty pages
+  // pass canMaintain={false} and get read-only browsing. The taxonomy is
+  // slated to follow the same rights model as questions later.
+  canMaintain?: boolean;
+  onSubjectsChange?: (subjects: Subject[]) => void;
+} = {}) {
   const [subjects,       setSubjects]       = useState<Subject[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [search,         setSearch]         = useState('');
@@ -463,8 +486,9 @@ export function SubjectManager() {
     if (!silent) setLoading(true);
     const all = await getAllSubjects();
     setSubjects(all);
+    onSubjectsChange?.(all);
     if (!silent) setLoading(false);
-  }, []);
+  }, [onSubjectsChange]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -519,7 +543,8 @@ export function SubjectManager() {
           />
         </div>
 
-        {/* Refresh counts */}
+        {/* Refresh counts (maintenance) */}
+        {canMaintain && (
         <button
           type="button" onClick={handleRefresh} disabled={refreshing}
           title="Refresh question counts from Firestore"
@@ -532,8 +557,10 @@ export function SubjectManager() {
           }
           Refresh counts
         </button>
+        )}
 
-        {/* Merge */}
+        {/* Merge (maintenance) */}
+        {canMaintain && (
         <button
           type="button" onClick={() => setShowMerge(true)}
           className="flex items-center gap-1.5 text-xs px-3 py-2 transition-opacity hover:opacity-70"
@@ -541,9 +568,11 @@ export function SubjectManager() {
         >
           <Merge size={12} strokeWidth={1.5} /> Merge subjects
         </button>
+        )}
       </div>
 
-      {/* Add new subject */}
+      {/* Add new subject (maintenance) */}
+      {canMaintain && (
       <div className="flex items-center gap-2 mb-5">
         <input
           type="text"
@@ -567,6 +596,7 @@ export function SubjectManager() {
           Add Subject
         </button>
       </div>
+      )}
       {addErr && <p className="text-xs mb-3" style={{ color: '#9B2828' }}>{addErr}</p>}
 
       {/* Stats row */}
@@ -593,6 +623,7 @@ export function SubjectManager() {
             <SubjectCard
               key={s.id}
               subject={s}
+              canEdit={canMaintain}
               onUpdated={(updated) => setSubjects((prev) => prev.map((x) => x.id === updated.id ? updated : x))}
               onDeleted={(id) => setSubjects((prev) => prev.filter((x) => x.id !== id))}
             />

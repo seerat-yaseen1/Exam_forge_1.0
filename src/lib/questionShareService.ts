@@ -248,14 +248,21 @@ export async function resolveShare(
  * into one unified list, deduped by question id.
  */
 export async function getFlatReceivedQuestions(
-  recipientId: string
+  recipientId: string,
+  // Recipient's institute — shares are strictly intra-institute, so the
+  // batch declares a same-institute scope for tenant-fence provability.
+  instituteId?: string,
 ): Promise<{ shares: QuestionShare[]; questions: Question[] }> {
   const shares = await getActiveSharesForRecipient(recipientId);
   const seen   = new Set<string>();
   const out:   Question[] = [];
 
   for (const share of shares) {
-    const questions = await getQuestionsByIds(share.questionIds);
+    const questions = await getQuestionsByIds(
+      share.questionIds,
+      undefined,
+      instituteId ? { instituteId } : undefined,
+    );
     for (const q of questions) {
       if (!seen.has(q.id)) {
         seen.add(q.id);

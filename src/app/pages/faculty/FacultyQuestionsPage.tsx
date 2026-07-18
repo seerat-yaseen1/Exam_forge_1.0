@@ -417,11 +417,12 @@ function PreviewModal({ question, onClose }: { question: Question; onClose: () =
 // ── Slide-over panel ───────────────────────────────────────────────────────────
 
 function QuestionPanel({
-  mode, question, facultyId, onSave, onClose,
+  mode, question, facultyId, instituteId, onSave, onClose,
 }: {
   mode: 'create' | 'edit';
   question: Question | null;
   facultyId: string;
+  instituteId: string;
   onSave: (draft: QuestionDraft) => Promise<void>;
   onClose: () => void;
 }) {
@@ -458,6 +459,7 @@ function QuestionPanel({
             initialData={question ?? undefined}
             ownerType="faculty"
             ownerId={facultyId}
+            instituteId={instituteId}
             onSave={onSave}
             onCancel={onClose}
           />
@@ -475,6 +477,7 @@ export function FacultyQuestionsPage() {
   if (!session) return <Navigate to="/faculty/login" replace />;
 
   const facultyId = session.facultyId;
+  const instituteId = session.instituteId;
 
   // ── Data ──────────────────────────────────────────────────────────
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -516,7 +519,10 @@ export function FacultyQuestionsPage() {
 
   // ── Save handler ──────────────────────────────────────────────────
   const handleSave = async (draft: QuestionDraft) => {
-    const payload = { ...draft, ownerType: 'faculty' as const, ownerId: facultyId };
+    // instituteId = tenant stamp: faculty questions carry their INSTITUTE
+    // (not themselves) so the institute admin's Phase-1 visibility and the
+    // tenant-fence rules both key off it.
+    const payload = { ...draft, ownerType: 'faculty' as const, ownerId: facultyId, instituteId };
     if (panelMode === 'create') {
       const saved = await createQuestion(payload);
       setQuestions((prev) => [saved, ...prev]);
@@ -675,7 +681,7 @@ export function FacultyQuestionsPage() {
           {/* Subjects tab */}
           {activeTab === 'subjects' && (
             <div className="px-6 py-6">
-              <SubjectManager onSubjectsChange={(subjs) => setSubjects(subjs)} />
+              <SubjectManager canMaintain={false} onSubjectsChange={(subjs) => setSubjects(subjs)} />
             </div>
           )}
         </div>
@@ -688,6 +694,7 @@ export function FacultyQuestionsPage() {
             mode={panelMode}
             question={editTarget}
             facultyId={facultyId}
+            instituteId={instituteId}
             onSave={handleSave}
             onClose={() => { setPanelOpen(false); setEditTarget(null); }}
           />
@@ -715,6 +722,7 @@ export function FacultyQuestionsPage() {
           onComplete={() => { setBulkUploadOpen(false); fetchAll(true); }}
           ownerType="faculty"
           ownerId={facultyId}
+          instituteId={instituteId}
         />
       )}
 

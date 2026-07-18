@@ -581,12 +581,14 @@ function Step4({
   subjects,
   ownerType,
   ownerId,
+  instituteId,
   onComplete,
 }: {
   rows: ParsedRow[];
   subjects: Subject[];
   ownerType?: QuestionOwnerType;
   ownerId?: string;
+  instituteId?: string;
   onComplete: (saved: number, skipped: number) => void;
 }) {
   const [done,    setDone]    = useState(0);
@@ -616,6 +618,10 @@ function Step4({
           const created = await createQuestion({
             ...draft,
             ...(ownerType ? { ownerType, ownerId: ownerId ?? ownerType } : {}),
+            // Tenant stamp: institute/faculty-authored questions carry the
+            // author's institute (rules validate it); webOwner content never
+            // carries one.
+            ...(ownerType && ownerType !== 'webOwner' && instituteId ? { instituteId } : {}),
           }, { skipCounterBump: true });
           if (created.subjectId) subjectDeltas.set(created.subjectId, (subjectDeltas.get(created.subjectId) ?? 0) + 1);
           if (created.topicId)   topicDeltas.set(created.topicId, (topicDeltas.get(created.topicId) ?? 0) + 1);
@@ -697,9 +703,10 @@ export interface BulkUploadModalProps {
   /** Optional — scopes newly created questions to an institute or faculty owner. */
   ownerType?: QuestionOwnerType;
   ownerId?:   string;
+  instituteId?: string;
 }
 
-export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: BulkUploadModalProps) {
+export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId, instituteId }: BulkUploadModalProps) {
   const [step,      setStep]      = useState<1 | 2 | 3 | 4>(1);
   const [workbook,  setWorkbook]  = useState<ParsedWorkbook | null>(null);
   const [summary,   setSummary]   = useState<UploadSummary | null>(null);
@@ -715,7 +722,7 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
     Promise.all([
       getAllSubjects(),
       getAllTopics(),
-      getDuplicateCheckPool(ownerType, ownerId),
+      getDuplicateCheckPool(ownerType, ownerId, instituteId),
     ]).then(([s, t, qs]) => {
       setSubjects(s);
       setTopics(t);
@@ -839,6 +846,7 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId }: Bul
                   subjects={subjects}
                   ownerType={ownerType}
                   ownerId={ownerId}
+                  instituteId={instituteId}
                   onComplete={handleComplete}
                 />
               </motion.div>

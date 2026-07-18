@@ -458,6 +458,7 @@ function QuestionPanel({
             initialData={question ?? undefined}
             ownerType="institute"
             ownerId={instituteId}
+            instituteId={instituteId}
             onSave={onSave}
             onCancel={onClose}
           />
@@ -518,7 +519,8 @@ export function InstituteQuestionsPage() {
 
   // ── Save handler ──────────────────────────────────────────────────
   const handleSave = async (draft: QuestionDraft) => {
-    const payload = { ...draft, ownerType: 'institute' as const, ownerId: instituteId };
+    // instituteId = tenant stamp (rules validate it equals the author's institute)
+    const payload = { ...draft, ownerType: 'institute' as const, ownerId: instituteId, instituteId };
     if (panelMode === 'create') {
       const saved = await createQuestion(payload);
       setQuestions((prev) => [saved, ...prev]);
@@ -678,7 +680,7 @@ export function InstituteQuestionsPage() {
           {/* Subjects tab */}
           {activeTab === 'subjects' && (
             <div className="px-6 py-6">
-              <SubjectManager onSubjectsChange={(subjs) => setSubjects(subjs)} />
+              <SubjectManager canMaintain={false} onSubjectsChange={(subjs) => setSubjects(subjs)} />
             </div>
           )}
         </div>
@@ -718,6 +720,7 @@ export function InstituteQuestionsPage() {
           onComplete={() => { setBulkUploadOpen(false); fetchAll(true); }}
           ownerType="institute"
           ownerId={instituteId}
+          instituteId={instituteId}
         />
       )}
 

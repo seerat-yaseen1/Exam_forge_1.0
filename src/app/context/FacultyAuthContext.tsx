@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
+import { revokeOtherSessionsKeepCurrent } from '../../lib/sessionSecurity';
 import { getInstituteLogo } from '../../lib/firebaseService';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -231,6 +232,12 @@ export function FacultyAuthProvider({ children }: { children: React.ReactNode })
           firstLoginRequired: false,
         });
         setSession((prev) => (prev ? { ...prev, firstLoginRequired: false } : null));
+        // C'-1 (scoped): the credential changed — sign out every other
+        // session (covers first-login forced changes too, killing anyone
+        // else holding the provisioned password). Best-effort; the password
+        // change has already succeeded. This device is re-authenticated with
+        // the new password inside the helper so it survives the revocation.
+        await revokeOtherSessionsKeepCurrent(newPassword);
         return { success: true };
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code;

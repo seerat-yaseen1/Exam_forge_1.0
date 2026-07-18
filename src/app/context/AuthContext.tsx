@@ -16,6 +16,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
+import { revokeOtherSessionsKeepCurrent } from '../../lib/sessionSecurity';
 
 export interface PlatformSettings {
   name: string;
@@ -196,6 +197,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const credential = EmailAuthProvider.credential(fbUser.email, currentPassword);
         await reauthenticateWithCredential(fbUser, credential);
         await updatePassword(fbUser, newPassword);
+        // C'-1 (scoped): the credential changed — sign out every other
+        // session. Best-effort; the password change has already succeeded.
+        // MFA caveat: for the TOTP-enrolled webOwner the keep-current re-auth
+        // is skipped, so this device also signs out within ~1 h (see
+        // lib/sessionSecurity.ts).
+        await revokeOtherSessionsKeepCurrent(newPassword);
         return { success: true };
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code;

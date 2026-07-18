@@ -1195,6 +1195,19 @@ export function ExamShell() {
   const currentQId = currentSectionQIds[currentQIdx] ?? null;
   const currentQuestion = currentQId ? questionMap.get(currentQId) ?? null : null;
 
+  // ── Counter denominator ─────────────────────────────────────────
+  // In linear/adaptive delivery currentSectionQIds only contains what has
+  // been SERVED (it grows 1 → N), so its length made the header count read
+  // "Q1 of 1, Q2 of 2, …". The section's true size is already client-visible
+  // in every mode via the assessment's resolved sections (questionOrder is a
+  // permutation of the same list), so showing N leaks nothing new — linear
+  // secrecy gates question CONTENT, not counts. Adaptive currently delivers
+  // the same fixed paper as linear; revisit this denominator when the
+  // adaptive ladder lands and the served count may diverge from the pool.
+  const currentSectionTotal = isLinear
+    ? (currentSection?.questions.length || currentSectionQIds.length)
+    : currentSectionQIds.length;
+
   // In linear mode the student is ALWAYS on the newest served question —
   // there is no navigation. When the server appends a question (via the
   // attempt subscription), advance to it.
@@ -2241,7 +2254,7 @@ export function ExamShell() {
                   question={currentQuestion}
                   marks={marksMap.get(currentQId!) ?? 1}
                   questionNumber={currentQIdx + 1}
-                  totalQuestions={currentSectionQIds.length}
+                  totalQuestions={currentSectionTotal}
                   answer={localAnswers[currentQId!]?.value}
                   onAnswer={(value) => handleAnswer(currentQId!, value)}
                   flagReason={flagged[currentQId!] ?? null}

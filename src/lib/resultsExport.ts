@@ -44,6 +44,7 @@ import type { Attempt, AttemptStatus } from './submissionService';
 // library loads on first actual use (template download / file parse /
 // export), not with the page chunk that happens to render this component.
 type XlsxModule = typeof import('xlsx');
+type WorkSheetT = import('xlsx').WorkSheet;
 let xlsxPromise: Promise<XlsxModule> | null = null;
 const loadXlsx = () => (xlsxPromise ??= import('xlsx'));
 
@@ -280,6 +281,28 @@ function buildIntegrityRows(exported: ExportedAttempt[]): Record<string, unknown
   });
 }
 
+// ── CSV formula-injection guard (external review #3) ──────────────
+// A CSV cell whose text begins with = + - @ (or a leading tab/CR) is
+// evaluated as a formula when the file is opened in Excel / Sheets /
+// LibreOffice — so a hostile staff-entered value (e.g. a student "name" of
+// =HYPERLINK(...)) would execute on whichever staff machine opens the
+// export. Neutralize by prefixing a single apostrophe, the OWASP-
+// recommended escape: spreadsheet apps then treat the cell as literal text.
+//
+// CSV path ONLY, by design: the .xlsx branch writes typed string cells,
+// which Excel never evaluates, and prefixing there would corrupt clean
+// data. Numeric cells (type 'n') are untouched, so scores, percentages and
+// negative numbers survive exactly as written.
+function sanitizeSheetForCsv(ws: WorkSheetT): void {
+  for (const addr of Object.keys(ws)) {
+    if (addr.startsWith('!')) continue; // sheet metadata (!ref, !cols, …)
+    const cell = (ws as Record<string, { t?: string; v?: unknown }>)[addr];
+    if (cell && cell.t === 's' && typeof cell.v === 'string' && /^[=+\-@\t\r]/.test(cell.v)) {
+      cell.v = `'${cell.v}`;
+    }
+  }
+}
+
 // ── Download helpers ──────────────────────────────────────────────
 
 function downloadBlob(content: BlobPart, filename: string, mime: string): void {
@@ -338,11 +361,14 @@ export async function downloadResultsExport(params: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } else {
     // CSV — three files, staggered so the browser fires all downloads.
-    const parts: Array<[XLSX.WorkSheet, string]> = [
+    // Each sheet is neutralized against formula injection first (CSV only —
+    // see sanitizeSheetForCsv; the xlsx branch above is safe as-is).
+    const parts: Array<[WorkSheetT, string]> = [
       [summarySheet,   `${base}_summary.csv`],
       [sectionSheet,   `${base}_sections.csv`],
       [integritySheet, `${base}_integrity.csv`],
     ];
+    parts.forEach(([sheet]) => sanitizeSheetForCsv(sheet));
     parts.forEach(([sheet, name], i) => {
       setTimeout(() => {
         downloadBlob('\uFEFF' + XLSX.utils.sheet_to_csv(sheet), name, 'text/csv;charset=utf-8');

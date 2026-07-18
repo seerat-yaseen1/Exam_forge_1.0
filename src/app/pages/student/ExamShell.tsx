@@ -21,7 +21,7 @@ import {
   CheckCircle2, Shield, Send, Layers, Flag, MonitorSmartphone, Clock,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
-import { getAssessment, getSEBPublicInfo, type Assessment, type AssessmentSection, getSebToken, setSebRequired } from '../../../lib/assessmentService';
+import { getAssessment, getSEBPublicInfo, type Assessment, type AssessmentSection, type SectionBreak, getSebToken, setSebRequired } from '../../../lib/assessmentService';
 import { getExamQuestionsForStudent, type Question } from '../../../lib/questionBankService';
 import {
   startAttempt,
@@ -90,11 +90,19 @@ type ShellStatus = 'loading' | 'ready' | 'choosing_section' | 'on_break' | 'subm
 type BreakState = {
   justSubmittedSectionId: string;
   justSubmittedSectionName: string;
-  nextSectionId: string;
-  nextSectionIdx: number;
-  nextSectionName: string;
   endsAt: number;        // ms timestamp
   mandatory: boolean;
+  // How the break resolves when the student continues:
+  //   'start_next' — sequential/random: endBreak → startSection on the known
+  //                  next section in play order.
+  //   'choose'     — student_choice: hand off to the section picker locally;
+  //                  the mandatory wait is re-checked server-side when the
+  //                  pick reaches startSection.
+  then: 'start_next' | 'choose';
+  // Present only when then === 'start_next'.
+  nextSectionId?: string;
+  nextSectionIdx?: number;
+  nextSectionName?: string;
 };
 
 type OverlayKind =
@@ -194,6 +202,36 @@ function buildEffectiveSections(a: Assessment): AssessmentSection[] {
 
   // Nothing to work with — return original (shell will show "no questions")
   return secs;
+}
+
+// ── Positional break resolution ───────────────────────────────────
+// (Client mirror of breakAfterCompletion in functions/src/index.ts — the
+// server enforces, this schedules the UI. Keep the two in sync.)
+//
+// A break is AUTHORED on a section in builder order, but is APPLIED by
+// completion count: the break after the Nth completed section is the one
+// authored on the Nth section in builder order, regardless of the per-student
+// play order. That makes the break schedule identical for every student under
+// 'random' and 'student_choice'; under 'sequential' builder order == play
+// order, so this is exactly the legacy behaviour.
+//
+// builderSections is assessment.sections (builder order), filtered down to
+// the ids the attempt actually plays (buildEffectiveSections can drop empty
+// sections, and legacy flat-question attempts use a synthetic id that never
+// matches — both cases resolve to "no breaks" or the correct reduced list).
+function breakAfterCompletion(
+  builderSections: AssessmentSection[] | undefined,
+  attemptSectionIds: string[] | undefined,
+  completedCount: number,
+): SectionBreak | null {
+  if (!builderSections || builderSections.length === 0 || completedCount < 1) return null;
+  const played = new Set(attemptSectionIds ?? []);
+  const ordered = played.size > 0
+    ? builderSections.filter((s) => played.has(s.id))
+    : builderSections;
+  if (completedCount >= ordered.length) return null; // no break after the last section
+  const brk = ordered[completedCount - 1]?.breakAfter;
+  return brk && brk.durationMinutes > 0 ? brk : null;
 }
 
 /**
@@ -542,7 +580,9 @@ function BreakScreen({
       <div className="flex flex-col items-center gap-4" style={{ maxWidth: 440, textAlign: 'center', padding: '0 24px' }}>
         <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>BREAK</p>
         <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.6 }}>
-          {state.justSubmittedSectionName} submitted. Take a moment before {state.nextSectionName} begins.
+          {state.then === 'choose'
+            ? `${state.justSubmittedSectionName} submitted. Take a moment — you'll choose your next section when you continue.`
+            : `${state.justSubmittedSectionName} submitted. Take a moment before ${state.nextSectionName} begins.`}
         </p>
         <div
           className="flex items-center justify-center"
@@ -570,7 +610,9 @@ function BreakScreen({
             cursor: canContinue ? 'pointer' : 'not-allowed',
           }}
         >
-          {expired ? `Continue to ${state.nextSectionName}` : (state.mandatory ? 'Please wait…' : `Skip break`)}
+          {expired
+            ? (state.then === 'choose' ? 'Choose next section' : `Continue to ${state.nextSectionName}`)
+            : (state.mandatory ? 'Please wait…' : `Skip break`)}
         </button>
       </div>
     </div>
@@ -936,10 +978,12 @@ export function ExamShell() {
         setLocalAnswers({ ...att.answers });
         setCurrentSectionIdx(att.currentSectionIdx);
 
+        const isChoice = a.sectionStartOrder === 'student_choice';
+
         // Detect resume-mid-pick (student_choice): if the active section
         // has no startedAt yet, the student needs to choose before we
         // can render the question shell.
-        if (a.sectionStartOrder === 'student_choice') {
+        if (isChoice) {
           const cur = effSections[att.currentSectionIdx];
           if (cur && !att.sectionTimings[cur.id]?.startedAt) {
             setShellStatus('choosing_section');
@@ -947,29 +991,62 @@ export function ExamShell() {
           }
         }
 
-        // Detect resume-mid-break: a section is submitted, the next one
-        // hasn't started, and the configured break window hasn't elapsed.
+        // Detect resume-between-sections: the active section is submitted but
+        // a next section exists and hasn't started. The applicable break is
+        // POSITIONAL — resolved by how many sections are completed (builder
+        // order via breakAfterCompletion), not by which section was played.
+        //   • break still running        → break screen (resolves into the
+        //     picker in choice mode, or into the next section otherwise)
+        //   • break over / none due, choice mode → the picker
+        //   • break over / none due, sequential+random → an expired break
+        //     screen; its Continue button runs the normal endBreak →
+        //     startSection path. (This also un-wedges attempts that
+        //     previously resumed here onto an already-submitted section.)
         const curSec = effSections[att.currentSectionIdx];
+        const curTiming = curSec ? att.sectionTimings[curSec.id] : undefined;
         const nextSec = effSections[att.currentSectionIdx + 1];
-        if (curSec && nextSec && curSec.breakAfter && curSec.breakAfter.durationMinutes > 0) {
-          const timing = att.sectionTimings[curSec.id];
-          const nextTiming = att.sectionTimings[nextSec.id];
-          if (timing?.submittedAt && !nextTiming?.startedAt) {
-            const endsAt = new Date(timing.submittedAt).getTime() + curSec.breakAfter.durationMinutes * 60 * 1000;
-            if (endsAt > Date.now()) {
-              setBreakState({
-                justSubmittedSectionId: curSec.id,
-                justSubmittedSectionName: curSec.name,
-                nextSectionId: nextSec.id,
-                nextSectionIdx: att.currentSectionIdx + 1,
-                nextSectionName: nextSec.name,
-                endsAt,
-                mandatory: curSec.breakAfter.mandatory,
-              });
-              setShellStatus('on_break');
-              return;
-            }
+        const nextTiming = nextSec ? att.sectionTimings[nextSec.id] : undefined;
+        if (curSec && nextSec && curTiming?.submittedAt && !nextTiming?.startedAt) {
+          const completedCount = att.currentSectionIdx + 1;
+          const brk = breakAfterCompletion(a.sections, att.sectionIds, completedCount);
+          const endsAt = brk
+            ? new Date(curTiming.submittedAt).getTime() + brk.durationMinutes * 60 * 1000
+            : 0;
+          if (brk && endsAt > Date.now()) {
+            setBreakState({
+              justSubmittedSectionId: curSec.id,
+              justSubmittedSectionName: curSec.name,
+              endsAt,
+              mandatory: brk.mandatory,
+              then: isChoice ? 'choose' : 'start_next',
+              ...(isChoice
+                ? {}
+                : { nextSectionId: nextSec.id, nextSectionIdx: att.currentSectionIdx + 1, nextSectionName: nextSec.name }),
+            });
+            setShellStatus('on_break');
+            return;
           }
+          if (isChoice) {
+            setShellStatus('choosing_section');
+            return;
+          }
+          // Break already elapsed while away (or none configured — possible
+          // when the server force-paused a mandatory break an older bundle
+          // didn't schedule). Show the break screen in its expired state:
+          // mandatory=false so the Continue click (a real gesture, needed for
+          // the fullscreen re-entry) drives endBreak → startSection.
+          setBreakState({
+            justSubmittedSectionId: curSec.id,
+            justSubmittedSectionName: curSec.name,
+            endsAt: Date.now(),
+            mandatory: false,
+            then: 'start_next',
+            nextSectionId: nextSec.id,
+            nextSectionIdx: att.currentSectionIdx + 1,
+            nextSectionName: nextSec.name,
+          });
+          setShellStatus('on_break');
+          return;
         }
 
         // Init violation warning count from existing integrity log
@@ -1356,14 +1433,20 @@ export function ExamShell() {
 
     const nextIdx = currentSectionIdx + 1;
     const nextSection = effectiveSections[nextIdx] ?? null;
-    const breakCfg = currentSection.breakAfter;
     const isStudentChoice = a.sectionStartOrder === 'student_choice';
-    // Pause if a break is configured OR we're in student_choice and there's
-    // a next slot — in both cases the next section's timer must not start
-    // automatically.
-    // student_choice takes precedence over breakAfter (the picker
-    // already pauses between sections, so a break is redundant).
-    const useBreak = !isStudentChoice && !!(breakCfg && breakCfg.durationMinutes > 0);
+    // POSITIONAL break lookup: the break after the Nth completed section comes
+    // from the Nth section in BUILDER order (breakAfterCompletion), not from
+    // the section that happened to be played. nextIdx == completions after
+    // this submit, because sections complete strictly in play order. This
+    // makes the break schedule identical for every student under 'random',
+    // and breaks now apply in 'student_choice' too — break first, then the
+    // picker. Under 'sequential' builder order == play order: unchanged.
+    const breakCfg = nextSection ? breakAfterCompletion(a.sections, att.sectionIds, nextIdx) : null;
+    const useBreak = !!nextSection && !!breakCfg;
+    // Pause if a break is due OR we're in student_choice and there's a next
+    // slot — in both cases the next section's timer must not start
+    // automatically. (The server independently refuses to auto-start when a
+    // MANDATORY positional break is due, so a tampered client gains nothing.)
     const pauseBeforeNext = !!nextSection && (useBreak || isStudentChoice);
 
     try {
@@ -1405,11 +1488,12 @@ export function ExamShell() {
       setBreakState({
         justSubmittedSectionId: sectionId,
         justSubmittedSectionName: currentSection.name,
-        nextSectionId: nextSection.id,
-        nextSectionIdx: nextIdx,
-        nextSectionName: nextSection.name,
         endsAt: submittedAtMs + breakCfg.durationMinutes * 60 * 1000,
         mandatory: breakCfg.mandatory,
+        then: isStudentChoice ? 'choose' : 'start_next',
+        ...(isStudentChoice
+          ? {}
+          : { nextSectionId: nextSection.id, nextSectionIdx: nextIdx, nextSectionName: nextSection.name }),
       });
       setAttempt((prev) =>
         prev
@@ -1489,15 +1573,28 @@ export function ExamShell() {
     // Request fullscreen FIRST so the click gesture is still live; if rejected,
     // the overlay will gate interaction until the student returns to fullscreen.
     await enforceFullscreenOrPrompt();
+
+    // student_choice: the break resolves into the section picker — no server
+    // call here. The mandatory wait is still enforced server-side when the
+    // student's pick reaches startSection (positional gate), so a clock-
+    // skewed early continue is refused there and the pick simply retries.
+    if (bs.then === 'choose') {
+      setBreakState(null);
+      setShellStatus('choosing_section');
+      return;
+    }
+    if (!bs.nextSectionId || bs.nextSectionIdx === undefined) return; // defensive — start_next always carries these
+    const nextSectionId = bs.nextSectionId;
+    const nextSectionIdx = bs.nextSectionIdx;
     try {
       const broke = await endBreak({
         attemptId: att.id,
-        nextSectionId: bs.nextSectionId,
-        nextSectionIdx: bs.nextSectionIdx,
+        nextSectionId,
+        nextSectionIdx,
       });
       // Sequential delivery: the next section's first question arrives here.
       if (broke.question) {
-        mergeServedQuestion(broke.question, bs.nextSectionId);
+        mergeServedQuestion(broke.question, nextSectionId);
       }
     } catch (e) {
       // If the server refused (mandatory break not elapsed on the SERVER
@@ -1518,11 +1615,11 @@ export function ExamShell() {
       prev
         ? {
             ...prev,
-            currentSectionIdx: bs.nextSectionIdx,
+            currentSectionIdx: nextSectionIdx,
             sectionTimings: {
               ...prev.sectionTimings,
-              [bs.nextSectionId]: {
-                ...prev.sectionTimings[bs.nextSectionId],
+              [nextSectionId]: {
+                ...prev.sectionTimings[nextSectionId],
                 startedAt: startISO,
                 timeUsedSeconds: 0,
               },
@@ -1530,7 +1627,7 @@ export function ExamShell() {
           }
         : prev
     );
-    setCurrentSectionIdx(bs.nextSectionIdx);
+    setCurrentSectionIdx(nextSectionIdx);
     setCurrentQIdx(0);
     setBreakState(null);
     setShellStatus('ready');

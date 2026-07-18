@@ -2188,6 +2188,40 @@ interface StartSectionData {
 // sequential advance, student_choice pick (with reordering), and post-
 // break resume. Refuses to start a section whose preceding MANDATORY
 // break has not yet elapsed.
+
+// ── Positional break resolution ───────────────────────────────────
+// (Server twin of breakAfterCompletion in src/app/pages/student/ExamShell.tsx
+// — the client schedules the UI from the same formula. Keep them in sync.)
+//
+// A break is AUTHORED on a section in builder order, but is APPLIED by
+// completion count: the break after the Nth completed section is the one
+// authored on the Nth section in builder order, regardless of the per-student
+// play order. Under 'random' / 'student_choice' this makes the break schedule
+// identical for every student; under 'sequential' builder order == play
+// order, so it is exactly the legacy per-section behaviour.
+//
+// builderSections = assessment.sections (builder order). attemptSectionIds is
+// the attempt's frozen played set (possibly a filtered subset of the builder
+// list — empty sections are dropped client-side; legacy flat-question
+// attempts use a synthetic id that matches nothing → no breaks). Sections
+// complete strictly in play order in every mode, so a section's play index IS
+// its completion ordinal.
+type BreakCfg = { durationMinutes: number; mandatory: boolean };
+
+function breakAfterCompletion(
+  builderSections: Array<{ id: string; breakAfter?: BreakCfg }> | undefined,
+  attemptSectionIds: string[] | undefined,
+  completedCount: number,
+): BreakCfg | null {
+  if (!builderSections || builderSections.length === 0 || completedCount < 1) return null;
+  const played = new Set(attemptSectionIds ?? []);
+  const ordered = played.size > 0
+    ? builderSections.filter((s) => played.has(s.id))
+    : builderSections;
+  if (completedCount >= ordered.length) return null; // no break after the last section
+  const brk = ordered[completedCount - 1]?.breakAfter;
+  return brk && typeof brk.durationMinutes === 'number' && brk.durationMinutes > 0 ? brk : null;
+}
 export const startSection = onCall<StartSectionData>(
   { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
@@ -2240,8 +2274,13 @@ export const startSection = onCall<StartSectionData>(
       sectionIds = reorderedSectionIds;
     }
 
-    // Mandatory-break gate: find the section submitted immediately before this
-    // one in play order; if it has a mandatory break that hasn't elapsed, deny.
+    // Mandatory-break gate (POSITIONAL): starting the section at play index
+    // `idx` means `idx` sections are already completed, so the applicable
+    // break is the one after the idx-th completion — resolved by builder-
+    // order position via breakAfterCompletion, NOT by which section happened
+    // to be played (random shuffles / student picks make identity meaningless
+    // for scheduling). Deny if that break is mandatory and hasn't elapsed
+    // since the previous play-order section's submit.
     const idx = sectionIds.indexOf(sectionId);
     if (idx > 0) {
       const prevId = sectionIds[idx - 1];
@@ -2249,11 +2288,10 @@ export const startSection = onCall<StartSectionData>(
       if (prevTiming?.submittedAt) {
         const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
         const a = aSnap.data() as {
-          sections?: Array<{ id: string; breakAfter?: { durationMinutes: number; mandatory: boolean } }>;
+          sections?: Array<{ id: string; breakAfter?: BreakCfg }>;
         } | undefined;
-        const prevSec = a?.sections?.find((s) => s.id === prevId);
-        const brk = prevSec?.breakAfter;
-        if (brk && brk.mandatory && brk.durationMinutes > 0) {
+        const brk = breakAfterCompletion(a?.sections, attempt.sectionIds, idx);
+        if (brk && brk.mandatory) {
           const breakEndsAt = new Date(prevTiming.submittedAt).getTime() + brk.durationMinutes * 60_000;
           if (Date.now() < breakEndsAt) {
             throw new HttpsError('failed-precondition', 'Mandatory break has not ended yet.');
@@ -2347,6 +2385,7 @@ export const submitSection = onCall<SubmitSectionData>(
       studentId: string;
       status: string;
       assessmentId: string;
+      sectionIds?: string[];   // frozen play order — used for positional break resolution
       sectionTimings: Record<string, AttemptSectionTiming>;
       // Phase 2.5 — serve the next section's first question on advance
       questionOrder?: Record<string, string[]>;
@@ -2373,8 +2412,22 @@ export const submitSection = onCall<SubmitSectionData>(
     if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
     const a = aSnap.data() as {
       sectionGraceSeconds?: number;
-      sections?: Array<{ id: string; timeLimit?: number }>;
+      sections?: Array<{ id: string; timeLimit?: number; breakAfter?: BreakCfg }>;
     };
+
+    // ── Server-side pause decision (positional breaks) ───────────────
+    // Submitting the section at play index `playIdx` completes playIdx + 1
+    // sections, so the break due now is breakAfterCompletion(…, playIdx + 1).
+    // When that break is MANDATORY, the server refuses to auto-start the next
+    // section regardless of the client's pauseBeforeNext — a tampered client
+    // can no longer skip a mandatory break by claiming no pause is needed.
+    // (Skippable breaks stay client-scheduled: the student may continue
+    // immediately anyway, so forcing a pause here would add nothing.)
+    const playIdx = Array.isArray(attempt.sectionIds) ? attempt.sectionIds.indexOf(sectionId) : -1;
+    const breakDue = playIdx >= 0
+      ? breakAfterCompletion(a.sections, attempt.sectionIds, playIdx + 1)
+      : null;
+    const mandatoryBreakDue = !!(breakDue && breakDue.mandatory);
 
     const startedMs = new Date(timing.startedAt).getTime();
     const serverNow = Date.now();
@@ -2395,7 +2448,7 @@ export const submitSection = onCall<SubmitSectionData>(
           [`sectionTimings.${sectionId}.timeUsedSeconds`]: cappedUsed,
           updatedAt: new Date().toISOString(),
         };
-        if (nextSectionId && !pauseBeforeNext) {
+        if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
           lateUpdates.currentSectionIdx = nextSectionIdx;
           lateUpdates[`sectionTimings.${nextSectionId}.startedAt`] = new Date().toISOString();
           lateUpdates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
@@ -2412,7 +2465,7 @@ export const submitSection = onCall<SubmitSectionData>(
       updatedAt: nowIso,
     };
     let nextQuestion: ReturnType<typeof sanitizeQuestionForStudent> | null = null;
-    if (nextSectionId && !pauseBeforeNext) {
+    if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
       updates.currentSectionIdx = nextSectionIdx;
       updates[`sectionTimings.${nextSectionId}.startedAt`] = nowIso;
       updates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
@@ -2449,7 +2502,10 @@ export const submitSection = onCall<SubmitSectionData>(
       }
     }
     await attemptRef.update(updates);
-    return { ok: true, timeUsedSeconds, question: nextQuestion };
+    // breakDue is informational for the client (the new bundle computes the
+    // same positional schedule itself); it also documents why an auto-start
+    // was refused when a mandatory break was due.
+    return { ok: true, timeUsedSeconds, question: nextQuestion, breakDue };
   },
 );
 // ═══════════════════════════════════════════════════════════════════════════

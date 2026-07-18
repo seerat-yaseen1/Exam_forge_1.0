@@ -450,7 +450,10 @@ export function SetupStep({
                               }}
                             >
                               <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>
-                                Break after
+                                {/* Positional: this break applies after the (idx+1)th COMPLETED
+                                    section, whichever section that turns out to be when the
+                                    section order is Random or Student's choice. */}
+                                Break after {idx + 1}{(['st', 'nd', 'rd'][idx] ?? 'th')} section completed
                               </span>
                               <input
                                 type="number"

@@ -839,9 +839,9 @@ export function DetailsStep({
                 </div>
                 <p className="text-xs" style={{ color: '#9A9891' }}>
                   {sectionStartOrder === 'random'
-                    ? 'Each student gets sections in a different order.'
+                    ? 'Each student gets sections in a different order. Breaks apply by completion count — after the 1st completed section, the 2nd, and so on.'
                     : sectionStartOrder === 'student_choice'
-                      ? 'Students choose which section to take first.'
+                      ? 'Students choose which section to take next. Breaks apply by completion count — after the 1st completed section, the 2nd, and so on.'
                       : 'Sections are taken in the order shown below.'}
                 </p>
               </div>

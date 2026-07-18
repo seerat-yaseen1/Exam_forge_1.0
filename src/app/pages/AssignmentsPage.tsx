@@ -37,6 +37,12 @@ import {
   type AssignmentTarget,
   type AssessmentSection,
 } from '../../lib/assessmentService';
+import {
+  deriveShowResultsTo, deriveAllowReviewTo,
+  DEFAULT_SHOW_RESULTS_TO, DEFAULT_ALLOW_REVIEW_TO,
+  type VisibilityAudience,
+} from '../../lib/visibility';
+import { AudienceSelector } from '../components/assignments/AudienceSelector';
 import { getAllQuestions, type Question } from '../../lib/questionBankService';
 import { getAllSubjects, type Subject } from '../../lib/subjectService';
 import { AllocationPanelCore } from '../components/assignments/allocation/AllocationPanelCore';
@@ -3295,8 +3301,13 @@ function DetailsStep({
   const [sectionStartOrder, setSectionStartOrder] = useState<'sequential' | 'random' | 'student_choice'>(
     assessment?.sectionStartOrder ?? 'sequential'
   );
-  const [showResults, setShowResults] = useState(assessment?.showResults ?? false);
-  const [allowReview, setAllowReview] = useState(assessment?.allowReview ?? false);
+  // N5 final form — audience arrays are the source of truth; the booleans
+  // above are kept only for state the older steps still read, and are
+  // re-derived from the arrays at save time.
+  const [showResultsTo, setShowResultsTo] = useState<VisibilityAudience[]>(
+    assessment ? deriveShowResultsTo(assessment) : [...DEFAULT_SHOW_RESULTS_TO]);
+  const [allowReviewTo, setAllowReviewTo] = useState<VisibilityAudience[]>(
+    assessment ? deriveAllowReviewTo(assessment) : [...DEFAULT_ALLOW_REVIEW_TO]);
   // ── Security tier + delivery mode (Phase 0 wiring) ──────────────
   const [securityTier, setSecurityTier] = useState<'mock' | 'normal' | 'high_stake'>(
     assessment?.securityTier ?? 'normal',
@@ -3547,8 +3558,12 @@ function DetailsStep({
         sectionGraceSeconds: sectionGraceSeconds ? parseInt(sectionGraceSeconds, 10) : undefined,
         shuffleQuestions,
         sectionStartOrder,
-        showResults,
-        allowReview,
+        // Audience arrays are authoritative; legacy booleans mirror the
+        // 'students' entry so pre-audience code paths keep working.
+        showResults: showResultsTo.includes('students'),
+        allowReview: allowReviewTo.includes('students'),
+        showResultsTo,
+        allowReviewTo,
         // ── Security tier + delivery mode (Phase 0 wiring) ──────────
         // applyTierDefaults enforces the per-tier floor (high-stake locks
         // camera on / mobile off / extension on). deliveryMode is chosen
@@ -4077,19 +4092,19 @@ function DetailsStep({
                   locked={!mut.shuffleQuestions}
                   lockReason={mut.shuffleQuestions ? undefined : lockReason}
                 />
-                <SettingsToggle
+                <AudienceSelector
                   icon={<BarChart2 size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
                   label="Show Results"
-                  hint="Display score and outcomes to students after submission"
-                  value={showResults}
-                  onChange={setShowResults}
+                  hint="Who can see scores and outcomes after submission"
+                  value={showResultsTo}
+                  onChange={setShowResultsTo}
                 />
-                <SettingsToggle
+                <AudienceSelector
                   icon={<BookOpen size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
                   label="Allow Review"
-                  hint="Let students revisit their answers after submission"
-                  value={allowReview}
-                  onChange={setAllowReview}
+                  hint="Who can see the questions and correct answers after submission"
+                  value={allowReviewTo}
+                  onChange={setAllowReviewTo}
                 />
               </div>
             </div>

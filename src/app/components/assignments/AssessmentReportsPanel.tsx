@@ -28,6 +28,7 @@ import {
   getAssessment,
   type Assessment,
 } from '../../../lib/assessmentService';
+import { reviewAudienceAllows } from '../../../lib/visibility';
 import {
   getQuestionsByIdsForReview,
   type Question,
@@ -148,6 +149,36 @@ export function AssessmentReportsPanel({ assessmentId, reviewerId, reviewerRole,
         <p className="text-xs" style={{ color: '#9B2828' }}>{errorMsg}</p>
       </div>
     );
+  }
+
+  // ── Access guard (N5 final form) ───────────────────────────────
+  // A triage queue you can't see the questions of can't be actioned, so for
+  // reviewers who don't own this assessment and whose audience isn't in
+  // allowReviewTo, the panel explains itself instead of rendering a list of
+  // undiagnosable flags. The roster hides its Reports tab on the same
+  // condition; this covers the standalone inbox surfaces. Reports still
+  // reach the exam owner's own inbox regardless.
+  if (assessment) {
+    const ownsIt =
+      reviewerRole === 'web_owner'
+        ? true
+        : reviewerRole === 'institute'
+          ? assessment.ownerType === 'institute' && assessment.ownerId === instituteId
+          : assessment.ownerType === 'faculty'   && assessment.ownerId === reviewerId;
+    const mayReview = ownsIt
+      || reviewAudienceAllows(assessment, reviewerRole === 'institute' ? 'institute' : 'faculty');
+    if (!mayReview) {
+      return (
+        <div className="px-4 py-8 text-center">
+          <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.7 }}>
+            Question reports on this exam are handled by its owner.
+            <br />
+            Your role doesn't have question-review access here — the exam
+            owner controls this in the assessment's visibility settings.
+          </p>
+        </div>
+      );
+    }
   }
 
   return (

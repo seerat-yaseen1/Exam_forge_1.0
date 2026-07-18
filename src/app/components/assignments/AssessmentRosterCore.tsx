@@ -19,6 +19,7 @@ import {
   FileText, Eye, Trash2, AlertCircle, Flag, Download,
 } from 'lucide-react';
 import { getAssessment, blockStudent, unblockStudent, setAttemptOverride, statusColor, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
+import { reviewAudienceAllows, resultsAudienceAllows, type VisibilityAudience } from '../../../lib/visibility';
 import { AssessmentReportsPanel } from './AssessmentReportsPanel';
 import {
   getStudentsByInstitute,
@@ -927,12 +928,17 @@ function AttemptsPanel({
   assessmentId,
   studentId,
   assessment,
+  canManageAttempts,
   onOverrideSaved,
   onRequestDelete,
 }: {
   assessmentId: string;
   studentId: string;
   assessment: Assessment;
+  /** Owner-only (rules: canWriteOwned) — hides the override control on
+   *  exams this viewer doesn't own instead of offering a button that
+   *  always fails permission-denied. */
+  canManageAttempts: boolean;
   onOverrideSaved: () => void;
   onRequestDelete: (attemptId: string, attemptNumber: number) => void;
 }) {
@@ -1055,7 +1061,9 @@ function AttemptsPanel({
         )}
       </div>
 
-      {/* Per-student override control */}
+      {/* Per-student override control — owner-only (writes are blocked by
+          rules for non-owners; don't render a control that can only fail) */}
+      {canManageAttempts && (
       <div>
         <p className="text-xs mb-1.5" style={{ color: '#6B6B66' }}>
           Student override <span style={{ color: '#C4C3BD' }}>(blank = use global limit)</span>
@@ -1111,6 +1119,7 @@ function AttemptsPanel({
           </p>
         )}
       </div>
+      )}
 
       {/* Attempt history mini-list */}
       {!histLoading && allAttempts.length > 0 && (
@@ -1226,8 +1235,12 @@ function AttemptDrawer({
   row, onClose, onRequestFreeze, onRequestUnfreeze, freezeLoading,
   onRequestBlock, onRequestUnblock, blockLoading,
   assessment, onOverrideSaved, onRequestDelete,
+  canSeeResults, canReview, canManageAttempts,
 }: {
   row: RosterRow;
+  canSeeResults: boolean;
+  canReview: boolean;
+  canManageAttempts: boolean;
   onClose: () => void;
   onRequestFreeze: (attemptId: string, studentName: string) => void;
   onRequestUnfreeze: (attempt: Attempt, studentName: string) => void;
@@ -1420,7 +1433,7 @@ function AttemptDrawer({
               </div>
             </div>
 
-            {attempt.scores && (
+            {attempt.scores && canSeeResults && (
               <div>
                 <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>SCORE</p>
                 <div className="px-4 py-3" style={{ background: '#F7F6F3', borderRadius: 2 }}>
@@ -1442,11 +1455,19 @@ function AttemptDrawer({
             )}
 
             {/* ── RESPONSES section — only for completed attempts ── */}
-            {(attempt.status === 'submitted' || attempt.status === 'auto_submitted' || attempt.status === 'terminated') && (
+            {canReview
+              && (attempt.status === 'submitted' || attempt.status === 'auto_submitted' || attempt.status === 'terminated') && (
               <div>
                 <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>RESPONSES</p>
                 <ResponseViewer attempt={attempt} assessment={assessment} />
               </div>
+            )}
+            {!canReview
+              && (attempt.status === 'submitted' || attempt.status === 'auto_submitted' || attempt.status === 'terminated') && (
+              <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                Question review is not enabled for your role on this exam — the
+                exam owner controls this in the assessment's visibility settings.
+              </p>
             )}
 
             <div>
@@ -1554,6 +1575,7 @@ function AttemptDrawer({
                 assessmentId={assessment.id}
                 studentId={student.id}
                 assessment={assessment}
+                canManageAttempts={canManageAttempts}
                 onOverrideSaved={onOverrideSaved}
                 onRequestDelete={onRequestDelete}
               />
@@ -1776,6 +1798,7 @@ export function AssessmentRosterCore({
   reviewerRole = 'web_owner',
 }: AssessmentRosterCoreProps) {
   const [view, setView] = useState<'roster' | 'reports'>('roster');
+  // (guarded below: the reports view renders only when canReview)
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [students, setStudents]     = useState<Student[]>([]);
   const [attempts, setAttempts]     = useState<Attempt[]>([]);
@@ -1857,6 +1880,28 @@ export function AssessmentRosterCore({
     () => new Set(assessment?.blockedStudents ?? []),
     [assessment?.blockedStudents]
   );
+
+  // ── Viewer visibility (N5 final form) ──────────────────────────
+  // fullAccess: webOwner anywhere, or the assessment's owning institute /
+  // faculty. Non-owners are gated by the owner's audience settings:
+  //   canSeeResults → SCORE detail in the drawer
+  //   canReview     → RESPONSES (questions + answers + keys) and the
+  //                   Reports (triage) view — a triage queue without
+  //                   question access can't be actioned, so it's hidden.
+  // Server enforces the keys (getAnswerKeysForReview); this drives the UI.
+  // Attempt-override writes are owner-only in the rules (canWriteOwned),
+  // so the override control follows fullAccess.
+  const viewerAudience: VisibilityAudience | null =
+    reviewerRole === 'web_owner' ? null : reviewerRole;
+  const fullAccess = !assessment ? false
+    : reviewerRole === 'web_owner' ? true
+    : reviewerRole === 'institute'
+      ? assessment.ownerType === 'institute' && assessment.ownerId === instituteId
+      : assessment.ownerType === 'faculty'   && assessment.ownerId === invigId;
+  const canSeeResults = !assessment ? false
+    : fullAccess || (viewerAudience !== null && resultsAudienceAllows(assessment, viewerAudience));
+  const canReview = !assessment ? false
+    : fullAccess || (viewerAudience !== null && reviewAudienceAllows(assessment, viewerAudience));
 
   const rows: RosterRow[] = useMemo(() => {
     const attemptByStudent = new Map<string, Attempt>(attempts.map((a) => [a.studentId, a]));
@@ -2090,7 +2135,7 @@ export function AssessmentRosterCore({
       <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E3E1DB' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}
           className="flex items-center gap-2 px-4 py-2 sm:px-6">
-          {(['roster', 'reports'] as const).map((v) => (
+          {(canReview ? (['roster', 'reports'] as const) : (['roster'] as const)).map((v) => (
             <button key={v} onClick={() => setView(v)}
               className="text-xs px-3 py-1.5"
               style={{
@@ -2116,7 +2161,7 @@ export function AssessmentRosterCore({
         </div>
       </div>
 
-      {view === 'reports' ? (
+      {(view === 'reports' && canReview) ? (
         <div className="px-4 py-6 sm:p-6" style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
           <AssessmentReportsPanel
             assessmentId={assessmentId}
@@ -2212,6 +2257,9 @@ export function AssessmentRosterCore({
               onClick={() => setSelectedRow(null)} />
             <AttemptDrawer
               row={selectedRow}
+              canSeeResults={canSeeResults}
+              canReview={canReview}
+              canManageAttempts={fullAccess}
               onClose={() => setSelectedRow(null)}
               onRequestFreeze={handleRequestFreeze}
               onRequestUnfreeze={handleRequestUnfreeze}

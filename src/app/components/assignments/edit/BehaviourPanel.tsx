@@ -3,6 +3,10 @@ import { EditPanelShell, Field } from './EditPanelShell';
 import { editableFields } from './useEditableFields';
 import { Switch } from '../../ui/switch';
 import { updateAssessmentBehaviour, type Assessment } from '../../../../lib/assessmentService';
+import {
+  deriveShowResultsTo, deriveAllowReviewTo, type VisibilityAudience,
+} from '../../../../lib/visibility';
+import { AudienceSelector } from '../AudienceSelector';
 
 type Props = {
   assessment: Assessment;
@@ -18,16 +22,18 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
   const [passing, setPassing] = useState<string>(
     assessment.passingScore != null ? String(assessment.passingScore) : ''
   );
-  const [showResults, setShowResults] = useState(assessment.showResults);
-  const [allowReview, setAllowReview] = useState(assessment.allowReview);
+  // N5 final form — audience arrays are the source of truth; legacy booleans
+  // are re-derived from the 'students' entry at save time.
+  const [showResultsTo, setShowResultsTo] = useState<VisibilityAudience[]>(deriveShowResultsTo(assessment));
+  const [allowReviewTo, setAllowReviewTo] = useState<VisibilityAudience[]>(deriveAllowReviewTo(assessment));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setShuffle(assessment.shuffleQuestions);
       setPassing(assessment.passingScore != null ? String(assessment.passingScore) : '');
-      setShowResults(assessment.showResults);
-      setAllowReview(assessment.allowReview);
+      setShowResultsTo(deriveShowResultsTo(assessment));
+      setAllowReviewTo(deriveAllowReviewTo(assessment));
     }
   }, [open, assessment.id]);
 
@@ -37,8 +43,8 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
   const dirty =
     (fields.shuffleQuestions && shuffle !== assessment.shuffleQuestions) ||
     (fields.passingScore && passingNum !== assessment.passingScore) ||
-    (fields.showResults && showResults !== assessment.showResults) ||
-    (fields.allowReview && allowReview !== assessment.allowReview);
+    (fields.showResults && showResultsTo.join() !== deriveShowResultsTo(assessment).join()) ||
+    (fields.allowReview && allowReviewTo.join() !== deriveAllowReviewTo(assessment).join());
 
   const handleSave = async () => {
     setSaving(true);
@@ -46,8 +52,14 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
       const patch: Partial<Assessment> = {};
       if (fields.shuffleQuestions) patch.shuffleQuestions = shuffle;
       if (fields.passingScore) patch.passingScore = passingNum;
-      if (fields.showResults) patch.showResults = showResults;
-      if (fields.allowReview) patch.allowReview = allowReview;
+      if (fields.showResults) {
+        patch.showResultsTo = showResultsTo;
+        patch.showResults   = showResultsTo.includes('students');
+      }
+      if (fields.allowReview) {
+        patch.allowReviewTo = allowReviewTo;
+        patch.allowReview   = allowReviewTo.includes('students');
+      }
       await updateAssessmentBehaviour(assessment.id, patch);
       onSaved(patch);
       onOpenChange(false);
@@ -94,21 +106,25 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
       )}
 
       {fields.showResults && (
-        <ToggleRow
-          label="Show results after submission"
-          hint="Student sees their score immediately."
-          checked={showResults}
-          onChange={setShowResults}
-        />
+        <div className="py-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+          <AudienceSelector
+            label="Show results"
+            hint="Who can see scores and outcomes after submission."
+            value={showResultsTo}
+            onChange={setShowResultsTo}
+          />
+        </div>
       )}
 
       {fields.allowReview && (
-        <ToggleRow
-          label="Allow answer review"
-          hint="Student can review their answers after submission."
-          checked={allowReview}
-          onChange={setAllowReview}
-        />
+        <div className="py-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+          <AudienceSelector
+            label="Allow review"
+            hint="Who can see the questions and correct answers after submission."
+            value={allowReviewTo}
+            onChange={setAllowReviewTo}
+          />
+        </div>
       )}
     </EditPanelShell>
   );

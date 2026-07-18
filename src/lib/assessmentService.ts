@@ -266,8 +266,14 @@ export type Assessment = {
 
   // Settings
   shuffleQuestions: boolean;
-  showResults: boolean;         // show results to student after submission
-  allowReview: boolean;         // allow student to review answers after submission
+  showResults: boolean;         // legacy boolean — students entry of showResultsTo (kept in sync)
+  allowReview: boolean;         // legacy boolean — students entry of allowReviewTo (kept in sync)
+  // N5 final form (2026-07-17) — audience-scoped visibility. Optional: when
+  // absent (legacy docs) the booleans above govern; see lib/visibility.ts
+  // for exact legacy semantics (server mirror: reviewAudienceAllows in
+  // functions/src/index.ts).
+  showResultsTo?: Array<'students' | 'institute' | 'faculty'>;
+  allowReviewTo?: Array<'students' | 'institute' | 'faculty'>;
 
   // Section play order — 'sequential' (default) keeps the order set in the
   // builder; 'random' shuffles per student at startAttempt; 'student_choice'
@@ -557,7 +563,8 @@ export async function updateAssessmentAccess(id: string, patch: AccessPatch): Pr
 }
 
 export type BehaviourPatch = Partial<Pick<Assessment,
-  'shuffleQuestions' | 'passingScore' | 'showResults' | 'allowReview' | 'sectionStartOrder'
+  'shuffleQuestions' | 'passingScore' | 'showResults' | 'allowReview'
+  | 'showResultsTo' | 'allowReviewTo' | 'sectionStartOrder'
 >>;
 export async function updateAssessmentBehaviour(id: string, patch: BehaviourPatch): Promise<void> {
   await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
@@ -648,6 +655,8 @@ export async function duplicateAssessment(
     shuffleQuestions:    options.includeSettings ? src.shuffleQuestions : false,
     showResults:         options.includeSettings ? src.showResults      : false,
     allowReview:         options.includeSettings ? src.allowReview      : false,
+    showResultsTo:       options.includeSettings ? src.showResultsTo    : undefined,
+    allowReviewTo:       options.includeSettings ? src.allowReviewTo    : undefined,
     timeLimit:           options.includeSettings ? src.timeLimit           : undefined,
     overallTimeLimit:    options.includeSettings ? src.overallTimeLimit    : undefined,
     passingScore:        options.includeSettings ? src.passingScore        : undefined,

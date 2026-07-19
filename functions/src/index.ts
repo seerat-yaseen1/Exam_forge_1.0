@@ -2759,6 +2759,105 @@ export const deleteQuestionAsRole = onCall<{ id?: string; subjectId?: string | n
   },
 );
 
+/**
+ * Share questions with peers as institute/faculty — gated by the SHARE right.
+ * Faculty may share their OWN questions and content GRANTED to them, strictly
+ * with recipients inside their own institute. The server:
+ *   1. enforces the share right (ceiling + faculty grant, direct mode),
+ *   2. verifies every recipient is inside the caller's institute,
+ *   3. verifies every shared question is one the caller legitimately holds
+ *      (owns, or was shared/granted to them),
+ * then writes one QuestionShare per recipient. Direct mode only in Phase 2;
+ * request mode routes to the Phase-3 approval workflow.
+ */
+export const shareQuestionsAsRole = onCall<{
+  questionIds?: string[];
+  recipients?: Array<{ id: string; type: 'faculty' | 'institute' }>;
+  note?: string;
+}>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, 'share');
+
+    const questionIds = Array.isArray(request.data?.questionIds) ? request.data!.questionIds! : [];
+    const recipients  = Array.isArray(request.data?.recipients) ? request.data!.recipients! : [];
+    const note = typeof request.data?.note === 'string' ? request.data!.note.slice(0, 500) : '';
+    if (questionIds.length === 0) throw new HttpsError('invalid-argument', 'No questions to share.');
+    if (recipients.length === 0)  throw new HttpsError('invalid-argument', 'No recipients selected.');
+    if (questionIds.length > 200) throw new HttpsError('invalid-argument', 'Too many questions in one share.');
+
+    // 2) Every recipient must be inside the caller's institute.
+    for (const r of recipients) {
+      if (r.type === 'institute') {
+        if (r.id !== owner.instituteId) {
+          throw new HttpsError('permission-denied', 'Can only share within your own institute.');
+        }
+      } else if (r.type === 'faculty') {
+        const facSnap = await db.collection('faculty').doc(r.id).get();
+        if (!facSnap.exists || facSnap.get('instituteId') !== owner.instituteId) {
+          throw new HttpsError('permission-denied', 'Recipient is not in your institute.');
+        }
+      } else {
+        throw new HttpsError('invalid-argument', 'Invalid recipient type.');
+      }
+    }
+
+    // 3) Verify the caller legitimately holds each shared question — either
+    //    owns it, or it's inside their institute (institute-authored or
+    //    granted webOwner content readable to them). Cross-institute ids are
+    //    rejected outright.
+    for (let i = 0; i < questionIds.length; i += 30) {
+      const chunk = questionIds.slice(i, i + 30);
+      const snap = await db.collection('questions').where('id', 'in', chunk).get();
+      const found = new Map(snap.docs.map((d) => [d.id, d]));
+      for (const qid of chunk) {
+        const doc = found.get(qid);
+        if (!doc) throw new HttpsError('not-found', `Question ${qid} not found.`);
+        const qOwnerType = doc.get('ownerType') ?? 'webOwner';
+        const qOwnerId   = doc.get('ownerId')   ?? 'webOwner';
+        const qInstitute = doc.get('instituteId') ?? '';
+        const ownedByCaller = qOwnerType === owner.ownerType && qOwnerId === owner.ownerId;
+        const inCallerInstitute = qInstitute === owner.instituteId;
+        const isWebOwnerContent = qOwnerType === 'webOwner';
+        if (!ownedByCaller && !inCallerInstitute && !isWebOwnerContent) {
+          throw new HttpsError('permission-denied', `You cannot share question ${qid}.`);
+        }
+      }
+    }
+
+    // Write one share per recipient.
+    const nowIso = new Date().toISOString();
+    const batch = db.batch();
+    const created: string[] = [];
+    for (const r of recipients) {
+      const id = `qs_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      created.push(id);
+      batch.set(db.collection('questionShares').doc(id), {
+        id,
+        sharedBy:            owner.ownerId,
+        sharedByType:        owner.ownerType,
+        sharedByInstituteId: owner.instituteId,
+        sharedWith:          r.id,
+        sharedWithType:      r.type,
+        questionIds,
+        note,
+        isRevoked:           false,
+        sharedAt:            nowIso,
+        updatedAt:           nowIso,
+      });
+    }
+    await batch.commit();
+
+    return { ok: true, shareIds: created };
+  },
+);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ALLOCATION SYSTEM — Phase B (plans/ALLOCATION_SYSTEM_PLAN.md)
 //

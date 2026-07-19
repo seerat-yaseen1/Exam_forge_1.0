@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, X, Eye, Pencil, Trash2, Loader2, BookOpen,
-  AlertTriangle, Search, Upload, Download,
+  AlertTriangle, Search, Upload, Download, Share2,
 } from 'lucide-react';
 import {
   getQuestionsByOwner, createQuestion, updateQuestion, softDeleteQuestion,
@@ -15,6 +15,7 @@ import { facultyCanDirect, effectiveFacultyMode } from '../../../lib/questionRig
 import { getAllSubjects, type Subject } from '../../../lib/subjectService';
 import { QuestionTypeEngine, type QuestionDraft } from '../../components/questions/QuestionTypeEngine';
 import { QuestionPreview } from '../../components/questions/QuestionPreview';
+import { ShareQuestionsModal } from '../../components/questions/ShareQuestionsModal';
 import { SubjectManager } from '../../components/questions/SubjectManager';
 import { BulkUploadModal } from '../../components/questions/BulkUploadModal';
 import { ExportModal } from '../../components/questions/ExportModal';
@@ -228,14 +229,16 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
 // ── Question row ───────────────────────────────────────────────────────────────
 
 function QuestionRow({
-  question, canEdit, canDelete, onPreview, onEdit, onDelete,
+  question, canEdit, canDelete, canShare, onPreview, onEdit, onDelete, onShare,
 }: {
   question: Question;
   canEdit: boolean;
   canDelete: boolean;
+  canShare: boolean;
   onPreview: () => void;
   onEdit:    () => void;
   onDelete:  () => void;
+  onShare:   () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -284,6 +287,11 @@ function QuestionRow({
         <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
           <Eye size={13} strokeWidth={1.5} />
         </button>
+        {canShare && (
+          <button onClick={onShare} title="Share" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+            <Share2 size={13} strokeWidth={1.5} />
+          </button>
+        )}
         {canEdit && (
           <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
             <Pencil size={13} strokeWidth={1.5} />
@@ -496,6 +504,7 @@ export function FacultyQuestionsPage() {
   const canCreate = facultyCanDirect({ questionRights: myRights }, ceiling, 'create');
   const canEdit   = facultyCanDirect({ questionRights: myRights }, ceiling, 'edit');
   const canDelete = facultyCanDirect({ questionRights: myRights }, ceiling, 'delete');
+  const canShare  = facultyCanDirect({ questionRights: myRights }, ceiling, 'share');
   // 'request' mode is granted but its workflow is Phase 3 — surfaced so the
   // UI can show a "needs approval" affordance later without another pass.
   const editIsRequest   = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'edit') === 'request';
@@ -514,6 +523,8 @@ export function FacultyQuestionsPage() {
   const [editTarget,     setEditTarget]     = useState<Question | null>(null);
   const [previewQ,       setPreviewQ]       = useState<Question | null>(null);
   const [deleteTarget,   setDeleteTarget]   = useState<Question | null>(null);
+  const [shareTarget,    setShareTarget]    = useState<Question | null>(null);
+  const [shareNotice,    setShareNotice]    = useState('');
   const [deleting,       setDeleting]       = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [exportOpen,     setExportOpen]     = useState(false);
@@ -696,9 +707,11 @@ export function FacultyQuestionsPage() {
                         question={q}
                         canEdit={canEdit}
                         canDelete={canDelete}
+                        canShare={canShare}
                         onPreview={() => setPreviewQ(q)}
                         onEdit={() => openEdit(q)}
                         onDelete={() => setDeleteTarget(q)}
+                        onShare={() => setShareTarget(q)}
                       />
                     ))
               }
@@ -772,6 +785,29 @@ export function FacultyQuestionsPage() {
           subjects={subjects}
           onClose={() => setExportOpen(false)}
         />
+      )}
+
+      {shareTarget && (
+        <ShareQuestionsModal
+          instituteId={instituteId}
+          selfFacultyId={facultyId}
+          questionIds={[shareTarget.id]}
+          onClose={() => setShareTarget(null)}
+          onShared={(count) => {
+            setShareTarget(null);
+            setShareNotice(`Shared with ${count} recipient${count !== 1 ? 's' : ''}.`);
+            setTimeout(() => setShareNotice(''), 4000);
+          }}
+        />
+      )}
+
+      {shareNotice && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 text-xs px-4 py-2.5"
+          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+        >
+          {shareNotice}
+        </div>
       )}
     </>
   );

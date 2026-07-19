@@ -1387,3 +1387,16 @@ export async function deleteQuestionAsRole(
   >(functions, 'deleteQuestionAsRole');
   await call({ id, subjectId: taxonomy?.subjectId ?? null, topicId: taxonomy?.topicId ?? null });
 }
+
+export async function shareQuestionsAsRole(
+  questionIds: string[],
+  recipients: Array<{ id: string; type: 'faculty' | 'institute' }>,
+  note?: string,
+): Promise<{ shareIds: string[] }> {
+  const call = httpsCallable<
+    { questionIds: string[]; recipients: Array<{ id: string; type: 'faculty' | 'institute' }>; note?: string },
+    { ok: boolean; shareIds: string[] }
+  >(functions, 'shareQuestionsAsRole');
+  const res = await call({ questionIds, recipients, note });
+  return { shareIds: res.data.shareIds };
+}

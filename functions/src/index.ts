@@ -2534,7 +2534,14 @@ async function assertQuestionRight(
   callerInstituteId: string | undefined,
   callerFacultyId: string | undefined,
   right: 'create' | 'edit' | 'share' | 'delete',
-): Promise<{ ownerType: 'institute' | 'faculty'; ownerId: string; instituteId: string }> {
+  // Which mode the caller must hold for this action:
+  //   'direct'  — the direct callables (act immediately)
+  //   'request' — the request-submission callable (faculty raises a request)
+  //   'any'     — accept either (used when the mode isn't the gate)
+  // The institute admin always resolves to 'direct' (never operates in
+  // request mode against themselves).
+  requireMode: 'direct' | 'request' | 'any' = 'direct',
+): Promise<{ ownerType: 'institute' | 'faculty'; ownerId: string; instituteId: string; mode: 'direct' | 'request' }> {
   if (callerRole !== 'institute' && callerRole !== 'faculty') {
     throw new HttpsError('permission-denied', 'Only institute or faculty accounts use this endpoint.');
   }
@@ -2551,12 +2558,14 @@ async function assertQuestionRight(
   }
 
   if (callerRole === 'institute') {
-    // The institute admin holds all rights the ceiling allows, in direct
-    // mode (the admin never operates in request mode against themselves).
-    return { ownerType: 'institute', ownerId: callerInstituteId, instituteId: callerInstituteId };
+    // The institute admin holds all rights the ceiling allows, in direct mode.
+    if (requireMode === 'request') {
+      throw new HttpsError('failed-precondition', 'Institute admins act directly, not by request.');
+    }
+    return { ownerType: 'institute', ownerId: callerInstituteId, instituteId: callerInstituteId, mode: 'direct' };
   }
 
-  // Faculty: needs the individual grant, in direct mode, within the ceiling.
+  // Faculty: needs the individual grant, in an allowed mode, within the ceiling.
   if (!callerFacultyId) {
     throw new HttpsError('permission-denied', 'Missing faculty context.');
   }
@@ -2567,13 +2576,22 @@ async function assertQuestionRight(
   const rights = (facSnap.get('questionRights') as FacultyRightsS | undefined) ?? undefined;
   const fr = rights?.[right];
   const grantableModes = cr.modes ?? [];
-  if (!fr?.granted || fr.mode !== 'direct' || !grantableModes.includes('direct')) {
+  // The granted mode must be currently grantable by the ceiling.
+  if (!fr?.granted || !fr.mode || !grantableModes.includes(fr.mode)) {
     throw new HttpsError(
       'permission-denied',
       `The "${right}" right is not enabled for your account. Ask your institute admin.`,
     );
   }
-  return { ownerType: 'faculty', ownerId: callerFacultyId, instituteId: callerInstituteId };
+  if (requireMode !== 'any' && fr.mode !== requireMode) {
+    throw new HttpsError(
+      'failed-precondition',
+      requireMode === 'direct'
+        ? `Your "${right}" right requires approval — submit a request instead.`
+        : `Your "${right}" right is direct — no request needed.`,
+    );
+  }
+  return { ownerType: 'faculty', ownerId: callerFacultyId, instituteId: callerInstituteId, mode: fr.mode };
 }
 
 // Shared answer-key extraction — mirrors src/lib/questionBankService.ts.
@@ -2591,6 +2609,171 @@ function stripUndefined<T extends Record<string, unknown>>(o: T): T {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(o)) if (v !== undefined) out[k] = v;
   return out as T;
+}
+
+// ── Reusable question executors ───────────────────────────────────
+// The actual write logic for each action, factored out so BOTH the direct
+// callables and the request-approval path (resolveQuestionRequest) run
+// identical, server-authoritative writes. Each takes the resolved owner
+// (from assertQuestionRight) plus the payload, and performs no rights check
+// of its own — the caller must have already authorized.
+
+type QOwner = { ownerType: 'institute' | 'faculty'; ownerId: string; instituteId: string };
+
+async function execCreateQuestion(
+  db: FirebaseFirestore.Firestore,
+  owner: QOwner,
+  src: Record<string, unknown>,
+  taxonomy: { subjectId?: string | null; topicId?: string | null },
+): Promise<{ id: string }> {
+  const id = `q_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const nowIso = new Date().toISOString();
+  const full: Record<string, unknown> = {
+    ...src,
+    id,
+    ownerType: owner.ownerType,
+    ownerId:   owner.ownerId,
+    instituteId: owner.instituteId,
+    isDeleted: false,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+  const { publicPart, answerPart } = splitQuestionPayload(full);
+  const publicDoc = stripUndefined({ ...publicPart, correctIds: [], correctPairs: [], modelAnswer: '' });
+  const answerDoc = stripUndefined({
+    id, ownerType: owner.ownerType, ownerId: owner.ownerId,
+    correctIds: [], correctPairs: [], modelAnswer: '', ...answerPart, updatedAt: nowIso,
+  });
+  const batch = db.batch();
+  batch.set(db.collection('questions').doc(id), publicDoc);
+  batch.set(db.collection('questionAnswers').doc(id), answerDoc);
+  await batch.commit();
+  try {
+    if (taxonomy.subjectId) await db.collection('subjects').doc(String(taxonomy.subjectId)).update({ questionCount: FieldValue.increment(1) });
+    if (taxonomy.topicId)   await db.collection('topics').doc(String(taxonomy.topicId)).update({ questionCount: FieldValue.increment(1) });
+  } catch (e) { console.warn('[execCreateQuestion] counter bump skipped', e); }
+  return { id };
+}
+
+async function execEditQuestion(
+  db: FirebaseFirestore.Firestore,
+  owner: QOwner,
+  id: string,
+  src: Record<string, unknown>,
+  taxonomy: { subjectId?: string | null; topicId?: string | null; prevSubjectId?: string | null; prevTopicId?: string | null },
+): Promise<void> {
+  // Ownership: edit is OWN-questions-only.
+  const existing = await db.collection('questions').doc(id).get();
+  if (!existing.exists) throw new HttpsError('not-found', 'Question not found.');
+  if (existing.get('ownerType') !== owner.ownerType || existing.get('ownerId') !== owner.ownerId) {
+    throw new HttpsError('permission-denied', 'You can only edit your own questions.');
+  }
+  const nowIso = new Date().toISOString();
+  const { publicPart, answerPart } = splitQuestionPayload(src);
+  delete publicPart.id; delete publicPart.ownerType; delete publicPart.ownerId;
+  delete publicPart.instituteId; delete publicPart.createdAt;
+  const batch = db.batch();
+  if (Object.keys(publicPart).length > 0) {
+    batch.update(db.collection('questions').doc(id), stripUndefined({ ...publicPart, updatedAt: nowIso }));
+  }
+  if (Object.keys(answerPart).length > 0) {
+    batch.set(
+      db.collection('questionAnswers').doc(id),
+      stripUndefined({ ...answerPart, ownerType: owner.ownerType, ownerId: owner.ownerId, updatedAt: nowIso }),
+      { merge: true },
+    );
+  }
+  await batch.commit();
+  const { subjectId, topicId, prevSubjectId, prevTopicId } = taxonomy;
+  try {
+    if (prevSubjectId && prevSubjectId !== subjectId) await db.collection('subjects').doc(String(prevSubjectId)).update({ questionCount: FieldValue.increment(-1) });
+    if (subjectId && subjectId !== prevSubjectId)     await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(1) });
+    if (prevTopicId && prevTopicId !== topicId)       await db.collection('topics').doc(String(prevTopicId)).update({ questionCount: FieldValue.increment(-1) });
+    if (topicId && topicId !== prevTopicId)           await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(1) });
+  } catch (e) { console.warn('[execEditQuestion] counter shift skipped', e); }
+}
+
+async function execDeleteQuestion(
+  db: FirebaseFirestore.Firestore,
+  owner: QOwner,
+  id: string,
+  taxonomy: { subjectId?: string | null; topicId?: string | null },
+): Promise<void> {
+  const existing = await db.collection('questions').doc(id).get();
+  if (!existing.exists) throw new HttpsError('not-found', 'Question not found.');
+  if (existing.get('ownerType') !== owner.ownerType || existing.get('ownerId') !== owner.ownerId) {
+    throw new HttpsError('permission-denied', 'You can only delete your own questions.');
+  }
+  await db.collection('questions').doc(id).update({ isDeleted: true, updatedAt: new Date().toISOString() });
+  const subjectId = taxonomy.subjectId ?? existing.get('subjectId') ?? null;
+  const topicId   = taxonomy.topicId ?? existing.get('topicId') ?? null;
+  try {
+    if (subjectId) await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(-1) });
+    if (topicId)   await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(-1) });
+  } catch (e) { console.warn('[execDeleteQuestion] counter bump skipped', e); }
+}
+
+async function execShareQuestions(
+  db: FirebaseFirestore.Firestore,
+  owner: QOwner,
+  questionIds: string[],
+  recipients: Array<{ id: string; type: 'faculty' | 'institute' }>,
+  note: string,
+): Promise<{ shareIds: string[] }> {
+  // Recipients must be inside the caller's institute.
+  for (const r of recipients) {
+    if (r.type === 'institute') {
+      if (r.id !== owner.instituteId) throw new HttpsError('permission-denied', 'Can only share within your own institute.');
+    } else if (r.type === 'faculty') {
+      const facSnap = await db.collection('faculty').doc(r.id).get();
+      if (!facSnap.exists || facSnap.get('instituteId') !== owner.instituteId) {
+        throw new HttpsError('permission-denied', 'Recipient is not in your institute.');
+      }
+    } else {
+      throw new HttpsError('invalid-argument', 'Invalid recipient type.');
+    }
+  }
+  // Each shared question must be legitimately held by the caller.
+  for (let i = 0; i < questionIds.length; i += 30) {
+    const chunk = questionIds.slice(i, i + 30);
+    const snap = await db.collection('questions').where('id', 'in', chunk).get();
+    const found = new Map(snap.docs.map((d) => [d.id, d]));
+    for (const qid of chunk) {
+      const doc = found.get(qid);
+      if (!doc) throw new HttpsError('not-found', `Question ${qid} not found.`);
+      const qOwnerType = doc.get('ownerType') ?? 'webOwner';
+      const qOwnerId   = doc.get('ownerId')   ?? 'webOwner';
+      const qInstitute = doc.get('instituteId') ?? '';
+      const ownedByCaller = qOwnerType === owner.ownerType && qOwnerId === owner.ownerId;
+      const inCallerInstitute = qInstitute === owner.instituteId;
+      const isWebOwnerContent = qOwnerType === 'webOwner';
+      if (!ownedByCaller && !inCallerInstitute && !isWebOwnerContent) {
+        throw new HttpsError('permission-denied', `You cannot share question ${qid}.`);
+      }
+    }
+  }
+  const nowIso = new Date().toISOString();
+  const batch = db.batch();
+  const created: string[] = [];
+  for (const r of recipients) {
+    const id = `qs_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    created.push(id);
+    batch.set(db.collection('questionShares').doc(id), {
+      id,
+      sharedBy:            owner.ownerId,
+      sharedByType:        owner.ownerType,
+      sharedByInstituteId: owner.instituteId,
+      sharedWith:          r.id,
+      sharedWithType:      r.type,
+      questionIds,
+      note,
+      isRevoked:           false,
+      sharedAt:            nowIso,
+      updatedAt:           nowIso,
+    });
+  }
+  await batch.commit();
+  return { shareIds: created };
 }
 
 interface QWritePayload {
@@ -2621,48 +2804,10 @@ export const createQuestionAsRole = onCall<QWritePayload>(
     if (!src || typeof src !== 'object') {
       throw new HttpsError('invalid-argument', 'Missing question payload.');
     }
-    const id = `q_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const nowIso = new Date().toISOString();
-
-    // Server assigns owner + tenant stamp — client values are ignored.
-    const full: Record<string, unknown> = {
-      ...src,
-      id,
-      ownerType: owner.ownerType,
-      ownerId:   owner.ownerId,
-      instituteId: owner.instituteId,
-      isDeleted: false,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-    const { publicPart, answerPart } = splitQuestionPayload(full);
-    // Public doc must never carry answer keys.
-    const publicDoc = stripUndefined({
-      ...publicPart,
-      correctIds: [], correctPairs: [], modelAnswer: '',
+    const { id } = await execCreateQuestion(db, owner, src, {
+      subjectId: request.data?.subjectId ?? null,
+      topicId:   request.data?.topicId ?? null,
     });
-    const answerDoc = stripUndefined({
-      id,
-      ownerType: owner.ownerType,
-      ownerId:   owner.ownerId,
-      correctIds: [], correctPairs: [], modelAnswer: '',
-      ...answerPart,
-      updatedAt: nowIso,
-    });
-
-    const batch = db.batch();
-    batch.set(db.collection('questions').doc(id), publicDoc);
-    batch.set(db.collection('questionAnswers').doc(id), answerDoc);
-    await batch.commit();
-
-    // Best-effort taxonomy counter bump.
-    const subjectId = request.data?.subjectId ?? null;
-    const topicId   = request.data?.topicId ?? null;
-    try {
-      if (subjectId) await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(1) });
-      if (topicId)   await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(1) });
-    } catch (e) { console.warn('[createQuestionAsRole] counter bump skipped', e); }
-
     return { ok: true, id };
   },
 );
@@ -2684,43 +2829,12 @@ export const editQuestionAsRole = onCall<QWritePayload>(
     const src = request.data?.question;
     if (!src || typeof src !== 'object') throw new HttpsError('invalid-argument', 'Missing question payload.');
 
-    // Ownership: edit is OWN-questions-only. The existing doc's owner must
-    // match the caller (institute admins edit institute-owned; faculty edit
-    // their own).
-    const existing = await db.collection('questions').doc(id).get();
-    if (!existing.exists) throw new HttpsError('not-found', 'Question not found.');
-    if (existing.get('ownerType') !== owner.ownerType || existing.get('ownerId') !== owner.ownerId) {
-      throw new HttpsError('permission-denied', 'You can only edit your own questions.');
-    }
-
-    const nowIso = new Date().toISOString();
-    const { publicPart, answerPart } = splitQuestionPayload(src);
-    // Never let owner/stamp/id be rewritten by an edit.
-    delete publicPart.id; delete publicPart.ownerType; delete publicPart.ownerId;
-    delete publicPart.instituteId; delete publicPart.createdAt;
-
-    const batch = db.batch();
-    if (Object.keys(publicPart).length > 0) {
-      batch.update(db.collection('questions').doc(id), stripUndefined({ ...publicPart, updatedAt: nowIso }));
-    }
-    if (Object.keys(answerPart).length > 0) {
-      batch.set(
-        db.collection('questionAnswers').doc(id),
-        stripUndefined({ ...answerPart, ownerType: owner.ownerType, ownerId: owner.ownerId, updatedAt: nowIso }),
-        { merge: true },
-      );
-    }
-    await batch.commit();
-
-    // Taxonomy shift on subject/topic change (best-effort).
-    const { subjectId, topicId, prevSubjectId, prevTopicId } = request.data || {};
-    try {
-      if (prevSubjectId && prevSubjectId !== subjectId) await db.collection('subjects').doc(String(prevSubjectId)).update({ questionCount: FieldValue.increment(-1) });
-      if (subjectId && subjectId !== prevSubjectId)     await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(1) });
-      if (prevTopicId && prevTopicId !== topicId)       await db.collection('topics').doc(String(prevTopicId)).update({ questionCount: FieldValue.increment(-1) });
-      if (topicId && topicId !== prevTopicId)           await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(1) });
-    } catch (e) { console.warn('[editQuestionAsRole] counter shift skipped', e); }
-
+    await execEditQuestion(db, owner, id, src, {
+      subjectId: request.data?.subjectId ?? null,
+      topicId:   request.data?.topicId ?? null,
+      prevSubjectId: request.data?.prevSubjectId ?? null,
+      prevTopicId:   request.data?.prevTopicId ?? null,
+    });
     return { ok: true };
   },
 );
@@ -2740,21 +2854,10 @@ export const deleteQuestionAsRole = onCall<{ id?: string; subjectId?: string | n
     const id = request.data?.id;
     if (!id) throw new HttpsError('invalid-argument', 'Missing question id.');
 
-    const existing = await db.collection('questions').doc(id).get();
-    if (!existing.exists) throw new HttpsError('not-found', 'Question not found.');
-    if (existing.get('ownerType') !== owner.ownerType || existing.get('ownerId') !== owner.ownerId) {
-      throw new HttpsError('permission-denied', 'You can only delete your own questions.');
-    }
-
-    await db.collection('questions').doc(id).update({ isDeleted: true, updatedAt: new Date().toISOString() });
-
-    const subjectId = request.data?.subjectId ?? existing.get('subjectId') ?? null;
-    const topicId   = request.data?.topicId ?? existing.get('topicId') ?? null;
-    try {
-      if (subjectId) await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(-1) });
-      if (topicId)   await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(-1) });
-    } catch (e) { console.warn('[deleteQuestionAsRole] counter bump skipped', e); }
-
+    await execDeleteQuestion(db, owner, id, {
+      subjectId: request.data?.subjectId ?? null,
+      topicId:   request.data?.topicId ?? null,
+    });
     return { ok: true };
   },
 );
@@ -2792,69 +2895,215 @@ export const shareQuestionsAsRole = onCall<{
     if (recipients.length === 0)  throw new HttpsError('invalid-argument', 'No recipients selected.');
     if (questionIds.length > 200) throw new HttpsError('invalid-argument', 'Too many questions in one share.');
 
-    // 2) Every recipient must be inside the caller's institute.
-    for (const r of recipients) {
-      if (r.type === 'institute') {
-        if (r.id !== owner.instituteId) {
-          throw new HttpsError('permission-denied', 'Can only share within your own institute.');
-        }
-      } else if (r.type === 'faculty') {
-        const facSnap = await db.collection('faculty').doc(r.id).get();
-        if (!facSnap.exists || facSnap.get('instituteId') !== owner.instituteId) {
-          throw new HttpsError('permission-denied', 'Recipient is not in your institute.');
-        }
-      } else {
-        throw new HttpsError('invalid-argument', 'Invalid recipient type.');
+    const { shareIds } = await execShareQuestions(db, owner, questionIds, recipients, note);
+    return { ok: true, shareIds };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// QUESTION REQUESTS — Phase 3 (request/approval workflow)
+// When a faculty member's grant for an action is in REQUEST mode, the action
+// doesn't execute directly — it becomes a pending questionRequests doc that
+// the institute admin approves or rejects. Approval EXECUTES the action
+// server-side via the same exec* functions the direct callables use, so the
+// approval path is exactly as tamper-proof as the direct path.
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface RequestPayload {
+  type?: 'create' | 'edit' | 'delete' | 'share';
+  // create/edit: full question fields; delete: unused; share: unused
+  question?: Record<string, unknown>;
+  questionId?: string;                // edit/delete/share subject
+  questionStem?: string;              // denormalized for inbox display
+  subjectId?: string | null;
+  topicId?: string | null;
+  prevSubjectId?: string | null;
+  prevTopicId?: string | null;
+  // share
+  recipients?: Array<{ id: string; type: 'faculty' | 'institute' }>;
+  note?: string;
+}
+
+/**
+ * Faculty submits a request for an action their grant only permits in REQUEST
+ * mode. Verifies the request-mode grant, validates the payload the same way
+ * the direct callables do (ownership for edit/delete; recipients+holdings for
+ * share), and writes a PENDING questionRequests doc. Does NOT mutate anything.
+ */
+export const submitQuestionRequest = onCall<RequestPayload>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    const type = request.data?.type;
+    if (!type || !['create', 'edit', 'delete', 'share'].includes(type)) {
+      throw new HttpsError('invalid-argument', 'Invalid request type.');
+    }
+
+    // Must hold the right in REQUEST mode (institute admins never reach here —
+    // they act directly). This throws if the grant is direct or absent.
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, type, 'request');
+
+    // Pre-validate the payload so obviously-invalid requests are rejected at
+    // submission rather than sitting in the inbox until approval fails.
+    if (type === 'edit' || type === 'delete') {
+      const qid = request.data?.questionId;
+      if (!qid) throw new HttpsError('invalid-argument', 'Missing question id.');
+      const existing = await db.collection('questions').doc(qid).get();
+      if (!existing.exists) throw new HttpsError('not-found', 'Question not found.');
+      if (existing.get('ownerType') !== owner.ownerType || existing.get('ownerId') !== owner.ownerId) {
+        throw new HttpsError('permission-denied', `You can only ${type} your own questions.`);
+      }
+    }
+    if (type === 'create' || type === 'edit') {
+      if (!request.data?.question || typeof request.data.question !== 'object') {
+        throw new HttpsError('invalid-argument', 'Missing question payload.');
+      }
+    }
+    if (type === 'share') {
+      const recips = request.data?.recipients;
+      if (!Array.isArray(recips) || recips.length === 0) {
+        throw new HttpsError('invalid-argument', 'No recipients selected.');
       }
     }
 
-    // 3) Verify the caller legitimately holds each shared question — either
-    //    owns it, or it's inside their institute (institute-authored or
-    //    granted webOwner content readable to them). Cross-institute ids are
-    //    rejected outright.
-    for (let i = 0; i < questionIds.length; i += 30) {
-      const chunk = questionIds.slice(i, i + 30);
-      const snap = await db.collection('questions').where('id', 'in', chunk).get();
-      const found = new Map(snap.docs.map((d) => [d.id, d]));
-      for (const qid of chunk) {
-        const doc = found.get(qid);
-        if (!doc) throw new HttpsError('not-found', `Question ${qid} not found.`);
-        const qOwnerType = doc.get('ownerType') ?? 'webOwner';
-        const qOwnerId   = doc.get('ownerId')   ?? 'webOwner';
-        const qInstitute = doc.get('instituteId') ?? '';
-        const ownedByCaller = qOwnerType === owner.ownerType && qOwnerId === owner.ownerId;
-        const inCallerInstitute = qInstitute === owner.instituteId;
-        const isWebOwnerContent = qOwnerType === 'webOwner';
-        if (!ownedByCaller && !inCallerInstitute && !isWebOwnerContent) {
-          throw new HttpsError('permission-denied', `You cannot share question ${qid}.`);
-        }
-      }
-    }
+    // Faculty display name for the inbox.
+    const facSnap = await db.collection('faculty').doc(facultyId!).get();
+    const facultyName = (facSnap.get('name') as string | undefined) ?? 'Faculty';
 
-    // Write one share per recipient.
+    const id = `qr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const nowIso = new Date().toISOString();
-    const batch = db.batch();
-    const created: string[] = [];
-    for (const r of recipients) {
-      const id = `qs_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      created.push(id);
-      batch.set(db.collection('questionShares').doc(id), {
-        id,
-        sharedBy:            owner.ownerId,
-        sharedByType:        owner.ownerType,
-        sharedByInstituteId: owner.instituteId,
-        sharedWith:          r.id,
-        sharedWithType:      r.type,
-        questionIds,
-        note,
-        isRevoked:           false,
-        sharedAt:            nowIso,
-        updatedAt:           nowIso,
-      });
-    }
-    await batch.commit();
+    await db.collection('questionRequests').doc(id).set(stripUndefined({
+      id,
+      type,
+      status: 'pending',
+      facultyId,
+      facultyName,
+      instituteId: owner.instituteId,
+      questionId:   request.data?.questionId ?? null,
+      questionStem: request.data?.questionStem ?? null,
+      payload: stripUndefined({
+        question:  request.data?.question ?? null,
+        recipients: request.data?.recipients ?? null,
+        note:       request.data?.note ?? null,
+        subjectId:  request.data?.subjectId ?? null,
+        topicId:    request.data?.topicId ?? null,
+        prevSubjectId: request.data?.prevSubjectId ?? null,
+        prevTopicId:   request.data?.prevTopicId ?? null,
+      }),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    }));
+    return { ok: true, id };
+  },
+);
 
-    return { ok: true, shareIds: created };
+/**
+ * Institute admin approves or rejects a pending request. On APPROVE, executes
+ * the action server-side via the exec* functions with the ORIGINAL faculty
+ * requester as owner (so ownership checks pass and the question stays theirs).
+ * On REJECT, just marks it. Idempotent-ish: a non-pending request is refused.
+ */
+export const resolveQuestionRequest = onCall<{ requestId?: string; decision?: 'approve' | 'reject'; reviewNote?: string }>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const callerInst  = request.auth.token.instituteId as string | undefined;
+
+    if (role !== 'institute') {
+      throw new HttpsError('permission-denied', 'Only the institute admin can resolve requests.');
+    }
+    const requestId = request.data?.requestId;
+    const decision  = request.data?.decision;
+    if (!requestId) throw new HttpsError('invalid-argument', 'Missing request id.');
+    if (decision !== 'approve' && decision !== 'reject') {
+      throw new HttpsError('invalid-argument', 'Decision must be approve or reject.');
+    }
+
+    const reqRef = db.collection('questionRequests').doc(requestId);
+    const reqSnap = await reqRef.get();
+    if (!reqSnap.exists) throw new HttpsError('not-found', 'Request not found.');
+    const req = reqSnap.data() as {
+      type: 'create' | 'edit' | 'delete' | 'share';
+      status: string;
+      facultyId: string;
+      instituteId: string;
+      questionId?: string | null;
+      payload?: {
+        question?: Record<string, unknown> | null;
+        recipients?: Array<{ id: string; type: 'faculty' | 'institute' }> | null;
+        note?: string | null;
+        subjectId?: string | null; topicId?: string | null;
+        prevSubjectId?: string | null; prevTopicId?: string | null;
+      };
+    };
+
+    // Authorization: the caller must be the admin of this request's institute.
+    if (req.instituteId !== callerInst) {
+      throw new HttpsError('permission-denied', 'This request belongs to another institute.');
+    }
+    if (req.status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'This request has already been resolved.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const reviewNote = typeof request.data?.reviewNote === 'string' ? request.data.reviewNote.slice(0, 500) : '';
+
+    if (decision === 'reject') {
+      await reqRef.update({ status: 'rejected', reviewedBy: callerInst, reviewNote, updatedAt: nowIso });
+      return { ok: true, status: 'rejected' };
+    }
+
+    // APPROVE — execute the action as the ORIGINAL faculty requester so
+    // ownership checks pass and authored content stays theirs. The faculty's
+    // request-mode grant was verified at submission; we re-confirm the right
+    // still exists at all (ceiling may have changed) but not the mode.
+    const owner: QOwner = { ownerType: 'faculty', ownerId: req.facultyId, instituteId: req.instituteId };
+    // Re-check the institute still has this right (ceiling could have been
+    // revoked between submission and approval).
+    const instSnap = await db.collection('institutes').doc(req.instituteId).get();
+    const ceiling = instSnap.get('questionRightsCeiling') as QuestionRightsCeilingS | undefined;
+    if (!ceiling?.[req.type]?.allowed) {
+      throw new HttpsError('failed-precondition', `The institute no longer has the "${req.type}" right — cannot approve.`);
+    }
+
+    const p = req.payload ?? {};
+    try {
+      if (req.type === 'create') {
+        if (!p.question) throw new HttpsError('failed-precondition', 'Request has no question payload.');
+        await execCreateQuestion(db, owner, p.question, { subjectId: p.subjectId ?? null, topicId: p.topicId ?? null });
+      } else if (req.type === 'edit') {
+        if (!req.questionId || !p.question) throw new HttpsError('failed-precondition', 'Request has no edit payload.');
+        await execEditQuestion(db, owner, req.questionId, p.question, {
+          subjectId: p.subjectId ?? null, topicId: p.topicId ?? null,
+          prevSubjectId: p.prevSubjectId ?? null, prevTopicId: p.prevTopicId ?? null,
+        });
+      } else if (req.type === 'delete') {
+        if (!req.questionId) throw new HttpsError('failed-precondition', 'Request has no question id.');
+        await execDeleteQuestion(db, owner, req.questionId, { subjectId: p.subjectId ?? null, topicId: p.topicId ?? null });
+      } else if (req.type === 'share') {
+        if (!Array.isArray(p.recipients) || p.recipients.length === 0) {
+          throw new HttpsError('failed-precondition', 'Request has no recipients.');
+        }
+        const qids = req.questionId ? [req.questionId] : [];
+        if (qids.length === 0) throw new HttpsError('failed-precondition', 'Request has no question to share.');
+        await execShareQuestions(db, owner, qids, p.recipients, p.note ?? '');
+      }
+    } catch (e) {
+      // Execution failed (e.g. ownership changed, question deleted). Leave the
+      // request pending so the admin can retry or reject, and surface why.
+      if (e instanceof HttpsError) throw e;
+      throw new HttpsError('internal', 'Failed to execute the approved action.');
+    }
+
+    await reqRef.update({ status: 'approved', reviewedBy: callerInst, reviewNote, updatedAt: nowIso });
+    return { ok: true, status: 'approved' };
   },
 );
 

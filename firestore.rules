@@ -728,6 +728,30 @@ service cloud.firestore {
       allow delete: if canWriteShare(resource.data);
     }
 
+    // questionRequests — Phase 3 request/approval workflow. Faculty raise
+    // requests for actions their grant only permits in request mode; the
+    // institute admin resolves them. All WRITES that matter (create the
+    // request, approve/reject) go through the submitQuestionRequest /
+    // resolveQuestionRequest callables, which enforce rights + execute
+    // server-side; these rules just scope who can READ the queue and act as
+    // a backstop on direct writes.
+    //   • faculty  — read/write their OWN requests within their institute
+    //   • institute admin — read/write requests inside their institute
+    //   • webOwner — full
+    function ownsRequest(d) {
+      return isWebOwner()
+        || (role() == 'institute' && request.auth.token.instituteId == d.instituteId)
+        || (role() == 'faculty'
+            && request.auth.token.instituteId == d.instituteId
+            && request.auth.token.facultyId   == d.facultyId);
+    }
+    match /questionRequests/{id} {
+      allow read:   if ownsRequest(resource.data);
+      allow create: if ownsRequest(request.resource.data);
+      allow update: if ownsRequest(resource.data);
+      allow delete: if isWebOwner();
+    }
+
     // questionReports — student files; assessment owner (institute or faculty)
     // resolves; webOwner override.
     function canResolveReport(d) {

@@ -11,12 +11,14 @@ import {
   type Question, type Difficulty,
 } from '../../../lib/questionBankService';
 import { getFaculty, getInstitute, type FacultyQuestionRights, type QuestionRightsCeiling } from '../../../lib/firebaseService';
-import { facultyCanDirect, effectiveFacultyMode } from '../../../lib/questionRights';
+import { effectiveFacultyMode } from '../../../lib/questionRights';
+import { submitQuestionRequest } from '../../../lib/questionRequestService';
 import { getAllSubjects, type Subject } from '../../../lib/subjectService';
 import { QuestionTypeEngine, type QuestionDraft } from '../../components/questions/QuestionTypeEngine';
 import { QuestionPreview } from '../../components/questions/QuestionPreview';
 import { ShareQuestionsModal } from '../../components/questions/ShareQuestionsModal';
 import { SubjectManager } from '../../components/questions/SubjectManager';
+import { MyRequestsList } from '../../components/questions/MyRequestsList';
 import { BulkUploadModal } from '../../components/questions/BulkUploadModal';
 import { ExportModal } from '../../components/questions/ExportModal';
 import { useFacultyAuth } from '../../context/FacultyAuthContext';
@@ -101,12 +103,13 @@ function SkeletonRow() {
 
 // ── Tab bar ────────────────────────────────────────────────────────────────────
 
-type Tab = 'pool' | 'subjects';
+type Tab = 'pool' | 'subjects' | 'requests';
 
-function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
+function TabBar({ active, onChange, showRequests }: { active: Tab; onChange: (t: Tab) => void; showRequests: boolean }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'pool',     label: 'Question Pool' },
     { id: 'subjects', label: 'Subjects'      },
+    ...(showRequests ? [{ id: 'requests' as Tab, label: 'My Requests' }] : []),
   ];
   return (
     <div className="flex gap-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
@@ -501,15 +504,24 @@ export function FacultyQuestionsPage() {
   // (buttons stay hidden while unknown — fail closed).
   const [ceiling, setCeiling] = useState<QuestionRightsCeiling | undefined>(undefined);
   const [myRights, setMyRights] = useState<FacultyQuestionRights | undefined>(undefined);
-  const canCreate = facultyCanDirect({ questionRights: myRights }, ceiling, 'create');
-  const canEdit   = facultyCanDirect({ questionRights: myRights }, ceiling, 'edit');
-  const canDelete = facultyCanDirect({ questionRights: myRights }, ceiling, 'delete');
-  const canShare  = facultyCanDirect({ questionRights: myRights }, ceiling, 'share');
-  // 'request' mode is granted but its workflow is Phase 3 — surfaced so the
-  // UI can show a "needs approval" affordance later without another pass.
-  const editIsRequest   = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'edit') === 'request';
-  const deleteIsRequest = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'delete') === 'request';
-  const createIsRequest = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'create') === 'request';
+  // A right's effective mode: 'direct' | 'request' | 'none'.
+  const createMode = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'create');
+  const editMode   = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'edit');
+  const deleteMode = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'delete');
+  const shareMode  = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'share');
+  // Button visibility: the faculty has the right in SOME mode (direct acts
+  // immediately; request routes to approval). 'none' hides the control.
+  const canCreate = createMode !== 'none';
+  const canEdit   = editMode   !== 'none';
+  const canDelete = deleteMode !== 'none';
+  const canShare  = shareMode  !== 'none';
+  // Whether each action needs approval rather than acting directly.
+  const createIsRequest = createMode === 'request';
+  const editIsRequest   = editMode   === 'request';
+  const deleteIsRequest = deleteMode === 'request';
+  const shareIsRequest  = shareMode  === 'request';
+  // Any right in request mode ⇒ show the "My Requests" tab.
+  const anyRequestMode = createIsRequest || editIsRequest || deleteIsRequest || shareIsRequest;
 
   // ── Data ──────────────────────────────────────────────────────────
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -524,7 +536,8 @@ export function FacultyQuestionsPage() {
   const [previewQ,       setPreviewQ]       = useState<Question | null>(null);
   const [deleteTarget,   setDeleteTarget]   = useState<Question | null>(null);
   const [shareTarget,    setShareTarget]    = useState<Question | null>(null);
-  const [shareNotice,    setShareNotice]    = useState('');
+  const [notice,         setNotice]         = useState('');
+  const flashNotice = (msg: string) => { setNotice(msg); setTimeout(() => setNotice(''), 4000); };
   const [deleting,       setDeleting]       = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [exportOpen,     setExportOpen]     = useState(false);
@@ -557,15 +570,44 @@ export function FacultyQuestionsPage() {
 
   // ── Save handler ──────────────────────────────────────────────────
   const handleSave = async (draft: QuestionDraft) => {
-    // Server assigns owner + tenant stamp; we forward the assembled draft.
-    // The RIGHT is enforced server-side by the callable — the UI only ever
-    // opens this panel when the corresponding right is held (direct mode).
+    // Direct mode executes immediately via the callable; request mode routes
+    // the same payload to submitQuestionRequest for institute-admin approval.
+    // The RIGHT + mode are re-enforced server-side either way.
     if (panelMode === 'create') {
+      if (createIsRequest) {
+        await submitQuestionRequest({
+          type: 'create',
+          question: draft as Record<string, unknown>,
+          questionStem: (draft as { stem?: string }).stem ?? '',
+          subjectId: (draft as { subjectId?: string }).subjectId ?? null,
+          topicId:   (draft as { topicId?: string }).topicId ?? null,
+        });
+        setPanelOpen(false);
+        setEditTarget(null);
+        flashNotice('Create request submitted for approval.');
+        return;
+      }
       const { id } = await createQuestionAsRole(draft as Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>);
       const nowIso = new Date().toISOString();
       const saved = { ...draft, id, ownerType: 'faculty', ownerId: facultyId, instituteId, isDeleted: false, createdAt: nowIso, updatedAt: nowIso } as Question;
       setQuestions((prev) => [saved, ...prev]);
     } else if (editTarget) {
+      if (editIsRequest) {
+        await submitQuestionRequest({
+          type: 'edit',
+          questionId: editTarget.id,
+          questionStem: editTarget.stem ?? '',
+          question: draft as Record<string, unknown>,
+          subjectId: (draft as { subjectId?: string }).subjectId ?? null,
+          topicId:   (draft as { topicId?: string }).topicId ?? null,
+          prevSubjectId: editTarget.subjectId ?? null,
+          prevTopicId:   editTarget.topicId ?? null,
+        });
+        setPanelOpen(false);
+        setEditTarget(null);
+        flashNotice('Edit request submitted for approval.');
+        return;
+      }
       await editQuestionAsRole(editTarget.id, draft as Partial<Question>, {
         prevSubjectId: editTarget.subjectId ?? null,
         prevTopicId:   editTarget.topicId ?? null,
@@ -582,6 +624,18 @@ export function FacultyQuestionsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
+      if (deleteIsRequest) {
+        await submitQuestionRequest({
+          type: 'delete',
+          questionId: deleteTarget.id,
+          questionStem: deleteTarget.stem ?? '',
+          subjectId: deleteTarget.subjectId ?? null,
+          topicId:   deleteTarget.topicId ?? null,
+        });
+        setDeleteTarget(null);
+        flashNotice('Delete request submitted for approval.');
+        return;
+      }
       await deleteQuestionAsRole(deleteTarget.id, {
         subjectId: deleteTarget.subjectId ?? null,
         topicId:   deleteTarget.topicId ?? null,
@@ -683,7 +737,7 @@ export function FacultyQuestionsPage() {
         </div>
 
         {/* ── Tabs ── */}
-        <TabBar active={activeTab} onChange={setActiveTab} />
+        <TabBar active={activeTab} onChange={setActiveTab} showRequests={anyRequestMode} />
 
         {/* ── Tab content ── */}
         <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderTop: 'none', borderRadius: '0 0 3px 3px' }}>
@@ -736,6 +790,10 @@ export function FacultyQuestionsPage() {
             <div className="px-6 py-6">
               <SubjectManager canMaintain={false} onSubjectsChange={(subjs) => setSubjects(subjs)} />
             </div>
+          )}
+
+          {activeTab === 'requests' && (
+            <MyRequestsList facultyId={facultyId} />
           )}
         </div>
       </motion.div>
@@ -792,21 +850,26 @@ export function FacultyQuestionsPage() {
           instituteId={instituteId}
           selfFacultyId={facultyId}
           questionIds={[shareTarget.id]}
+          questionStem={shareTarget.stem ?? ''}
+          isRequest={shareIsRequest}
           onClose={() => setShareTarget(null)}
-          onShared={(count) => {
+          onShared={(count, wasRequest) => {
             setShareTarget(null);
-            setShareNotice(`Shared with ${count} recipient${count !== 1 ? 's' : ''}.`);
-            setTimeout(() => setShareNotice(''), 4000);
+            flashNotice(
+              wasRequest
+                ? 'Share request submitted for approval.'
+                : `Shared with ${count} recipient${count !== 1 ? 's' : ''}.`,
+            );
           }}
         />
       )}
 
-      {shareNotice && (
+      {notice && (
         <div
           className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 text-xs px-4 py-2.5"
           style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
         >
-          {shareNotice}
+          {notice}
         </div>
       )}
     </>

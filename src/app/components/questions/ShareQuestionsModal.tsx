@@ -8,19 +8,27 @@ import { useEffect, useState } from 'react';
 import { X, Loader2, Check, Share2, Users } from 'lucide-react';
 import { getFacultyByInstitute, type Faculty } from '../../../lib/firebaseService';
 import { shareQuestionsAsRole } from '../../../lib/questionBankService';
+import { submitQuestionRequest } from '../../../lib/questionRequestService';
 
 export function ShareQuestionsModal({
   instituteId,
   selfFacultyId,
   questionIds,
+  questionStem,
+  isRequest = false,
   onClose,
   onShared,
 }: {
   instituteId: string;
   selfFacultyId: string;
   questionIds: string[];
+  // For request mode, the single subject question's stem (inbox display).
+  questionStem?: string;
+  // When true, sharing is submitted as an approval request instead of
+  // executing immediately.
+  isRequest?: boolean;
   onClose: () => void;
-  onShared: (count: number) => void;
+  onShared: (count: number, wasRequest: boolean) => void;
 }) {
   const [peers, setPeers] = useState<Faculty[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,8 +66,20 @@ export function ShareQuestionsModal({
     if (recipients.length === 0) { setError('Select at least one recipient.'); return; }
     setSaving(true);
     try {
-      await shareQuestionsAsRole(questionIds, recipients, note.trim() || undefined);
-      onShared(recipients.length);
+      if (isRequest) {
+        // Share requests carry a single subject question (the row's id).
+        await submitQuestionRequest({
+          type: 'share',
+          questionId: questionIds[0],
+          questionStem: questionStem ?? '',
+          recipients,
+          note: note.trim() || undefined,
+        });
+        onShared(recipients.length, true);
+      } else {
+        await shareQuestionsAsRole(questionIds, recipients, note.trim() || undefined);
+        onShared(recipients.length, false);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sharing failed.');
     } finally {
@@ -152,7 +172,9 @@ export function ShareQuestionsModal({
             style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, opacity: saving || recipientCount === 0 ? 0.5 : 1, cursor: saving || recipientCount === 0 ? 'not-allowed' : 'pointer' }}
           >
             {saving ? <Loader2 size={11} className="animate-spin" /> : <Share2 size={11} strokeWidth={2} />}
-            Share{recipientCount > 0 ? ` with ${recipientCount}` : ''}
+            {isRequest
+              ? `Request share${recipientCount > 0 ? ` with ${recipientCount}` : ''}`
+              : `Share${recipientCount > 0 ? ` with ${recipientCount}` : ''}`}
           </button>
         </div>
       </div>

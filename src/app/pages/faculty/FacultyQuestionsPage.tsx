@@ -6,9 +6,12 @@ import {
 } from 'lucide-react';
 import {
   getQuestionsByOwner, createQuestion, updateQuestion, softDeleteQuestion,
+  createQuestionAsRole, editQuestionAsRole, deleteQuestionAsRole,
   questionTypeBadge, difficultyColor,
   type Question, type Difficulty,
 } from '../../../lib/questionBankService';
+import { getFaculty, getInstitute, type FacultyQuestionRights, type QuestionRightsCeiling } from '../../../lib/firebaseService';
+import { facultyCanDirect, effectiveFacultyMode } from '../../../lib/questionRights';
 import { getAllSubjects, type Subject } from '../../../lib/subjectService';
 import { QuestionTypeEngine, type QuestionDraft } from '../../components/questions/QuestionTypeEngine';
 import { QuestionPreview } from '../../components/questions/QuestionPreview';
@@ -225,9 +228,11 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
 // ── Question row ───────────────────────────────────────────────────────────────
 
 function QuestionRow({
-  question, onPreview, onEdit, onDelete,
+  question, canEdit, canDelete, onPreview, onEdit, onDelete,
 }: {
   question: Question;
+  canEdit: boolean;
+  canDelete: boolean;
   onPreview: () => void;
   onEdit:    () => void;
   onDelete:  () => void;
@@ -279,12 +284,16 @@ function QuestionRow({
         <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
           <Eye size={13} strokeWidth={1.5} />
         </button>
-        <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
-          <Pencil size={13} strokeWidth={1.5} />
-        </button>
-        <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}>
-          <Trash2 size={13} strokeWidth={1.5} />
-        </button>
+        {canEdit && (
+          <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+            <Pencil size={13} strokeWidth={1.5} />
+          </button>
+        )}
+        {canDelete && (
+          <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}>
+            <Trash2 size={13} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -292,14 +301,14 @@ function QuestionRow({
 
 // ── Empty state ────────────────────────────────────────────────────────────────
 
-function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd: () => void }) {
+function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd?: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-16" style={{ color: '#C4C3BD' }}>
       <div style={{ width: 1, height: 32, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 16 }} />
       <p className="text-xs" style={{ letterSpacing: '0.1em' }}>
         {filtered ? 'NO QUESTIONS MATCH' : 'NO QUESTIONS YET'}
       </p>
-      {!filtered && (
+      {!filtered && onAdd && (
         <button
           onClick={onAdd}
           className="mt-4 flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-70"
@@ -479,6 +488,20 @@ export function FacultyQuestionsPage() {
   const facultyId = session.facultyId;
   const instituteId = session.instituteId;
 
+  // Effective question rights (permission-model Phase 2): institute ceiling
+  // ∩ this faculty's grants. Fetched alongside questions; null until loaded
+  // (buttons stay hidden while unknown — fail closed).
+  const [ceiling, setCeiling] = useState<QuestionRightsCeiling | undefined>(undefined);
+  const [myRights, setMyRights] = useState<FacultyQuestionRights | undefined>(undefined);
+  const canCreate = facultyCanDirect({ questionRights: myRights }, ceiling, 'create');
+  const canEdit   = facultyCanDirect({ questionRights: myRights }, ceiling, 'edit');
+  const canDelete = facultyCanDirect({ questionRights: myRights }, ceiling, 'delete');
+  // 'request' mode is granted but its workflow is Phase 3 — surfaced so the
+  // UI can show a "needs approval" affordance later without another pass.
+  const editIsRequest   = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'edit') === 'request';
+  const deleteIsRequest = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'delete') === 'request';
+  const createIsRequest = effectiveFacultyMode({ questionRights: myRights }, ceiling, 'create') === 'request';
+
   // ── Data ──────────────────────────────────────────────────────────
   const [questions, setQuestions] = useState<Question[]>([]);
   const [subjects,  setSubjects]  = useState<Subject[]>([]);
@@ -504,31 +527,39 @@ export function FacultyQuestionsPage() {
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [qs, subjs] = await Promise.all([
+      const [qs, subjs, fac, inst] = await Promise.all([
         getQuestionsByOwner('faculty', facultyId),
         getAllSubjects(),
+        getFaculty(facultyId),
+        getInstitute(instituteId),
       ]);
       setQuestions(qs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       setSubjects(subjs);
+      setMyRights(fac?.questionRights);
+      setCeiling(inst?.questionRightsCeiling);
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [facultyId]);
+  }, [facultyId, instituteId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // ── Save handler ──────────────────────────────────────────────────
   const handleSave = async (draft: QuestionDraft) => {
-    // instituteId = tenant stamp: faculty questions carry their INSTITUTE
-    // (not themselves) so the institute admin's Phase-1 visibility and the
-    // tenant-fence rules both key off it.
-    const payload = { ...draft, ownerType: 'faculty' as const, ownerId: facultyId, instituteId };
+    // Server assigns owner + tenant stamp; we forward the assembled draft.
+    // The RIGHT is enforced server-side by the callable — the UI only ever
+    // opens this panel when the corresponding right is held (direct mode).
     if (panelMode === 'create') {
-      const saved = await createQuestion(payload);
+      const { id } = await createQuestionAsRole(draft as Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>);
+      const nowIso = new Date().toISOString();
+      const saved = { ...draft, id, ownerType: 'faculty', ownerId: facultyId, instituteId, isDeleted: false, createdAt: nowIso, updatedAt: nowIso } as Question;
       setQuestions((prev) => [saved, ...prev]);
     } else if (editTarget) {
-      await updateQuestion(editTarget.id, payload);
-      const updated = { ...editTarget, ...payload, updatedAt: new Date().toISOString() } as Question;
+      await editQuestionAsRole(editTarget.id, draft as Partial<Question>, {
+        prevSubjectId: editTarget.subjectId ?? null,
+        prevTopicId:   editTarget.topicId ?? null,
+      });
+      const updated = { ...editTarget, ...draft, updatedAt: new Date().toISOString() } as Question;
       setQuestions((prev) => prev.map((q) => (q.id === editTarget.id ? updated : q)));
     }
     setPanelOpen(false);
@@ -540,7 +571,10 @@ export function FacultyQuestionsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await softDeleteQuestion(deleteTarget.id);
+      await deleteQuestionAsRole(deleteTarget.id, {
+        subjectId: deleteTarget.subjectId ?? null,
+        topicId:   deleteTarget.topicId ?? null,
+      });
       setQuestions((prev) => prev.filter((q) => q.id !== deleteTarget.id));
       setDeleteTarget(null);
     } finally {
@@ -601,6 +635,7 @@ export function FacultyQuestionsPage() {
               <Download size={12} strokeWidth={1.5} /> Export
             </button>
 
+            {canCreate && (
             <button
               onClick={() => setBulkUploadOpen(true)}
               className="flex items-center gap-1.5 text-xs px-3 py-2.5 transition-opacity hover:opacity-80"
@@ -608,7 +643,9 @@ export function FacultyQuestionsPage() {
             >
               <Upload size={12} strokeWidth={1.5} /> Bulk Upload
             </button>
+            )}
 
+            {canCreate && (
             <button
               onClick={openCreate}
               className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
@@ -616,6 +653,7 @@ export function FacultyQuestionsPage() {
             >
               <Plus size={12} strokeWidth={2} /> Add Question
             </button>
+            )}
           </div>
         </div>
 
@@ -651,11 +689,13 @@ export function FacultyQuestionsPage() {
               {loading
                 ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                 : filtered.length === 0
-                  ? <EmptyState filtered={isFiltered} onAdd={openCreate} />
+                  ? <EmptyState filtered={isFiltered} onAdd={canCreate ? openCreate : undefined} />
                   : filtered.map((q) => (
                       <QuestionRow
                         key={q.id}
                         question={q}
+                        canEdit={canEdit}
+                        canDelete={canDelete}
                         onPreview={() => setPreviewQ(q)}
                         onEdit={() => openEdit(q)}
                         onDelete={() => setDeleteTarget(q)}

@@ -43,8 +43,32 @@ export type Institute = {
   // ── Exam Roster gates ──────────────────────────────────────────────
   canAdminManageExamRosters?: boolean;      // Institute Admin can access live exam rosters
   facultyCanManageExamRosters?: boolean;    // Faculty (if individually granted) can manage rosters
+  // ── Question-rights ceiling (permission-model Phase 2) ─────────────
+  // Set by Web Owner. The CEILING: the maximum rights this institute may
+  // hold, and — per right — the maximum modes it may grant onward to
+  // faculty. Absent ⇒ everything off (secure-by-default). Enforced
+  // server-side in the question callables; the UI mirrors it.
+  questionRightsCeiling?: QuestionRightsCeiling;
   createdAt: string;
   updatedAt: string;
+}
+
+// One right in the ceiling: whether the institute has it at all, and the
+// set of modes it may pass to faculty. 'direct' = faculty acts immediately;
+// 'request' = faculty raises a request the admin approves (Phase 3). An
+// empty modes array with allowed:true means the institute may USE the right
+// itself but may not grant it onward.
+export type QuestionRightMode = 'direct' | 'request';
+export type CeilingRight = {
+  allowed: boolean;
+  modes: QuestionRightMode[];   // subset the institute may grant to faculty
+};
+export type QuestionRightName = 'create' | 'edit' | 'share' | 'delete';
+export type QuestionRightsCeiling = {
+  create: CeilingRight;
+  edit:   CeilingRight;
+  share:  CeilingRight;
+  delete: CeilingRight;
 };
 
 export type InstituteCredentials = {
@@ -77,8 +101,27 @@ export type Faculty = {
   schoolsManagementEnabled?: boolean;
   canCreateStudents?: boolean;
   canManageExamRosters?: boolean;  // Individual faculty gate (effective only when institute also has facultyCanManageExamRosters = true)
+  // ── Per-faculty question rights (permission-model Phase 2) ─────────
+  // Set by the Institute Admin, always at/below the institute ceiling.
+  // Per right: whether this faculty has it, and in which mode. Absent /
+  // granted:false ⇒ the faculty cannot perform that action. Enforced
+  // server-side in the question callables. In Phase 2 only 'direct' mode
+  // takes effect; 'request' is stored but its workflow lands in Phase 3.
+  questionRights?: FacultyQuestionRights;
   createdAt: string;
   updatedAt: string;
+}
+
+// One granted right for a faculty member.
+export type FacultyRight = {
+  granted: boolean;
+  mode: QuestionRightMode;
+};
+export type FacultyQuestionRights = {
+  create: FacultyRight;
+  edit:   FacultyRight;
+  share:  FacultyRight;
+  delete: FacultyRight;
 };
 
 export type FacultyCredentials = {
@@ -1321,6 +1364,37 @@ export async function setFacultyManageRostersPermission(
 ): Promise<void> {
   return firestoreUpdate<Faculty>('faculty', facultyId, {
     canManageExamRosters: enabled,
+    updatedAt: new Date().toISOString(),
+  } as Partial<Faculty>);
+}
+// ── Question-rights setters (permission-model Phase 2) ─────────────
+// These persist the config docs; ENFORCEMENT lives in the question
+// callables (createQuestionAsRole / editQuestionAsRole / deleteQuestionAsRole),
+// which re-read and re-validate server-side. The setters themselves are
+// gated by the existing owner-scoped Firestore rules on institutes/faculty.
+
+/** Web Owner: set an institute's question-rights ceiling. */
+export async function setInstituteQuestionRightsCeiling(
+  instituteId: string,
+  ceiling: QuestionRightsCeiling,
+): Promise<void> {
+  return firestoreUpdate<Institute>('institutes', instituteId, {
+    questionRightsCeiling: ceiling,
+    updatedAt: new Date().toISOString(),
+  } as Partial<Institute>);
+}
+
+/**
+ * Institute Admin: set a faculty member's question rights. Callers should
+ * clampRightsToCeiling() first; the server clamps again regardless, so a
+ * tampered client cannot exceed the ceiling.
+ */
+export async function setFacultyQuestionRights(
+  facultyId: string,
+  rights: FacultyQuestionRights,
+): Promise<void> {
+  return firestoreUpdate<Faculty>('faculty', facultyId, {
+    questionRights: rights,
     updatedAt: new Date().toISOString(),
   } as Partial<Faculty>);
 }

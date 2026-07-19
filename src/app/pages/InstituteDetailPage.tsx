@@ -16,6 +16,7 @@ import {
   setInstituteFacultyManageRostersPermission,
 } from '../../lib/firebaseService';
 import { FacultyTab } from '../components/faculty/FacultyTab';
+import { QuestionRightsCeilingEditor } from '../components/questions/QuestionRightsCeilingEditor';
 import { StudentTab } from '../components/student/StudentTab';
 import { SchoolsTab } from '../components/schools/SchoolsTab';
 
@@ -385,6 +386,7 @@ export function InstituteDetailPage() {
                     instituteSchoolsEnabled={schoolsPerm}
                     instituteFacultyCreateStudentsEnabled={facultyCreateStudentsPerm}
                     instituteFacultyManageRostersEnabled={facultyManageRostersPerm}
+                    questionRightsCeiling={institute.questionRightsCeiling}
                   />
                 </motion.div>
               )}
@@ -492,6 +494,22 @@ export function InstituteDetailPage() {
                 disabled={!adminManageRostersPerm}
                 disabledReason="Enable 'Institute Admin — Manage Exam Rosters' first to unlock this."
               />
+
+              {/* ── Question rights ceiling (permission-model Phase 2) ── */}
+              <div className="mt-6 pt-5" style={{ borderTop: '1px solid #E3E1DB' }}>
+                <p className="text-xs mb-3" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>
+                  QUESTION RIGHTS CEILING
+                </p>
+                {institute && (
+                  <QuestionRightsCeilingEditor
+                    instituteId={institute.id}
+                    initial={institute.questionRightsCeiling}
+                    onSaved={(ceiling) =>
+                      setInstitute((prev) => (prev ? { ...prev, questionRightsCeiling: ceiling } : prev))
+                    }
+                  />
+                )}
+              </div>
             </div>
           </motion.div>
         )}

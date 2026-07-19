@@ -2509,6 +2509,257 @@ export const submitSection = onCall<SubmitSectionData>(
   },
 );
 // ═══════════════════════════════════════════════════════════════════════════
+// QUESTION RIGHTS — Phase 2 (permission model)
+// Rights-enforced write path for institute/faculty question authoring.
+// Web Owner authoring stays on the direct client path (unrestricted owner).
+// These callables make the create/edit/delete RIGHT tamper-proof: the client
+// UI hides buttons, but the actual write is gated here against the caller's
+// server-side rights, the institute ceiling, ownership, and the tenant stamp.
+// Direct mode only in Phase 2; 'request' mode is stored but its approval
+// workflow is Phase 3, so a request-mode grant is treated as "not permitted"
+// for direct execution here.
+// ═══════════════════════════════════════════════════════════════════════════
+
+type CeilingRightS = { allowed?: boolean; modes?: Array<'direct' | 'request'> };
+type QuestionRightsCeilingS = Record<'create' | 'edit' | 'share' | 'delete', CeilingRightS | undefined>;
+type FacultyRightS = { granted?: boolean; mode?: 'direct' | 'request' };
+type FacultyRightsS = Record<'create' | 'edit' | 'share' | 'delete', FacultyRightS | undefined>;
+
+// Server twin of effectiveFacultyMode/instituteHasRight in
+// src/lib/questionRights.ts — keep in sync. Resolves whether the caller may
+// perform `right` in DIRECT mode right now.
+async function assertQuestionRight(
+  db: FirebaseFirestore.Firestore,
+  callerRole: string | undefined,
+  callerInstituteId: string | undefined,
+  callerFacultyId: string | undefined,
+  right: 'create' | 'edit' | 'share' | 'delete',
+): Promise<{ ownerType: 'institute' | 'faculty'; ownerId: string; instituteId: string }> {
+  if (callerRole !== 'institute' && callerRole !== 'faculty') {
+    throw new HttpsError('permission-denied', 'Only institute or faculty accounts use this endpoint.');
+  }
+  if (!callerInstituteId) {
+    throw new HttpsError('permission-denied', 'Missing institute context.');
+  }
+
+  // Institute ceiling — required for the right to exist at all.
+  const instSnap = await db.collection('institutes').doc(callerInstituteId).get();
+  const ceiling = (instSnap.get('questionRightsCeiling') as QuestionRightsCeilingS | undefined) ?? undefined;
+  const cr = ceiling?.[right];
+  if (!cr?.allowed) {
+    throw new HttpsError('permission-denied', `This institute does not have the "${right}" right.`);
+  }
+
+  if (callerRole === 'institute') {
+    // The institute admin holds all rights the ceiling allows, in direct
+    // mode (the admin never operates in request mode against themselves).
+    return { ownerType: 'institute', ownerId: callerInstituteId, instituteId: callerInstituteId };
+  }
+
+  // Faculty: needs the individual grant, in direct mode, within the ceiling.
+  if (!callerFacultyId) {
+    throw new HttpsError('permission-denied', 'Missing faculty context.');
+  }
+  const facSnap = await db.collection('faculty').doc(callerFacultyId).get();
+  if (!facSnap.exists) {
+    throw new HttpsError('permission-denied', 'Faculty account not found.');
+  }
+  const rights = (facSnap.get('questionRights') as FacultyRightsS | undefined) ?? undefined;
+  const fr = rights?.[right];
+  const grantableModes = cr.modes ?? [];
+  if (!fr?.granted || fr.mode !== 'direct' || !grantableModes.includes('direct')) {
+    throw new HttpsError(
+      'permission-denied',
+      `The "${right}" right is not enabled for your account. Ask your institute admin.`,
+    );
+  }
+  return { ownerType: 'faculty', ownerId: callerFacultyId, instituteId: callerInstituteId };
+}
+
+// Shared answer-key extraction — mirrors src/lib/questionBankService.ts.
+const ANSWER_KEYS_S = ['correctIds', 'correctPairs', 'modelAnswer'] as const;
+function splitQuestionPayload(payload: Record<string, unknown>) {
+  const publicPart: Record<string, unknown> = {};
+  const answerPart: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if ((ANSWER_KEYS_S as readonly string[]).includes(k)) answerPart[k] = v;
+    else publicPart[k] = v;
+  }
+  return { publicPart, answerPart };
+}
+function stripUndefined<T extends Record<string, unknown>>(o: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) if (v !== undefined) out[k] = v;
+  return out as T;
+}
+
+interface QWritePayload {
+  id?: string;
+  // Full question fields the client already assembled (public + answer keys),
+  // minus owner/stamp which the server assigns authoritatively.
+  question: Record<string, unknown>;
+  // taxonomy hint for counter bumps
+  subjectId?: string | null;
+  topicId?: string | null;
+  prevSubjectId?: string | null;
+  prevTopicId?: string | null;
+}
+
+/** Create a question as institute/faculty, gated by the create right. */
+export const createQuestionAsRole = onCall<QWritePayload>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, 'create');
+
+    const src = request.data?.question;
+    if (!src || typeof src !== 'object') {
+      throw new HttpsError('invalid-argument', 'Missing question payload.');
+    }
+    const id = `q_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const nowIso = new Date().toISOString();
+
+    // Server assigns owner + tenant stamp — client values are ignored.
+    const full: Record<string, unknown> = {
+      ...src,
+      id,
+      ownerType: owner.ownerType,
+      ownerId:   owner.ownerId,
+      instituteId: owner.instituteId,
+      isDeleted: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    const { publicPart, answerPart } = splitQuestionPayload(full);
+    // Public doc must never carry answer keys.
+    const publicDoc = stripUndefined({
+      ...publicPart,
+      correctIds: [], correctPairs: [], modelAnswer: '',
+    });
+    const answerDoc = stripUndefined({
+      id,
+      ownerType: owner.ownerType,
+      ownerId:   owner.ownerId,
+      correctIds: [], correctPairs: [], modelAnswer: '',
+      ...answerPart,
+      updatedAt: nowIso,
+    });
+
+    const batch = db.batch();
+    batch.set(db.collection('questions').doc(id), publicDoc);
+    batch.set(db.collection('questionAnswers').doc(id), answerDoc);
+    await batch.commit();
+
+    // Best-effort taxonomy counter bump.
+    const subjectId = request.data?.subjectId ?? null;
+    const topicId   = request.data?.topicId ?? null;
+    try {
+      if (subjectId) await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(1) });
+      if (topicId)   await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(1) });
+    } catch (e) { console.warn('[createQuestionAsRole] counter bump skipped', e); }
+
+    return { ok: true, id };
+  },
+);
+
+/** Edit a question as institute/faculty — gated by the edit right AND ownership. */
+export const editQuestionAsRole = onCall<QWritePayload>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, 'edit');
+
+    const id = request.data?.id;
+    if (!id) throw new HttpsError('invalid-argument', 'Missing question id.');
+    const src = request.data?.question;
+    if (!src || typeof src !== 'object') throw new HttpsError('invalid-argument', 'Missing question payload.');
+
+    // Ownership: edit is OWN-questions-only. The existing doc's owner must
+    // match the caller (institute admins edit institute-owned; faculty edit
+    // their own).
+    const existing = await db.collection('questions').doc(id).get();
+    if (!existing.exists) throw new HttpsError('not-found', 'Question not found.');
+    if (existing.get('ownerType') !== owner.ownerType || existing.get('ownerId') !== owner.ownerId) {
+      throw new HttpsError('permission-denied', 'You can only edit your own questions.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const { publicPart, answerPart } = splitQuestionPayload(src);
+    // Never let owner/stamp/id be rewritten by an edit.
+    delete publicPart.id; delete publicPart.ownerType; delete publicPart.ownerId;
+    delete publicPart.instituteId; delete publicPart.createdAt;
+
+    const batch = db.batch();
+    if (Object.keys(publicPart).length > 0) {
+      batch.update(db.collection('questions').doc(id), stripUndefined({ ...publicPart, updatedAt: nowIso }));
+    }
+    if (Object.keys(answerPart).length > 0) {
+      batch.set(
+        db.collection('questionAnswers').doc(id),
+        stripUndefined({ ...answerPart, ownerType: owner.ownerType, ownerId: owner.ownerId, updatedAt: nowIso }),
+        { merge: true },
+      );
+    }
+    await batch.commit();
+
+    // Taxonomy shift on subject/topic change (best-effort).
+    const { subjectId, topicId, prevSubjectId, prevTopicId } = request.data || {};
+    try {
+      if (prevSubjectId && prevSubjectId !== subjectId) await db.collection('subjects').doc(String(prevSubjectId)).update({ questionCount: FieldValue.increment(-1) });
+      if (subjectId && subjectId !== prevSubjectId)     await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(1) });
+      if (prevTopicId && prevTopicId !== topicId)       await db.collection('topics').doc(String(prevTopicId)).update({ questionCount: FieldValue.increment(-1) });
+      if (topicId && topicId !== prevTopicId)           await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(1) });
+    } catch (e) { console.warn('[editQuestionAsRole] counter shift skipped', e); }
+
+    return { ok: true };
+  },
+);
+
+/** Soft-delete a question as institute/faculty — gated by the delete right AND ownership. */
+export const deleteQuestionAsRole = onCall<{ id?: string; subjectId?: string | null; topicId?: string | null }>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, 'delete');
+
+    const id = request.data?.id;
+    if (!id) throw new HttpsError('invalid-argument', 'Missing question id.');
+
+    const existing = await db.collection('questions').doc(id).get();
+    if (!existing.exists) throw new HttpsError('not-found', 'Question not found.');
+    if (existing.get('ownerType') !== owner.ownerType || existing.get('ownerId') !== owner.ownerId) {
+      throw new HttpsError('permission-denied', 'You can only delete your own questions.');
+    }
+
+    await db.collection('questions').doc(id).update({ isDeleted: true, updatedAt: new Date().toISOString() });
+
+    const subjectId = request.data?.subjectId ?? existing.get('subjectId') ?? null;
+    const topicId   = request.data?.topicId ?? existing.get('topicId') ?? null;
+    try {
+      if (subjectId) await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(-1) });
+      if (topicId)   await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(-1) });
+    } catch (e) { console.warn('[deleteQuestionAsRole] counter bump skipped', e); }
+
+    return { ok: true };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ALLOCATION SYSTEM — Phase B (plans/ALLOCATION_SYSTEM_PLAN.md)
 //
 // Three callables, webOwner-only in v1:

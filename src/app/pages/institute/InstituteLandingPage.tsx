@@ -8,6 +8,7 @@ import {
   getInstitute,
   type Faculty,
   type Student,
+  type QuestionRightsCeiling,
 } from '../../../lib/firebaseService';
 import { SchoolsTab } from '../../components/schools/SchoolsTab';
 import { FacultyTab } from '../../components/faculty/FacultyTab';
@@ -391,6 +392,7 @@ export function InstituteLandingPage() {
   const [canCreateStudents,    setCanCreateStudents]    = useState(session?.canAdminCreateStudents    ?? false);
   const [facultyCanCreateStud, setFacultyCanCreateStud] = useState(session?.facultyCanCreateStudents  ?? false);
   const [canCreateQuestions,   setCanCreateQuestions]   = useState(session?.canAdminCreateQuestions   ?? false);
+  const [questionCeiling, setQuestionCeiling] = useState<QuestionRightsCeiling | undefined>(undefined);
   const [permissionLoading, setPermissionLoading] = useState(false);
 
   useEffect(() => {
@@ -404,6 +406,7 @@ export function InstituteLandingPage() {
           setCanCreateStudents(inst.canAdminCreateStudents    ?? false);
           setFacultyCanCreateStud(inst.facultyCanCreateStudents ?? false);
           setCanCreateQuestions(inst.canAdminCreateQuestions  ?? false);
+          setQuestionCeiling(inst.questionRightsCeiling);
         }
       })
       .finally(() => setPermissionLoading(false));
@@ -486,6 +489,7 @@ export function InstituteLandingPage() {
                   instituteName={session.instituteName}
                   instituteSchoolsEnabled={canManageSchools}
                   instituteFacultyCreateStudentsEnabled={facultyCanCreateStud}
+                  questionRightsCeiling={questionCeiling}
                 />
               ) : (
                 <FacultyList instituteId={session.instituteId} />

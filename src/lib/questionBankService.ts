@@ -1331,3 +1331,59 @@ export async function getDuplicateCheckPool(
   }
   return out;
 }
+// ── Rights-enforced write path (permission-model Phase 2) ──────────
+// Institute/faculty question authoring routes through Cloud Functions that
+// enforce the caller's create/edit/delete RIGHT server-side (see
+// createQuestionAsRole / editQuestionAsRole / deleteQuestionAsRole in
+// functions/src/index.ts). Web Owner authoring keeps using the direct
+// createQuestion/updateQuestion/softDeleteQuestion path (unrestricted owner).
+// The server assigns owner + tenant stamp; client-sent owner fields are
+// ignored, so these wrappers just forward the assembled question payload.
+
+export async function createQuestionAsRole(
+  question: Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>,
+): Promise<{ id: string }> {
+  const call = httpsCallable<
+    { question: typeof question; subjectId?: string | null; topicId?: string | null },
+    { ok: boolean; id: string }
+  >(functions, 'createQuestionAsRole');
+  const res = await call({
+    question,
+    subjectId: question.subjectId ?? null,
+    topicId:   question.topicId ?? null,
+  });
+  return { id: res.data.id };
+}
+
+export async function editQuestionAsRole(
+  id: string,
+  patch: Partial<Question>,
+  taxonomy?: { prevSubjectId?: string | null; prevTopicId?: string | null },
+): Promise<void> {
+  const call = httpsCallable<
+    {
+      id: string; question: Partial<Question>;
+      subjectId?: string | null; topicId?: string | null;
+      prevSubjectId?: string | null; prevTopicId?: string | null;
+    },
+    { ok: boolean }
+  >(functions, 'editQuestionAsRole');
+  await call({
+    id, question: patch,
+    subjectId: patch.subjectId ?? null,
+    topicId:   patch.topicId ?? null,
+    prevSubjectId: taxonomy?.prevSubjectId ?? null,
+    prevTopicId:   taxonomy?.prevTopicId ?? null,
+  });
+}
+
+export async function deleteQuestionAsRole(
+  id: string,
+  taxonomy?: { subjectId?: string | null; topicId?: string | null },
+): Promise<void> {
+  const call = httpsCallable<
+    { id: string; subjectId?: string | null; topicId?: string | null },
+    { ok: boolean }
+  >(functions, 'deleteQuestionAsRole');
+  await call({ id, subjectId: taxonomy?.subjectId ?? null, topicId: taxonomy?.topicId ?? null });
+}

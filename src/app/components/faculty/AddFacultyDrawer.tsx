@@ -19,6 +19,13 @@ export interface Faculty {
   role: 'Faculty';
   status: 'active' | 'disabled';
   firstLoginRequired: boolean;
+  // Optional permission fields (mirrors lib/firebaseService Faculty). Present
+  // so FacultyTab can read/gate per-faculty toggles and the Phase-2 question-
+  // rights editor without re-casting.
+  schoolsManagementEnabled?: boolean;
+  canCreateStudents?: boolean;
+  canManageExamRosters?: boolean;
+  questionRights?: import('../../../lib/firebaseService').FacultyQuestionRights;
   createdAt: string;
   updatedAt: string;
 }

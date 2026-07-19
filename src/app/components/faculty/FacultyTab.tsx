@@ -3,9 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Users, Plus, Upload, Loader2, PauseCircle, PlayCircle,
   Trash2, AlertTriangle, X, Mail, MailX, Check, Shield, ShieldCheck,
-  GraduationCap,
+  GraduationCap, SlidersHorizontal,
 } from 'lucide-react';
 import { AddFacultyDrawer, type Faculty } from './AddFacultyDrawer';
+import { FacultyQuestionRightsEditor } from './FacultyQuestionRightsEditor';
+import type { QuestionRightsCeiling } from '../../../lib/firebaseService';
+import { instituteHasRight, RIGHT_NAMES } from '../../../lib/questionRights';
 import { BulkFacultyModal } from './BulkFacultyModal';
 import {
   getFacultyByInstitute,
@@ -44,6 +47,10 @@ interface Props {
   // Only effective when the institute also has facultyCanCreateStudents = true.
   instituteFacultyCreateStudentsEnabled?: boolean;
   instituteFacultyManageRostersEnabled?: boolean;
+  // Institute question-rights ceiling (permission-model Phase 2). When set
+  // and any right is allowed, each faculty row gets an expandable question-
+  // rights editor. Absent ⇒ no rights UI (institute has no ceiling yet).
+  questionRightsCeiling?: QuestionRightsCeiling;
 }
 
 export function FacultyTab({
@@ -52,8 +59,13 @@ export function FacultyTab({
   instituteSchoolsEnabled = false,
   instituteFacultyCreateStudentsEnabled = false,
   instituteFacultyManageRostersEnabled = false,
+  questionRightsCeiling,
 }: Props) {
   const [faculties, setFaculties]     = useState<Faculty[]>([]);
+  // Which faculty row has its question-rights editor expanded.
+  const [rightsExpandedId, setRightsExpandedId] = useState<string | null>(null);
+  // Whether the institute ceiling offers any right at all (gates the UI).
+  const ceilingHasAnyRight = RIGHT_NAMES.some((r) => instituteHasRight(questionRightsCeiling, r));
   const [loading, setLoading]         = useState(true);
   const [fetchError, setFetchError]   = useState('');
   const [lastSynced, setLastSynced]   = useState<Date | null>(null);
@@ -550,6 +562,20 @@ export function FacultyTab({
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-0.5">
+                        {/* Question-rights editor toggle (Phase 2) */}
+                        {ceilingHasAnyRight && (
+                          <button
+                            onClick={() => setRightsExpandedId((prev) => (prev === faculty.id ? null : faculty.id))}
+                            title="Question rights"
+                            className="p-2 rounded transition-all"
+                            style={{
+                              color: rightsExpandedId === faculty.id ? '#2A6B3A' : '#C4C3BD',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <SlidersHorizontal size={13} strokeWidth={1.5} />
+                          </button>
+                        )}
                         {/* Toggle status */}
                         <button
                           onClick={() => handleToggleStatus(faculty.id)}
@@ -599,6 +625,36 @@ export function FacultyTab({
           </tbody>
         </table>
       </div>
+
+      {/* Expanded question-rights editor — rendered outside the table so it
+          isn't constrained by cell layout; keyed to the selected faculty. */}
+      {rightsExpandedId && ceilingHasAnyRight && (() => {
+        const fac = faculties.find((f) => f.id === rightsExpandedId);
+        if (!fac) return null;
+        return (
+          <div
+            className="mt-3 px-4 py-4"
+            style={{ background: '#FBFBF9', border: '1px solid #E3E1DB', borderRadius: 3 }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs" style={{ color: '#0C0C0B' }}>
+                Question rights — <span style={{ color: '#6B6B66' }}>{fac.name}</span>
+              </p>
+              <button onClick={() => setRightsExpandedId(null)} className="p-1" style={{ color: '#9A9891' }}>
+                <X size={13} strokeWidth={1.5} />
+              </button>
+            </div>
+            <FacultyQuestionRightsEditor
+              facultyId={fac.id}
+              ceiling={questionRightsCeiling}
+              initial={fac.questionRights}
+              onSaved={(rights) =>
+                setFaculties((prev) => prev.map((f) => (f.id === fac.id ? { ...f, questionRights: rights } : f)))
+              }
+            />
+          </div>
+        );
+      })()}
 
       {!loading && total > 0 && (
         <p className="text-xs mt-3" style={{ color: '#C4C3BD' }}>

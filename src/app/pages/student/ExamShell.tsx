@@ -13,7 +13,7 @@
  *   - Submit flow with client-side score calculation
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -615,6 +615,29 @@ function BreakScreen({
             : (state.mandatory ? 'Please wait…' : `Skip break`)}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TIMER CHIP — labelled wrapper for the top-bar countdowns
+// ══════════════════════════════════════════════════════════════════
+// The exam can show up to three clocks at once (per-question in linear/
+// adaptive, per-section, and the whole-exam Total). Bare pills side by side
+// are indistinguishable — "01:24  04:24" gives the student no way to tell
+// which is which. This wraps each SectionTimer with a small uppercase caption
+// so they read as a labelled family: PER Q · SECTION · TOTAL. The caption
+// sits inline to the left of the pill to keep the 52px bar height.
+function TimerChip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-shrink-0">
+      <span
+        className="text-[10px] uppercase"
+        style={{ color: '#9A9891', letterSpacing: '0.06em', fontWeight: 500 }}
+      >
+        {label}
+      </span>
+      {children}
     </div>
   );
 }
@@ -2192,18 +2215,26 @@ export function ExamShell() {
           </div>
         </div>
 
+        {/* Section timer */}
+        {currentSection.timeLimit && sectionStartedAt && (
+          <TimerChip label="Section">
+            <SectionTimer
+              timeLimitMinutes={currentSection.timeLimit}
+              startedAtISO={sectionStartedAt}
+              onExpire={handleSectionTimerExpire}
+              frozenOffsetSeconds={totalFrozenSeconds}
+              frozenAtISO={isFrozen ? frozenAtISO : null}
+              nowFn={nowFn}
+            />
+          </TimerChip>
+        )}
+
         {/* Overall exam timer (whole sitting) — labelled to distinguish it
             from the per-section clock. Only shown when the exam defines an
             overall cap. Enforcement is server-side; this is the visible
             countdown so the total limit is never a surprise. */}
         {showOverallTimer && (
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span
-              className="text-xs"
-              style={{ color: '#9A9891', letterSpacing: '0.04em' }}
-            >
-              Total
-            </span>
+          <TimerChip label="Total">
             <SectionTimer
               timeLimitMinutes={overallLimitMinutes}
               startedAtISO={overallAnchorISO!}
@@ -2212,19 +2243,7 @@ export function ExamShell() {
               frozenAtISO={isFrozen ? frozenAtISO : null}
               nowFn={nowFn}
             />
-          </div>
-        )}
-
-        {/* Section timer */}
-        {currentSection.timeLimit && sectionStartedAt && (
-          <SectionTimer
-            timeLimitMinutes={currentSection.timeLimit}
-            startedAtISO={sectionStartedAt}
-            onExpire={handleSectionTimerExpire}
-            frozenOffsetSeconds={totalFrozenSeconds}
-            frozenAtISO={isFrozen ? frozenAtISO : null}
-            nowFn={nowFn}
-          />
+          </TimerChip>
         )}
         {/* Session conflict badge */}
         {hasConflict && (
@@ -2365,6 +2384,9 @@ export function ExamShell() {
                             borderRadius: 2,
                             color: qSecondsLeft <= 10 ? '#9B2828' : '#1E7B3C',
                           }}>
+                          <span className="text-[10px] uppercase" style={{ letterSpacing: '0.06em', opacity: 0.7 }}>
+                            Per Q
+                          </span>
                           <Clock size={10} strokeWidth={1.5} />
                           {Math.floor(qSecondsLeft / 60)}:{String(qSecondsLeft % 60).padStart(2, '0')}
                         </span>

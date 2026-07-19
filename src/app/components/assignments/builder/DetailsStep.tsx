@@ -8,7 +8,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { X, Loader2, ClipboardList, Clock, Calendar, AlertTriangle, CheckCircle2, FileText, Timer, Award, ChevronRight, AlertCircle, Shuffle, BarChart2, BookOpen, Shield, Upload } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
-import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection } from '../../../../lib/assessmentService';
+import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection } from '../../../../lib/assessmentService';
 import { deriveShowResultsTo, deriveAllowReviewTo, DEFAULT_SHOW_RESULTS_TO, DEFAULT_ALLOW_REVIEW_TO, type VisibilityAudience } from '../../../../lib/visibility';
 import { AudienceSelector } from '../AudienceSelector';
 import { type Question } from '../../../../lib/questionBankService';
@@ -121,6 +121,29 @@ export function DetailsStep({
       })
       .catch(() => {/* leave empty — platform keys apply */});
   }, [assessment?.id]);
+
+  // ── Platform SEB availability (for the publish checklist) ─────────
+  // When an exam is set to PLATFORM config, it inherits the platform Config
+  // Keys and platform .seb file from the SEB settings page — the same
+  // resolution the verification endpoint uses at exam time (per-exam override
+  // → platform → env). The high-stake publish gate must therefore treat the
+  // requirement as met when the platform actually has a key AND a file, not
+  // demand per-exam artifacts the exam was never meant to carry. Loaded once
+  // on mount; a fetch failure leaves both false (fail-safe: the gate asks for
+  // explicit config rather than letting a possibly-unconfigured platform
+  // through).
+  const [platformHasKey, setPlatformHasKey] = useState(false);
+  const [platformHasFile, setPlatformHasFile] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getSEBSettings()
+      .then((s) => { if (!cancelled) setPlatformHasKey((s.configKeys?.length ?? 0) > 0); })
+      .catch(() => {/* leave false — gate will ask for explicit config */});
+    getSEBPublicInfo()
+      .then((info) => { if (!cancelled) setPlatformHasFile(Boolean(info.configFileUrl)); })
+      .catch(() => {/* leave false */});
+    return () => { cancelled = true; };
+  }, []);
   const [saving, setSaving] = useState(false);
 
   // ── D2: rule-based allocation (Step 3 "By Hierarchy" mode) ────────
@@ -396,10 +419,29 @@ export function DetailsStep({
       const publishing = (overrideStatus ?? status) === 'active';
       if (publishing && securityTier === 'high_stake') {
         const missing: string[] = [];
-        const hasFile = useCustomSeb && (Boolean(sebFile) || Boolean(sebConfigFileUrl));
-        const hasKeys = useCustomSeb && sebKeyLines.length > 0;
-        if (requireSEB && !hasKeys) missing.push('a per-exam SEB Config Key');
-        if (requireSEB && !hasFile) missing.push('an uploaded .seb configuration file');
+        // The SEB requirement is met by EITHER path:
+        //   • custom   → this exam's own uploaded key + .seb file
+        //   • platform → the platform Config Key + platform .seb file that the
+        //                SEB settings page holds (inherited at exam time via
+        //                the same per-exam → platform resolution the verifier
+        //                uses). This is the fix for the false publish-block:
+        //                previously both checks were gated on useCustomSeb, so
+        //                a platform-config exam was blocked even though the
+        //                platform already had a key and a file.
+        const hasKeys = useCustomSeb ? sebKeyLines.length > 0 : platformHasKey;
+        const hasFile = useCustomSeb
+          ? (Boolean(sebFile) || Boolean(sebConfigFileUrl))
+          : platformHasFile;
+        if (requireSEB && !hasKeys) {
+          missing.push(useCustomSeb
+            ? 'a per-exam SEB Config Key'
+            : 'a platform SEB Config Key (add one on the Safe Exam Browser page, or switch this exam to Exam-specific config)');
+        }
+        if (requireSEB && !hasFile) {
+          missing.push(useCustomSeb
+            ? 'an uploaded .seb configuration file'
+            : 'a platform .seb configuration file (upload one on the Safe Exam Browser page, or switch this exam to Exam-specific config)');
+        }
         if (hierarchyMode &&
             (!allocationDraft.nodeType ||
              (allocationDraft.nodeType !== 'institute' && allocationDraft.nodeIds.length === 0))) {

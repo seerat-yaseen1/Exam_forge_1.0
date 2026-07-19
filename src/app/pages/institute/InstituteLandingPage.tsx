@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, GraduationCap, School, Loader2, AlertTriangle, Lock } from 'lucide-react';
+import { Users, GraduationCap, School, Loader2, AlertTriangle, Lock, Inbox } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
 import {
   getFacultyByInstitute,
@@ -11,12 +11,15 @@ import {
   type QuestionRightsCeiling,
 } from '../../../lib/firebaseService';
 import { SchoolsTab } from '../../components/schools/SchoolsTab';
+import { ApprovalsInbox } from '../../components/questions/ApprovalsInbox';
+import { RIGHT_NAMES, grantableModes } from '../../../lib/questionRights';
+import { getPendingRequestCount } from '../../../lib/questionRequestService';
 import { FacultyTab } from '../../components/faculty/FacultyTab';
 import { StudentTab } from '../../components/student/StudentTab';
 
 // ── Types ─────────────────────────────────────────────────────────
 
-type Tab = 'faculties' | 'students' | 'schools';
+type Tab = 'faculties' | 'students' | 'schools' | 'approvals';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -393,6 +396,10 @@ export function InstituteLandingPage() {
   const [facultyCanCreateStud, setFacultyCanCreateStud] = useState(session?.facultyCanCreateStudents  ?? false);
   const [canCreateQuestions,   setCanCreateQuestions]   = useState(session?.canAdminCreateQuestions   ?? false);
   const [questionCeiling, setQuestionCeiling] = useState<QuestionRightsCeiling | undefined>(undefined);
+  const [pendingCount, setPendingCount] = useState(0);
+  // The approvals inbox is relevant only when the ceiling permits at least one
+  // right to be granted to faculty in REQUEST mode.
+  const requestModeEnabled = RIGHT_NAMES.some((r) => grantableModes(questionCeiling, r).includes('request'));
   const [permissionLoading, setPermissionLoading] = useState(false);
 
   useEffect(() => {
@@ -412,10 +419,19 @@ export function InstituteLandingPage() {
       .finally(() => setPermissionLoading(false));
   }, [session?.instituteId]);
 
+  // Pending-request count for the Approvals tab badge (only when relevant).
+  useEffect(() => {
+    if (!session?.instituteId || !requestModeEnabled) { setPendingCount(0); return; }
+    getPendingRequestCount(session.instituteId).then(setPendingCount).catch(() => {});
+  }, [session?.instituteId, requestModeEnabled]);
+
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'faculties', label: 'Faculty',  icon: <Users size={12} strokeWidth={1.5} /> },
     { key: 'students',  label: 'Students', icon: <GraduationCap size={12} strokeWidth={1.5} /> },
     { key: 'schools',   label: 'Schools',  icon: <School size={12} strokeWidth={1.5} /> },
+    ...(requestModeEnabled
+      ? [{ key: 'approvals' as Tab, label: 'Approvals', icon: <Inbox size={12} strokeWidth={1.5} /> }]
+      : []),
   ];
 
   return (
@@ -459,6 +475,15 @@ export function InstituteLandingPage() {
               {tab.key === 'schools' && !permissionLoading && !canManageSchools && (
                 <span className="ml-0.5" style={{ color: '#C4C3BD' }}>
                   <Lock size={9} strokeWidth={1.5} />
+                </span>
+              )}
+              {/* Approvals tab: pending-count badge */}
+              {tab.key === 'approvals' && pendingCount > 0 && (
+                <span
+                  className="ml-1 inline-flex items-center justify-center"
+                  style={{ minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: '#8A6D3B', color: '#FFFFFF', fontSize: 10, lineHeight: 1 }}
+                >
+                  {pendingCount}
                 </span>
               )}
               {isActive && (
@@ -553,6 +578,17 @@ export function InstituteLandingPage() {
                   readOnly={!canManageSchools}
                 />
               )}
+            </motion.div>
+          )}
+
+          {activeTab === 'approvals' && session?.instituteId && requestModeEnabled && (
+            <motion.div key="approvals" className="p-5"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}>
+              <ApprovalsInbox
+                instituteId={session.instituteId}
+                onPendingCountChange={setPendingCount}
+              />
             </motion.div>
           )}
         </AnimatePresence>

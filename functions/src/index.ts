@@ -366,6 +366,72 @@ interface QuestionDoc {
   engine: 'mcq' | 'text' | 'match';
   variant: string | null;
   options: MCQOption[];
+  difficulty?: 'easy' | 'medium' | 'hard';   // server-read; used for per-row grading policy
+}
+
+// ── Grading policy (server twin of resolveGradingPolicy in assessmentService) ──
+// Negative marking + blank handling, resolved per question through the chain
+// exam → section → difficulty-row with the exam master switch as a hard gate.
+// Frozen onto the attempt at start so a mid-flight edit can't regrade. Keep in
+// EXACT sync with src/lib/assessmentService.ts.
+type PenaltyTypeS = 'fixed' | 'percent';
+interface GradingPolicyS {
+  negativeMarking?: boolean;
+  penaltyType?: PenaltyTypeS;
+  penaltyValue?: number;
+  blankScore?: number;
+}
+interface SectionGradingPolicyS {
+  section?: GradingPolicyS;
+  byDifficulty?: Partial<Record<'easy' | 'medium' | 'hard', GradingPolicyS>>;
+}
+interface AssessmentGradingConfigS {
+  exam?: GradingPolicyS;
+  sections?: Record<string, SectionGradingPolicyS>;
+}
+interface ResolvedGradingPolicyS {
+  negativeMarking: boolean;
+  penaltyType: PenaltyTypeS;
+  penaltyValue: number;
+  blankScore: number;
+}
+
+function resolveGradingPolicyS(
+  config: AssessmentGradingConfigS | undefined,
+  sectionId: string,
+  difficulty: 'easy' | 'medium' | 'hard',
+): ResolvedGradingPolicyS {
+  const exam = config?.exam;
+  const gateOpen = exam?.negativeMarking === true;
+  const sectionPol = config?.sections?.[sectionId];
+  const rowPol = sectionPol?.byDifficulty?.[difficulty];
+  const pick = <K extends keyof GradingPolicyS>(k: K): GradingPolicyS[K] | undefined =>
+    rowPol?.[k] ?? sectionPol?.section?.[k] ?? exam?.[k];
+
+  const blankScore = pick('blankScore') ?? 0;
+  if (!gateOpen) {
+    return { negativeMarking: false, penaltyType: 'fixed', penaltyValue: 0, blankScore };
+  }
+  const negOn = pick('negativeMarking') ?? true;
+  if (!negOn) {
+    return { negativeMarking: false, penaltyType: 'fixed', penaltyValue: 0, blankScore };
+  }
+  return {
+    negativeMarking: true,
+    penaltyType: pick('penaltyType') ?? 'fixed',
+    penaltyValue: Math.max(0, pick('penaltyValue') ?? 0),
+    blankScore,
+  };
+}
+
+// Compute the penalty (a POSITIVE number to subtract) for a fully-wrong answer
+// under a resolved policy, given the question's own marks.
+function penaltyFor(policy: ResolvedGradingPolicyS, questionMarks: number): number {
+  if (!policy.negativeMarking || policy.penaltyValue <= 0) return 0;
+  if (policy.penaltyType === 'percent') {
+    return Math.max(0, (policy.penaltyValue / 100) * questionMarks);
+  }
+  return Math.max(0, policy.penaltyValue);
 }
 
 interface QuestionAnswerDoc {
@@ -445,6 +511,7 @@ interface GradingAssessmentDoc {
   // booleans govern (see reviewAudienceAllows).
   allowReviewTo?: unknown;
   showResultsTo?: unknown;
+  gradingConfig?: AssessmentGradingConfigS;   // negative marking + blank policy
 }
 
 // ── Visibility audiences (N5 final form) ──────────────────────────
@@ -607,9 +674,13 @@ function scoreAttemptAnswers(params: {
   passingScore: number | undefined;
   exposeKeysToStudent: boolean;
   invalidatedQuestionIds?: Set<string>;
+  // Frozen grading policy (negative marking + blank handling). Absent = legacy
+  // scoring (no penalty, blank = 0), so existing exams are unaffected.
+  gradingConfig?: AssessmentGradingConfigS;
 }): { scores: ScoresOut; gradedAnswers: Record<string, GradedAnswerOut> } {
   const { sections, questionMap, answerMap, answers, passingScore, exposeKeysToStudent } = params;
   const invalidated = params.invalidatedQuestionIds ?? new Set<string>();
+  const gradingConfig = params.gradingConfig;
 
   let totalAwarded   = 0;
   let totalAvailable = 0;
@@ -631,6 +702,12 @@ function scoreAttemptAnswers(params: {
       const q   = questionMap.get(aq.questionId);
       const ans = answerMap.get(aq.questionId);
       const studentAnswer = answers?.[aq.questionId];
+
+      // Resolve the grading policy for THIS question (exam → section → row).
+      // Difficulty is read from the server-fetched question doc (trustworthy),
+      // defaulting to 'medium' when absent. No config → NO_PENALTY equivalent.
+      const difficulty = (q?.difficulty === 'easy' || q?.difficulty === 'hard') ? q.difficulty : 'medium';
+      const policy = resolveGradingPolicyS(gradingConfig, sec.id, difficulty);
 
       const exposed: GradedAnswerOut = {
         isCorrect: null,
@@ -654,14 +731,18 @@ function scoreAttemptAnswers(params: {
         answered++;
         if (q.engine === 'mcq') {
           const { multiplier, isCorrect } = scoreMCQMultiplier(q, ans, studentAnswer.value);
-          const award = multiplier * aq.marks;
+          // Option A: negative marking applies ONLY to a FULLY wrong answer
+          // (multiplier 0). Any correct/partial content keeps its positive
+          // award untouched — negative marking and partial credit stay
+          // cleanly separated (partial credit is its own future feature).
+          const award = multiplier > 0 ? multiplier * aq.marks : -penaltyFor(policy, aq.marks);
           sectionAwarded += award;
           totalAwarded   += award;
           exposed.marksAwarded = award;
           exposed.isCorrect    = isCorrect;
         } else if (q.engine === 'match') {
           const { multiplier, isCorrect } = scoreMatchMultiplier(ans, studentAnswer.value);
-          const award = multiplier * aq.marks;
+          const award = multiplier > 0 ? multiplier * aq.marks : -penaltyFor(policy, aq.marks);
           sectionAwarded += award;
           totalAwarded   += award;
           exposed.marksAwarded = award;
@@ -669,6 +750,15 @@ function scoreAttemptAnswers(params: {
         } else {
           // text engine — needs human grading
           requiresManualReview = true;
+        }
+      } else {
+        // BLANK / unanswered — apply the policy's blankScore (default 0), NEVER
+        // the wrong-answer penalty. A student can't lose marks for a question
+        // they never attempted. Left out of `answered`.
+        if (policy.blankScore !== 0) {
+          sectionAwarded += policy.blankScore;
+          totalAwarded   += policy.blankScore;
+          exposed.marksAwarded = policy.blankScore;
         }
       }
 
@@ -685,8 +775,14 @@ function scoreAttemptAnswers(params: {
     });
   }
 
+  // Assessment-level floor: the headline total can never go below zero, even
+  // if penalties exceeded earned marks. Sections are NOT floored — a section
+  // may be internally net-negative (visible to staff as a diagnostic); only
+  // the aggregate the student sees is clamped. (Seerat's decision.)
+  const flooredTotal = Math.max(0, totalAwarded);
+
   const percentage = totalAvailable > 0
-    ? Math.round((totalAwarded / totalAvailable) * 100 * 10) / 10
+    ? Math.round((flooredTotal / totalAvailable) * 100 * 10) / 10
     : 0;
   const passed = passingScore !== undefined
     ? percentage >= passingScore
@@ -694,7 +790,7 @@ function scoreAttemptAnswers(params: {
 
   return {
     scores: {
-      total: totalAwarded,
+      total: flooredTotal,
       available: totalAvailable,
       percentage,
       passed,
@@ -740,6 +836,7 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       createdAt?: string;
       freezeState?: { frozen?: boolean } | null;
       securityConfig?: { tier?: string; requireSEB?: boolean } | null;
+      gradingConfig?: AssessmentGradingConfigS;   // frozen at startExam
     };
 
     // AuthZ — student owner OR grader in same institute OR web owner
@@ -796,6 +893,9 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       // Keys land in the student's own attempt only when STUDENTS are in
       // the review audience (N5 final form).
       exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
+      // Grade under the policy FROZEN on the attempt at start; fall back to the
+      // live assessment for attempts that predate the freeze (older in-progress).
+      gradingConfig: attempt.gradingConfig ?? assessment.gradingConfig,
     });
 
     const nowIso = new Date().toISOString();
@@ -952,6 +1052,7 @@ export const regradeAttempts = onCall<RegradeAttemptsData>(
         status?: string;
         isDeleted?: boolean;
         answers?: Record<string, AttemptAnswerDoc>;
+        gradingConfig?: AssessmentGradingConfigS;   // frozen policy for this attempt
       };
       if (!att.status || !FINISHED.has(att.status)) continue;
       if (att.isDeleted) continue;
@@ -964,6 +1065,8 @@ export const regradeAttempts = onCall<RegradeAttemptsData>(
         passingScore: assessment.passingScore,
         exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
         invalidatedQuestionIds: invalidated,
+        // Regrade under each attempt's OWN frozen policy (fall back to live).
+        gradingConfig: att.gradingConfig ?? assessment.gradingConfig,
       });
 
       batch.update(docSnap.ref, { scores, gradedAnswers, updatedAt: nowIso });
@@ -1889,6 +1992,7 @@ export const startExam = onCall<StartExamData>(
       requireSEB?: boolean;
       sebConfigKeys?: string[];
       securityLockedAt?: string;
+      gradingConfig?: AssessmentGradingConfigS;   // frozen onto the attempt below
     };
 
     // ── Effective security config, re-derived SERVER-SIDE (Phase 0) ──
@@ -2161,6 +2265,12 @@ export const startExam = onCall<StartExamData>(
         // assessment mid-exam cannot change what this attempt must satisfy.
         requireSEB,
       },
+      // Frozen grading policy — negative marking + blank handling, resolved per
+      // question at grade time from THIS snapshot, so editing the exam's policy
+      // mid-flight can't change how an in-progress student is scored. Only
+      // stored when the exam actually defines a policy (keeps legacy attempts
+      // clean; absent === legacy scoring).
+      ...(a.gradingConfig ? { gradingConfig: a.gradingConfig } : {}),
       totalFrozenSeconds: 0,
       serverAnchored: true, // marks this attempt as using server-owned timestamps
       // Phase C — allocation provenance: which materialization admitted this

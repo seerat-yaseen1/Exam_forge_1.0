@@ -52,6 +52,107 @@ export type AssessmentOwnerType = 'webOwner' | 'institute' | 'faculty';
 // ── Question reference for assessments ───────────────────────────
 // Each question in an assessment has a point value and optional config
 
+// ── Grading policy (negative marking + blank handling) ────────────
+// A grading policy controls how a WRONG or BLANK answer scores, on top of the
+// existing correct/partial award. It exists at up to three levels that form an
+// inheritance chain, gated at the top:
+//
+//   exam master  →  section override  →  difficulty-row override
+//
+// Resolution per question: the row policy wins if present, else the section's,
+// else the exam's. The exam master switch is a HARD GATE — when negative
+// marking is OFF at the exam level, NO section or row can apply a penalty
+// (resolution short-circuits to "no penalty"). blankScore is always honoured
+// (default 0). Applies to Standard + Linear delivery only.
+//
+// Frozen onto the attempt at start (like securityConfig), so editing the exam
+// mid-flight cannot change how an in-progress student is graded.
+
+export type PenaltyType = 'fixed' | 'percent';  // fixed marks | percent of the question's marks
+
+// The rule a single level expresses. A level with negativeMarking:false (or
+// absent) contributes no penalty; blankScore defaults to 0 when absent.
+export type GradingPolicy = {
+  negativeMarking?: boolean;     // this level penalises wrong answers
+  penaltyType?: PenaltyType;     // how the penalty magnitude is interpreted
+  penaltyValue?: number;         // POSITIVE magnitude to deduct (teacher never types a minus)
+  blankScore?: number;           // marks for an unanswered question (default 0)
+};
+
+// Per-section policy: an optional section-level override plus optional
+// per-difficulty-row overrides. Any absent level inherits the one above.
+export type SectionGradingPolicy = {
+  section?: GradingPolicy;                                  // section-level override
+  byDifficulty?: Partial<Record<'easy' | 'medium' | 'hard', GradingPolicy>>;
+};
+
+// The whole exam's grading configuration. exam is the master (and the gate);
+// sections is keyed by section id.
+export type AssessmentGradingConfig = {
+  exam?: GradingPolicy;                          // master default + hard gate
+  sections?: Record<string, SectionGradingPolicy>;
+};
+
+// The single resolved policy that actually applies to one question. Produced
+// by resolveGradingPolicy; this is what the scorer and the frozen attempt use.
+export type ResolvedGradingPolicy = {
+  negativeMarking: boolean;
+  penaltyType: PenaltyType;
+  penaltyValue: number;   // positive magnitude; 0 when negativeMarking is false
+  blankScore: number;     // default 0
+};
+
+export const NO_PENALTY_POLICY: ResolvedGradingPolicy = {
+  negativeMarking: false,
+  penaltyType: 'fixed',
+  penaltyValue: 0,
+  blankScore: 0,
+};
+
+// Resolve the effective policy for one question given its difficulty.
+// Chain: row → section → exam, first defined wins per FIELD, with the exam
+// master switch as a hard gate. Keep in sync with the server twin in
+// functions/src/index.ts.
+export function resolveGradingPolicy(
+  config: AssessmentGradingConfig | undefined,
+  sectionId: string,
+  difficulty: 'easy' | 'medium' | 'hard',
+): ResolvedGradingPolicy {
+  const exam = config?.exam;
+  // HARD GATE: master off (or unset) → no penalty anywhere. blankScore still
+  // resolves (a teacher may set blank handling even with penalties off), but
+  // negativeMarking can never be switched back on below the exam level.
+  const gateOpen = exam?.negativeMarking === true;
+
+  const sectionPol = config?.sections?.[sectionId];
+  const rowPol = sectionPol?.byDifficulty?.[difficulty];
+
+  // First-defined-wins per field, tightest level first.
+  const pick = <K extends keyof GradingPolicy>(k: K): GradingPolicy[K] | undefined =>
+    rowPol?.[k] ?? sectionPol?.section?.[k] ?? exam?.[k];
+
+  const blankScore = pick('blankScore') ?? 0;
+
+  if (!gateOpen) {
+    return { negativeMarking: false, penaltyType: 'fixed', penaltyValue: 0, blankScore };
+  }
+
+  // Gate open: a level may still opt OUT of negative marking for its scope by
+  // setting negativeMarking:false at the row/section. Resolve that flag the
+  // same first-defined-wins way.
+  const negOn = pick('negativeMarking') ?? true;   // gate open + no explicit flag below → on
+  if (!negOn) {
+    return { negativeMarking: false, penaltyType: 'fixed', penaltyValue: 0, blankScore };
+  }
+
+  return {
+    negativeMarking: true,
+    penaltyType: pick('penaltyType') ?? 'fixed',
+    penaltyValue: Math.max(0, pick('penaltyValue') ?? 0),
+    blankScore,
+  };
+}
+
 export type AssessmentQuestion = {
   questionId: string;
   marks: number;           // points awarded for this question
@@ -394,6 +495,12 @@ export type Assessment = {
   // slow connection at the buzzer is not penalised. undefined = 30s default.
   overallGraceSeconds?: number;
 
+  // Grade a wrong/blank answer per the negative-marking policy. Absent =
+  // no negative marking anywhere (identical to legacy scoring). Resolved
+  // per question (exam → section → difficulty-row) and frozen onto the
+  // attempt at start. Standard + Linear delivery only.
+  gradingConfig?: AssessmentGradingConfig;
+
   // Set by startExam on the FIRST attempt. Presence = security config frozen.
   // Written only by the Cloud Function (Admin SDK); clients cannot set it
   // (firestore.rules forbids editing security fields once this is present).
@@ -712,6 +819,7 @@ export async function duplicateAssessment(
     timeLimit:           options.includeSettings ? src.timeLimit           : undefined,
     overallTimeLimit:    options.includeSettings ? src.overallTimeLimit    : undefined,
     overallGraceSeconds: options.includeSettings ? src.overallGraceSeconds : undefined,
+    gradingConfig:       options.includeSettings ? src.gradingConfig       : undefined,
     passingScore:        options.includeSettings ? src.passingScore        : undefined,
     maxAttempts:         options.includeSettings ? src.maxAttempts         : 1,
     sectionStartOrder:   options.includeSettings ? src.sectionStartOrder   : undefined,

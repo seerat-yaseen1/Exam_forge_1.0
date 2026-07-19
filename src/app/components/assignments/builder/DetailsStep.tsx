@@ -15,7 +15,7 @@ import { type Question } from '../../../../lib/questionBankService';
 import { getAllSubjects, type Subject } from '../../../../lib/subjectService';
 import { AllocationPanelCore } from '../allocation/AllocationPanelCore';
 import { emptyAllocationDraft, getAllocation, type AllocationDraft, type AllocationNodeType } from '../../../../lib/allocationService';
-import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, type SectionDraft } from './shared';
+import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, computeAutoOverallLimit, sumSectionsAndBreaksMinutes, DEFAULT_OVERALL_GRACE_SECONDS, type SectionDraft } from './shared';
 import { Field, SectionLabel, selectStyle, DurationIndicator, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle } from './controls';
 import { RuleBuilderPanel } from './topicPickers';
 import { InstitutePicker, StudentPicker } from './targetPickers';
@@ -61,6 +61,19 @@ export function DetailsStep({
   const [passingScore, setPassingScore] = useState(assessment?.passingScore?.toString() ?? '');
   const [maxAttempts, setMaxAttempts] = useState(assessment?.maxAttempts?.toString() ?? '1');
   const [sectionGraceSeconds, setSectionGraceSeconds] = useState(assessment?.sectionGraceSeconds?.toString() ?? '');
+  // ── Overall exam timer ─────────────────────────────────────────
+  // overallGraceSeconds: its own knob (blank = 30s default).
+  const [overallGraceSeconds, setOverallGraceSeconds] = useState(assessment?.overallGraceSeconds?.toString() ?? '');
+  // overallAuto: when on, the limit field is DRIVEN by the sections
+  // (sum of section time + section grace + breaks + overall grace) and stays
+  // in sync as they change. Default on for a NEW exam (so a teacher who never
+  // touches it still gets a correct cap instead of unlimited); off for an
+  // existing exam that already has a saved value the author chose.
+  const [overallAuto, setOverallAuto] = useState(
+    assessment?.overallTimeLimit == null
+  );
+  // overallTimeLimit: the manual value (used only when overallAuto is off).
+  const [overallTimeLimit, setOverallTimeLimit] = useState(assessment?.overallTimeLimit?.toString() ?? '');
   const [shuffleQuestions, setShuffleQuestions] = useState(assessment?.shuffleQuestions ?? false);
   const [sectionStartOrder, setSectionStartOrder] = useState<'sequential' | 'random' | 'student_choice'>(
     assessment?.sectionStartOrder ?? 'sequential'
@@ -280,6 +293,15 @@ export function DetailsStep({
           warnings.push(`The scheduled window (${windowMins}m) is shorter than the total section time + breaks (${required}m). Some students may run out of clock time.`);
         }
       }
+      // Impossible overall-limit warning (manual only — Auto can never be too
+      // short). If the total exam cap is below the bare sum of section time +
+      // breaks, students literally cannot finish every section within it.
+      if (!overallAuto && effectiveOverallLimit && effectiveOverallLimit > 0) {
+        const floorMins = sumSectionsAndBreaksMinutes(sections);
+        if (floorMins > 0 && effectiveOverallLimit < floorMins) {
+          warnings.push(`The overall time limit (${effectiveOverallLimit}m) is less than the total section time + breaks (${floorMins}m). Students cannot complete every section within it — the exam will hard-cut before they finish.`);
+        }
+      }
       if (warnings.length > 0) {
         setPendingPublish({ warnings });
         return;
@@ -317,6 +339,8 @@ export function DetailsStep({
         startDate: startDate ? fromDateTimeLocal(startDate) : undefined,
         endDate: endDate ? fromDateTimeLocal(endDate) : undefined,
         timeLimit: undefined,
+        overallTimeLimit: effectiveOverallLimit,
+        overallGraceSeconds: overallGraceSeconds ? parseInt(overallGraceSeconds, 10) : undefined,
         passingScore: passingScore ? parseInt(passingScore, 10) : undefined,
         maxAttempts: maxAttempts ? parseInt(maxAttempts, 10) : undefined,
         sectionGraceSeconds: sectionGraceSeconds ? parseInt(sectionGraceSeconds, 10) : undefined,
@@ -409,6 +433,26 @@ export function DetailsStep({
   };
 
   const totalSectionTime = sections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
+
+  // ── Overall timer — Auto value + effective value ───────────────
+  // When overallAuto is on, the field shows (and saves) this computed budget,
+  // recomputed live as sections / grace change. sectionGraceSeconds and
+  // overallGraceSeconds fall back to their 30s defaults when blank.
+  const autoOverallLimit = useMemo(
+    () => computeAutoOverallLimit(
+      sections,
+      sectionGraceSeconds ? parseInt(sectionGraceSeconds, 10) : undefined,
+      overallGraceSeconds ? parseInt(overallGraceSeconds, 10) : undefined,
+    ),
+    [sections, sectionGraceSeconds, overallGraceSeconds]
+  );
+  // The value that will actually be saved: the auto budget when Auto is on,
+  // otherwise the manual entry (blank manual = no overall cap).
+  const effectiveOverallLimit = overallAuto
+    ? autoOverallLimit
+    : (overallTimeLimit ? parseInt(overallTimeLimit, 10) : undefined);
+  // Displayed in the input box (read-only while Auto is on).
+  const overallLimitDisplay = overallAuto ? String(autoOverallLimit) : overallTimeLimit;
 
   return (
     <div className="flex flex-col">
@@ -530,6 +574,77 @@ export function DetailsStep({
                     placeholder="e.g., 30" min="0" className="flex-1 outline-none"
                     style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
                   {sectionGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
+                </div>
+              </Field>
+
+              {/* ── Overall exam timer ────────────────────────────────── */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs" style={{ color: '#6B6A65' }}>Overall time limit</span>
+                    <span className="text-xs" style={{ color: '#C4C3BD' }}>(whole exam, optional)</span>
+                  </div>
+                  {/* Auto toggle — when on, the value is computed from the
+                      sections and stays in sync. Off = manual entry. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Turning Auto OFF seeds the manual box with the current
+                      // computed value so the teacher edits from a sane number
+                      // rather than an empty field.
+                      if (overallAuto) setOverallTimeLimit(String(autoOverallLimit));
+                      setOverallAuto((v) => !v);
+                    }}
+                    className="flex items-center gap-1 px-2 py-0.5"
+                    style={{
+                      borderRadius: 2,
+                      border: `1px solid ${overallAuto ? '#B8E6C8' : '#E3E1DB'}`,
+                      background: overallAuto ? '#F0F9F4' : '#FFFFFF',
+                    }}
+                  >
+                    <span className="text-xs" style={{ color: overallAuto ? '#1E7B3C' : '#9A9891' }}>
+                      Auto
+                    </span>
+                    {overallAuto && <CheckCircle2 size={10} strokeWidth={2} style={{ color: '#1E7B3C' }} />}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2"
+                  style={{
+                    border: '1px solid #E3E1DB', borderRadius: 2,
+                    background: overallAuto ? '#F7F6F3' : '#FFFFFF',
+                  }}>
+                  <Clock size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                  <input
+                    type="number"
+                    value={overallLimitDisplay}
+                    onChange={(e) => setOverallTimeLimit(e.target.value)}
+                    readOnly={overallAuto}
+                    placeholder="Blank = no overall cap"
+                    min="1"
+                    className="flex-1 outline-none"
+                    style={{
+                      background: 'transparent',
+                      color: overallAuto ? '#6B6A65' : '#0C0C0B',
+                      fontSize: 12, border: 'none',
+                    }}
+                  />
+                  {overallLimitDisplay && <span style={{ color: '#C4C3BD', fontSize: 10 }}>minutes</span>}
+                </div>
+                <p className="text-xs mt-1" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                  {overallAuto
+                    ? `Auto: sum of section time, section grace, breaks and overall grace (currently ${autoOverallLimit}m). Counts from when a student begins — time in breaks and gaps between sections counts against it.`
+                    : 'Counts from when a student begins the exam. The exam hard-cuts when this runs out, even mid-section. Blank = no overall cap.'}
+                </p>
+              </div>
+
+              <Field label="Overall grace period" hint={`(seconds past the overall timer; blank = ${DEFAULT_OVERALL_GRACE_SECONDS}s default)`}>
+                <div className="flex items-center gap-2 px-3 py-2"
+                  style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                  <Timer size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                  <input type="number" value={overallGraceSeconds} onChange={(e) => setOverallGraceSeconds(e.target.value)}
+                    placeholder={`e.g., ${DEFAULT_OVERALL_GRACE_SECONDS}`} min="0" className="flex-1 outline-none"
+                    style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
+                  {overallGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
                 </div>
               </Field>
 

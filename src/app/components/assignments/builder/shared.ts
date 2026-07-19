@@ -106,4 +106,93 @@ export function mutabilityFor(status?: AssessmentStatus): FieldMutability {
   return { targetType: false, startDate: false, endDate: false, shuffleQuestions: false, sections: false };
 }
 
+// ── Overall time limit — Auto default ─────────────────────────────
+// The "full budget" a student could legitimately consume across the whole
+// sitting, in minutes:
+//
+//   Σ section time limits
+// + Σ section grace  (one grace window per TIMED section — a section with no
+//                     time limit has nothing to be graced, so it is skipped)
+// + Σ break durations
+// + overall grace    (the single trailing buffer on the whole-exam clock)
+//
+// Used to pre-fill the builder's "Overall time limit" field when Auto is on,
+// and kept in sync live as sections/breaks/grace change. The teacher can turn
+// Auto off and type their own value. DEFAULT_SECTION_GRACE_SECONDS /
+// DEFAULT_OVERALL_GRACE_SECONDS below mirror the server defaults — keep in
+// sync with functions/src/index.ts.
+export const DEFAULT_SECTION_GRACE_SECONDS = 30;
+export const DEFAULT_OVERALL_GRACE_SECONDS = 30;
+
+// Rounded UP: the field is whole minutes, and the budget must never come out
+// SHORTER than the real sum of parts, or the auto value would itself trip the
+// "manual limit is less than sum of sections + breaks" warning.
+export function computeAutoOverallLimit(
+  sections: SectionDraft[],
+  sectionGraceSeconds: number = DEFAULT_SECTION_GRACE_SECONDS,
+  overallGraceSeconds: number = DEFAULT_OVERALL_GRACE_SECONDS,
+): number {
+  const timedSections = sections.filter((s) => (parseInt(s.timeLimit, 10) || 0) > 0);
+
+  const sectionMins = timedSections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
+  // Breaks live on all sections EXCEPT the last (a break after the final
+  // section is meaningless), matching buildSections / the publish warning.
+  const breakMins = sections
+    .slice(0, -1)
+    .reduce((sum, s) => sum + (parseInt(s.breakAfterMinutes, 10) || 0), 0);
+
+  const sectionGraceMins = (timedSections.length * sectionGraceSeconds) / 60;
+  const overallGraceMins = overallGraceSeconds / 60;
+
+  return Math.ceil(sectionMins + breakMins + sectionGraceMins + overallGraceMins);
+}
+
+// The bare sum of section time limits + break durations, in minutes — the
+// floor below which a manual overall limit is impossible to finish (students
+// literally cannot complete every section). Used for the save-time soft
+// warning. Grace is NOT included here: grace is slack, not usable exam time,
+// so a limit that omits grace is tight but not impossible.
+export function sumSectionsAndBreaksMinutes(sections: SectionDraft[]): number {
+  const sectionMins = sections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
+  const breakMins = sections
+    .slice(0, -1)
+    .reduce((sum, s) => sum + (parseInt(s.breakAfterMinutes, 10) || 0), 0);
+  return sectionMins + breakMins;
+}
+
+// ── Published-section variants (for the post-publish edit panel) ──
+// Same math as the two helpers above, but reading the resolved Assessment
+// shape (numeric timeLimit / breakAfter.durationMinutes) instead of the
+// builder's string-typed SectionDraft. Kept minimal — only the two the edit
+// panel needs.
+type PublishedSectionLike = {
+  timeLimit?: number;
+  breakAfter?: { durationMinutes?: number } | null;
+};
+
+export function computeAutoOverallLimitFromSections(
+  sections: PublishedSectionLike[],
+  sectionGraceSeconds: number = DEFAULT_SECTION_GRACE_SECONDS,
+  overallGraceSeconds: number = DEFAULT_OVERALL_GRACE_SECONDS,
+): number {
+  const timed = sections.filter((s) => (s.timeLimit ?? 0) > 0);
+  const sectionMins = timed.reduce((sum, s) => sum + (s.timeLimit ?? 0), 0);
+  const breakMins = sections
+    .slice(0, -1)
+    .reduce((sum, s) => sum + (s.breakAfter?.durationMinutes ?? 0), 0);
+  const sectionGraceMins = (timed.length * sectionGraceSeconds) / 60;
+  const overallGraceMins = overallGraceSeconds / 60;
+  return Math.ceil(sectionMins + breakMins + sectionGraceMins + overallGraceMins);
+}
+
+export function sumSectionsAndBreaksMinutesFromSections(
+  sections: PublishedSectionLike[],
+): number {
+  const sectionMins = sections.reduce((sum, s) => sum + (s.timeLimit ?? 0), 0);
+  const breakMins = sections
+    .slice(0, -1)
+    .reduce((sum, s) => sum + (s.breakAfter?.durationMinutes ?? 0), 0);
+  return sectionMins + breakMins;
+}
+
 // ── Friendly schedule controls ────────────────────────────────────

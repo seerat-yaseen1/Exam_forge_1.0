@@ -21,6 +21,7 @@ export type EditableFields = {
   sections: boolean;
   shuffleQuestions: boolean;
   passingScore: boolean;
+  overallTimer: boolean;
   showResults: boolean;
   allowReview: boolean;
 };
@@ -42,6 +43,7 @@ export function editableFields(status?: AssessmentStatus): EditableFields {
       sections: true,
       shuffleQuestions: true,
       passingScore: true,
+      overallTimer: true,
       showResults: true,
       allowReview: true,
     };
@@ -61,6 +63,7 @@ export function editableFields(status?: AssessmentStatus): EditableFields {
       sections: false,
       shuffleQuestions: false,
       passingScore: true,
+      overallTimer: true,
       showResults: true,
       allowReview: true,
     };
@@ -80,6 +83,7 @@ export function editableFields(status?: AssessmentStatus): EditableFields {
     sections: false,
     shuffleQuestions: false,
     passingScore: false,
+    overallTimer: false,
     showResults: true,
     allowReview: true,
   };
@@ -97,7 +101,7 @@ export function availablePanels(status?: AssessmentStatus): PanelKey[] {
   if (f.startDate || f.endDate || f.maxAttempts || f.attemptOverrides) panels.push('schedule');
   if (f.targetType || f.blockedStudents) panels.push('access');
   if (f.sections) panels.push('sections');
-  if (f.shuffleQuestions || f.passingScore || f.showResults || f.allowReview) panels.push('behaviour');
+  if (f.shuffleQuestions || f.passingScore || f.overallTimer || f.showResults || f.allowReview) panels.push('behaviour');
 
   return panels;
 }

@@ -1284,6 +1284,7 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
 // which would break the client's `new Date(startedAt)` parsing).
 
 const DEFAULT_SECTION_GRACE_SECONDS = 30;
+const DEFAULT_OVERALL_GRACE_SECONDS = 30;
 
 interface AttemptSectionTiming {
   startedAt: string;
@@ -2385,6 +2386,7 @@ export const submitSection = onCall<SubmitSectionData>(
       studentId: string;
       status: string;
       assessmentId: string;
+      startedAt?: string;      // wall-clock start of the whole sitting — overall-clock anchor
       sectionIds?: string[];   // frozen play order — used for positional break resolution
       sectionTimings: Record<string, AttemptSectionTiming>;
       // Phase 2.5 — serve the next section's first question on advance
@@ -2412,6 +2414,8 @@ export const submitSection = onCall<SubmitSectionData>(
     if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
     const a = aSnap.data() as {
       sectionGraceSeconds?: number;
+      overallTimeLimit?: number;
+      overallGraceSeconds?: number;
       sections?: Array<{ id: string; timeLimit?: number; breakAfter?: BreakCfg }>;
     };
 
@@ -2435,6 +2439,51 @@ export const submitSection = onCall<SubmitSectionData>(
 
     const sec = a.sections?.find((s) => s.id === sectionId);
     const graceSec = a.sectionGraceSeconds ?? DEFAULT_SECTION_GRACE_SECONDS;
+
+    // ── Overall exam deadline (hard cut) ─────────────────────────────
+    // Anchored on attempt.startedAt — the wall-clock start of the whole
+    // sitting — so all idle time between/inside sections and every break
+    // counts against it. This is the fence that closes the "walk away
+    // between sections" leak: the section clocks each run independently and
+    // honestly, but nothing else stops a student from taking hours across
+    // the exam. Checked BEFORE the section deadline: if the whole exam is
+    // over, that verdict wins regardless of the section's own clock.
+    //
+    // On breach we HARD CUT — close the current section at the overall
+    // deadline and refuse to advance to any next section. The client
+    // finalises the attempt (gradeAttempt) on seeing this signal; whatever
+    // is answered stands. Grace is the overall knob (own 30s default), the
+    // single trailing buffer for network lag at the buzzer.
+    //
+    // Freeze posture matches the section check: the server ignores freeze
+    // here (grace absorbs slack; freeze is an invigilator escape hatch
+    // credited only in the client display). Consistent with the existing
+    // section-deadline enforcement above.
+    if (a.overallTimeLimit && a.overallTimeLimit > 0 && attempt.startedAt) {
+      const overallGraceSec = a.overallGraceSeconds ?? DEFAULT_OVERALL_GRACE_SECONDS;
+      const examStartMs = new Date(attempt.startedAt).getTime();
+      const overallDeadlineMs = examStartMs + a.overallTimeLimit * 60_000 + overallGraceSec * 1000;
+      if (serverNow > overallDeadlineMs) {
+        // Close the current section at its true submit time (clamped to the
+        // section's own deadline if that is earlier), never advancing.
+        let sectionCloseMs = serverNow;
+        if (sec?.timeLimit && sec.timeLimit > 0) {
+          const sectionDeadlineMs = startedMs + sec.timeLimit * 60_000 + graceSec * 1000;
+          sectionCloseMs = Math.min(serverNow, sectionDeadlineMs);
+        }
+        const closeIso = new Date(sectionCloseMs).toISOString();
+        const usedSec = Math.max(0, Math.floor((sectionCloseMs - startedMs) / 1000));
+        await attemptRef.update({
+          [`sectionTimings.${sectionId}.submittedAt`]: closeIso,
+          [`sectionTimings.${sectionId}.timeUsedSeconds`]: usedSec,
+          updatedAt: new Date().toISOString(),
+        });
+        // The client catches this and calls gradeAttempt('time_expired') to
+        // finalise the whole attempt. No next section is served.
+        throw new HttpsError('deadline-exceeded', 'OVERALL_DEADLINE_EXCEEDED');
+      }
+    }
+
     if (sec?.timeLimit && sec.timeLimit > 0) {
       const deadlineMs = startedMs + sec.timeLimit * 60_000 + graceSec * 1000;
       if (serverNow > deadlineMs) {

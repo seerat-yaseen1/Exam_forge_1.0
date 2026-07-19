@@ -1478,9 +1478,20 @@ export function ExamShell() {
       }
     } catch (e) {
       const msg = (e as { message?: string })?.message ?? '';
-      // A late submit is finalised server-side (section closed at its true
-      // deadline, and advanced identically to the normal path). Fall through
-      // to the local-state advance below. Any OTHER error is a real failure.
+      // Overall exam deadline breached — HARD CUT. The server has already
+      // closed the current section at the overall deadline and refused to
+      // advance; the whole attempt is over. Finalise it now (grade with
+      // 'time_expired') instead of falling through to the advance/break
+      // branches below. doFinalSubmit takes over the submit lock, so leave
+      // submittingRef engaged here.
+      if (msg.includes('OVERALL_DEADLINE_EXCEEDED')) {
+        await doFinalSubmit('time_expired');
+        return;
+      }
+      // A late SECTION submit is finalised server-side (section closed at its
+      // true deadline, and advanced identically to the normal path). Fall
+      // through to the local-state advance below. Any OTHER error is a real
+      // failure.
       if (!msg.includes('SECTION_DEADLINE_EXCEEDED') && !msg.includes('deadline-exceeded')) {
         submittingRef.current = false;
         setErrorMsg('Could not submit this section. Check your connection and try again.');
@@ -1943,6 +1954,21 @@ export function ExamShell() {
   }, [shellStatus, doSectionSubmit]);
 
   // ══════════════════════════════════════════════════════════════════
+  // OVERALL TIMER EXPIRY (hard cut)
+  // ══════════════════════════════════════════════════════════════════
+  // The whole-exam clock hit zero. Unlike the section timer, this ends the
+  // ENTIRE attempt — go straight to final submit, whatever section the
+  // student is on. The server enforces the same deadline on the next
+  // submitSection regardless (this display-driven path just gets there
+  // faster and cleaner). Suppressed while frozen — an invigilator pause
+  // must not auto-finalise the exam.
+  const handleOverallTimerExpire = useCallback(() => {
+    if (shellStatus !== 'ready') return;
+    if (isFrozenRef.current) return;
+    handleFinalSubmit('time_expired');
+  }, [shellStatus, handleFinalSubmit]);
+
+  // ══════════════════════════════════════════════════════════════════
   // RENDER: LOADING / ERROR
   // ══════════════════════════════════════════════════════════════════
 
@@ -2079,6 +2105,18 @@ export function ExamShell() {
   if (!sectionStartedAt && currentSection.timeLimit) {
     console.warn('[ExamShell] section missing startedAt — timer suppressed', currentSection.id);
   }
+
+  // ── Overall exam clock ─────────────────────────────────────────
+  // Whole-sitting countdown, anchored on attempt.startedAt (set once, server-
+  // side, at attempt creation — the true start of the exam). Rendered only
+  // when the assessment defines an overall cap. Display-only; the server
+  // enforces the same deadline on every submitSection (hard cut). Freeze is
+  // credited exactly like the section clock, via totalFrozenSeconds /
+  // frozenAtISO, so an invigilator pause does not eat the overall budget.
+  const overallLimitMinutes = assessment.overallTimeLimit ?? 0;
+  const overallAnchorISO = attempt.startedAt || null;
+  const showOverallTimer = overallLimitMinutes > 0 && !!overallAnchorISO;
+
   const isIntegrityActive = overlay === null && shellStatus === 'ready' && !hasConflict && !isFrozen;
 
   // ── Load-then-render gate (Phase 2) ────────────────────────────
@@ -2153,6 +2191,29 @@ export function ExamShell() {
             ))}
           </div>
         </div>
+
+        {/* Overall exam timer (whole sitting) — labelled to distinguish it
+            from the per-section clock. Only shown when the exam defines an
+            overall cap. Enforcement is server-side; this is the visible
+            countdown so the total limit is never a surprise. */}
+        {showOverallTimer && (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span
+              className="text-xs"
+              style={{ color: '#9A9891', letterSpacing: '0.04em' }}
+            >
+              Total
+            </span>
+            <SectionTimer
+              timeLimitMinutes={overallLimitMinutes}
+              startedAtISO={overallAnchorISO!}
+              onExpire={handleOverallTimerExpire}
+              frozenOffsetSeconds={totalFrozenSeconds}
+              frozenAtISO={isFrozen ? frozenAtISO : null}
+              nowFn={nowFn}
+            />
+          </div>
+        )}
 
         {/* Section timer */}
         {currentSection.timeLimit && sectionStartedAt && (

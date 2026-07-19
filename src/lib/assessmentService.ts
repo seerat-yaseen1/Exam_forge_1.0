@@ -339,9 +339,16 @@ export type Assessment = {
   sebConfigFileUrl?: string;
 
   // Overall exam time limit (minutes) — runs ALONGSIDE per-section timeLimit;
-  // whichever expires first ends the exam. Enforced in Phase 1.
-  // undefined = no overall cap.
+  // whichever expires first ends the exam. undefined = no overall cap.
+  // Enforced server-side in submitSection (hard cut on the whole attempt).
+  // Anchored on attempt.startedAt (the wall-clock start of the sitting), so
+  // time spent in breaks and idle gaps between sections counts against it.
   overallTimeLimit?: number;
+
+  // Grace window (seconds) on the OVERALL clock — its own knob, independent of
+  // sectionGraceSeconds. Absorbs network lag / the final submit click so a
+  // slow connection at the buzzer is not penalised. undefined = 30s default.
+  overallGraceSeconds?: number;
 
   // Set by startExam on the FIRST attempt. Presence = security config frozen.
   // Written only by the Cloud Function (Admin SDK); clients cannot set it
@@ -565,6 +572,7 @@ export async function updateAssessmentAccess(id: string, patch: AccessPatch): Pr
 export type BehaviourPatch = Partial<Pick<Assessment,
   'shuffleQuestions' | 'passingScore' | 'showResults' | 'allowReview'
   | 'showResultsTo' | 'allowReviewTo' | 'sectionStartOrder'
+  | 'overallTimeLimit' | 'overallGraceSeconds'
 >>;
 export async function updateAssessmentBehaviour(id: string, patch: BehaviourPatch): Promise<void> {
   await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
@@ -659,6 +667,7 @@ export async function duplicateAssessment(
     allowReviewTo:       options.includeSettings ? src.allowReviewTo    : undefined,
     timeLimit:           options.includeSettings ? src.timeLimit           : undefined,
     overallTimeLimit:    options.includeSettings ? src.overallTimeLimit    : undefined,
+    overallGraceSeconds: options.includeSettings ? src.overallGraceSeconds : undefined,
     passingScore:        options.includeSettings ? src.passingScore        : undefined,
     maxAttempts:         options.includeSettings ? src.maxAttempts         : 1,
     sectionStartOrder:   options.includeSettings ? src.sectionStartOrder   : undefined,

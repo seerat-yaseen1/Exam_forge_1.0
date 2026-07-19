@@ -5,10 +5,11 @@ import {
   AlertTriangle, Search, Upload, Download,
 } from 'lucide-react';
 import {
-  getQuestionsByOwner, createQuestion, updateQuestion, softDeleteQuestion,
+  getQuestionsByOwner, getQuestionsByInstitute, createQuestion, updateQuestion, softDeleteQuestion,
   questionTypeBadge, difficultyColor,
   type Question, type Difficulty,
 } from '../../../lib/questionBankService';
+import { getFacultyByInstitute } from '../../../lib/firebaseService';
 import { getAllSubjects, type Subject } from '../../../lib/subjectService';
 import { QuestionTypeEngine, type QuestionDraft } from '../../components/questions/QuestionTypeEngine';
 import { QuestionPreview } from '../../components/questions/QuestionPreview';
@@ -225,14 +226,22 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
 // ── Question row ───────────────────────────────────────────────────────────────
 
 function QuestionRow({
-  question, onPreview, onEdit, onDelete,
+  question, authorLabel, canEdit, onPreview, onEdit, onDelete,
 }: {
   question: Question;
+  // 'Mine' for institute-authored, faculty name for faculty-authored
+  // (institute-wide visibility). null suppresses the badge.
+  authorLabel: string | null;
+  // Whether the institute admin may edit/delete THIS question. Own questions:
+  // yes. Faculty questions: not this phase (edit/delete are own-only; the
+  // rules reject the write) — Phase 2 lights these up per granted rights.
+  canEdit: boolean;
   onPreview: () => void;
   onEdit:    () => void;
   onDelete:  () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const mine = authorLabel === 'Mine';
   return (
     <div
       className="flex items-center gap-4 px-5 py-3.5 transition-colors"
@@ -249,6 +258,19 @@ function QuestionRow({
           {truncate(question.stem, 110) || <em style={{ color: '#B0AEA8' }}>No stem</em>}
         </p>
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+          {authorLabel && (
+            <span
+              className="text-xs px-1.5 py-0.5"
+              style={{
+                background: mine ? '#EEF2EE' : '#F3EFEA',
+                color:      mine ? '#4A6B4A' : '#8A6D3B',
+                borderRadius: 2, fontSize: 10, letterSpacing: '0.02em',
+              }}
+              title={mine ? 'Authored by you' : `Authored by ${authorLabel}`}
+            >
+              {mine ? 'Mine' : authorLabel}
+            </span>
+          )}
           {question.subject && (
             <span className="text-xs" style={{ color: '#9A9891' }}>{question.subject}</span>
           )}
@@ -279,12 +301,16 @@ function QuestionRow({
         <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
           <Eye size={13} strokeWidth={1.5} />
         </button>
-        <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
-          <Pencil size={13} strokeWidth={1.5} />
-        </button>
-        <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}>
-          <Trash2 size={13} strokeWidth={1.5} />
-        </button>
+        {canEdit && (
+          <>
+            <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+              <Pencil size={13} strokeWidth={1.5} />
+            </button>
+            <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}>
+              <Trash2 size={13} strokeWidth={1.5} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -482,6 +508,9 @@ export function InstituteQuestionsPage() {
   // ── Data ──────────────────────────────────────────────────────────
   const [questions, setQuestions] = useState<Question[]>([]);
   const [subjects,  setSubjects]  = useState<Subject[]>([]);
+  // facultyId → display name, for the author badge on faculty-authored
+  // questions surfaced by institute-wide visibility.
+  const [facultyNames, setFacultyNames] = useState<Record<string, string>>({});
   const [loading,   setLoading]   = useState(true);
 
   // ── UI state ───────���──────────────────────────────────────────────
@@ -504,11 +533,23 @@ export function InstituteQuestionsPage() {
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [qs, subjs] = await Promise.all([
+      const [own, wide, subjs, faculty] = await Promise.all([
+        // Own questions WITH answer keys (admin authors/edits these).
         getQuestionsByOwner('institute', instituteId),
+        // Everything authored inside the institute — includes faculty
+        // questions (public only; their keys stay owner-scoped). Phase-1
+        // institute-wide visibility.
+        getQuestionsByInstitute(instituteId),
         getAllSubjects(),
+        getFacultyByInstitute(instituteId),
       ]);
-      setQuestions(qs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      setFacultyNames(Object.fromEntries(faculty.map((f) => [f.id, f.name])));
+      // Merge: own questions (keyed, editable) take precedence over their
+      // public twin in the wide set; faculty questions come through as
+      // public-only. De-dupe by id.
+      const ownIds = new Set(own.map((q) => q.id));
+      const merged = [...own, ...wide.filter((q) => !ownIds.has(q.id))];
+      setQuestions(merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       setSubjects(subjs);
     } finally {
       if (!silent) setLoading(false);
@@ -650,15 +691,25 @@ export function InstituteQuestionsPage() {
                 ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                 : filtered.length === 0
                   ? <EmptyState filtered={isFiltered} onAdd={openCreate} />
-                  : filtered.map((q) => (
-                      <QuestionRow
-                        key={q.id}
-                        question={q}
-                        onPreview={() => setPreviewQ(q)}
-                        onEdit={() => openEdit(q)}
-                        onDelete={() => setDeleteTarget(q)}
-                      />
-                    ))
+                  : filtered.map((q) => {
+                      const mine = q.ownerType === 'institute' && q.ownerId === instituteId;
+                      const authorLabel = mine
+                        ? 'Mine'
+                        : (q.ownerType === 'faculty'
+                            ? (facultyNames[q.ownerId ?? ''] ?? 'Faculty')
+                            : null);
+                      return (
+                        <QuestionRow
+                          key={q.id}
+                          question={q}
+                          authorLabel={authorLabel}
+                          canEdit={mine}
+                          onPreview={() => setPreviewQ(q)}
+                          onEdit={() => openEdit(q)}
+                          onDelete={() => setDeleteTarget(q)}
+                        />
+                      );
+                    })
               }
 
               {/* Count footer */}

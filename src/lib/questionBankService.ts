@@ -644,6 +644,32 @@ export async function getQuestionsByOwner(
 }
 
 /**
+ * All questions authored INSIDE an institute — both the institute admin's own
+ * (ownerType 'institute') and every faculty member's (ownerType 'faculty',
+ * tenant-stamped with this institute). Powers the institute admin's Phase-1
+ * institute-wide visibility.
+ *
+ * Keyed off the `instituteId` tenant stamp, so the read is provable under the
+ * tenant-fence rules (institute branch: instituteId == mine). Always returns
+ * PUBLIC questions — the institute admin sees faculty questions for oversight,
+ * but answer keys stay owner-scoped (a faculty member's keys are theirs), so
+ * this never fetches the answer sibling. Callers needing their OWN keys still
+ * use getQuestionsByOwner.
+ */
+export async function getQuestionsByInstitute(
+  instituteId: string,
+): Promise<Question[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, COL.questions),
+      where('isDeleted',  '==', false),
+      where('instituteId', '==', instituteId)
+    )
+  );
+  return snap.docs.map((d) => sanitizePublic(d.data() as Question));
+}
+
+/**
  * Update question metadata or content. Always bumps updatedAt.
  * Routes answer-key fields to the questionAnswers sibling collection.
  */

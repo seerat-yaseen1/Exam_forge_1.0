@@ -515,6 +515,33 @@ export async function getAllTopics(): Promise<Topic[]> {
   return snap.docs.map((d) => d.data() as Topic);
 }
 
+// ── Taxonomy maps (slug → current canonical name) ─────────────────
+// The assessment builder matches questions to selection rules by subject/topic
+// NAME, but a rename updates only the taxonomy doc — old questions keep the old
+// name (renameSubject stores it as an alias the assessment path never reads).
+// These maps let the builder resolve each question's subjectId/topicId to the
+// CURRENT name before matching, so a rename can never orphan a question.
+// Keep the resolution rule identical to canonicalSubject/canonicalTopic in
+// assessmentService and qSubject/qTopic in topicPickers.
+export type TaxonomyNameMaps = {
+  subjectNameById: Record<string, string>;  // subjectId → current Subject.name
+  topicNameById: Record<string, string>;     // topicId   → current Topic.name
+};
+
+export function buildTaxonomyNameMaps(subjects: Subject[], topics: Topic[]): TaxonomyNameMaps {
+  const subjectNameById: Record<string, string> = {};
+  for (const s of subjects) subjectNameById[s.id] = s.name;
+  const topicNameById: Record<string, string> = {};
+  for (const t of topics) topicNameById[t.id] = t.name;
+  return { subjectNameById, topicNameById };
+}
+
+/** One-shot loader: fetch subjects + topics and build the name maps together. */
+export async function loadTaxonomyNameMaps(): Promise<TaxonomyNameMaps> {
+  const [subjects, topics] = await Promise.all([getAllSubjects(), getAllTopics()]);
+  return buildTaxonomyNameMaps(subjects, topics);
+}
+
 export async function getTopicsBySubject(subjectId: string): Promise<Topic[]> {
   const { where } = await import('firebase/firestore');
   const snap = await getDocs(

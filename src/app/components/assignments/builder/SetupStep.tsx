@@ -9,7 +9,7 @@ import { Plus, X, CheckCircle2, Timer, ChevronRight, Layers, BookOpen, Lock } fr
 import { type Student } from '../../../../lib/firebaseService';
 import { type Assessment, type AssessmentStatus } from '../../../../lib/assessmentService';
 import { type Question } from '../../../../lib/questionBankService';
-import { getAllSubjects, type Subject } from '../../../../lib/subjectService';
+import { getAllSubjects, loadTaxonomyNameMaps, type Subject, type TaxonomyNameMaps } from '../../../../lib/subjectService';
 import { makeSectionId, SECTION_LETTERS, defaultSectionName, mutabilityFor, type SectionDraft } from './shared';
 import { Field, SectionLabel, inputStyle } from './controls';
 import { SectionTopicPicker, SubjectPickerPhase, TopicPickerPhase } from './topicPickers';
@@ -52,6 +52,24 @@ export function SetupStep({
       .then(setAllSubjectDocs)
       .finally(() => setLoadingSubjects(false));
   }, []);
+
+  // Taxonomy name maps (slug → current name) — see loadTaxonomyNameMaps. Makes
+  // the bank tree below group renamed subjects/topics under their CURRENT name
+  // instead of splitting old vs new. Empty = fall back to stored names.
+  const [taxonomyMaps, setTaxonomyMaps] = useState<TaxonomyNameMaps>({ subjectNameById: {}, topicNameById: {} });
+  useEffect(() => {
+    loadTaxonomyNameMaps()
+      .then(setTaxonomyMaps)
+      .catch(() => setTaxonomyMaps({ subjectNameById: {}, topicNameById: {} }));
+  }, []);
+  const qSubject = useCallback(
+    (q: Question): string => (q.subjectId && taxonomyMaps.subjectNameById[q.subjectId]) || q.subject,
+    [taxonomyMaps]
+  );
+  const qTopic = useCallback(
+    (q: Question): string => (q.topicId && taxonomyMaps.topicNameById[q.topicId]) || q.topic,
+    [taxonomyMaps]
+  );
 
   // ── Right-column phase: 1=Subjects, 2=Topics, 3=Sections ─────
   // Restore the furthest-completed phase when returning from Step 2.
@@ -102,14 +120,16 @@ export function SetupStep({
   const subjectTopics = useMemo(() => {
     const map: Record<string, Set<string>> = {};
     allQuestions.forEach((q) => {
-      if (q.isDeleted || !q.subject || !q.topic) return;
-      if (!map[q.subject]) map[q.subject] = new Set();
-      map[q.subject].add(q.topic);
+      const subj = qSubject(q);
+      const top = qTopic(q);
+      if (q.isDeleted || !subj || !top) return;
+      if (!map[subj]) map[subj] = new Set();
+      map[subj].add(top);
     });
     const sorted: Record<string, string[]> = {};
     for (const subj in map) sorted[subj] = [...map[subj]].sort();
     return sorted;
-  }, [allQuestions]);
+  }, [allQuestions, qSubject, qTopic]);
 
   // ── Scoped subjectTopics for Phase 3 section builder ─────────
   // When a topicPool is set, scope the section picker to only those topics.
@@ -311,6 +331,8 @@ export function SetupStep({
                 onToggle={toggleSubjectInPool}
                 onNext={() => setRightPhase(2)}
                 loading={loadingSubjects}
+                subjectNameById={taxonomyMaps.subjectNameById}
+                topicNameById={taxonomyMaps.topicNameById}
               />
             )}
 
@@ -324,6 +346,8 @@ export function SetupStep({
                 onToggleTopic={toggleTopicInPool}
                 onBack={() => setRightPhase(1)}
                 onNext={() => setRightPhase(3)}
+                subjectNameById={taxonomyMaps.subjectNameById}
+                topicNameById={taxonomyMaps.topicNameById}
               />
             )}
 

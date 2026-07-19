@@ -106,11 +106,49 @@ type BankQuestion = {
   topic: string;       // needed for topic-level filtering
   difficulty: string;
   isDeleted: boolean;
+  // Slug links to the taxonomy docs. PREFERRED over the name strings above:
+  // renaming a subject/topic updates the doc but NOT the name stored on old
+  // questions, so name-only matching silently drops renamed questions from
+  // selection. When taxonomy maps are supplied, we resolve these IDs to the
+  // CURRENT canonical name so a rename can never orphan a question.
+  subjectId?: string;
+  topicId?: string;
 };
+
+// ── Taxonomy canonicalisation (rename-proof matching) ─────────────
+// The assessment builder matches questions to selection rules by subject +
+// topic NAME. That breaks after a rename: the rule and the picker show the
+// new name, but old questions still carry the old name (renameSubject keeps
+// the old name only as an alias, which the assessment path never consults).
+//
+// Fix: resolve every question's stored subjectId/topicId to the CURRENT name
+// via these maps before matching, so both sides speak the same, always-current
+// name. Falls back to the stored name when a question has no ID (legacy docs)
+// or no map is supplied — so behaviour is unchanged when maps are absent, and
+// nothing regresses for questions that predate the slug system.
+export type TaxonomyMaps = {
+  subjectNameById: Record<string, string>;  // subjectId → current Subject.name
+  topicNameById: Record<string, string>;    // topicId   → current Topic.name
+};
+
+function canonicalSubject(q: BankQuestion, maps?: TaxonomyMaps): string {
+  if (maps && q.subjectId && maps.subjectNameById[q.subjectId]) {
+    return maps.subjectNameById[q.subjectId];
+  }
+  return q.subject;
+}
+
+function canonicalTopic(q: BankQuestion, maps?: TaxonomyMaps): string {
+  if (maps && q.topicId && maps.topicNameById[q.topicId]) {
+    return maps.topicNameById[q.topicId];
+  }
+  return q.topic;
+}
 
 export function resolveQuestionsForSections(
   sections: AssessmentSection[],
-  allQuestions: BankQuestion[]
+  allQuestions: BankQuestion[],
+  taxonomy?: TaxonomyMaps
 ): { sections: AssessmentSection[]; flatQuestions: AssessmentQuestion[] } {
   const usedIds = new Set<string>();
   let globalOrder = 0;
@@ -121,12 +159,15 @@ export function resolveQuestionsForSections(
     for (const rule of section.rules) {
       if (rule.count <= 0) continue;
 
-      // Build pool: matching subject + topic + difficulty, not deleted, not yet used
+      // Build pool: matching subject + topic + difficulty, not deleted, not yet
+      // used. Subject/topic are compared against each question's CURRENT
+      // canonical name (resolved from its slug ID when taxonomy maps are given),
+      // so a renamed subject/topic still matches its old questions.
       const pool = allQuestions.filter(
         (q) =>
           !q.isDeleted &&
-          q.subject === rule.subject &&
-          q.topic === rule.topic &&
+          canonicalSubject(q, taxonomy) === rule.subject &&
+          canonicalTopic(q, taxonomy) === rule.topic &&
           q.difficulty === rule.difficulty &&
           !usedIds.has(q.id)
       );
@@ -171,7 +212,8 @@ export type RuleValidationResult = {
 
 export function validateSelectionRules(
   sections: AssessmentSection[],
-  allQuestions: BankQuestion[]
+  allQuestions: BankQuestion[],
+  taxonomy?: TaxonomyMaps
 ): { valid: boolean; results: RuleValidationResult[] } {
   const usedCounts: Record<string, number> = {};
   const results: RuleValidationResult[] = [];
@@ -179,11 +221,13 @@ export function validateSelectionRules(
   const key = (subject: string, topic: string, diff: string) =>
     `${subject}::${topic}::${diff}`;
 
-  // Pre-compute total available per subject+topic+difficulty
+  // Pre-compute total available per subject+topic+difficulty, keyed by the
+  // CURRENT canonical name (same resolution the pool uses), so the count a
+  // rule sees matches what resolveQuestionsForSections will actually draw.
   const totalAvailable: Record<string, number> = {};
   for (const q of allQuestions) {
     if (q.isDeleted) continue;
-    const k = key(q.subject, q.topic, q.difficulty);
+    const k = key(canonicalSubject(q, taxonomy), canonicalTopic(q, taxonomy), q.difficulty);
     totalAvailable[k] = (totalAvailable[k] ?? 0) + 1;
   }
 

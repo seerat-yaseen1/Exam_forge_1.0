@@ -21,6 +21,8 @@ export function RuleBuilderPanel({
   locked,
   subjectPoolNames,
   topicPool,
+  subjectNameById,
+  topicNameById,
 }: {
   sections: SectionDraft[];
   activeSectionIdx: number;
@@ -30,8 +32,22 @@ export function RuleBuilderPanel({
   locked?: boolean;
   subjectPoolNames?: string[];
   topicPool?: string[];
+  // Slug → CURRENT canonical name maps. When provided, a question's subject/
+  // topic is read from its subjectId/topicId via these maps, so a renamed
+  // subject/topic still groups its old questions under the current name (and
+  // never appears split across old + new names). Falls back to the stored
+  // name when a question has no ID or the map lacks the ID (legacy docs).
+  subjectNameById?: Record<string, string>;
+  topicNameById?: Record<string, string>;
 }) {
   const activeSection = sections[activeSectionIdx];
+
+  // Resolve a question's subject/topic to its current canonical name. Keep in
+  // sync with canonicalSubject/canonicalTopic in assessmentService — same rule.
+  const qSubject = (q: Question): string =>
+    (subjectNameById && q.subjectId && subjectNameById[q.subjectId]) || q.subject;
+  const qTopic = (q: Question): string =>
+    (topicNameById && q.topicId && topicNameById[q.topicId]) || q.topic;
 
   // ── Derived bank structure ──────────────────────────────────────
   // subjectTopics: subject → sorted list of topics
@@ -40,10 +56,12 @@ export function RuleBuilderPanel({
     const topicsMap: Record<string, Set<string>> = {};
     const countMap: Record<string, number> = {};
     allQuestions.forEach((q) => {
-      if (q.isDeleted || !q.subject || !q.topic) return;
-      if (!topicsMap[q.subject]) topicsMap[q.subject] = new Set();
-      topicsMap[q.subject].add(q.topic);
-      const k = `${q.subject}::${q.topic}::${q.difficulty}`;
+      const subj = qSubject(q);
+      const top = qTopic(q);
+      if (q.isDeleted || !subj || !top) return;
+      if (!topicsMap[subj]) topicsMap[subj] = new Set();
+      topicsMap[subj].add(top);
+      const k = `${subj}::${top}::${q.difficulty}`;
       countMap[k] = (countMap[k] ?? 0) + 1;
     });
     const sorted: Record<string, string[]> = {};
@@ -51,7 +69,7 @@ export function RuleBuilderPanel({
       sorted[subj] = [...topicsMap[subj]].sort();
     }
     return { subjectTopics: sorted, bankCount: countMap };
-  }, [allQuestions]);
+  }, [allQuestions, subjectNameById, topicNameById]);
 
   // ── Filter by this section's assigned topics ────────────────────
   // If assignedTopics is non-empty, only show those subject/topic pairs.
@@ -663,6 +681,8 @@ export function SubjectPickerPhase({
   onToggle,
   onNext,
   loading,
+  subjectNameById,
+  topicNameById,
 }: {
   subjects: Subject[];
   allQuestions: Question[];
@@ -670,19 +690,27 @@ export function SubjectPickerPhase({
   onToggle: (id: string) => void;
   onNext: () => void;
   loading: boolean;
+  subjectNameById?: Record<string, string>;
+  topicNameById?: Record<string, string>;
 }) {
-  // Derive unique topic count per subject name from live question bank
+  // Derive unique topic count per subject name from live question bank.
+  // Resolve each question's subject/topic to its CURRENT canonical name so a
+  // renamed subject's count lands under subj.name (the lookup key below) and
+  // renamed topics aren't double-counted across old + new labels.
   const topicCountBySubject = useMemo(() => {
+    const qSub = (q: Question) => (subjectNameById && q.subjectId && subjectNameById[q.subjectId]) || q.subject;
+    const qTop = (q: Question) => (topicNameById && q.topicId && topicNameById[q.topicId]) || q.topic;
     const map: Record<string, Set<string>> = {};
     allQuestions.forEach((q) => {
-      if (q.isDeleted || !q.subject || !q.topic) return;
-      if (!map[q.subject]) map[q.subject] = new Set();
-      map[q.subject].add(q.topic);
+      const s = qSub(q); const t = qTop(q);
+      if (q.isDeleted || !s || !t) return;
+      if (!map[s]) map[s] = new Set();
+      map[s].add(t);
     });
     const out: Record<string, number> = {};
     for (const subj in map) out[subj] = map[subj].size;
     return out;
-  }, [allQuestions]);
+  }, [allQuestions, subjectNameById, topicNameById]);
 
   if (loading) {
     return (
@@ -792,6 +820,8 @@ export function TopicPickerPhase({
   onToggleTopic,
   onBack,
   onNext,
+  subjectNameById,
+  topicNameById,
 }: {
   allSubjects: Subject[];
   allQuestions: Question[];
@@ -800,6 +830,8 @@ export function TopicPickerPhase({
   onToggleTopic: (key: string) => void;
   onBack: () => void;
   onNext: () => void;
+  subjectNameById?: Record<string, string>;
+  topicNameById?: Record<string, string>;
 }) {
   // Resolve subject names from selected IDs
   const selectedSubjectNames = useMemo(
@@ -807,25 +839,31 @@ export function TopicPickerPhase({
     [allSubjects, selectedSubjectIds]
   );
 
-  // Build topic lists + per-topic Q counts, scoped to selected subjects
+  // Build topic lists + per-topic Q counts, scoped to selected subjects.
+  // Questions are grouped by their CURRENT canonical subject/topic name so a
+  // renamed subject (whose old questions still store the old name) still lands
+  // under the selected subject's current name, and renamed topics group cleanly.
   const subjectData = useMemo(() => {
+    const qSub = (q: Question) => (subjectNameById && q.subjectId && subjectNameById[q.subjectId]) || q.subject;
+    const qTop = (q: Question) => (topicNameById && q.topicId && topicNameById[q.topicId]) || q.topic;
     const map: Record<string, { topics: string[]; counts: Record<string, number> }> = {};
     selectedSubjectNames.forEach((name) => {
       map[name] = { topics: [], counts: {} };
     });
     const topicSets: Record<string, Set<string>> = {};
     allQuestions.forEach((q) => {
-      if (q.isDeleted || !q.subject || !q.topic) return;
-      if (!map[q.subject]) return;
-      if (!topicSets[q.subject]) topicSets[q.subject] = new Set();
-      topicSets[q.subject].add(q.topic);
-      map[q.subject].counts[q.topic] = (map[q.subject].counts[q.topic] ?? 0) + 1;
+      const s = qSub(q); const t = qTop(q);
+      if (q.isDeleted || !s || !t) return;
+      if (!map[s]) return;
+      if (!topicSets[s]) topicSets[s] = new Set();
+      topicSets[s].add(t);
+      map[s].counts[t] = (map[s].counts[t] ?? 0) + 1;
     });
     for (const subj in topicSets) {
       map[subj].topics = [...topicSets[subj]].sort();
     }
     return map;
-  }, [allQuestions, selectedSubjectNames]);
+  }, [allQuestions, selectedSubjectNames, subjectNameById, topicNameById]);
 
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(
     () => new Set(selectedSubjectNames)

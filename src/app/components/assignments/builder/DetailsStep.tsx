@@ -12,7 +12,7 @@ import { createAssessment, resolveQuestionsForSections, validateSelectionRules, 
 import { deriveShowResultsTo, deriveAllowReviewTo, DEFAULT_SHOW_RESULTS_TO, DEFAULT_ALLOW_REVIEW_TO, type VisibilityAudience } from '../../../../lib/visibility';
 import { AudienceSelector } from '../AudienceSelector';
 import { type Question } from '../../../../lib/questionBankService';
-import { getAllSubjects, type Subject } from '../../../../lib/subjectService';
+import { getAllSubjects, loadTaxonomyNameMaps, type Subject, type TaxonomyNameMaps } from '../../../../lib/subjectService';
 import { AllocationPanelCore } from '../allocation/AllocationPanelCore';
 import { emptyAllocationDraft, getAllocation, type AllocationDraft, type AllocationNodeType } from '../../../../lib/allocationService';
 import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, computeAutoOverallLimit, sumSectionsAndBreaksMinutes, DEFAULT_OVERALL_GRACE_SECONDS, type SectionDraft } from './shared';
@@ -182,6 +182,15 @@ export function DetailsStep({
   useEffect(() => {
     getAllSubjects().then(setSubjectDocs).catch(() => setSubjectDocs([]));
   }, []);
+  // Taxonomy name maps (slug → current name) — make rule matching + the picker
+  // rename-proof (see loadTaxonomyNameMaps / canonicalSubject). Empty maps mean
+  // "fall back to stored names", so a load failure degrades to legacy behaviour.
+  const [taxonomyMaps, setTaxonomyMaps] = useState<TaxonomyNameMaps>({ subjectNameById: {}, topicNameById: {} });
+  useEffect(() => {
+    loadTaxonomyNameMaps()
+      .then(setTaxonomyMaps)
+      .catch(() => setTaxonomyMaps({ subjectNameById: {}, topicNameById: {} }));
+  }, []);
   const subjectPoolNames = useMemo(
     () => subjectDocs.filter((s) => subjectPool.includes(s.id)).map((s) => s.name),
     [subjectDocs, subjectPool]
@@ -282,7 +291,7 @@ export function DetailsStep({
         }
       });
 
-      const { valid, results } = validateSelectionRules(builtSections, allQuestions);
+      const { valid, results } = validateSelectionRules(builtSections, allQuestions, taxonomyMaps);
       if (!valid) {
         results
           .filter((r) => !r.ok)
@@ -342,7 +351,7 @@ export function DetailsStep({
       let flatQuestions = builtSections.flatMap((s) => s.questions);
 
       if (targetStatus === 'active') {
-        const resolved = resolveQuestionsForSections(builtSections, allQuestions);
+        const resolved = resolveQuestionsForSections(builtSections, allQuestions, taxonomyMaps);
         finalSections = resolved.sections;
         flatQuestions = resolved.flatQuestions;
       }
@@ -1044,6 +1053,8 @@ export function DetailsStep({
         locked={!mut.sections}
         subjectPoolNames={subjectPoolNames}
         topicPool={topicPool}
+        subjectNameById={taxonomyMaps.subjectNameById}
+        topicNameById={taxonomyMaps.topicNameById}
       />
 
       {/* Bottom bar — rules phase hands off to Step 3 (Allocation). Saving now

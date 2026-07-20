@@ -9,6 +9,7 @@ import React from 'react';
 import { Clock, Calendar, AlertTriangle, CheckCircle2, AlertCircle, Lock, Zap, Infinity as InfinityIcon } from 'lucide-react';
 import { type Subject } from '../../../../lib/subjectService';
 import { Difficulty, RuleDraft, DIFF_LABEL, DIFF_COLORS, dateToInputLocal } from './shared';
+import { type GradingPolicy, type PenaltyType } from '../../../../lib/assessmentService';
 
 export function Field({ label, hint, required, children }: {
   label: string; hint?: string; required?: boolean; children: React.ReactNode;
@@ -281,9 +282,70 @@ export function LockedFieldWrapper({ label, reason, children }: {
 // Three-level hierarchy: Subject → Topic → Difficulty
 // ══════════════════════════════════════════════════════════════════
 
+// PenaltyInput — the penalty type (fixed marks | percent of the question's
+// marks) + magnitude. Shared by the exam default, section override, and the
+// per-difficulty-row override. Teacher types a POSITIVE number; the server
+// subtracts it. Emits partial GradingPolicy patches.
+export function PenaltyInput({
+  policy, onChange, compact,
+}: {
+  policy: GradingPolicy;
+  onChange: (patch: Partial<GradingPolicy>) => void;
+  compact?: boolean;
+}) {
+  const type: PenaltyType = policy.penaltyType ?? 'fixed';
+  return (
+    <div className="flex items-center gap-1.5">
+      {/* type toggle */}
+      <div className="flex" style={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #E3E1DB' }}>
+        {(['fixed', 'percent'] as PenaltyType[]).map((t) => {
+          const active = type === t;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onChange({ penaltyType: t })}
+              style={{
+                fontSize: compact ? 10 : 11,
+                padding: compact ? '2px 6px' : '4px 9px',
+                background: active ? '#9B2828' : '#FFFFFF',
+                color: active ? '#FFFFFF' : '#6B6A65',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {t === 'fixed' ? 'marks' : '%'}
+            </button>
+          );
+        })}
+      </div>
+      {/* magnitude */}
+      <div className="flex items-center gap-1 px-2 py-1"
+        style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+        <span style={{ color: '#9B2828', fontSize: compact ? 11 : 12 }}>−</span>
+        <input
+          type="number"
+          value={policy.penaltyValue ?? ''}
+          onChange={(e) => onChange({ penaltyValue: e.target.value === '' ? undefined : Math.max(0, parseFloat(e.target.value)) })}
+          placeholder="0"
+          min="0"
+          step={type === 'percent' ? '5' : '0.5'}
+          className="outline-none text-center"
+          style={{
+            width: compact ? 40 : 48, fontSize: compact ? 11 : 12, border: 'none',
+            background: 'transparent', color: '#0C0C0B',
+          }}
+        />
+        <span style={{ color: '#C4C3BD', fontSize: 10 }}>{type === 'percent' ? '%' : 'mk'}</span>
+      </div>
+    </div>
+  );
+}
+
 export function DifficultyRow({
   diff, available, bankTotal, rule,
   onCountChange, onMarksChange,
+  negMarkingOn, rowPolicy, inheritedPenaltyLabel, onRowPolicyChange,
 }: {
   diff: Difficulty;
   available: number;
@@ -291,12 +353,22 @@ export function DifficultyRow({
   rule: RuleDraft | undefined;
   onCountChange: (v: string) => void;
   onMarksChange: (v: string) => void;
+  // Negative-marking per-level override (Standard/Linear only). When
+  // negMarkingOn is false the whole control is hidden (hard gate closed).
+  // rowPolicy is this row's own override (undefined = inherit); the resolved
+  // inherited value is shown as placeholder text so the teacher sees what
+  // "inherit" means. onRowPolicyChange emits a partial patch (or clears).
+  negMarkingOn?: boolean;
+  rowPolicy?: GradingPolicy;
+  inheritedPenaltyLabel?: string;
+  onRowPolicyChange?: (patch: Partial<GradingPolicy> | null) => void;
 }) {
   const count = parseInt(rule?.count ?? '', 10) || 0;
   const isEmpty = bankTotal === 0;
   const isOver = count > available;
   const hasValue = count > 0;
   const dc = DIFF_COLORS[diff];
+  const rowOverrides = !!rowPolicy && (rowPolicy.penaltyValue !== undefined || rowPolicy.negativeMarking === false);
 
   return (
     <div
@@ -365,6 +437,39 @@ export function DifficultyRow({
         />
         <span style={{ color: '#C4C3BD', fontSize: 10 }}>mk/Q</span>
       </div>
+
+      {/* Per-level negative-marking override (Standard/Linear, gate open) */}
+      {negMarkingOn && !isEmpty && hasValue && onRowPolicyChange && (
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {rowOverrides ? (
+            <>
+              <PenaltyInput compact policy={rowPolicy ?? {}} onChange={(patch) => onRowPolicyChange(patch)} />
+              <button
+                type="button"
+                onClick={() => onRowPolicyChange(null)}
+                title="Reset to inherited penalty"
+                style={{ fontSize: 10, color: '#9A9891', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                reset
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onRowPolicyChange({ penaltyValue: 0 })}
+              title="Override the penalty for this difficulty"
+              className="flex items-center gap-1"
+              style={{
+                fontSize: 10, color: '#9A9891', padding: '2px 7px',
+                border: '1px dashed #E3E1DB', borderRadius: 2, background: 'transparent', cursor: 'pointer',
+              }}
+            >
+              <span style={{ color: '#C4C3BD' }}>−penalty:</span>
+              <span>{inheritedPenaltyLabel ?? 'inherited'}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Subtotal + status */}
       <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">

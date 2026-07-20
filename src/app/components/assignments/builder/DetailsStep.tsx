@@ -8,7 +8,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { X, Loader2, ClipboardList, Clock, Calendar, AlertTriangle, CheckCircle2, FileText, Timer, Award, ChevronRight, AlertCircle, Shuffle, BarChart2, BookOpen, Shield, Upload } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
-import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection } from '../../../../lib/assessmentService';
+import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection, type AssessmentGradingConfig, type GradingPolicy, type PenaltyType } from '../../../../lib/assessmentService';
 import { deriveShowResultsTo, deriveAllowReviewTo, DEFAULT_SHOW_RESULTS_TO, DEFAULT_ALLOW_REVIEW_TO, type VisibilityAudience } from '../../../../lib/visibility';
 import { AudienceSelector } from '../AudienceSelector';
 import { type Question } from '../../../../lib/questionBankService';
@@ -16,9 +16,52 @@ import { getAllSubjects, loadTaxonomyNameMaps, type Subject, type TaxonomyNameMa
 import { AllocationPanelCore } from '../allocation/AllocationPanelCore';
 import { emptyAllocationDraft, getAllocation, type AllocationDraft, type AllocationNodeType } from '../../../../lib/allocationService';
 import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, computeAutoOverallLimit, sumSectionsAndBreaksMinutes, DEFAULT_OVERALL_GRACE_SECONDS, type SectionDraft } from './shared';
-import { Field, SectionLabel, selectStyle, DurationIndicator, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle } from './controls';
+import { Field, SectionLabel, selectStyle, DurationIndicator, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle, PenaltyInput } from './controls';
 import { RuleBuilderPanel } from './topicPickers';
 import { InstitutePicker, StudentPicker } from './targetPickers';
+
+// Prepare the grading policy for persistence:
+//  • adaptive delivery → no policy (feature is Standard + Linear only)
+//  • master switch off → undefined (exam stores nothing, grades like legacy)
+//  • prune empty section/row overrides so the doc stays clean
+// The server re-resolves and re-gates regardless; this just keeps stored data
+// honest and avoids "off but carries penalty numbers" cruft.
+function sanitizeGradingConfig(
+  config: AssessmentGradingConfig,
+  deliveryMode: 'standard' | 'linear' | 'adaptive',
+): AssessmentGradingConfig | undefined {
+  if (deliveryMode === 'adaptive') return undefined;
+  const exam = config.exam;
+  if (exam?.negativeMarking !== true) {
+    // Master off. Preserve blankScore only if a teacher deliberately set one
+    // (blank handling is meaningful even with penalties off); otherwise nothing.
+    if (exam && typeof exam.blankScore === 'number') {
+      return { exam: { negativeMarking: false, blankScore: exam.blankScore } };
+    }
+    return undefined;
+  }
+  const clean: AssessmentGradingConfig = { exam };
+  if (config.sections) {
+    const sections: NonNullable<AssessmentGradingConfig['sections']> = {};
+    for (const [sid, sp] of Object.entries(config.sections)) {
+      const hasSection = sp.section && Object.keys(sp.section).length > 0;
+      const rows = sp.byDifficulty
+        ? Object.fromEntries(
+            Object.entries(sp.byDifficulty).filter(([, p]) => p && Object.keys(p).length > 0)
+          )
+        : undefined;
+      const hasRows = rows && Object.keys(rows).length > 0;
+      if (hasSection || hasRows) {
+        sections[sid] = {
+          ...(hasSection ? { section: sp.section } : {}),
+          ...(hasRows ? { byDifficulty: rows } : {}),
+        };
+      }
+    }
+    if (Object.keys(sections).length > 0) clean.sections = sections;
+  }
+  return clean;
+}
 
 export function DetailsStep({
   mode, assessment, originalStatus, allQuestions, sections, setSections, onBack, onSave,
@@ -75,6 +118,66 @@ export function DetailsStep({
   // overallTimeLimit: the manual value (used only when overallAuto is off).
   const [overallTimeLimit, setOverallTimeLimit] = useState(assessment?.overallTimeLimit?.toString() ?? '');
   const [shuffleQuestions, setShuffleQuestions] = useState(assessment?.shuffleQuestions ?? false);
+
+  // ── Grading policy (negative marking + blank handling) ───────────
+  // One draft object mirroring AssessmentGradingConfig. The exam master switch
+  // is the hard gate: when off, section/row overrides are inert (kept in state
+  // so toggling back on restores them, but never sent as "on"). Standard +
+  // Linear only — hidden entirely for adaptive.
+  const [gradingConfig, setGradingConfig] = useState<AssessmentGradingConfig>(
+    assessment?.gradingConfig ?? {}
+  );
+  const examPolicy = gradingConfig.exam ?? {};
+  const negMarkingOn = examPolicy.negativeMarking === true;
+
+  // Patch the exam-level policy (master switch, default penalty, blank rule).
+  const patchExamPolicy = (patch: Partial<GradingPolicy>) =>
+    setGradingConfig((c) => ({ ...c, exam: { ...(c.exam ?? {}), ...patch } }));
+
+  // Patch a section-level override; null clears it entirely (back to inherit).
+  const patchSectionPolicy = (sectionId: string, patch: Partial<GradingPolicy> | null) =>
+    setGradingConfig((c) => {
+      const sections = { ...(c.sections ?? {}) };
+      const cur = sections[sectionId] ?? {};
+      if (patch === null) {
+        const { section: _drop, ...rest } = cur;
+        if (Object.keys(rest).length > 0) sections[sectionId] = rest; else delete sections[sectionId];
+      } else {
+        sections[sectionId] = { ...cur, section: { ...(cur.section ?? {}), ...patch } };
+      }
+      return { ...c, sections };
+    });
+
+  // Format the penalty INHERITED at a given (section, difficulty) — i.e. what
+  // applies when the row/section does NOT override. Walks section → exam (the
+  // levels above the row). Used as placeholder text so "inherit" is legible.
+  const formatPenalty = (p: GradingPolicy | undefined): string | null => {
+    if (!p || p.penaltyValue === undefined || p.penaltyValue === null) return null;
+    if (p.negativeMarking === false) return 'no penalty';
+    return (p.penaltyType ?? 'fixed') === 'percent' ? `−${p.penaltyValue}%` : `−${p.penaltyValue} mk`;
+  };
+  const resolveInheritedPenalty = (sectionId: string, _diff: 'easy' | 'medium' | 'hard'): string => {
+    const sp = gradingConfig.sections?.[sectionId]?.section;
+    return formatPenalty(sp) ?? formatPenalty(examPolicy) ?? 'none';
+  };
+
+  const patchRowPolicy = (sectionId: string, difficulty: 'easy' | 'medium' | 'hard', patch: Partial<GradingPolicy> | null) =>
+    setGradingConfig((c) => {
+      const sections = { ...(c.sections ?? {}) };
+      const cur = sections[sectionId] ?? {};
+      const byDifficulty = { ...(cur.byDifficulty ?? {}) };
+      if (patch === null) {
+        delete byDifficulty[difficulty];
+      } else {
+        byDifficulty[difficulty] = { ...(byDifficulty[difficulty] ?? {}), ...patch };
+      }
+      const hasRows = Object.keys(byDifficulty).length > 0;
+      const next = { ...cur, ...(hasRows ? { byDifficulty } : {}) };
+      if (!hasRows) delete (next as { byDifficulty?: unknown }).byDifficulty;
+      if (Object.keys(next).length > 0) sections[sectionId] = next; else delete sections[sectionId];
+      return { ...c, sections };
+    });
+
   const [sectionStartOrder, setSectionStartOrder] = useState<'sequential' | 'random' | 'student_choice'>(
     assessment?.sectionStartOrder ?? 'sequential'
   );
@@ -373,6 +476,10 @@ export function DetailsStep({
         timeLimit: undefined,
         overallTimeLimit: effectiveOverallLimit,
         overallGraceSeconds: overallGraceSeconds ? parseInt(overallGraceSeconds, 10) : undefined,
+        // Negative-marking policy. sanitizeGradingConfig strips the whole thing
+        // to undefined when the master switch is off (so an off exam stores no
+        // policy and grades exactly like legacy), and prunes empty overrides.
+        gradingConfig: sanitizeGradingConfig(gradingConfig, deliveryMode),
         passingScore: passingScore ? parseInt(passingScore, 10) : undefined,
         maxAttempts: maxAttempts ? parseInt(maxAttempts, 10) : undefined,
         sectionGraceSeconds: sectionGraceSeconds ? parseInt(sectionGraceSeconds, 10) : undefined,
@@ -698,6 +805,76 @@ export function DetailsStep({
                   {overallGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
                 </div>
               </Field>
+
+              {/* NEGATIVE MARKING (Standard + Linear only) ─────────────── */}
+              {deliveryMode !== 'adaptive' && (
+                <div className="space-y-3 pt-1">
+                  <SectionLabel label="NEGATIVE MARKING" />
+
+                  {/* Master switch — the hard gate. Off = no penalty anywhere. */}
+                  <button
+                    type="button"
+                    onClick={() => patchExamPolicy({ negativeMarking: !negMarkingOn })}
+                    className="w-full flex items-center justify-between px-3 py-2.5"
+                    style={{
+                      borderRadius: 2,
+                      border: `1px solid ${negMarkingOn ? '#F2CECE' : '#E3E1DB'}`,
+                      background: negMarkingOn ? '#FDF5F5' : '#FFFFFF',
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={13} strokeWidth={1.5} style={{ color: negMarkingOn ? '#9B2828' : '#9A9891' }} />
+                      <span className="text-xs" style={{ color: negMarkingOn ? '#9B2828' : '#6B6A65' }}>
+                        Deduct marks for wrong answers
+                      </span>
+                    </div>
+                    <span
+                      className="flex items-center px-2 py-0.5"
+                      style={{
+                        borderRadius: 2, fontSize: 10,
+                        border: `1px solid ${negMarkingOn ? '#F2CECE' : '#E3E1DB'}`,
+                        background: negMarkingOn ? '#FFFFFF' : '#F7F6F3',
+                        color: negMarkingOn ? '#9B2828' : '#9A9891',
+                      }}
+                    >
+                      {negMarkingOn ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+
+                  {negMarkingOn && (
+                    <>
+                      {/* Exam default penalty */}
+                      <Field label="Default penalty for wrong answers" hint="(applied unless a section or difficulty overrides it)">
+                        <PenaltyInput
+                          policy={examPolicy}
+                          onChange={(patch) => patchExamPolicy(patch)}
+                        />
+                      </Field>
+
+                      <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                        Only <strong>fully wrong</strong> answers are penalised. Partially correct answers keep their partial marks, and blanks are never penalised. The exam total never drops below zero.
+                      </p>
+                    </>
+                  )}
+
+                  {/* Blank rule — meaningful even with penalties off; almost always 0. */}
+                  <Field label="Score for a blank (unanswered) question" hint="(default 0 — a student is never penalised for not attempting)">
+                    <div className="flex items-center gap-2 px-3 py-2"
+                      style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                      <input
+                        type="number"
+                        value={examPolicy.blankScore ?? ''}
+                        onChange={(e) => patchExamPolicy({ blankScore: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                        placeholder="0"
+                        step="0.5"
+                        className="flex-1 outline-none"
+                        style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }}
+                      />
+                      <span style={{ color: '#C4C3BD', fontSize: 10 }}>marks</span>
+                    </div>
+                  </Field>
+                </div>
+              )}
 
               {status === 'active' && (
                 <div className="flex items-start gap-2 px-3 py-3"
@@ -1055,6 +1232,14 @@ export function DetailsStep({
         topicPool={topicPool}
         subjectNameById={taxonomyMaps.subjectNameById}
         topicNameById={taxonomyMaps.topicNameById}
+        grading={deliveryMode !== 'adaptive' && negMarkingOn ? {
+          negMarkingOn,
+          getSectionPolicy: (sid) => gradingConfig.sections?.[sid]?.section,
+          getRowPolicy: (sid, d) => gradingConfig.sections?.[sid]?.byDifficulty?.[d],
+          resolveInherited: resolveInheritedPenalty,
+          setSectionPolicy: patchSectionPolicy,
+          setRowPolicy: patchRowPolicy,
+        } : undefined}
       />
 
       {/* Bottom bar — rules phase hands off to Step 3 (Allocation). Saving now

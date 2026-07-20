@@ -6,11 +6,12 @@
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Loader2, CheckCircle2, Timer, ChevronRight, Layers, CheckSquare, Square, BookOpen, Lock } from 'lucide-react';
+import { X, Loader2, CheckCircle2, Timer, ChevronRight, Layers, CheckSquare, Square, BookOpen, Lock, AlertCircle } from 'lucide-react';
 import { type Question } from '../../../../lib/questionBankService';
 import { type Subject } from '../../../../lib/subjectService';
 import { DIFFICULTIES, type Difficulty, type RuleDraft, type SectionDraft } from './shared';
-import { DifficultyRow } from './controls';
+import { DifficultyRow, PenaltyInput } from './controls';
+import { type GradingPolicy } from '../../../../lib/assessmentService';
 
 export function RuleBuilderPanel({
   sections,
@@ -23,6 +24,7 @@ export function RuleBuilderPanel({
   topicPool,
   subjectNameById,
   topicNameById,
+  grading,
 }: {
   sections: SectionDraft[];
   activeSectionIdx: number;
@@ -39,6 +41,18 @@ export function RuleBuilderPanel({
   // name when a question has no ID or the map lacks the ID (legacy docs).
   subjectNameById?: Record<string, string>;
   topicNameById?: Record<string, string>;
+  // Negative-marking config surface (Standard/Linear only; undefined = feature
+  // off/adaptive, so no grading UI renders). Lets each section get a section
+  // override and each difficulty row a per-level override, resolving the
+  // inherited value for display.
+  grading?: {
+    negMarkingOn: boolean;
+    getSectionPolicy: (sectionId: string) => GradingPolicy | undefined;
+    getRowPolicy: (sectionId: string, diff: 'easy' | 'medium' | 'hard') => GradingPolicy | undefined;
+    resolveInherited: (sectionId: string, diff: 'easy' | 'medium' | 'hard') => string;
+    setSectionPolicy: (sectionId: string, patch: Partial<GradingPolicy> | null) => void;
+    setRowPolicy: (sectionId: string, diff: 'easy' | 'medium' | 'hard', patch: Partial<GradingPolicy> | null) => void;
+  };
 }) {
   const activeSection = sections[activeSectionIdx];
 
@@ -502,6 +516,10 @@ export function RuleBuilderPanel({
                                         rule={getRule(subject, topic, diff)}
                                         onCountChange={(v) => updateRule(subject, topic, diff, 'count', v)}
                                         onMarksChange={(v) => updateRule(subject, topic, diff, 'marksPerQuestion', v)}
+                                        negMarkingOn={grading?.negMarkingOn}
+                                        rowPolicy={grading?.getRowPolicy(activeSection.id, diff)}
+                                        inheritedPenaltyLabel={grading?.resolveInherited(activeSection.id, diff)}
+                                        onRowPolicyChange={grading ? (patch) => grading.setRowPolicy(activeSection.id, diff, patch) : undefined}
                                       />
                                     ))}
                                   </motion.div>
@@ -519,6 +537,36 @@ export function RuleBuilderPanel({
           })
         )}
       </div>
+
+      {/* ── Section-level negative-marking override (Standard/Linear) ── */}
+      {grading?.negMarkingOn && sectionTotalQ > 0 && (() => {
+        const secPol = grading.getSectionPolicy(activeSection.id);
+        const secOverrides = !!secPol && (secPol.penaltyValue !== undefined || secPol.negativeMarking === false);
+        return (
+          <div className="flex-shrink-0 flex items-center gap-2 px-5 py-2"
+            style={{ borderTop: '1px solid #F0EFEB', background: '#FDFBF7' }}>
+            <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#B0AEA8' }} />
+            <span className="text-xs" style={{ color: '#9A9891' }}>Penalty for this section</span>
+            {secOverrides ? (
+              <div className="flex items-center gap-1.5 ml-auto">
+                <PenaltyInput compact policy={secPol ?? {}} onChange={(patch) => grading.setSectionPolicy(activeSection.id, patch)} />
+                <button type="button" onClick={() => grading.setSectionPolicy(activeSection.id, null)}
+                  style={{ fontSize: 10, color: '#9A9891', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  reset
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => grading.setSectionPolicy(activeSection.id, { penaltyValue: 0 })}
+                className="ml-auto flex items-center gap-1"
+                style={{ fontSize: 10, color: '#9A9891', padding: '2px 8px', border: '1px dashed #E3E1DB', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}>
+                <span style={{ color: '#C4C3BD' }}>inherits exam default:</span>
+                <span>{grading.resolveInherited(activeSection.id, 'medium')}</span>
+                <span style={{ color: '#C4C3BD' }}>· override</span>
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Footer: per-section total ── */}
       {sectionTotalQ > 0 && (

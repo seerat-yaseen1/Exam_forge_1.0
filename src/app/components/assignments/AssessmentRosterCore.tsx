@@ -480,7 +480,7 @@ function UnblockConfirmModal({
 // RESPONSE VIEWER — Correct / Wrong / Partial / Unattempted / Text
 // ══════════════════════════════════════════════════════════════════
 
-type AnswerCategory = 'correct' | 'wrong' | 'partial' | 'unattempted' | 'text';
+type AnswerCategory = 'correct' | 'wrong' | 'penalized' | 'partial' | 'unattempted' | 'text';
 
 type ClassifiedItem = {
   question: Question;
@@ -510,7 +510,12 @@ function classifyAnswer(
     }
     if (graded.isCorrect === true)  return { category: 'correct', awarded: graded.marksAwarded };
     if (graded.isCorrect === false) {
-      const cat: AnswerCategory = graded.marksAwarded > 0 ? 'partial' : 'wrong';
+      // marksAwarded > 0 → partial credit kept; < 0 → negative marking bit
+      // (a wrong answer that cost marks); 0 → plain wrong.
+      const cat: AnswerCategory =
+        graded.marksAwarded > 0 ? 'partial'
+        : graded.marksAwarded < 0 ? 'penalized'
+        : 'wrong';
       return { category: cat, awarded: Math.round(graded.marksAwarded * 100) / 100 };
     }
     // isCorrect null on a non-text question: invalidated (full marks) or
@@ -561,6 +566,7 @@ const CATEGORY_CONFIG: Record<AnswerCategory, {
 }> = {
   correct:     { label: 'Correct',     bg: '#F0F9F4', text: '#1E7B3C', border: '#B8E6C8', dot: '#1E7B3C',  icon: <CheckCircle2 size={11} strokeWidth={1.5} /> },
   wrong:       { label: 'Wrong',       bg: '#FDF5F5', text: '#9B2828', border: '#F2CECE', dot: '#9B2828',  icon: <XCircle size={11} strokeWidth={1.5} /> },
+  penalized:   { label: 'Penalized',   bg: '#FBEFEF', text: '#7F1D1D', border: '#E9B8B8', dot: '#7F1D1D',  icon: <XCircle size={11} strokeWidth={1.5} /> },
   partial:     { label: 'Partial',     bg: '#FFFBF0', text: '#92680A', border: '#F5DFA0', dot: '#D4A017',  icon: <AlertCircle size={11} strokeWidth={1.5} /> },
   unattempted: { label: 'Unattempted', bg: '#F7F6F3', text: '#9A9891', border: '#E3E1DB', dot: '#C4C3BD',  icon: <Minus size={11} strokeWidth={1.5} /> },
   text:        { label: 'Text',        bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8',  icon: <FileText size={11} strokeWidth={1.5} /> },
@@ -624,7 +630,7 @@ function ResponseViewer({
   }, [questions, attempt.answers, marksMap, sectionNameMap]);
 
   const counts = useMemo(() => {
-    const c = { correct: 0, wrong: 0, partial: 0, unattempted: 0, text: 0 };
+    const c = { correct: 0, wrong: 0, penalized: 0, partial: 0, unattempted: 0, text: 0 };
     classified.forEach((item) => { c[item.category]++; });
     return c;
   }, [classified]);
@@ -634,14 +640,16 @@ function ResponseViewer({
     [classified, activeTab]
   );
 
-  const tabs: Array<{ key: AnswerCategory | 'all'; label: string; count: number }> = [
+  type RosterTab = { key: AnswerCategory | 'all'; label: string; count: number };
+  const tabs: RosterTab[] = ([
     { key: 'all',         label: 'All',        count: classified.length },
     { key: 'correct',     label: 'Correct',    count: counts.correct },
     { key: 'wrong',       label: 'Wrong',      count: counts.wrong },
+    { key: 'penalized',   label: 'Penalized',  count: counts.penalized },
     { key: 'partial',     label: 'Partial',    count: counts.partial },
     { key: 'unattempted', label: 'Unattempted',count: counts.unattempted },
     { key: 'text',        label: 'Text',       count: counts.text },
-  ].filter((t) => t.key === 'all' || t.count > 0);
+  ] as RosterTab[]).filter((t) => t.key === 'all' || t.count > 0);
 
   if (loading) {
     return (

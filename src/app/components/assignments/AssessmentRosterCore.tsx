@@ -18,7 +18,7 @@ import {
   Ban, CircleSlash, Hash, RotateCcw, XCircle, Minus,
   FileText, Eye, Trash2, AlertCircle, Flag, Download,
 } from 'lucide-react';
-import { getAssessment, blockStudent, unblockStudent, setAttemptOverride, statusColor, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
+import { getAssessment, blockStudent, unblockStudent, setAttemptOverride, statusColor, resolveAllocatedStudents, isRuleAllocated, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
 import { reviewAudienceAllows, resultsAudienceAllows, type VisibilityAudience } from '../../../lib/visibility';
 import { AssessmentReportsPanel } from './AssessmentReportsPanel';
 import {
@@ -1809,6 +1809,9 @@ export function AssessmentRosterCore({
   // (guarded below: the reports view renders only when canReview)
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [students, setStudents]     = useState<Student[]>([]);
+  // False when the roster is a conservative superset rather than the exact
+  // allocated list — see resolveAllocatedStudents. Drives the banner below.
+  const [rosterExact, setRosterExact] = useState(true);
   const [attempts, setAttempts]     = useState<Attempt[]>([]);
   const [loading, setLoading]       = useState(true);
   const [errorMsg, setErrorMsg]     = useState('');
@@ -1849,14 +1852,19 @@ export function AssessmentRosterCore({
         if (!a) { setErrorMsg('Assessment not found.'); setLoading(false); return; }
         setAssessment(a);
 
-        const target = a.assignedTo;
-        const relevant = allStudents.filter((s) => {
-          if (target.type === 'all') return true;
-          if (target.type === 'institutes') return target.instituteIds.includes(s.instituteId);
-          if (target.type === 'students') return target.studentIds.includes(s.id);
-          return false;
-        });
+        // Targeting is resolved centrally — this component must NOT branch on
+        // assignedTo. A rule-allocated exam stores an empty assignedTo, so the
+        // old inline filter returned zero students for every hierarchy exam
+        // while they were in fact allocated and sitting it.
+        //
+        // canReadMembers: assessmentMembers is webOwner-only in firestore.rules.
+        const { students: relevant, exact } = await resolveAllocatedStudents(
+          a,
+          allStudents,
+          { canReadMembers: reviewerRole === 'web_owner' },
+        );
         setStudents(relevant);
+        setRosterExact(exact);
       } catch (e: any) {
         setErrorMsg(e.message || 'Failed to load roster.');
       } finally {
@@ -1864,7 +1872,7 @@ export function AssessmentRosterCore({
       }
     };
     load();
-  }, [assessmentId, instituteId]);
+  }, [assessmentId, instituteId, reviewerRole]);
 
   // ── Live attempts — filter out soft-deleted from active roster ─
   useEffect(() => {
@@ -2115,6 +2123,20 @@ export function AssessmentRosterCore({
               )}
             </div>
           </div>
+
+          {/* Approximate-roster notice — only when we could not read the exact
+              member list (non-owner staff on a hierarchy exam). Better to say
+              so than to present a superset as if it were the allocation. */}
+          {!rosterExact && isRuleAllocated(assessment) && (
+            <div className="flex items-start gap-2 px-3 py-2 mb-4"
+              style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+              <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#9A9891', marginTop: 2, flexShrink: 0 }} />
+              <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+                This exam is allocated by hierarchy. Showing all students in your institute —
+                the exact allocated list is visible to the Web Owner. Attempt data below is exact.
+              </p>
+            </div>
+          )}
 
           {/* Stats */}
           <div className="flex items-center gap-x-4 gap-y-2 sm:gap-5 flex-wrap">

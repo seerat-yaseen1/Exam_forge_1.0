@@ -3628,9 +3628,21 @@ export const resolveAllocation = onCall<ResolveAllocationData>(
         materializing: !smallDelta,
       }, { merge: true });
 
-      if (freshA.get('allocationMode') !== 'rules') {
-        txn.set(assessmentRef, { allocationMode: 'rules' }, { merge: true });
-      }
+      // Stamp the mode AND denormalize the resolved head-count onto the
+      // assessment doc. The count matters because every STAFF surface (list
+      // rows, roster, export) reads the assessment doc and nothing else:
+      // `allocations` and `assessmentMembers` are webOwner-only in the rules,
+      // so an institute admin or faculty member physically cannot read them.
+      // Without this field they fall back to `assignedTo`, which is empty for
+      // a rule-allocated exam — that is the "0 Students" bug.
+      //
+      // This is a display counter, never an authorization input. The exam gate
+      // remains the materialized assessmentMembers list (invariant 6); nothing
+      // reads allocatedCount to decide who may sit the exam.
+      txn.set(assessmentRef, {
+        allocationMode: 'rules',
+        allocatedCount: result.members.length,
+      }, { merge: true });
 
       if (smallDelta) {
         result.delta.added.forEach((sid) => {
@@ -3785,6 +3797,13 @@ export const addManualMember = onCall<AddManualMemberData>(
         assessmentId, manualCount: 1, updatedAt: nowIso,
       }, { merge: true });
     }
+    // Keep the denormalized staff-facing head-count in step with the member
+    // list. resolveAllocation writes it absolutely (it knows the whole set);
+    // here we only know we added exactly one, so increment. Guarded by the
+    // `existing.exists` early-return above, so this can't double-count.
+    batch.set(db.collection('assessments').doc(assessmentId), {
+      allocatedCount: FieldValue.increment(1),
+    }, { merge: true });
     await batch.commit();
 
     return { ok: true, alreadyMember: false };

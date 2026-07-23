@@ -436,6 +436,16 @@ export type Assessment = {
   // assessmentMembers list, not assignedTo. undefined = legacy path.
   allocationMode?: 'rules';
 
+  // Denormalized head-count for rule-allocated exams, written by
+  // resolveAllocation / addManualMember. DISPLAY ONLY — never an
+  // authorization input (the gate is the assessmentMembers list).
+  //
+  // It exists because `allocations` and `assessmentMembers` are webOwner-only
+  // in firestore.rules, so institute/faculty staff cannot read the real list.
+  // This is the one allocation number they CAN see, and it rides along on the
+  // assessment doc they already fetch — no extra read, no rules change.
+  allocatedCount?: number;
+
   // Attempt limits
   // maxAttempts: undefined = unlimited; integer = max finished attempts allowed
   // attemptOverrides: per-student override of maxAttempts
@@ -752,14 +762,20 @@ export type DuplicateOptions = {
   includeSettings: boolean;    // timing, attempts, shuffle, review, results
   includeScheduling: boolean;  // startDate / endDate window
   includeSecurity: boolean;    // tier, delivery mode, camera/mobile/extension
-  includeAllocations: boolean; // assignedTo targeting
+  includeAllocations: boolean; // assignedTo targeting, or hierarchy re-resolution
 };
+
+/** What duplicateAssessment did about targeting — surfaced to the user. */
+export type DuplicateAllocationOutcome =
+  | { kind: 'legacy' }              // assignedTo copied (or intentionally cleared)
+  | { kind: 'rules_recreated'; count: number }   // hierarchy re-resolved onto the copy
+  | { kind: 'rules_failed'; reason: string };    // hierarchy could NOT be carried
 
 export async function duplicateAssessment(
   sourceId: string,
   options: DuplicateOptions,
   titleOverride?: string,
-): Promise<Assessment> {
+): Promise<{ assessment: Assessment; allocation: DuplicateAllocationOutcome }> {
   const src = await getAssessment(sourceId);
   if (!src) throw new Error('Assessment not found.');
 
@@ -803,7 +819,11 @@ export async function duplicateAssessment(
     subjectPool: wantQuestions ? src.subjectPool : undefined,
     topicPool:   wantQuestions ? src.topicPool   : undefined,
 
-    assignedTo: options.includeAllocations
+    // Rule-allocated sources carry a meaningless assignedTo (see the note on
+    // describeAssignment). Copying it would stamp the duplicate with an empty
+    // legacy target that LOOKS authoritative. The hierarchy is re-resolved
+    // after creation instead — see the allocation block below.
+    assignedTo: options.includeAllocations && !isRuleAllocated(src)
       ? src.assignedTo
       : { type: 'students', studentIds: [] },
 
@@ -847,7 +867,69 @@ export async function duplicateAssessment(
     } catch { /* non-fatal — platform keys apply */ }
   }
 
-  return created;
+  // ── Allocation (hierarchy sources) ──────────────────────────────
+  // Membership is materialized per-assessment, so it cannot be "copied" —
+  // the duplicate must re-resolve the SAME node selection against today's
+  // hierarchy. That is intentional: the copy targets the same batches/
+  // sections, and if a student has since joined one, they are included.
+  //
+  // The copy's roster can therefore differ from the source's. That is the
+  // correct reading of "same selection", and the outcome is returned so the
+  // caller can tell the user the number rather than leaving them to discover
+  // it on the roster.
+  let allocation: DuplicateAllocationOutcome = { kind: 'legacy' };
+  if (options.includeAllocations && isRuleAllocated(src)) {
+    try {
+      const alloc = await getAllocationForDuplicate(sourceId);
+      if (!alloc || !alloc.nodeType) {
+        allocation = { kind: 'rules_failed', reason: 'the original allocation could not be read' };
+      } else {
+        const res = await commitAllocationForDuplicate(
+          created.id, alloc.nodeType, alloc.nodeIds,
+        );
+        created.allocationMode = 'rules';
+        created.allocatedCount = res.resolvedCount;
+        allocation = { kind: 'rules_recreated', count: res.resolvedCount };
+      }
+    } catch (e: any) {
+      // Never fail the whole duplicate over allocation — the copy exists as a
+      // draft targeting nobody, which is safe and re-allocatable by hand.
+      allocation = {
+        kind: 'rules_failed',
+        reason: e?.message || 'the hierarchy selection could not be re-resolved',
+      };
+    }
+  }
+
+  return { assessment: created, allocation };
+}
+
+// Local thin wrappers over the allocation callables. Declared here rather
+// than imported from allocationService to avoid a circular import
+// (allocationService already imports from firebaseService, and the roster
+// imports both) — duplicate is the only consumer.
+async function getAllocationForDuplicate(assessmentId: string): Promise<{
+  nodeType: string; nodeIds: string[];
+} | null> {
+  const snap = await getDocs(query(
+    collection(db, 'allocations'),
+    where('assessmentId', '==', assessmentId),
+  ));
+  const d = snap.docs[0];
+  if (!d) return null;
+  return { nodeType: String(d.get('nodeType') ?? ''), nodeIds: (d.get('nodeIds') ?? []) as string[] };
+}
+
+async function commitAllocationForDuplicate(
+  assessmentId: string, nodeType: string, nodeIds: string[],
+): Promise<{ resolvedCount: number }> {
+  const call = httpsCallable<
+    { assessmentId: string; nodeType: string; nodeIds: string[]; expectedVersion: number; dryRun: boolean },
+    { resolvedCount: number }
+  >(functions, 'resolveAllocation');
+  // expectedVersion 0 — the duplicate is brand new, so it has no allocation doc.
+  const res = await call({ assessmentId, nodeType, nodeIds, expectedVersion: 0, dryRun: false });
+  return { resolvedCount: res.data.resolvedCount ?? 0 };
 }
 
 // ── Phase 3: platform-wide SEB settings ───────────────────────────
@@ -1257,8 +1339,36 @@ export function statusColor(status: AssessmentStatus): {
 }
 
 // ── Format assignment target for display ─────────────────────────
+//
+// TWO TARGETING SYSTEMS LIVE SIDE BY SIDE. Read this before touching any
+// code that answers "who is this exam for?":
+//
+//   LEGACY  — assignedTo: { all | institutes | students }. Self-describing;
+//             the ids are right there on the assessment doc.
+//   RULES   — allocationMode === 'rules'. assignedTo is MEANINGLESS (the
+//             builder writes an empty students target as a side effect of
+//             its ternary). Truth lives in assessmentMembers/*, with the
+//             head-count denormalized onto assessment.allocatedCount.
+//
+// Reading assignedTo on a rules exam yields "0 Students" — it is the wrong
+// field, not a wrong value. That mismatch caused the July 2026 roster bug:
+// students were correctly allocated and could sit the exam, while every
+// staff surface reported zero.
+//
+// The rule going forward: NEVER branch on assignedTo directly. Call
+// describeAssignment() to render it and resolveAllocatedStudents() to list
+// members. Both handle the mode split in one place, so a third targeting
+// mode only has to be taught to this file.
 
+/**
+ * Legacy-only formatter. Kept for pre-rules assessments and for callers that
+ * genuinely hold nothing but an AssignmentTarget.
+ *
+ * Prefer describeAssignment(assessment) — this function cannot see
+ * allocationMode and so cannot tell a rules exam from an empty legacy one.
+ */
 export function formatAssignmentTarget(target: AssignmentTarget): string {
+  if (!target) return '—';
   if (target.type === 'all') return 'All Students';
   if (target.type === 'institutes')
     return `${target.instituteIds.length} Institute${
@@ -1269,4 +1379,114 @@ export function formatAssignmentTarget(target: AssignmentTarget): string {
       target.studentIds.length === 1 ? '' : 's'
     }`;
   return '—';
+}
+
+/** The minimum an assessment-like object needs for the helpers below. */
+export type AssignmentDescribable = {
+  assignedTo: AssignmentTarget;
+  allocationMode?: 'rules';
+  allocatedCount?: number;
+};
+
+/** True when targeting comes from assessmentMembers, not assignedTo. */
+export function isRuleAllocated(a: AssignmentDescribable | null | undefined): boolean {
+  return a?.allocationMode === 'rules';
+}
+
+/**
+ * Human-readable "who takes this exam", correct for BOTH targeting systems.
+ * This is what every staff surface should render.
+ *
+ * A rules exam with no count yet (mid-materialization, or an older doc saved
+ * before allocatedCount existed) reads "By hierarchy" rather than claiming a
+ * number it doesn't have — an honest unknown beats a confident zero.
+ */
+export function describeAssignment(a: AssignmentDescribable | null | undefined): string {
+  if (!a) return '—';
+  if (isRuleAllocated(a)) {
+    const n = a.allocatedCount;
+    if (typeof n !== 'number') return 'By hierarchy';
+    return `${n} Student${n === 1 ? '' : 's'} · by hierarchy`;
+  }
+  return formatAssignmentTarget(a.assignedTo);
+}
+
+/**
+ * Resolve the students allocated to an assessment — the SINGLE source of
+ * truth for every staff-side roster, export and invigilation list.
+ *
+ * Callers pass the full student pool they are already allowed to see (the
+ * roster fetches it anyway), and get back the allocated subset.
+ *
+ * WHY THIS ISN'T JUST A FILTER
+ * The two targeting systems need different reads:
+ *   • legacy → pure filter over assignedTo. No I/O.
+ *   • rules  → the member list, which lives in assessmentMembers.
+ *
+ * And assessmentMembers is webOwner-only in firestore.rules. Institute and
+ * faculty staff CANNOT read it. Rather than loosen the rules (the member list
+ * is the exam gate — widening reads on it widens the blast radius of any
+ * future rules mistake), non-owner staff fall back to the pool they can
+ * already see, scoped to their institute by the caller.
+ *
+ * That fallback is deliberately conservative: for an institute admin, "every
+ * student in my institute" is a superset of "my students allocated to this
+ * exam". They may see a not-yet-attempted student who wasn't allocated, but
+ * they never MISS one who was — and no attempt data leaks, because attempts
+ * are subscribed separately under their own rules. A blank roster is the
+ * worse failure: it hides live exam-takers from the people invigilating them.
+ *
+ * Returns `exact: false` when that fallback is in play so the UI can say so
+ * instead of quietly overstating.
+ */
+export async function resolveAllocatedStudents<T extends { id: string; instituteId: string }>(
+  assessment: AssignmentDescribable,
+  pool: T[],
+  opts: { canReadMembers: boolean },
+): Promise<{ students: T[]; exact: boolean }> {
+  if (!isRuleAllocated(assessment)) {
+    const t = assessment.assignedTo;
+    const students = pool.filter((s) => {
+      if (!t) return true;
+      if (t.type === 'all') return true;
+      if (t.type === 'institutes') return t.instituteIds.includes(s.instituteId);
+      if (t.type === 'students') return t.studentIds.includes(s.id);
+      return false;
+    });
+    return { students, exact: true };
+  }
+
+  // ── Rule-allocated ──────────────────────────────────────────────
+  if (!opts.canReadMembers) {
+    // Non-owner staff: show the institute-scoped pool (see note above).
+    return { students: pool, exact: false };
+  }
+
+  const ids = await getAssessmentMemberIds(assessment as Assessment);
+  if (ids === null) {
+    // The read failed (rules, transient, or offline). Degrade to the pool
+    // rather than rendering an empty roster during a live exam.
+    return { students: pool, exact: false };
+  }
+  const idSet = new Set(ids);
+  return { students: pool.filter((s) => idSet.has(s.id)), exact: true };
+}
+
+/**
+ * Every studentId materialized against this assessment.
+ * Returns null when the read is not permitted or fails — callers must
+ * distinguish "no members" from "couldn't tell", since the two demand
+ * opposite UI (empty state vs. fallback).
+ */
+export async function getAssessmentMemberIds(assessment: Assessment): Promise<string[] | null> {
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'assessmentMembers'),
+      where('assessmentId', '==', assessment.id),
+      where('active', '==', true),
+    ));
+    return snap.docs.map((d) => String(d.get('studentId')));
+  } catch {
+    return null;
+  }
 }

@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Trash2, Loader2, AlertTriangle, CalendarClock, Timer, CheckSquare, Square, Copy } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
-import { type DuplicateOptions, formatAssignmentTarget, type Assessment } from '../../../../lib/assessmentService';
+import { type DuplicateOptions, describeAssignment, type Assessment } from '../../../../lib/assessmentService';
 import { type Subject } from '../../../../lib/subjectService';
 import { Difficulty, DIFF_COLORS, formatDateTime, formatDateShort, truncate } from '../builder/shared';
 import { StatusBadgeChip, MetaItem } from './ListChrome';
@@ -190,7 +190,7 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
             <MetaItem label="Subject"><span style={{ color: '#0C0C0B' }}>{assessment.subject || '—'}</span></MetaItem>
             <MetaItem label="Questions"><span style={{ color: '#0C0C0B' }}>{assessment.questions.length}</span></MetaItem>
             <MetaItem label="Total Marks"><span style={{ color: '#0C0C0B' }}>{assessment.totalMarks}</span></MetaItem>
-            <MetaItem label="Assigned To"><span style={{ color: '#0C0C0B' }}>{formatAssignmentTarget(assessment.assignedTo)}</span></MetaItem>
+            <MetaItem label="Assigned To"><span style={{ color: '#0C0C0B' }}>{describeAssignment(assessment)}</span></MetaItem>
             {assessment.passingScore !== undefined && (
               <MetaItem label="Passing Score"><span style={{ color: '#0C0C0B' }}>{assessment.passingScore}%</span></MetaItem>
             )}

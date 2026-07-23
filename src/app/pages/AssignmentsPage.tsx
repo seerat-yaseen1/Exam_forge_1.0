@@ -89,6 +89,8 @@ export function AssignmentsPage() {
   const [deleting, setDeleting] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState<Assessment | null>(null);
   const [duplicating, setDuplicating] = useState(false);
+  // Post-duplicate feedback (hierarchy re-resolution result, or failure).
+  const [duplicateNotice, setDuplicateNotice] = useState<{ tone: 'info' | 'warn'; text: string } | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -171,13 +173,31 @@ export function AssignmentsPage() {
   const handleDuplicate = async (opts: DuplicateOptions, title: string) => {
     if (!duplicateTarget) return;
     setDuplicating(true);
+    setDuplicateNotice(null);
     try {
-      const copy = await duplicateAssessment(duplicateTarget.id, opts, title);
+      const { assessment: copy, allocation } = await duplicateAssessment(duplicateTarget.id, opts, title);
       // Show the new draft at the top of the list immediately.
       setAssessments((prev) => [copy, ...prev]);
       setDuplicateTarget(null);
-    } catch (e) {
+      // A hierarchy copy re-resolves its selection against today's hierarchy,
+      // so its roster can legitimately differ from the source's. Say so —
+      // silently landing a different roster is how the original bug hid.
+      if (allocation.kind === 'rules_recreated') {
+        setDuplicateNotice({
+          tone: 'info',
+          text: `Hierarchy allocation re-resolved for the copy — ${allocation.count} student${allocation.count === 1 ? '' : 's'} allocated. This can differ from the original if students have moved.`,
+        });
+      } else if (allocation.kind === 'rules_failed') {
+        setDuplicateNotice({
+          tone: 'warn',
+          text: `The copy was created, but ${allocation.reason}. It currently targets nobody — open it and set "Assign To" before publishing.`,
+        });
+      }
+    } catch (e: any) {
+      // Previously swallowed into console only, so a failed duplicate looked
+      // like a no-op. Surface it.
       console.error('[AssignmentsPage] duplicate failed', e);
+      setDuplicateNotice({ tone: 'warn', text: e?.message || 'Duplicate failed. Nothing was created.' });
     } finally { setDuplicating(false); }
   };
 
@@ -219,6 +239,23 @@ export function AssignmentsPage() {
             <Plus size={12} strokeWidth={2} /> Create Assessment
           </button>
         </div>
+
+        {/* Duplicate outcome notice */}
+        {duplicateNotice && (
+          <div className="flex items-start gap-2 px-3 py-2.5 mb-5"
+            style={{
+              background: duplicateNotice.tone === 'warn' ? '#FFFBEB' : '#F7F6F3',
+              border: `1px solid ${duplicateNotice.tone === 'warn' ? '#FDE68A' : '#E3E1DB'}`,
+              borderRadius: 2,
+            }}>
+            <p className="text-xs flex-1" style={{ color: duplicateNotice.tone === 'warn' ? '#92400E' : '#4A4A45', lineHeight: 1.6 }}>
+              {duplicateNotice.text}
+            </p>
+            <button onClick={() => setDuplicateNotice(null)}
+              className="text-xs transition-opacity hover:opacity-60"
+              style={{ color: '#9A9891' }}>Dismiss</button>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">

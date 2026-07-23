@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { Eye, Trash2, Calendar, ArrowRight, Users, Copy } from 'lucide-react';
-import { formatAssignmentTarget, type Assessment } from '../../../../lib/assessmentService';
+import { describeAssignment, type Assessment } from '../../../../lib/assessmentService';
 import { EditMenu } from '../edit/EditMenu';
 import { formatDateShort, truncate } from '../builder/shared';
 import { StatusBadgeChip } from './ListChrome';
@@ -33,7 +33,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
           · {sectionCount} section{sectionCount !== 1 ? 's' : ''}
         </span>
       )}
-      <span className="text-xs" style={{ color: '#C4C3BD' }}>· {formatAssignmentTarget(assessment.assignedTo)}</span>
+      <span className="text-xs" style={{ color: '#C4C3BD' }}>· {describeAssignment(assessment)}</span>
     </div>
   );
 
@@ -117,7 +117,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
             className="text-xs px-2 py-0.5"
             style={{ background: '#F7F6F3', color: '#9A9891', border: '1px solid #EEECEA', borderRadius: 2 }}
           >
-            {formatAssignmentTarget(assessment.assignedTo)}
+            {describeAssignment(assessment)}
           </span>
         </div>
 

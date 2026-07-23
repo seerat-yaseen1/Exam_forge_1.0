@@ -16,7 +16,7 @@ import { useFacultyAuth } from '../../context/FacultyAuthContext';
 import {
   getAssessmentsByOwner,
   statusColor,
-  formatAssignmentTarget,
+  describeAssignment,
   type Assessment,
   type AssessmentStatus,
 } from '../../../lib/assessmentService';
@@ -123,7 +123,7 @@ function AssessmentCard({
         <div className="flex items-center gap-1">
           <Users size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
           <span className="text-xs" style={{ color: '#9A9891' }}>
-            {formatAssignmentTarget(assessment.assignedTo)}
+            {describeAssignment(assessment)}
           </span>
         </div>
         {assessment.totalMarks > 0 && (

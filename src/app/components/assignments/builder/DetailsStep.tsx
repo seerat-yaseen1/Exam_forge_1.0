@@ -445,8 +445,22 @@ export function DetailsStep({
 
     setSaving(true);
     try {
-      const assignedTo: AssignmentTarget =
-        targetType === 'all' ? { type: 'all' }
+      // TARGETING: two systems, and this is where they fork.
+      //
+      // hierarchyMode ON  → targeting lives in assessmentMembers, materialized
+      //                     server-side by resolveAllocation after this save.
+      //                     assignedTo is NOT the source of truth and must not
+      //                     be read back for display or roster building — use
+      //                     describeAssignment() / resolveAllocatedStudents().
+      // hierarchyMode OFF → assignedTo IS the source of truth.
+      //
+      // The empty students target below is a placeholder to satisfy the
+      // required field, not a statement that nobody is assigned. Reading it as
+      // one is exactly the July 2026 bug: hierarchy exams reported
+      // "0 Students" and blank rosters while students sat them normally.
+      const assignedTo: AssignmentTarget = hierarchyMode
+        ? { type: 'students', studentIds: [] }
+        : targetType === 'all' ? { type: 'all' }
           : targetType === 'institutes' ? { type: 'institutes', instituteIds: selectedInstituteIds }
           : { type: 'students', studentIds: selectedStudentIds };
 

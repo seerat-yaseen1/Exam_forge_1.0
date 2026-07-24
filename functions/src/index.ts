@@ -327,6 +327,256 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
 );
 
 // ═══════════════════════════════════════════════════════════════════
+// ENTITY LIFECYCLE — audit writer + hierarchy unarchive
+// (Feature #15, Phase 0b)
+//
+// This section adds the SERVER half of the lifecycle foundation. It is
+// deliberately inert with respect to existing behaviour: writeAuditRow is a
+// helper nothing calls yet (Phase 1 wires it into the existing delete paths),
+// and setHierarchyNodeLifecycle closes a real pre-existing gap — archived
+// hierarchy nodes had no unarchive path at all, making archive a one-way door.
+//
+// WHY THE AUDIT WRITER LIVES SERVER-SIDE
+// firestore.rules denies every client write to deletionAudit, including the
+// Web Owner's. Two reasons: a client-writable trail can be forged, and a trail
+// written by a separate call from the action it records can silently go
+// missing when that second call fails — exactly the case the trail exists to
+// cover. So rows are written here, and Phase 1 onward writes them inside the
+// same operation as the transition they describe.
+// ═══════════════════════════════════════════════════════════════════
+
+type LifecycleStateS = 'active' | 'archived' | 'softDeleted' | 'purged';
+
+type AuditActionS =
+  | 'archive'
+  | 'softDelete'
+  | 'restore'
+  | 'purge'
+  | 'requestSubmitted'
+  | 'requestApproved'
+  | 'requestRejected'
+  | 'erasure';
+
+type SuccessionS = {
+  fromOwnerType: 'webOwner' | 'institute' | 'faculty';
+  fromOwnerId: string;
+  toOwnerType: 'webOwner' | 'institute' | 'faculty';
+  toOwnerId: string;
+  reason: 'chosen' | 'defaulted' | 'fallback';
+  counts?: Record<string, number> | null;
+};
+
+type AuditRowInput = {
+  action: AuditActionS;
+  entityType: string;
+  entityId: string;
+  entityLabel?: string | null;
+  fromState?: LifecycleStateS | null;
+  toState?: LifecycleStateS | null;
+  actorUid: string;
+  actorRole: string;
+  actorName?: string | null;
+  instituteId?: string | null;
+  reason?: string | null;
+  requestId?: string | null;
+  impact?: Record<string, number> | null;
+  succession?: SuccessionS | null;
+};
+
+/**
+ * Server twin of buildAuditRow in src/lib/deletionAudit.ts.
+ * KEEP IN SYNC — the client reads these rows and expects this exact shape.
+ *
+ * Every optional field is written as an explicit null rather than being
+ * omitted: Firestore drops undefined, which would make "no reason given"
+ * indistinguishable from "this build predates the reason field".
+ */
+function buildAuditRowS(input: AuditRowInput): Record<string, unknown> {
+  return {
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    entityLabel: input.entityLabel ?? null,
+    fromState: input.fromState ?? null,
+    toState: input.toState ?? null,
+    actorUid: input.actorUid,
+    actorRole: input.actorRole,
+    actorName: input.actorName ?? null,
+    instituteId: input.instituteId ?? null,
+    reason: input.reason ?? null,
+    requestId: input.requestId ?? null,
+    impact: input.impact ?? null,
+    succession: input.succession ?? null,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Append one audit row.
+ *
+ * Pass `txn` when the caller is already inside a transaction or batch so the
+ * row and the state change commit together — that atomicity is the whole
+ * point, and Phase 1 onward must use it. The standalone form exists for
+ * callers with nothing to bind to.
+ *
+ * NEVER THROWS. A failure to record an action must not roll back the action
+ * itself when the caller is not transactional: losing the row is bad, but
+ * leaving a half-completed deletion is worse. Failures are logged loudly so
+ * they surface in Cloud Logging rather than vanishing.
+ */
+async function writeAuditRow(
+  db: FirebaseFirestore.Firestore,
+  input: AuditRowInput,
+  txn?: FirebaseFirestore.Transaction | FirebaseFirestore.WriteBatch,
+): Promise<void> {
+  try {
+    const ref = db.collection('deletionAudit').doc();
+    const row = buildAuditRowS(input);
+    if (!txn) {
+      await ref.set(row);
+      return;
+    }
+    // Transaction.set and WriteBatch.set have structurally different overload
+    // sets, so TypeScript refuses to call the union directly. Both accept
+    // (ref, data) identically at runtime; narrow explicitly rather than
+    // casting the whole union away, so a genuinely wrong third argument
+    // would still be caught.
+    if (txn instanceof Object && 'commit' in txn && !('get' in txn)) {
+      (txn as FirebaseFirestore.WriteBatch).set(ref, row);
+    } else {
+      (txn as FirebaseFirestore.Transaction).set(ref, row);
+    }
+  } catch (err) {
+    console.error(
+      'writeAuditRow FAILED',
+      input.action,
+      input.entityType,
+      input.entityId,
+      err,
+    );
+  }
+}
+
+/** Actor identity for an audit row, pulled from the callable's auth context. */
+function actorFrom(request: {
+  auth?: { uid?: string; token?: Record<string, unknown> } | null;
+}): { actorUid: string; actorRole: string; instituteId: string | null } {
+  const token = (request.auth?.token ?? {}) as Record<string, unknown>;
+  return {
+    actorUid: request.auth?.uid ?? 'unknown',
+    actorRole: (token.role as string) ?? 'unknown',
+    instituteId: (token.instituteId as string) ?? null,
+  };
+}
+
+// ── Hierarchy node lifecycle ──────────────────────────────────────
+// Closes a real gap found during the Feature #15 baseline read: the nine
+// academic-hierarchy collections have archiveNode() (status -> 'archived')
+// but NO unarchive path anywhere in the codebase, so archiving a school or
+// program was irreversible through the UI.
+//
+// Kept as a callable rather than a client write because it must produce an
+// audit row, and clients cannot write deletionAudit.
+
+const HIERARCHY_COLLECTIONS = [
+  'schools',
+  'academicLevels',
+  'programs',
+  'academicSessions',
+  'academicYears',
+  'semesters',
+  'courses',
+  'sections',
+  'groups',
+] as const;
+
+type HierarchyCollection = (typeof HIERARCHY_COLLECTIONS)[number];
+
+export const setHierarchyNodeLifecycle = onCall<{
+  collection: HierarchyCollection;
+  nodeId: string;
+  action: 'archive' | 'restore';
+  reason?: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const { collection, nodeId, action, reason } = request.data || ({} as never);
+
+  if (!collection || !HIERARCHY_COLLECTIONS.includes(collection)) {
+    throw new HttpsError('invalid-argument', 'Unknown hierarchy collection.');
+  }
+  if (!nodeId) throw new HttpsError('invalid-argument', 'nodeId is required.');
+  if (action !== 'archive' && action !== 'restore') {
+    throw new HttpsError('invalid-argument', 'action must be archive or restore.');
+  }
+
+  const db = getFirestore();
+  const ref = db.collection(collection).doc(nodeId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Node not found.');
+
+  const data = snap.data() as Record<string, unknown>;
+  const nodeInstituteId = (data.instituteId as string) ?? null;
+
+  // Authorisation mirrors canWriteAcademic in firestore.rules: webOwner
+  // anywhere, institute admin within its own tenant. Faculty are excluded —
+  // hierarchy shape is an admin concern, and Feature #15 does not widen it.
+  const actor = actorFrom(request);
+  if (actor.actorRole !== 'webOwner') {
+    if (actor.actorRole !== 'institute' || !actor.instituteId
+        || actor.instituteId !== nodeInstituteId) {
+      throw new HttpsError('permission-denied', 'Not permitted for this node.');
+    }
+  }
+
+  const currentStatus = (data.status as string) ?? 'active';
+  const fromState: LifecycleStateS = currentStatus === 'archived' ? 'archived' : 'active';
+  const toState: LifecycleStateS = action === 'archive' ? 'archived' : 'active';
+
+  // Reject no-op transitions rather than writing a misleading audit row that
+  // claims a change occurred. Matches canTransition() in the client module.
+  if (fromState === toState) {
+    throw new HttpsError(
+      'failed-precondition',
+      action === 'archive' ? 'Node is already archived.' : 'Node is already active.',
+    );
+  }
+
+  const nowIso = new Date().toISOString();
+
+  // Legacy `status` stays authoritative (Option 2 — derive, do not migrate);
+  // the lifecycleState envelope is written ALONGSIDE it so new readers get
+  // the unified vocabulary and old readers keep working untouched.
+  const batch = db.batch();
+  batch.update(ref, {
+    status: toState === 'archived' ? 'archived' : 'active',
+    lifecycleState: toState,
+    archivedAt: toState === 'archived' ? nowIso : null,
+    archivedBy: toState === 'archived' ? actor.actorUid : null,
+    archivedByRole: toState === 'archived' ? actor.actorRole : null,
+    lifecycleReason: reason ?? null,
+    updatedAt: nowIso,
+  });
+
+  await writeAuditRow(db, {
+    action: action === 'archive' ? 'archive' : 'restore',
+    entityType: 'hierarchyNode',
+    entityId: nodeId,
+    entityLabel: (data.name as string) ?? null,
+    fromState,
+    toState,
+    actorUid: actor.actorUid,
+    actorRole: actor.actorRole,
+    instituteId: nodeInstituteId,
+    reason: reason ?? null,
+  }, batch);
+
+  await batch.commit();
+
+  return { ok: true as const, fromState, toState };
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // gradeAttempt — server-side scoring
 //
 // Replaces the previous client-side calculateScores + submitAttempt /

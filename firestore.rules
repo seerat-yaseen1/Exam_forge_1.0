@@ -20,6 +20,9 @@ rules_version = '2';
 //      and by materialized membership (see attempts + assessments blocks)
 //   ✅ Academic hierarchy + mappings reads scoped to staff / own-student
 //      (Audit N8, 2026-07-17)
+//   ✅ Entity-lifecycle audit trail append-only + tenant-scoped reads;
+//      deletionRequests reserved and denied until Phase 4
+//      (Feature #15, Phase 0b)
 //   ✅ Test collections blocked; unknown paths fall through to default deny
 //
 // Remaining deferrals are tracked in REMEDIATION_PLAN.md, not here (so this
@@ -837,6 +840,51 @@ service cloud.firestore {
     match /allocationAudit/{id} {
       allow read:  if isWebOwner();
       allow write: if false;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // ENTITY LIFECYCLE (Feature #15, Phase 0b)
+    // ═════════════════════════════════════════════════════════════════════════
+
+    // deletionAudit/{autoId} — append-only lifecycle trail: archive, soft
+    // delete, restore, purge, and (Phase 4) request submissions/resolutions.
+    //
+    // IMMUTABLE TO EVERY CLIENT PRINCIPAL, INCLUDING THE WEB OWNER.
+    // Same posture as allocationAudit above, for the same reason plus a
+    // stronger one: an audit trail a client can write is one a client can
+    // FORGE, and an audit trail a client writes separately from the action
+    // is one that can silently go missing when the second call fails. Rows
+    // are written server-side by the same callable that performs the
+    // transition, inside the same operation.
+    //
+    // READ SCOPING
+    //   • webOwner  — the whole trail.
+    //   • institute — only rows stamped with its own instituteId. Provable
+    //     from the query: the client filters instituteId == own claim (see
+    //     getAuditForInstitute in src/lib/deletionAudit.ts), so this rule
+    //     never forces an unfiltered scan.
+    //   • faculty / student — nothing. Faculty may TRIGGER lifecycle actions
+    //     under Phase 3 rights, but the trail exists to hold actors
+    //     accountable, so it is not readable by the population it audits.
+    match /deletionAudit/{id} {
+      allow read:  if isWebOwner()
+                      || (signedIn()
+                          && role() == 'institute'
+                          && resource.data.instituteId == request.auth.token.instituteId);
+      allow write: if false;
+    }
+
+    // deletionRequests/{autoId} — the approval workflow (Phase 4).
+    //
+    // Declared NOW, denied entirely, on purpose: the collection is named in
+    // the Phase 0a client module, and a named-but-unmatched collection would
+    // fall through to the default deny with no explanation of why. Phase 4
+    // replaces this block with real read scoping (requester sees own,
+    // approver sees the inbox for their tenant). Writes stay server-only
+    // permanently — submit and resolve are callables, so that the server can
+    // enforce rights and EXECUTE the approved action in one operation.
+    match /deletionRequests/{id} {
+      allow read, write: if false;
     }
 
     // ═════════════════════════════════════════════════════════════════════════

@@ -14,6 +14,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
+import { DeletionImpactPanel } from '../DeletionImpactPanel';
 
 function formatDate(value: unknown): string {
   if (!value) return '—';
@@ -401,7 +402,15 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                   {/* Actions */}
                   <td className="px-5 py-3.5">
                     {isConfirmDelete ? (
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex flex-col items-end gap-2">
+                        {/* Feature #15 Phase 1 — live dependency counts before
+                            a destructive click. Informational only: the panel
+                            never disables Confirm, so the rights model (Phase
+                            3) stays the single place that decides permission. */}
+                        <div style={{ minWidth: 260, textAlign: 'left', width: '100%' }}>
+                          <DeletionImpactPanel entityType="student" entityId={student.id} />
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
                         <span className="text-xs" style={{ color: '#9B2828' }}>Remove?</span>
                         <button onClick={handleDelete} disabled={deleteLoading}
                           className="flex items-center gap-1 text-xs px-2 py-1"
@@ -414,6 +423,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                           style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                           Cancel
                         </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-0.5">

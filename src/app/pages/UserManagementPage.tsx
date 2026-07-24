@@ -20,6 +20,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../lib/firebase';
+import { DeletionImpactPanel } from '../components/DeletionImpactPanel';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -892,7 +893,13 @@ export function UserManagementPage() {
                     <td className="px-5 py-3.5">
                       {isConfirmingDelete ? (
                         /* ── Delete with password confirmation ── */
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-2" style={{ minWidth: 280 }}>
+                          {/* Feature #15 Phase 1 — institute deletion has the
+                              widest blast radius on the platform, so the counts
+                              sit ABOVE the password field: they should inform
+                              whether to type it at all, not appear after the
+                              decision is already made. */}
+                          <DeletionImpactPanel entityType="institute" entityId={institute.id} />
                           <div className="flex items-center gap-1.5">
                             <ShieldAlert size={11} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />
                             <span className="text-xs" style={{ color: '#9B2828', letterSpacing: '0.04em' }}>

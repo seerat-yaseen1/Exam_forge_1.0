@@ -266,6 +266,15 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
     const targetInstituteId =
       role === 'institute' ? uid : (profile.instituteId as string | undefined);
 
+    // Captured BEFORE the delete — after it, the document is gone and these
+    // are unrecoverable. The label is what keeps the audit trail legible once
+    // the target no longer exists to look up.
+    const auditLabel =
+      (profile.name as string) || (profile.email as string) || null;
+    const auditFromState: LifecycleStateS =
+      (profile.lifecycleState as LifecycleStateS) ??
+      (profile.isDeleted === true ? 'softDeleted' : 'active');
+
     if (callerRole !== 'webOwner') {
       if (callerRole === 'institute') {
         if (role !== 'faculty' && role !== 'student') {
@@ -321,6 +330,28 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
         console.error('deleteAuthUser: mapping cascade failed for', uid, err);
       }
     }
+
+    // Lifecycle audit (Feature #15, Phase 1). deleteAuthUser remains a HARD
+    // delete for now — Phase 6 routes it through soft-delete + retention. What
+    // changes here is that the action stops being invisible: until now nothing
+    // in the platform recorded who removed an account.
+    //
+    // Written LAST, deliberately. The row asserts the deletion happened, so it
+    // must not be written before the deletion succeeds. writeAuditRow never
+    // throws, so a logging failure cannot roll back a completed removal —
+    // it logs loudly to Cloud Logging instead.
+    const actor = actorFrom(request);
+    await writeAuditRow(db, {
+      action: 'purge',
+      entityType: role,
+      entityId: uid,
+      entityLabel: auditLabel,
+      fromState: auditFromState,
+      toState: 'purged',
+      actorUid: actor.actorUid,
+      actorRole: actor.actorRole,
+      instituteId: targetInstituteId ?? null,
+    });
 
     return { ok: true };
   }
@@ -574,6 +605,197 @@ export const setHierarchyNodeLifecycle = onCall<{
   await batch.commit();
 
   return { ok: true as const, fromState, toState };
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// DELETION IMPACT — dependency counts before a destructive action
+// (Feature #15, Phase 1)
+//
+// WHY SERVER-SIDE
+// The counts are the whole point of the confirmation dialog, and they must be
+// TRUE. Counting client-side would mean either fetching every dependent doc
+// (thousands of reads to render one dialog — an institute with 1,200 students
+// and 48,000 attempts would be unusable) or trusting a stale denormalized
+// number. count() aggregation queries run in the datastore and return a single
+// number per collection, so the dialog costs a handful of aggregations
+// regardless of tenant size.
+//
+// It also sidesteps a rules problem: a faculty member may be permitted to
+// delete a student without being permitted to read every collection that
+// student appears in. The server can count what the caller cannot see.
+//
+// FAIL-LOUD, NOT FAIL-QUIET
+// If a count cannot be computed it is returned as null, and the UI must render
+// that as "unknown", never as zero. A dialog that silently shows 0 attempts for
+// a student who has 40 is worse than no dialog at all — it actively invites
+// the destructive click it was built to prevent.
+// ═══════════════════════════════════════════════════════════════════
+
+type ImpactCounts = Record<string, number | null>;
+
+/**
+ * Count documents matching one equality filter, using an aggregation query.
+ * Returns null on failure so the caller can distinguish "none" from "unknown".
+ */
+async function countWhere(
+  db: FirebaseFirestore.Firestore,
+  collection: string,
+  field: string,
+  value: string,
+  extra?: { field: string; value: unknown },
+): Promise<number | null> {
+  try {
+    let q: FirebaseFirestore.Query = db.collection(collection).where(field, '==', value);
+    if (extra) q = q.where(extra.field, '==', extra.value);
+    const snap = await q.count().get();
+    return snap.data().count;
+  } catch (err) {
+    console.error('countWhere failed', collection, field, value, err);
+    return null;
+  }
+}
+
+/**
+ * What would be affected by removing this entity?
+ *
+ * Counts only — nothing is written, nothing is validated, and calling this has
+ * no side effects. It is safe to call on every dialog open.
+ *
+ * The dependency table mirrors Section 7 of the feature spec, mapped onto the
+ * real collections rather than assumed ones.
+ */
+export const getDeletionImpact = onCall<{
+  entityType: 'institute' | 'faculty' | 'student' | 'assessment';
+  entityId: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const { entityType, entityId } = request.data || ({} as never);
+  if (!entityType || !entityId) {
+    throw new HttpsError('invalid-argument', 'entityType and entityId are required.');
+  }
+
+  const db = getFirestore();
+  const actor = actorFrom(request);
+
+  // Authorisation: a caller may only inspect an entity they could plausibly
+  // act on. This is a READ of counts, so the bar is tenant membership rather
+  // than a deletion right — Phase 3 gates the action itself.
+  const requireTenant = async (): Promise<string | null> => {
+    if (actor.actorRole === 'webOwner') return null;
+    if (actor.actorRole !== 'institute' && actor.actorRole !== 'faculty') {
+      throw new HttpsError('permission-denied', 'Insufficient permissions.');
+    }
+    if (!actor.instituteId) {
+      throw new HttpsError('permission-denied', 'Missing tenant claim.');
+    }
+    return actor.instituteId;
+  };
+
+  const callerInstitute = await requireTenant();
+
+  const counts: ImpactCounts = {};
+  let label: string | null = null;
+  let ownerInstituteId: string | null = null;
+
+  if (entityType === 'institute') {
+    // Only the Web Owner may inspect an institute — its dependents span the
+    // whole tenant, and no tenant-level actor should enumerate another's.
+    if (actor.actorRole !== 'webOwner') {
+      throw new HttpsError('permission-denied', 'Only the Web Owner may inspect an institute.');
+    }
+    const snap = await db.collection('institutes').doc(entityId).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Institute not found.');
+    label = (snap.get('name') as string) ?? null;
+    ownerInstituteId = entityId;
+
+    const [faculty, students, assessments, attempts, reports, schools, programs, courses] =
+      await Promise.all([
+        countWhere(db, 'faculty', 'instituteId', entityId),
+        countWhere(db, 'students', 'instituteId', entityId),
+        countWhere(db, 'assessments', 'ownerId', entityId),
+        countWhere(db, 'attempts', 'instituteId', entityId),
+        countWhere(db, 'questionReports', 'instituteId', entityId),
+        countWhere(db, 'schools', 'instituteId', entityId),
+        countWhere(db, 'programs', 'instituteId', entityId),
+        countWhere(db, 'courses', 'instituteId', entityId),
+      ]);
+    Object.assign(counts, {
+      faculty, students, assessments, attempts, reports, schools, programs, courses,
+    });
+  } else if (entityType === 'faculty') {
+    const snap = await db.collection('faculty').doc(entityId).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Faculty not found.');
+    ownerInstituteId = (snap.get('instituteId') as string) ?? null;
+    label = (snap.get('name') as string) ?? null;
+    if (callerInstitute && callerInstitute !== ownerInstituteId) {
+      throw new HttpsError('permission-denied', 'Different institute.');
+    }
+
+    // Owned content is what makes faculty deletion consequential — these are
+    // the counts that drive the succession decision in Phase 5.
+    const [assessments, questions, banks, mappings] = await Promise.all([
+      countWhere(db, 'assessments', 'ownerId', entityId),
+      countWhere(db, 'questions', 'ownerId', entityId),
+      countWhere(db, 'questionBanks', 'ownerId', entityId),
+      countWhere(db, 'academicMappings', 'facultyId', entityId),
+    ]);
+    Object.assign(counts, { assessments, questions, questionBanks: banks, mappings });
+  } else if (entityType === 'student') {
+    const snap = await db.collection('students').doc(entityId).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Student not found.');
+    ownerInstituteId = (snap.get('instituteId') as string) ?? null;
+    label = (snap.get('name') as string) ?? null;
+    if (callerInstitute && callerInstitute !== ownerInstituteId) {
+      throw new HttpsError('permission-denied', 'Different institute.');
+    }
+
+    const [attempts, mappings, reports, memberships] = await Promise.all([
+      countWhere(db, 'attempts', 'studentId', entityId),
+      countWhere(db, 'academicMappings', 'studentId', entityId),
+      countWhere(db, 'questionReports', 'studentId', entityId),
+      countWhere(db, 'assessmentMembers', 'studentId', entityId),
+    ]);
+    Object.assign(counts, { attempts, mappings, reports, memberships });
+  } else if (entityType === 'assessment') {
+    const snap = await db.collection('assessments').doc(entityId).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+    label = (snap.get('title') as string) ?? null;
+    const ownerType = snap.get('ownerType') as string | undefined;
+    const ownerId = snap.get('ownerId') as string | undefined;
+    ownerInstituteId = ownerType === 'institute' ? (ownerId ?? null) : null;
+    if (callerInstitute && ownerInstituteId && callerInstitute !== ownerInstituteId) {
+      throw new HttpsError('permission-denied', 'Different institute.');
+    }
+
+    const [attempts, members] = await Promise.all([
+      countWhere(db, 'attempts', 'assessmentId', entityId),
+      countWhere(db, 'assessmentMembers', 'assessmentId', entityId),
+    ]);
+    Object.assign(counts, { attempts, members });
+  } else {
+    throw new HttpsError('invalid-argument', 'Unsupported entityType.');
+  }
+
+  // Anything that would be PRESERVED rather than destroyed is called out
+  // separately, so the dialog can say so explicitly. The locked guarantee is
+  // that account deletion never touches attempts or reports, and a dialog
+  // that lists them beside faculty and students without that distinction
+  // reads as "all of this will be destroyed" — the opposite of the truth.
+  const preserved: string[] =
+    entityType === 'student' ? ['attempts', 'reports']
+    : entityType === 'faculty' ? ['attempts', 'reports']
+    : [];
+
+  return {
+    ok: true as const,
+    entityType,
+    entityId,
+    label,
+    instituteId: ownerInstituteId,
+    counts,
+    preserved,
+  };
 });
 
 // ═══════════════════════════════════════════════════════════════════

@@ -1,152 +1,166 @@
-// ── Deletion impact — dependency counts for confirmation dialogs ──
-// (Feature #15, Phase 1. Thin client over the getDeletionImpact callable.)
+// ── DeletionImpactPanel ───────────────────────────────────────────
+// (Feature #15, Phase 1. Shared by every destructive confirmation so the
+// three call sites cannot drift apart in what they warn about.)
 //
-// WHY THE COUNTS COME FROM THE SERVER
-// Counting client-side would mean fetching every dependent document to length
-// them — an institute with 1,200 students and 48,000 attempts would need tens
-// of thousands of reads to render one dialog. The callable uses Firestore
-// count() aggregations, which return a single number per collection without
-// transferring the documents.
+// DESIGN RULE FROM THE SPEC: "Delete should never be the path of least
+// resistance." This panel exists to put real, live-counted consequences in
+// front of the person BEFORE they confirm — not to decorate a dialog that was
+// going to be confirmed anyway.
 //
-// It also solves a permissions problem: a faculty member may be permitted to
-// delete a student without being permitted to read every collection that
-// student appears in. The server counts what the caller cannot see.
-//
-// THE null CONTRACT — READ THIS BEFORE RENDERING A COUNT
-// A count is `number | null`. null means "could not be determined", NOT zero.
-// Rendering null as 0 would tell someone their deletion is harmless when it
-// may not be, which is the exact failure the dialog exists to prevent. Use
-// formatCount() rather than interpolating the raw value.
+// Two things it deliberately does NOT do:
+//   • It never renders an unknown count as 0. See the null contract in
+//     deletionImpact.ts — telling someone a deletion is harmless when we
+//     could not verify that is the failure this whole panel exists to avoid.
+//   • It never blocks. It informs; the parent owns the decision. A panel that
+//     silently disabled the confirm button would move policy into a
+//     presentational component, where Phase 3's rights model cannot see it.
 
-import { httpsCallable } from 'firebase/functions';
-import { functions } from './firebase';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Loader2, ShieldCheck } from 'lucide-react';
+import {
+  getDeletionImpact,
+  impactRows,
+  formatCount,
+  shouldRecommendArchive,
+  type DeletionImpact,
+  type ImpactEntityType,
+} from '../../lib/deletionImpact';
 
-export type ImpactEntityType = 'institute' | 'faculty' | 'student' | 'assessment';
-
-export type DeletionImpact = {
+type Props = {
   entityType: ImpactEntityType;
   entityId: string;
-  /** Name/title captured server-side, for dialog copy. */
-  label: string | null;
-  instituteId: string | null;
-  /** Collection → count. null for any count that could not be computed. */
-  counts: Record<string, number | null>;
-  /**
-   * Keys within `counts` that will be PRESERVED, not destroyed. The locked
-   * guarantee is that account deletion never touches attempts or reports;
-   * listing them beside faculty and students without saying so would read as
-   * "all of this will be destroyed" — the opposite of the truth.
-   */
-  preserved: string[];
+  /** Called once the impact resolves, so the parent can adapt its copy. */
+  onResolved?: (impact: DeletionImpact | null) => void;
 };
 
-/**
- * Fetch the dependency counts for an entity. Read-only and side-effect free;
- * safe to call on every dialog open.
- *
- * Throws if the caller isn't permitted to inspect the entity, so callers
- * should render a neutral fallback rather than assuming zero impact.
- */
-export async function getDeletionImpact(
-  entityType: ImpactEntityType,
-  entityId: string,
-): Promise<DeletionImpact> {
-  const call = httpsCallable<
-    { entityType: ImpactEntityType; entityId: string },
-    { ok: true } & DeletionImpact
-  >(functions, 'getDeletionImpact');
-  const res = await call({ entityType, entityId });
-  const d = res.data;
-  return {
-    entityType: d.entityType,
-    entityId: d.entityId,
-    label: d.label ?? null,
-    instituteId: d.instituteId ?? null,
-    counts: d.counts ?? {},
-    preserved: d.preserved ?? [],
-  };
-}
+export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props) {
+  const [impact, setImpact] = useState<DeletionImpact | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
-// ── Presentation helpers ──────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setFailed(false);
 
-const LABELS: Record<string, string> = {
-  faculty:       'Faculty',
-  students:      'Students',
-  assessments:   'Assessments',
-  attempts:      'Exam attempts',
-  reports:       'Question reports',
-  schools:       'Schools',
-  programs:      'Programs',
-  courses:       'Courses',
-  questions:     'Questions',
-  questionBanks: 'Question banks',
-  mappings:      'Academic mappings',
-  memberships:   'Exam allocations',
-  members:       'Allocated students',
-};
+    getDeletionImpact(entityType, entityId)
+      .then((res) => {
+        if (cancelled) return;
+        setImpact(res);
+        onResolved?.(res);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('[impact] failed', err);
+        setFailed(true);
+        onResolved?.(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-export function impactLabel(key: string): string {
-  return LABELS[key] ?? key;
-}
+    return () => { cancelled = true; };
+    // onResolved intentionally excluded — parents commonly pass an inline
+    // closure, which would re-run this effect (and re-query) every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityType, entityId]);
 
-/**
- * Render a count for display. null becomes "unknown" — never "0".
- * See the null contract in the header.
- */
-export function formatCount(n: number | null): string {
-  if (n === null || n === undefined) return 'unknown';
-  return n.toLocaleString();
-}
-
-/**
- * Rows worth showing, largest first. Zero-count rows are dropped (they add
- * noise), but null rows are KEPT — "unknown" is information the person needs
- * in order to judge the risk.
- */
-export function impactRows(
-  impact: DeletionImpact | null,
-): Array<{ key: string; label: string; count: number | null; preserved: boolean }> {
-  if (!impact) return [];
-  return Object.entries(impact.counts)
-    .filter(([, n]) => n === null || n > 0)
-    .sort((a, b) => (b[1] ?? Number.MAX_SAFE_INTEGER) - (a[1] ?? Number.MAX_SAFE_INTEGER))
-    .map(([key, count]) => ({
-      key,
-      label: impactLabel(key),
-      count,
-      preserved: impact.preserved.includes(key),
-    }));
-}
-
-/**
- * Does this entity have enough dependents that Archive should be recommended
- * over deletion?
- *
- * Preserved rows do not count toward the total: attempts survive account
- * deletion, so 40,000 of them are not an argument against removing the
- * account. Counting them would make the recommendation fire on almost every
- * student and train people to dismiss it.
- *
- * An unknown (null) count DOES trigger the recommendation — if we cannot
- * establish that a deletion is safe, the reversible option is the one to
- * suggest.
- */
-export function shouldRecommendArchive(impact: DeletionImpact | null): boolean {
-  if (!impact) return false;
-  for (const [key, n] of Object.entries(impact.counts)) {
-    if (impact.preserved.includes(key)) continue;
-    if (n === null) return true;
-    if (n > 0) return true;
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs" style={{ color: '#9A9891' }}>
+        <Loader2 size={11} className="animate-spin" />
+        Checking what this affects…
+      </div>
+    );
   }
-  return false;
-}
 
-/** One-line summary for compact confirmation UI. */
-export function summarizeImpact(impact: DeletionImpact | null): string {
-  const rows = impactRows(impact).filter((r) => !r.preserved);
-  if (rows.length === 0) return 'No dependent records found.';
-  return rows
-    .slice(0, 3)
-    .map((r) => `${formatCount(r.count)} ${r.label.toLowerCase()}`)
-    .join(', ');
+  // A failed impact check is surfaced, never swallowed. If we cannot say what
+  // a deletion affects, the person should know that before proceeding rather
+  // than see an empty panel and read it as "nothing will be affected".
+  if (failed) {
+    return (
+      <div
+        className="flex items-start gap-2 text-xs px-2.5 py-2"
+        style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2, color: '#7A5B12' }}
+      >
+        <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
+        <span>
+          Could not determine what this affects. Proceed with caution — dependent
+          records may exist.
+        </span>
+      </div>
+    );
+  }
+
+  const rows = impactRows(impact);
+  const destructive = rows.filter((r) => !r.preserved);
+  const preserved = rows.filter((r) => r.preserved);
+  const recommendArchive = shouldRecommendArchive(impact);
+
+  if (rows.length === 0) {
+    return (
+      <div className="text-xs" style={{ color: '#9A9891' }}>
+        No dependent records found.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {destructive.length > 0 && (
+        <div
+          className="px-2.5 py-2"
+          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2 }}
+        >
+          <p className="text-xs mb-1.5" style={{ color: '#9B2828', fontWeight: 500 }}>
+            This will affect:
+          </p>
+          <div className="flex flex-col gap-0.5">
+            {destructive.map((r) => (
+              <div key={r.key} className="flex items-center justify-between text-xs">
+                <span style={{ color: '#6B6862' }}>{r.label}</span>
+                <span
+                  style={{
+                    color: r.count === null ? '#7A5B12' : '#3A3833',
+                    fontWeight: 500,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {formatCount(r.count)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {preserved.length > 0 && (
+        <div className="flex items-start gap-2 px-2.5 py-2"
+          style={{ background: '#F2F6F2', border: '1px solid #D3E0D3', borderRadius: 2 }}>
+          <ShieldCheck size={12} style={{ marginTop: 1, flexShrink: 0, color: '#3F6B3F' }} />
+          <div className="text-xs" style={{ color: '#3F6B3F' }}>
+            <span style={{ fontWeight: 500 }}>Kept as academic records: </span>
+            {preserved.map((r, i) => (
+              <span key={r.key}>
+                {i > 0 && ', '}
+                {formatCount(r.count)} {r.label.toLowerCase()}
+              </span>
+            ))}
+            .
+          </div>
+        </div>
+      )}
+
+      {recommendArchive && (
+        <div className="flex items-start gap-2 text-xs px-2.5 py-2"
+          style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2, color: '#7A5B12' }}>
+          <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
+          <span>
+            This account has dependent records. Disabling it instead blocks access
+            immediately and is reversible.
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Users, Plus, Upload, Loader2, PauseCircle, PlayCircle,
   Trash2, AlertTriangle, X, Mail, MailX, Check, Shield, ShieldCheck,
-  GraduationCap, SlidersHorizontal,
+  GraduationCap, SlidersHorizontal, Inbox,
 } from 'lucide-react';
 import { AddFacultyDrawer, type Faculty } from './AddFacultyDrawer';
 import { FacultyQuestionRightsEditor } from './FacultyQuestionRightsEditor';
@@ -20,6 +20,7 @@ import {
   type DeletionRightsCeiling,
 } from '../../../lib/deletionRights';
 import { FacultyDeletionRightsEditor } from './FacultyDeletionRightsEditor';
+import { isRequiresApproval, submitDeletionRequest } from '../../../lib/deletionRequestService';
 import { BulkFacultyModal } from './BulkFacultyModal';
 import {
   getFacultyByInstitute,
@@ -103,6 +104,8 @@ export function FacultyTab({
   // Per-row state
   const [deletingId, setDeletingId]         = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading]   = useState(false);
+  // Feature #15 Phase 4b — surfaces request-submission outcomes.
+  const [requestNotice, setRequestNotice] = useState<string | null>(null);
   const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [schoolsPermLoadingId, setSchoolsPermLoadingId] = useState<string | null>(null);
@@ -220,6 +223,22 @@ export function FacultyTab({
       setDeletingId(null);
       setLastSynced(new Date());
     } catch (e: any) {
+      // Feature #15 Phase 4b — request mode is not a failure. Fall through to
+      // submitting the request instead of swallowing it into console.error,
+      // which is what happened here before and left the admin with a delete
+      // button that silently did nothing.
+      if (isRequiresApproval(e)) {
+        try {
+          await submitDeletionRequest('faculty', deletingId);
+          setDeletingId(null);
+          setRequestNotice('Deletion request submitted for approval.');
+        } catch (subErr: any) {
+          setRequestNotice(subErr?.message ?? 'Could not submit the request.');
+        }
+        setTimeout(() => setRequestNotice(null), 6000);
+        setDeleteLoading(false);
+        return;
+      }
       console.error('Delete failed:', e);
     } finally {
       setDeleteLoading(false);
@@ -361,6 +380,14 @@ export function FacultyTab({
       </AnimatePresence>
 
       {/* ── Fetch error ── */}
+      {requestNotice && (
+        <div className="flex items-center gap-2 px-4 py-3 mb-4"
+          style={{ background: '#F2F6F2', border: '1px solid #D3E0D3', borderRadius: 2 }}>
+          <Inbox size={12} strokeWidth={1.5} style={{ color: '#3F6B3F' }} />
+          <p className="text-xs" style={{ color: '#3F6B3F' }}>{requestNotice}</p>
+        </div>
+      )}
+
       {fetchError && (
         <div className="flex items-center gap-2 px-4 py-3 mb-4"
           style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>

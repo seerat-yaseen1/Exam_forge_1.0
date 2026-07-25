@@ -14,6 +14,9 @@ import { SchoolsTab } from '../../components/schools/SchoolsTab';
 import { ApprovalsInbox } from '../../components/questions/ApprovalsInbox';
 import { RIGHT_NAMES, grantableModes } from '../../../lib/questionRights';
 import type { DeletionRightsCeiling } from '../../../lib/deletionRights';
+import { grantableModes as grantableDeletionModes, instituteMode, DELETABLE_RESOURCES } from '../../../lib/deletionRights';
+import { DeletionApprovalsInbox } from '../../components/DeletionApprovalsInbox';
+import { getPendingDeletionRequestCount } from '../../../lib/deletionRequestService';
 import { getPendingRequestCount } from '../../../lib/questionRequestService';
 import { FacultyTab } from '../../components/faculty/FacultyTab';
 import { StudentTab } from '../../components/student/StudentTab';
@@ -403,6 +406,17 @@ export function InstituteLandingPage() {
   // The approvals inbox is relevant only when the ceiling permits at least one
   // right to be granted to faculty in REQUEST mode.
   const requestModeEnabled = RIGHT_NAMES.some((r) => grantableModes(questionCeiling, r).includes('request'));
+  // Feature #15 Phase 4b — the Approvals tab must also open when DELETION
+  // requests are possible, which happens two ways: the institute may grant
+  // faculty a request-mode right (requests arrive here), or the institute
+  // itself acts in request mode (its own requests go up to the Web Owner
+  // and it watches them here). Either alone justifies the tab.
+  const deletionRequestModeEnabled = DELETABLE_RESOURCES.some(
+    (r) => grantableDeletionModes(deletionCeiling, r).includes('request')
+      || instituteMode(deletionCeiling, r) === 'request',
+  );
+  const approvalsTabEnabled = requestModeEnabled || deletionRequestModeEnabled;
+  const [pendingDeletionCount, setPendingDeletionCount] = useState(0);
   const [permissionLoading, setPermissionLoading] = useState(false);
 
   useEffect(() => {
@@ -429,11 +443,17 @@ export function InstituteLandingPage() {
     getPendingRequestCount(session.instituteId).then(setPendingCount).catch(() => {});
   }, [session?.instituteId, requestModeEnabled]);
 
+  // Pending DELETION requests for the same badge (Feature #15 Phase 4b).
+  useEffect(() => {
+    if (!session?.instituteId || !deletionRequestModeEnabled) { setPendingDeletionCount(0); return; }
+    getPendingDeletionRequestCount(session.instituteId).then(setPendingDeletionCount).catch(() => {});
+  }, [session?.instituteId, deletionRequestModeEnabled]);
+
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'faculties', label: 'Faculty',  icon: <Users size={12} strokeWidth={1.5} /> },
     { key: 'students',  label: 'Students', icon: <GraduationCap size={12} strokeWidth={1.5} /> },
     { key: 'schools',   label: 'Schools',  icon: <School size={12} strokeWidth={1.5} /> },
-    ...(requestModeEnabled
+    ...(approvalsTabEnabled
       ? [{ key: 'approvals' as Tab, label: 'Approvals', icon: <Inbox size={12} strokeWidth={1.5} /> }]
       : []),
   ];
@@ -482,12 +502,12 @@ export function InstituteLandingPage() {
                 </span>
               )}
               {/* Approvals tab: pending-count badge */}
-              {tab.key === 'approvals' && pendingCount > 0 && (
+              {tab.key === 'approvals' && (pendingCount + pendingDeletionCount) > 0 && (
                 <span
                   className="ml-1 inline-flex items-center justify-center"
                   style={{ minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: '#8A6D3B', color: '#FFFFFF', fontSize: 10, lineHeight: 1 }}
                 >
-                  {pendingCount}
+                  {pendingCount + pendingDeletionCount}
                 </span>
               )}
               {isActive && (
@@ -586,14 +606,35 @@ export function InstituteLandingPage() {
             </motion.div>
           )}
 
-          {activeTab === 'approvals' && session?.instituteId && requestModeEnabled && (
+          {activeTab === 'approvals' && session?.instituteId && approvalsTabEnabled && (
             <motion.div key="approvals" className="p-5"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}>
-              <ApprovalsInbox
-                instituteId={session.instituteId}
-                onPendingCountChange={setPendingCount}
-              />
+              {requestModeEnabled && (
+                <ApprovalsInbox
+                  instituteId={session.instituteId}
+                  onPendingCountChange={setPendingCount}
+                />
+              )}
+              {/* Feature #15 Phase 4b — deletion requests share the Approvals
+                  tab rather than getting a competing surface: an admin should
+                  have one place to look for things awaiting them. */}
+              {deletionRequestModeEnabled && (
+                <div className={requestModeEnabled ? 'mt-6 pt-5' : ''}
+                  style={requestModeEnabled ? { borderTop: '1px solid #E3E1DB' } : undefined}>
+                  <p className="text-xs mb-3" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>
+                    DELETION REQUESTS
+                  </p>
+                  <DeletionApprovalsInbox
+                    viewerRole="institute"
+                    instituteId={session.instituteId}
+                    onResolved={() => {
+                      getPendingDeletionRequestCount(session.instituteId!)
+                        .then(setPendingDeletionCount).catch(() => {});
+                    }}
+                  />
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

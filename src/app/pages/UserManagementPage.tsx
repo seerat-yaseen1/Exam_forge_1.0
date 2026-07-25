@@ -21,6 +21,7 @@ import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../lib/firebase';
 import { DeletionImpactPanel } from '../components/DeletionImpactPanel';
+import { DeletionApprovalsInbox } from '../components/DeletionApprovalsInbox';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -781,6 +782,15 @@ export function UserManagementPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ── Deletion requests raised by institutes (Feature #15 Phase 4b) ──
+             Placed ABOVE the institutes table on purpose: these are decisions
+             waiting on the Web Owner, and a queue below a long table is a
+             queue nobody reads. The inbox renders nothing when empty, so it
+             costs no space in the normal case. */}
+        <div className="mb-5">
+          <DeletionApprovalsInbox viewerRole="webOwner" />
+        </div>
 
         {/* ── Table ── */}
         <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>

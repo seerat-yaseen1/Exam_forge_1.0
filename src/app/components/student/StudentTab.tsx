@@ -15,6 +15,7 @@ import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
 import { DeletionImpactPanel } from '../DeletionImpactPanel';
+import { isRequiresApproval, submitDeletionRequest } from '../../../lib/deletionRequestService';
 
 function formatDate(value: unknown): string {
   if (!value) return '—';
@@ -171,6 +172,29 @@ export function StudentTab({ instituteId, instituteName }: Props) {
       setDeletingId(null);
       setLastSynced(new Date());
     } catch (e: any) {
+      // Feature #15 Phase 4b — the caller holds this right, but only in
+      // REQUEST mode. That is not a failure, so it must not read as one:
+      // fall through to submitting the request rather than showing an error
+      // the person can do nothing about. Branching on the error CODE, not
+      // on prose, so copy changes never break the flow.
+      if (isRequiresApproval(e)) {
+        try {
+          await submitDeletionRequest('student', deletingId);
+          setDeletingId(null);
+          setEmailNotice({
+            ok: true,
+            message: 'Deletion request submitted for approval.',
+          });
+        } catch (subErr: any) {
+          setEmailNotice({
+            ok: false,
+            message: subErr?.message ?? 'Could not submit the request.',
+          });
+        }
+        setTimeout(() => setEmailNotice(null), 6000);
+        setDeleteLoading(false);
+        return;
+      }
       console.error(e);
       setEmailNotice({ ok: false, message: e?.message ?? 'Failed to delete student.' });
       setTimeout(() => setEmailNotice(null), 6000);

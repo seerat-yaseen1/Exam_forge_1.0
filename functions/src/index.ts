@@ -237,6 +237,15 @@ export const createAuthUser = onCall<CreateAuthUserData>(
 interface DeleteAuthUserData {
   role: Role;
   uid: string;
+  /**
+   * Faculty only (Feature #15, Phase 5a). Another active faculty member in the
+   * same institute to inherit this person's questions, banks and assessments.
+   * Omitted ⇒ the institute admin inherits, which is the safe default and the
+   * only target guaranteed to exist.
+   */
+  successorId?: string;
+  /** Set once the admin has acknowledged live-exam ownership. */
+  confirmLiveOwnership?: boolean;
 }
 
 const CREDENTIALS_BY_ROLE: Partial<Record<Role, string>> = {
@@ -314,6 +323,149 @@ function resolveDeletionModeS(
   return 'none';
 }
 
+// ── Ownership succession (Feature #15, Phase 5a) ──────────────────
+//
+// When a faculty member is removed, their content must go somewhere. Left
+// alone it becomes UNWRITABLE BY EVERYONE: canWriteOwned in firestore.rules
+// grants write/delete to whoever matches ownerId, so a question owned by a
+// deleted uid can be read (the tenant stamp survives) but never edited or
+// removed again. Stranded, maintainable by nobody.
+//
+// DEFAULT SUCCESSOR = THE INSTITUTE ADMIN. It is the one target that always
+// exists as long as the institute does, so it can never fail and needs nobody
+// to choose anything — which is what makes it safe for bulk deletes and for
+// cascades where no human is present.
+//
+// ONE HOP, ALWAYS. If A's content passed to B and B now leaves, B's content
+// (including A's) goes to the institute admin — never onward to whoever B
+// once named. Chains are unreadable and make restore ambiguous.
+//
+// The previous owner is recorded on the AUDIT ROW, not on the content: the
+// content doc only carries its CURRENT owner, so once succession rewrites
+// ownerId the original is gone from it. The row is the only record, and is
+// what will let Phase 6 reverse a succession on restore.
+
+type SuccessionOutcomeS = {
+  toOwnerType: 'institute' | 'faculty';
+  toOwnerId: string;
+  reason: 'chosen' | 'defaulted' | 'fallback';
+  counts: Record<string, number>;
+};
+
+/** Rewrite ownerType/ownerId across one collection, in batches. */
+async function reassignOwned(
+  db: FirebaseFirestore.Firestore,
+  collection: string,
+  fromOwnerId: string,
+  to: { ownerType: string; ownerId: string },
+): Promise<number> {
+  let moved = 0;
+  try {
+    const snap = await db.collection(collection)
+      .where('ownerType', '==', 'faculty')
+      .where('ownerId', '==', fromOwnerId)
+      .get();
+    let batch = db.batch();
+    let n = 0;
+    for (const d of snap.docs) {
+      const patch: Record<string, unknown> = {
+        ownerType: to.ownerType,
+        ownerId: to.ownerId,
+        updatedAt: new Date().toISOString(),
+      };
+      // Preserve authorship. "Who controls this now" changes; "who wrote it"
+      // must not. Only stamped if absent, so a second succession never
+      // overwrites the true original author with an intermediate holder.
+      if (d.get('originalOwnerId') === undefined) {
+        patch.originalOwnerType = 'faculty';
+        patch.originalOwnerId = fromOwnerId;
+      }
+      batch.update(d.ref, patch);
+      moved++;
+      if (++n >= 400) { await batch.commit(); batch = db.batch(); n = 0; }
+    }
+    if (n > 0) await batch.commit();
+  } catch (err) {
+    console.error('reassignOwned failed', collection, fromOwnerId, err);
+  }
+  return moved;
+}
+
+/**
+ * Move a departing faculty member's content to a successor.
+ *
+ * The chosen successor is validated HERE, at execution time — not when it was
+ * picked. A request can sit in an approval inbox for days; a colleague chosen
+ * on Monday may be archived or deleted by Thursday. Trusting a selection-time
+ * check would transfer content to a dead account.
+ */
+async function performFacultySuccession(
+  db: FirebaseFirestore.Firestore,
+  facultyId: string,
+  instituteId: string,
+  chosenSuccessorId?: string | null,
+): Promise<SuccessionOutcomeS> {
+  let to: { ownerType: 'institute' | 'faculty'; ownerId: string } =
+    { ownerType: 'institute', ownerId: instituteId };
+  let reason: SuccessionOutcomeS['reason'] = 'defaulted';
+
+  if (chosenSuccessorId && chosenSuccessorId !== facultyId) {
+    const sucSnap = await db.collection('faculty').doc(chosenSuccessorId).get();
+    const valid = sucSnap.exists
+      && sucSnap.get('instituteId') === instituteId
+      && sucSnap.get('status') !== 'disabled'
+      && sucSnap.get('lifecycleState') !== 'softDeleted'
+      && sucSnap.get('lifecycleState') !== 'archived';
+    if (valid) {
+      to = { ownerType: 'faculty', ownerId: chosenSuccessorId };
+      reason = 'chosen';
+    } else {
+      // An intent existed and could not be honoured — distinct from nobody
+      // having chosen, and worth surfacing to whoever chose.
+      reason = 'fallback';
+    }
+  }
+
+  const [questions, questionBanks, assessments] = await Promise.all([
+    reassignOwned(db, 'questions', facultyId, to),
+    reassignOwned(db, 'questionBanks', facultyId, to),
+    reassignOwned(db, 'assessments', facultyId, to),
+  ]);
+
+  return {
+    toOwnerType: to.ownerType,
+    toOwnerId: to.ownerId,
+    reason,
+    counts: { questions, questionBanks, assessments },
+  };
+}
+
+/**
+ * Does this faculty member own assessments that are LIVE right now?
+ *
+ * Deleting the owner of a running exam is the one case succession does not
+ * make safe: students may be mid-attempt, and an ownership change during a
+ * sitting is a variable nobody wants in an exam-integrity story. The caller
+ * blocks and asks for reassignment first.
+ */
+async function countLiveOwnedAssessments(
+  db: FirebaseFirestore.Firestore,
+  facultyId: string,
+): Promise<number> {
+  try {
+    const snap = await db.collection('assessments')
+      .where('ownerType', '==', 'faculty')
+      .where('ownerId', '==', facultyId)
+      .where('status', '==', 'active')
+      .count().get();
+    return snap.data().count;
+  } catch (err) {
+    console.error('countLiveOwnedAssessments failed', facultyId, err);
+    // Fail CLOSED: if we cannot prove nothing is live, treat it as live.
+    return 1;
+  }
+}
+
 /**
  * Perform an account deletion. THE ONE PLACE THIS HAPPENS.
  *
@@ -342,9 +494,22 @@ async function performAccountDeletion(
     actorRole: string;
     requestId?: string | null;
     reason?: string | null;
+    /** Faculty only — successor chosen by the admin, validated at execution. */
+    successorId?: string | null;
   },
 ): Promise<void> {
   const { role, uid, profileRef } = params;
+
+  // ── Succession BEFORE destruction (Feature #15, Phase 5a) ────────
+  // Runs first, deliberately. If the profile were deleted first and the
+  // reassignment then failed, the content would be orphaned with no owner
+  // and no way to work out who it belonged to.
+  let succession: SuccessionOutcomeS | null = null;
+  if (role === 'faculty' && params.targetInstituteId) {
+    succession = await performFacultySuccession(
+      db, uid, params.targetInstituteId, params.successorId,
+    );
+  }
 
   try {
     await getAuth().deleteUser(uid);
@@ -362,14 +527,19 @@ async function performAccountDeletion(
   if (role === 'institute') {
     await db.collection('instituteLogos').doc(uid).delete().catch(() => undefined);
   }
-  if (role === 'student') {
-    // Cascade: academic-hierarchy mappings for a deleted student are pure
-    // orphans — remove them so node rosters don't render ghosts. Attempts
-    // and questionReports are DELIBERATELY kept: they are the institute's
-    // exam records / audit trail.
+  // Cascade: academic-hierarchy mappings for a deleted person are pure
+  // orphans — remove them so node rosters don't render ghosts. Attempts and
+  // questionReports are DELIBERATELY kept: they are the institute's exam
+  // records / audit trail.
+  //
+  // FACULTY WERE MISSING FROM THIS UNTIL PHASE 5a (bug d): the cleanup existed
+  // for students only, so every deleted faculty member left mapping rows
+  // pointing at an account that no longer existed.
+  if (role === 'student' || role === 'faculty') {
+    const mapField = role === 'student' ? 'studentId' : 'facultyId';
     try {
       const mapSnap = await db.collection('academicMappings')
-        .where('studentId', '==', uid).get();
+        .where(mapField, '==', uid).get();
       let batch = db.batch();
       let n = 0;
       for (const d of mapSnap.docs) {
@@ -401,6 +571,16 @@ async function performAccountDeletion(
     instituteId: params.targetInstituteId,
     requestId: params.requestId ?? null,
     reason: params.reason ?? null,
+    succession: succession
+      ? {
+          fromOwnerType: 'faculty',
+          fromOwnerId: uid,
+          toOwnerType: succession.toOwnerType,
+          toOwnerId: succession.toOwnerId,
+          reason: succession.reason,
+          counts: succession.counts,
+        }
+      : null,
   });
 }
 
@@ -411,7 +591,8 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
     const callerRole = request.auth.token.role as Role | undefined;
     const callerInstituteId = request.auth.token.instituteId as string | undefined;
 
-    const { role, uid } = request.data || ({} as DeleteAuthUserData);
+    const { role, uid, successorId, confirmLiveOwnership } =
+      request.data || ({} as DeleteAuthUserData);
     if (!role || !COLLECTION_BY_ROLE[role]) throw new HttpsError('invalid-argument', 'Invalid role.');
     if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
 
@@ -496,6 +677,22 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
       }
     }
 
+    // ── Live-exam guard (Feature #15, Phase 5a) ────────────────────
+    // Succession makes most faculty deletion safe, but not this case: an
+    // ACTIVE assessment may have students mid-attempt, and changing its owner
+    // during a sitting is a variable nobody wants in an exam-integrity story.
+    // Surfaced as a distinct code so the UI can offer reassignment rather
+    // than showing a dead end.
+    if (role === 'faculty' && !confirmLiveOwnership) {
+      const live = await countLiveOwnedAssessments(db, uid);
+      if (live > 0) {
+        throw new HttpsError(
+          'failed-precondition',
+          `FACULTY_OWNS_LIVE_ASSESSMENTS:${live}`,
+        );
+      }
+    }
+
     await performAccountDeletion(db, {
       role,
       uid,
@@ -505,6 +702,7 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
       targetInstituteId: targetInstituteId ?? null,
       actorUid: actorFrom(request).actorUid,
       actorRole: actorFrom(request).actorRole,
+      successorId: successorId ?? null,
     });
 
     return { ok: true };

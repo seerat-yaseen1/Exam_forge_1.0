@@ -21,6 +21,7 @@ import {
 } from '../../../lib/deletionRights';
 import { FacultyDeletionRightsEditor } from './FacultyDeletionRightsEditor';
 import { isRequiresApproval, submitDeletionRequest } from '../../../lib/deletionRequestService';
+import { SuccessorPicker } from './SuccessorPicker';
 import { BulkFacultyModal } from './BulkFacultyModal';
 import {
   getFacultyByInstitute,
@@ -106,6 +107,10 @@ export function FacultyTab({
   const [deleteLoading, setDeleteLoading]   = useState(false);
   // Feature #15 Phase 4b — surfaces request-submission outcomes.
   const [requestNotice, setRequestNotice] = useState<string | null>(null);
+  // Feature #15 Phase 5a — who inherits the departing member's content.
+  const [successorId, setSuccessorId] = useState<string | null>(null);
+  // Set when the server reports live owned assessments; the second click confirms.
+  const [liveOwnedCount, setLiveOwnedCount] = useState<number | null>(null);
   const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [schoolsPermLoadingId, setSchoolsPermLoadingId] = useState<string | null>(null);
@@ -214,19 +219,38 @@ export function FacultyTab({
     if (!deletingId) return;
     setDeleteLoading(true);
     try {
-      const deleteAuthUser = httpsCallable<{ role: string; uid: string }, { ok: boolean }>(
+      const deleteAuthUser = httpsCallable<
+        { role: string; uid: string; successorId?: string; confirmLiveOwnership?: boolean },
+        { ok: boolean }
+      >(
         functions,
         'deleteAuthUser'
       );
-      await deleteAuthUser({ role: 'faculty', uid: deletingId });
+      await deleteAuthUser({
+        role: 'faculty',
+        uid: deletingId,
+        successorId: successorId ?? undefined,
+        confirmLiveOwnership: liveOwnedCount !== null,
+      });
       setFaculties((prev) => prev.filter((f) => f.id !== deletingId));
       setDeletingId(null);
+      setSuccessorId(null);
+      setLiveOwnedCount(null);
       setLastSynced(new Date());
     } catch (e: any) {
       // Feature #15 Phase 4b — request mode is not a failure. Fall through to
       // submitting the request instead of swallowing it into console.error,
       // which is what happened here before and left the admin with a delete
       // button that silently did nothing.
+      // Live-exam ownership: not a failure, a checkpoint. Surface the count
+      // and let the same button confirm on the second click, rather than
+      // making the admin hunt for a separate override.
+      const liveMatch = /FACULTY_OWNS_LIVE_ASSESSMENTS:(\d+)/.exec(e?.message ?? '');
+      if (liveMatch) {
+        setLiveOwnedCount(Number(liveMatch[1]));
+        setDeleteLoading(false);
+        return;
+      }
       if (isRequiresApproval(e)) {
         try {
           await submitDeletionRequest('faculty', deletingId);
@@ -605,6 +629,30 @@ export function FacultyTab({
                             succession decision necessary. Informational only. */}
                         <div style={{ minWidth: 260, textAlign: 'left', width: '100%' }}>
                           <DeletionImpactPanel entityType="faculty" entityId={faculty.id} />
+                          {/* Feature #15 Phase 5a — succession. Optional by
+                              design: leaving it on the default hands content
+                              to the institute admin, which always works. */}
+                          <div className="mt-2">
+                            <SuccessorPicker
+                              instituteId={instituteId}
+                              excludeFacultyId={faculty.id}
+                              value={successorId}
+                              onChange={setSuccessorId}
+                              disabled={deleteLoading}
+                            />
+                          </div>
+                          {liveOwnedCount !== null && (
+                            <div className="flex items-start gap-2 mt-2 px-2.5 py-2"
+                              style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2 }}>
+                              <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0, color: '#7A5B12' }} />
+                              <span className="text-xs" style={{ color: '#7A5B12' }}>
+                                This member owns {liveOwnedCount} active assessment
+                                {liveOwnedCount === 1 ? '' : 's'}. Students may be
+                                mid-attempt. Confirm again to proceed — ownership
+                                transfers immediately.
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center justify-end gap-2">
                         <span className="text-xs" style={{ color: '#9B2828' }}>Remove?</span>
@@ -614,7 +662,9 @@ export function FacultyTab({
                           {deleteLoading ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
                           Confirm
                         </button>
-                        <button onClick={() => setDeletingId(null)} disabled={deleteLoading}
+                        <button
+                          onClick={() => { setDeletingId(null); setSuccessorId(null); setLiveOwnedCount(null); }}
+                          disabled={deleteLoading}
                           className="text-xs px-2 py-1"
                           style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                           Cancel

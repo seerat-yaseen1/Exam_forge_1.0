@@ -89,7 +89,16 @@ async function buildSessionFromAuthUser(
   ) {
     return { session: null, reason: 'wrong_institute_code', firstLoginRequired: false };
   }
-  if (inst.status === 'disabled' || stu.status === 'disabled') {
+  // Feature #15 — soft delete sets `lifecycleState`, NOT `status`. The two are
+  // deliberately separate axes (a disabled person is still lifecycle-active),
+  // which meant checking only `status` let deleted accounts — and members of a
+  // DELETED INSTITUTE — sign in and sit exams exactly as before. Blocking
+  // access is the entire point of the deletion, so the lifecycle axis is
+  // checked here too.
+  if (
+    inst.status === 'disabled' || stu.status === 'disabled'
+    || inst.lifecycleState === 'softDeleted' || stu.lifecycleState === 'softDeleted'
+  ) {
     return { session: null, reason: 'disabled', firstLoginRequired: false };
   }
   const activeUntil = String(inst.activeUntil ?? '');

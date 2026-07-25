@@ -299,8 +299,32 @@ export async function updateWebOwner(email: string, data: Partial<WebOwner>): Pr
 // INSTITUTE OPERATIONS
 // ──────────────────────────────────────────────────────────────────
 
+/**
+ * Drop soft-deleted records from a list (Feature #15).
+ *
+ * Soft delete sets `lifecycleState`, NOT `status` — the two are deliberately
+ * separate axes (a disabled person is still lifecycle-active). That means a
+ * deleted record keeps status:'active' and would otherwise keep rendering in
+ * every list as though nothing happened, which is exactly what it did: the
+ * page removed the row optimistically and the next poll put it straight back,
+ * still labelled Active.
+ *
+ * Filtered client-side rather than in the query so that legacy documents —
+ * which have no lifecycleState field at all — keep appearing. A Firestore
+ * inequality or != filter would silently drop every one of them.
+ */
+function excludeDeleted<T>(rows: T[]): T[] {
+  // Read defensively rather than constraining T: none of Institute / Faculty /
+  // Student declares `lifecycleState` (it is written by the server and is
+  // absent entirely on every pre-Feature-#15 document), so a structural
+  // constraint would reject all three at compile time.
+  return rows.filter(
+    (r) => (r as { lifecycleState?: string })?.lifecycleState !== 'softDeleted',
+  );
+}
+
 export async function getAllInstitutes(): Promise<Institute[]> {
-  return firestoreGetAll<Institute>('institutes');
+  return excludeDeleted(await firestoreGetAll<Institute>('institutes'));
 }
 
 export async function getInstitute(id: string): Promise<Institute | null> {
@@ -404,7 +428,7 @@ export async function deleteFaculty(facultyId: string): Promise<void> {
 }
 
 export async function getFacultyByInstitute(instituteId: string): Promise<Faculty[]> {
-  return firestoreQuery<Faculty>('faculty', 'instituteId', '==', instituteId);
+  return excludeDeleted(await firestoreQuery<Faculty>('faculty', 'instituteId', '==', instituteId));
 }
 
 export async function getFacultyByEmail(email: string): Promise<Faculty | null> {
@@ -457,7 +481,7 @@ export async function deleteStudent(studentId: string): Promise<void> {
 }
 
 export async function getStudentsByInstitute(instituteId: string): Promise<Student[]> {
-  return firestoreQuery<Student>('students', 'instituteId', '==', instituteId);
+  return excludeDeleted(await firestoreQuery<Student>('students', 'instituteId', '==', instituteId));
 }
 
 export async function getAllStudents(): Promise<Student[]> {

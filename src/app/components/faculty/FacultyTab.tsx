@@ -35,6 +35,7 @@ import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
 import { DeletionImpactPanel } from '../DeletionImpactPanel';
+import { SubjectDataPanel } from '../SubjectDataPanel';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -629,6 +630,14 @@ export function FacultyTab({
                             succession decision necessary. Informational only. */}
                         <div style={{ minWidth: 260, textAlign: 'left', width: '100%' }}>
                           <DeletionImpactPanel entityType="faculty" entityId={faculty.id} />
+                          {/* Feature #15 Phase 7a — what STRATUM holds
+                              about this person. Read-only; sits here
+                              because the moment you are about to remove
+                              someone is when you are most likely to be
+                              answering for what was kept. */}
+                          <div className="mt-2">
+                            <SubjectDataPanel role="faculty" uid={faculty.id} displayName={faculty.name} />
+                          </div>
                           {/* Feature #15 Phase 5a — succession. Optional by
                               design: leaving it on the default hands content
                               to the institute admin, which always works. */}

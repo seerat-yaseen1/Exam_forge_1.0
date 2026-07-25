@@ -15,6 +15,7 @@ import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
 import { DeletionImpactPanel } from '../DeletionImpactPanel';
+import { SubjectDataPanel } from '../SubjectDataPanel';
 import { isRequiresApproval, submitDeletionRequest } from '../../../lib/deletionRequestService';
 
 function formatDate(value: unknown): string {
@@ -433,6 +434,14 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                             3) stays the single place that decides permission. */}
                         <div style={{ minWidth: 260, textAlign: 'left', width: '100%' }}>
                           <DeletionImpactPanel entityType="student" entityId={student.id} />
+                          {/* Feature #15 Phase 7a — what STRATUM holds
+                              about this person. Read-only; sits here
+                              because the moment you are about to remove
+                              someone is when you are most likely to be
+                              answering for what was kept. */}
+                          <div className="mt-2">
+                            <SubjectDataPanel role="student" uid={student.id} displayName={student.name} />
+                          </div>
                         </div>
                         <div className="flex items-center justify-end gap-2">
                         <span className="text-xs" style={{ color: '#9B2828' }}>Remove?</span>

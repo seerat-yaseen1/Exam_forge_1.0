@@ -1947,6 +1947,180 @@ export const resolveDeletionRequest = onCall<{
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// SUBJECT DATA — everything held about one person (Feature #15, Phase 7a)
+//
+// DESTROYS NOTHING. Read-only, no legal precondition, safe to call any time.
+//
+// WHY THIS EXISTS BEFORE ERASURE
+// The right of ACCESS precedes the right of erasure in essentially every
+// regime, and it is the request far more likely to actually arrive. Without
+// this, answering "what do you hold about me?" means hand-querying Firestore.
+// It is also the foundation for erasure: you cannot honestly decide a request
+// without seeing what would be destroyed.
+//
+// THE UNREADABLE CONTRACT — same discipline as getDeletionImpact
+// A collection that cannot be read is reported as `null`, never as an empty
+// array. This export gets handed to a person as a complete answer; one that
+// silently omits a collection is worse than no export at all.
+//
+// SECRETS ARE NEVER EXPORTED
+// studentCredentials / facultyCredentials carry a `password` field. It is
+// stripped here unconditionally. An access export is handed to whoever asked
+// for it, frequently over email — putting a working credential in it would
+// turn a compliance feature into a credential-disclosure channel.
+// ═══════════════════════════════════════════════════════════════════
+
+type SubjectSection = {
+  collection: string;
+  /** null ⇒ could not be read. Distinct from [] which means "none". */
+  records: Record<string, unknown>[] | null;
+  note?: string;
+};
+
+/** Fields never included in an export, whatever collection they appear on. */
+const NEVER_EXPORT = ['password', 'passwordHash', 'sebToken', 'activeSessionId'];
+
+function scrub(data: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (NEVER_EXPORT.includes(k)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/** Read one collection by equality filter. Returns null if unreadable. */
+async function collectSection(
+  db: FirebaseFirestore.Firestore,
+  collection: string,
+  field: string,
+  value: string,
+  note?: string,
+): Promise<SubjectSection> {
+  try {
+    const snap = await db.collection(collection).where(field, '==', value).get();
+    return {
+      collection,
+      records: snap.docs.map((d) => ({ id: d.id, ...scrub(d.data() as Record<string, unknown>) })),
+      note,
+    };
+  } catch (err) {
+    console.error('collectSection failed', collection, field, value, err);
+    return { collection, records: null, note: 'Could not be read.' };
+  }
+}
+
+/** Read one document by id. Returns null records if unreadable. */
+async function collectDoc(
+  db: FirebaseFirestore.Firestore,
+  collection: string,
+  id: string,
+  note?: string,
+): Promise<SubjectSection> {
+  try {
+    const snap = await db.collection(collection).doc(id).get();
+    return {
+      collection,
+      records: snap.exists
+        ? [{ id: snap.id, ...scrub(snap.data() as Record<string, unknown>) }]
+        : [],
+      note,
+    };
+  } catch (err) {
+    console.error('collectDoc failed', collection, id, err);
+    return { collection, records: null, note: 'Could not be read.' };
+  }
+}
+
+export const getSubjectData = onCall<{
+  role: 'student' | 'faculty';
+  uid: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const { role, uid } = request.data || ({} as never);
+  if (role !== 'student' && role !== 'faculty') {
+    throw new HttpsError('invalid-argument', 'role must be student or faculty.');
+  }
+  if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
+
+  const db = getFirestore();
+  const actor = actorFrom(request);
+
+  const profileCol = role === 'student' ? 'students' : 'faculty';
+  const credCol = role === 'student' ? 'studentCredentials' : 'facultyCredentials';
+
+  const profileSnap = await db.collection(profileCol).doc(uid).get();
+  if (!profileSnap.exists) throw new HttpsError('not-found', 'Subject not found.');
+  const subjectInstituteId = (profileSnap.get('instituteId') as string) ?? null;
+
+  // Web Owner sees anyone; an institute admin only its own members. Faculty
+  // and students cannot run this on anyone, including themselves — a
+  // self-service export is a separate feature with its own identity checks.
+  if (actor.actorRole !== 'webOwner') {
+    if (actor.actorRole !== 'institute'
+        || !actor.instituteId
+        || actor.instituteId !== subjectInstituteId) {
+      throw new HttpsError('permission-denied', 'Insufficient permissions.');
+    }
+  }
+
+  const sections: SubjectSection[] = [];
+
+  sections.push(await collectDoc(db, profileCol, uid, 'Profile record.'));
+  sections.push(await collectDoc(db, credCol, uid,
+    'Account provisioning state. Credentials themselves are never exported.'));
+
+  if (role === 'student') {
+    sections.push(await collectSection(db, 'attempts', 'studentId', uid,
+      'Exam sittings, including answers, timings, scores and integrity events.'));
+    sections.push(await collectSection(db, 'academicMappings', 'studentId', uid,
+      'Placement in the academic hierarchy.'));
+    sections.push(await collectSection(db, 'assessmentMembers', 'studentId', uid,
+      'Exams this person was allocated to.'));
+    sections.push(await collectSection(db, 'questionReports', 'studentId', uid,
+      'Question issues this person reported during an exam.'));
+  } else {
+    sections.push(await collectSection(db, 'questions', 'ownerId', uid,
+      'Questions authored by this person.'));
+    sections.push(await collectSection(db, 'questionBanks', 'ownerId', uid,
+      'Question banks owned by this person.'));
+    sections.push(await collectSection(db, 'assessments', 'ownerId', uid,
+      'Assessments owned by this person.'));
+    sections.push(await collectSection(db, 'questionShares', 'ownerId', uid,
+      'Content this person shared.'));
+  }
+
+  // Audit + request surfaces name the subject regardless of role.
+  sections.push(await collectSection(db, 'deletionAudit', 'entityId', uid,
+    'Lifecycle actions recorded against this person.'));
+  sections.push(await collectSection(db, 'deletionRequests', 'entityId', uid,
+    'Deletion requests naming this person.'));
+
+  const unreadable = sections.filter((s) => s.records === null).map((s) => s.collection);
+
+  return {
+    ok: true as const,
+    generatedAt: new Date().toISOString(),
+    generatedBy: actor.actorUid,
+    generatedByRole: actor.actorRole,
+    subject: {
+      role,
+      uid,
+      name: (profileSnap.get('name') as string) ?? null,
+      email: (profileSnap.get('email') as string) ?? null,
+      instituteId: subjectInstituteId,
+    },
+    sections,
+    // Surfaced at the top level so the UI cannot present a partial export as
+    // complete without saying so.
+    unreadable,
+    note: 'Firebase Authentication holds this account\'s email, password hash '
+      + 'and sign-in timestamps; those are not included here.',
+  };
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // DELETION IMPACT — dependency counts before a destructive action
 // (Feature #15, Phase 1)
 //

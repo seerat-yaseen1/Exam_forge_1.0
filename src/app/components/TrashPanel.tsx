@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, RotateCcw, Trash2, AlertTriangle, Inbox } from 'lucide-react';
+import { InstitutePurgePanel } from './InstitutePurgePanel';
 import {
   getAllTrashed,
   restoreEntity,
@@ -31,6 +32,11 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmPurgeId, setConfirmPurgeId] = useState<string | null>(null);
+  // Feature #15 — webOwner-owned assessments whose attempts should ALSO go
+  // when an institute is permanently deleted. Empty = keep every result.
+  // Collected HERE rather than on the soft-delete dialog, because this is
+  // the only point at which the choice actually takes effect.
+  const [purgeSelection, setPurgeSelection] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,8 +70,12 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
     setBusyId(rec.id);
     setError('');
     try {
-      await purgeEntity(rec.role, rec.id);
+      await purgeEntity(rec.role, rec.id,
+        rec.role === 'institute' && purgeSelection.length
+          ? { deleteAttemptsOnWebOwnerAssessments: purgeSelection }
+          : {});
       setConfirmPurgeId(null);
+      setPurgeSelection([]);
       await load();
     } catch (err) {
       setError((err as { message?: string })?.message || 'Could not permanently delete.');
@@ -132,7 +142,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
 
                   {canPurge && !confirming && (
                     <button
-                      onClick={() => setConfirmPurgeId(rec.id)}
+                      onClick={() => { setConfirmPurgeId(rec.id); setPurgeSelection([]); }}
                       disabled={busy}
                       title="Permanently delete — cannot be undone"
                       className="p-1.5"
@@ -152,6 +162,15 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
                       ? 'This destroys the institute and everything belonging to it — faculty, students, content and attempts. It cannot be undone.'
                       : 'This removes the record permanently. It cannot be undone.'}
                   </p>
+                  {rec.role === 'institute' && (
+                    <div className="mb-2">
+                      <InstitutePurgePanel
+                        instituteId={rec.id}
+                        selected={purgeSelection}
+                        onChange={setPurgeSelection}
+                      />
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => doPurge(rec)}
@@ -163,7 +182,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
                       Delete permanently
                     </button>
                     <button
-                      onClick={() => setConfirmPurgeId(null)}
+                      onClick={() => { setConfirmPurgeId(null); setPurgeSelection([]); }}
                       disabled={busy}
                       className="text-xs px-3 py-1"
                       style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6862', background: '#FFFFFF' }}

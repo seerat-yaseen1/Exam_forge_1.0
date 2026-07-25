@@ -226,7 +226,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const credential = EmailAuthProvider.credential(fbUser.email, password);
       await reauthenticateWithCredential(fbUser, credential);
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+
+      // MFA IS NOT A FAILED PASSWORD.
+      // Firebase validates the first factor BEFORE challenging for the second,
+      // so `auth/multi-factor-auth-required` is only ever thrown once the
+      // password has already been accepted. Reaching it proves the password
+      // was right.
+      //
+      // The previous bare `catch { return false }` collapsed this into
+      // "Incorrect password", which made every password-confirmation gate
+      // permanently unusable for any account with TOTP enrolled — including
+      // the Web Owner, and therefore the institute-deletion gate.
+      //
+      // Scope note: this confirms KNOWLEDGE OF THE PASSWORD, which is what
+      // these gates are for — a deliberate speed bump before a destructive
+      // action. It does NOT complete a full reauthentication, because the
+      // second factor is never presented. Authorisation itself does not rest
+      // on this: every destructive path is enforced server-side by role and
+      // by the deletion-rights ceiling. If a gate ever needs true reauth, it
+      // must resolve the MFA challenge explicitly via getMultiFactorResolver
+      // rather than relying on this.
+      if (code === 'auth/multi-factor-auth-required') return true;
+
       return false;
     }
   }, []);

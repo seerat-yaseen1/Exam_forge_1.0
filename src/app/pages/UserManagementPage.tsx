@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Building2, Plus, Pencil, Trash2, PauseCircle, PlayCircle,
   Loader2, X, Check, AlertTriangle, Mail, MailX, RefreshCw,
-  CalendarDays, Eye, EyeOff, ShieldAlert, ChevronRight,
+  CalendarDays, Eye, EyeOff, ShieldAlert, ChevronRight, RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -22,7 +22,6 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../lib/firebase';
 import { DeletionImpactPanel } from '../components/DeletionImpactPanel';
 import { DeletionApprovalsInbox } from '../components/DeletionApprovalsInbox';
-import { InstitutePurgePanel } from '../components/InstitutePurgePanel';
 import { TrashPanel } from '../components/TrashPanel';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -505,9 +504,6 @@ export function UserManagementPage() {
 
   // Delete (per-row) — requires Web Owner password
   const [deletingId, setDeletingId]           = useState<string | null>(null);
-  // Feature #15 Phase 5b — webOwner-owned assessments whose attempts the
-  // Web Owner opted to delete along with the institute. Empty = keep all.
-  const [purgeSelection, setPurgeSelection] = useState<string[]>([]);
   const [deletePassword, setDeletePassword]   = useState('');
   const [deletePassVisible, setDeletePassVisible] = useState(false);
   const [deletePassError, setDeletePassError] = useState('');
@@ -562,7 +558,6 @@ export function UserManagementPage() {
   useEffect(() => {
     if (deletingId) {
       setDeletePassword(''); setDeletePassError(''); setDeletePassVisible(false);
-      setPurgeSelection([]);
       setTimeout(() => deleteInputRef.current?.focus(), 60);
     }
   }, [deletingId]);
@@ -659,13 +654,10 @@ export function UserManagementPage() {
         functions,
         'deleteAuthUser'
       );
-      await deleteAuthUser({
-        role: 'institute',
-        uid: deletingId,
-        // Feature #15 Phase 5b — empty unless the Web Owner explicitly opted
-        // in per assessment. Omitting it keeps every platform-exam result.
-        deleteAttemptsOnWebOwnerAssessments: purgeSelection.length ? purgeSelection : undefined,
-      });
+      // Soft delete. deleteAttemptsOnWebOwnerAssessments is deliberately NOT
+      // sent: this path destroys nothing, so there is no attempt data to
+      // decide about yet. That choice is made at permanent-delete time.
+      await deleteAuthUser({ role: 'institute', uid: deletingId });
       setInstitutes((prev) => prev.filter((i) => i.id !== deletingId));
       setDeletingId(null);
       setLastSynced(new Date());
@@ -932,12 +924,21 @@ export function UserManagementPage() {
                               whether to type it at all, not appear after the
                               decision is already made. */}
                           <DeletionImpactPanel entityType="institute" entityId={institute.id} />
-                          <div className="mt-2">
-                            <InstitutePurgePanel
-                              instituteId={institute.id}
-                              selected={purgeSelection}
-                              onChange={setPurgeSelection}
-                            />
+                          {/* Feature #15 — this dialog SOFT-deletes. Nothing
+                              below cascades: faculty, students, assessments and
+                              attempts all stay put, and the institute is
+                              restorable from the trash for 180 days. The
+                              per-assessment keep/delete choice lives on the
+                              PERMANENT delete confirmation instead, because
+                              that is the only place it takes effect. */}
+                          <div className="flex items-start gap-2 mt-2 px-2.5 py-2"
+                            style={{ background: '#F2F6F2', border: '1px solid #D3E0D3', borderRadius: 2 }}>
+                            <RotateCcw size={12} strokeWidth={1.5} style={{ marginTop: 1, flexShrink: 0, color: '#3F6B3F' }} />
+                            <span className="text-xs" style={{ color: '#3F6B3F' }}>
+                              Recoverable for 180 days. Access is blocked immediately;
+                              nothing is destroyed until you permanently delete it from
+                              the trash below.
+                            </span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <ShieldAlert size={11} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />
@@ -972,7 +973,7 @@ export function UserManagementPage() {
                               className="flex items-center gap-1 text-xs px-2.5 py-1.5"
                               style={{ background: '#9B2828', color: '#FFFFFF', borderRadius: 2, cursor: deleteLoading ? 'not-allowed' : 'pointer' }}>
                               {deleteLoading ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} strokeWidth={1.5} />}
-                              {deleteLoading ? 'Deleting…' : 'Delete permanently'}
+                              {deleteLoading ? 'Deleting…' : 'Delete'}
                             </button>
                             <button onClick={() => { setDeletingId(null); setDeletePassError(''); }} disabled={deleteLoading}
                               className="text-xs px-2.5 py-1.5"

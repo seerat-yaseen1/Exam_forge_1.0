@@ -638,6 +638,13 @@ async function performInstituteCascade(
       if (col === 'students') {
         counts.attempts = (counts.attempts ?? 0)
           + await purgeWhere(db, 'attempts', 'studentId', d.id);
+        // Also by studentId, not only by instituteId above: QuestionReport
+        // types instituteId as OPTIONAL, so any report written before that
+        // field existed would otherwise survive its own institute's purge as
+        // an unreachable orphan. Current code always sets it; this covers the
+        // legacy tail. purgeWhere is idempotent, so the overlap is harmless.
+        counts.questionReports = (counts.questionReports ?? 0)
+          + await purgeWhere(db, 'questionReports', 'studentId', d.id);
       }
       try {
         await getAuth().deleteUser(d.id);
@@ -1209,16 +1216,20 @@ async function performAccountDeletion(
   if (role === 'institute') {
     await db.collection('instituteLogos').doc(uid).delete().catch(() => undefined);
   }
-  // Cascade: academic-hierarchy mappings for a deleted person are pure
+  // Cascade: academic-hierarchy mappings for a deleted student are pure
   // orphans — remove them so node rosters don't render ghosts. Attempts and
   // questionReports are DELIBERATELY kept: they are the institute's exam
   // records / audit trail.
   //
-  // FACULTY WERE MISSING FROM THIS UNTIL PHASE 5a (bug d): the cleanup existed
-  // for students only, so every deleted faculty member left mapping rows
-  // pointing at an account that no longer existed.
-  if (role === 'student' || role === 'faculty') {
-    const mapField = role === 'student' ? 'studentId' : 'facultyId';
+  // STUDENTS ONLY, AND THAT IS CORRECT. The original spec listed "no faculty
+  // mapping cleanup" as a bug (d), and Phase 5a duly added a facultyId query
+  // here — but AcademicMapping has no facultyId field. It carries studentId /
+  // studentName / studentEmail and is student-only by design ("a student can
+  // have many mappings"), so faculty never had mappings to leak. That query
+  // matched nothing on every faculty deletion. Removed rather than left in:
+  // dead code that looks like a safety net is worse than no safety net.
+  if (role === 'student') {
+    const mapField = 'studentId';
     try {
       const mapSnap = await db.collection('academicMappings')
         .where(mapField, '==', uid).get();
@@ -2062,13 +2073,15 @@ export const getDeletionImpact = onCall<{
 
     // Owned content is what makes faculty deletion consequential — these are
     // the counts that drive the succession decision in Phase 5.
-    const [assessments, questions, banks, mappings] = await Promise.all([
+    // No academicMappings row here: that collection is student-only (see the
+    // note in performAccountDeletion). Counting it for faculty would query a
+    // field that does not exist and render a permanent, meaningless "0".
+    const [assessments, questions, banks] = await Promise.all([
       countWhere(db, 'assessments', 'ownerId', entityId),
       countWhere(db, 'questions', 'ownerId', entityId),
       countWhere(db, 'questionBanks', 'ownerId', entityId),
-      countWhere(db, 'academicMappings', 'facultyId', entityId),
     ]);
-    Object.assign(counts, { assessments, questions, questionBanks: banks, mappings });
+    Object.assign(counts, { assessments, questions, questionBanks: banks });
   } else if (entityType === 'student') {
     const snap = await db.collection('students').doc(entityId).get();
     if (!snap.exists) throw new HttpsError('not-found', 'Student not found.');

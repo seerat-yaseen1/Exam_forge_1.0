@@ -17,6 +17,7 @@ import {
 } from '../../lib/firebaseService';
 import { FacultyTab } from '../components/faculty/FacultyTab';
 import { QuestionRightsCeilingEditor } from '../components/questions/QuestionRightsCeilingEditor';
+import { DeletionRightsCeilingEditor } from '../components/questions/DeletionRightsCeilingEditor';
 import { StudentTab } from '../components/student/StudentTab';
 import { SchoolsTab } from '../components/schools/SchoolsTab';
 
@@ -506,6 +507,24 @@ export function InstituteDetailPage() {
                     initial={institute.questionRightsCeiling}
                     onSaved={(ceiling) =>
                       setInstitute((prev) => (prev ? { ...prev, questionRightsCeiling: ceiling } : prev))
+                    }
+                  />
+                )}
+              </div>
+
+              {/* ── Deletion rights ceiling (Feature #15, Phase 2) ── */}
+              <div className="mt-6 pt-5" style={{ borderTop: '1px solid #E3E1DB' }}>
+                <p className="text-xs mb-3" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>
+                  DELETION RIGHTS CEILING
+                </p>
+                {institute && (
+                  <DeletionRightsCeilingEditor
+                    instituteId={institute.id}
+                    initial={institute.deletionRightsCeiling}
+                    initialTransfer={institute.contentTransferRight}
+                    onSaved={(deletionRightsCeiling, contentTransferRight) =>
+                      setInstitute((prev) =>
+                        prev ? { ...prev, deletionRightsCeiling, contentTransferRight } : prev)
                     }
                   />
                 )}

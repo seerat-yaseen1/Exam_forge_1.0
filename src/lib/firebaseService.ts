@@ -11,6 +11,10 @@ import {
   QueryConstraint,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import type {
+  DeletionRightsCeiling,
+  ContentTransferRight,
+} from './deletionRights';
 
 // ──────────────────────────────────────────────────────────────────
 // TYPE DEFINITIONS
@@ -49,6 +53,19 @@ export type Institute = {
   // faculty. Absent ⇒ everything off (secure-by-default). Enforced
   // server-side in the question callables; the UI mirrors it.
   questionRightsCeiling?: QuestionRightsCeiling;
+  // ── Deletion-rights ceiling (Feature #15, Phase 2) ─────────────────
+  // Set by Web Owner. The CEILING for entity DELETION: per resource,
+  // whether this institute may delete it, how the institute itself acts
+  // (selfMode), and which modes it may grant onward to faculty. Absent ⇒
+  // everything off (secure-by-default). attempt + institute are forced
+  // off by clampCeiling regardless of what is stored. Enforced
+  // server-side in Phase 3's callables; this stores the config only.
+  deletionRightsCeiling?: DeletionRightsCeiling;
+  // Standing capability, exercised while the institute is ACTIVE: hand
+  // its questions + banks up to the Web Owner before deletion. Absent ⇒
+  // not permitted. Distinct from the ceiling because it is not a
+  // deletion right — see deletionRights.ts.
+  contentTransferRight?: ContentTransferRight;
   createdAt: string;
   updatedAt: string;
 }
@@ -1380,6 +1397,37 @@ export async function setInstituteQuestionRightsCeiling(
 ): Promise<void> {
   return firestoreUpdate<Institute>('institutes', instituteId, {
     questionRightsCeiling: ceiling,
+    updatedAt: new Date().toISOString(),
+  } as Partial<Institute>);
+}
+
+/**
+ * Web Owner: set an institute's DELETION-rights ceiling (Feature #15).
+ * The caller should clampCeiling() first; Phase 3's callables re-clamp on
+ * every deletion, and attempt/institute are forced off regardless, so a
+ * tampered ceiling document cannot widen anyone's rights.
+ */
+export async function setInstituteDeletionRightsCeiling(
+  instituteId: string,
+  ceiling: DeletionRightsCeiling,
+): Promise<void> {
+  return firestoreUpdate<Institute>('institutes', instituteId, {
+    deletionRightsCeiling: ceiling,
+    updatedAt: new Date().toISOString(),
+  } as Partial<Institute>);
+}
+
+/**
+ * Web Owner: set whether an institute may transfer its questions + banks up
+ * to the Web Owner before deletion. A standing capability the institute
+ * exercises while active — see deletionRights.ts.
+ */
+export async function setInstituteContentTransferRight(
+  instituteId: string,
+  transfer: ContentTransferRight,
+): Promise<void> {
+  return firestoreUpdate<Institute>('institutes', instituteId, {
+    contentTransferRight: transfer,
     updatedAt: new Date().toISOString(),
   } as Partial<Institute>);
 }

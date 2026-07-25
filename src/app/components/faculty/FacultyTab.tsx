@@ -36,6 +36,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
 import { DeletionImpactPanel } from '../DeletionImpactPanel';
 import { SubjectDataPanel } from '../SubjectDataPanel';
+import { LogSubjectRequestButton } from '../LogSubjectRequestButton';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -637,6 +638,9 @@ export function FacultyTab({
                               answering for what was kept. */}
                           <div className="mt-2">
                             <SubjectDataPanel role="faculty" uid={faculty.id} displayName={faculty.name} />
+                            <div className="mt-2">
+                              <LogSubjectRequestButton subjectRole="faculty" subjectId={faculty.id} />
+                            </div>
                           </div>
                           {/* Feature #15 Phase 5a — succession. Optional by
                               design: leaving it on the default hands content

@@ -17,6 +17,7 @@ import type { DeletionRightsCeiling } from '../../../lib/deletionRights';
 import { grantableModes as grantableDeletionModes, instituteMode, DELETABLE_RESOURCES } from '../../../lib/deletionRights';
 import { DeletionApprovalsInbox } from '../../components/DeletionApprovalsInbox';
 import { TrashPanel } from '../../components/TrashPanel';
+import { SubjectRequestsInbox } from '../../components/SubjectRequestsInbox';
 import { getPendingDeletionRequestCount } from '../../../lib/deletionRequestService';
 import { getPendingRequestCount } from '../../../lib/questionRequestService';
 import { FacultyTab } from '../../components/faculty/FacultyTab';
@@ -653,6 +654,17 @@ export function InstituteLandingPage() {
                   RECENTLY DELETED
                 </p>
                 <TrashPanel instituteId={session.instituteId} />
+              </div>
+
+              {/* Feature #15 Phase 7b — this institute's access & erasure
+                  requests. It is the controller for its own students, so its
+                  requests land here even though the Web Owner executes any
+                  erasure. */}
+              <div className="mt-6 pt-5" style={{ borderTop: '1px solid #E3E1DB' }}>
+                <p className="text-xs mb-3" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>
+                  DATA REQUESTS
+                </p>
+                <SubjectRequestsInbox instituteId={session.instituteId} />
               </div>
             </motion.div>
           )}

@@ -23,6 +23,7 @@ import { auth, functions } from '../../lib/firebase';
 import { DeletionImpactPanel } from '../components/DeletionImpactPanel';
 import { DeletionApprovalsInbox } from '../components/DeletionApprovalsInbox';
 import { TrashPanel } from '../components/TrashPanel';
+import { SubjectRequestsInbox } from '../components/SubjectRequestsInbox';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -797,6 +798,13 @@ export function UserManagementPage() {
              costs no space in the normal case. */}
         <div className="mb-5">
           <DeletionApprovalsInbox viewerRole="webOwner" />
+        </div>
+
+        {/* Feature #15 Phase 7b — access & erasure requests. Sits beside the
+            deletion inbox because both are "things awaiting a decision", and
+            an admin should have one place to look. */}
+        <div className="mb-5">
+          <SubjectRequestsInbox />
         </div>
 
         {/* Feature #15 Phase 6a — deleted records are recoverable now, so the

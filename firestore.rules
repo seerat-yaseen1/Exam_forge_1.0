@@ -925,6 +925,31 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // subjectRequests/{autoId} — access & erasure requests (Feature #15, 7b).
+    //
+    // The record of who asked for their data, when they asked, and what was
+    // decided — including refusals, which are as much a compliance artifact as
+    // fulfilments. Reads mirror deletionRequests: webOwner everything,
+    // institute its own tenant, nobody else.
+    //
+    // Students and faculty cannot read these, deliberately. A subject request
+    // is staff correspondence ABOUT a person, not a surface FOR them; a
+    // self-service view would need its own identity checks and its own
+    // decisions about what a subject may see of an internal deliberation.
+    //
+    // Writes are server-only permanently. submitSubjectRequest and
+    // decideSubjectRequest are callables so that the server can enforce the
+    // duplicate-open-request rule, require a reason on refusal, and stop an
+    // institute marking an ERASURE fulfilled when only the Web Owner can
+    // carry one out.
+    match /subjectRequests/{id} {
+      allow read:  if isWebOwner()
+                      || (signedIn()
+                          && role() == 'institute'
+                          && resource.data.instituteId == request.auth.token.instituteId);
+      allow write: if false;
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // BLOCKED — leftover dev/test collections
     // ═════════════════════════════════════════════════════════════════════════

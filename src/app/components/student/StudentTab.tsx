@@ -16,6 +16,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
 import { DeletionImpactPanel } from '../DeletionImpactPanel';
 import { SubjectDataPanel } from '../SubjectDataPanel';
+import { LogSubjectRequestButton } from '../LogSubjectRequestButton';
 import { isRequiresApproval, submitDeletionRequest } from '../../../lib/deletionRequestService';
 
 function formatDate(value: unknown): string {
@@ -441,6 +442,9 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                               answering for what was kept. */}
                           <div className="mt-2">
                             <SubjectDataPanel role="student" uid={student.id} displayName={student.name} />
+                            <div className="mt-2">
+                              <LogSubjectRequestButton subjectRole="student" subjectId={student.id} />
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center justify-end gap-2">

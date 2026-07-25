@@ -1947,6 +1947,189 @@ export const resolveDeletionRequest = onCall<{
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// SUBJECT REQUESTS — access & erasure requests (Feature #15, Phase 7b)
+//
+// RECORDS DECISIONS. DESTROYS NOTHING. No policy configuration required.
+//
+// WHY REFUSAL IS FIRST-CLASS HERE
+// If examination records carry a mandatory retention period, then erasure
+// requests received inside that window are lawfully refusable — that is the
+// ordinary operation of the legal-compliance exception, not a loophole. But
+// refusing is not the same as ignoring: a dated, reasoned refusal IS the
+// compliance artifact, because it shows the request was received, considered
+// and answered. Before this there was nowhere to record one at all.
+//
+// So for a platform with real retention obligations, the refusal path is the
+// one that runs most of the time, and it is built to be as first-class as
+// fulfilment rather than an afterthought bolted onto an erasure button.
+//
+// SPLIT CONTROLLERSHIP (locked): institutes are controllers for their own
+// students, the Web Owner for platform-level data. But attempts are
+// Web-Owner-only, so an institute carrying the legal duty cannot discharge it
+// alone. Institutes RAISE; the Web Owner EXECUTES erasure. Access requests an
+// institute can fulfil itself, since getSubjectData is already scoped to
+// their own members.
+//
+// NOTE ON TIMEFRAMES: `receivedAt` is deliberately separate from `createdAt`.
+// Compliance clocks run from when the PERSON asked, not from when somebody
+// got round to logging it. An institute's deadline can therefore already be
+// part-spent when the request reaches this system.
+// ═══════════════════════════════════════════════════════════════════
+
+type SubjectRequestType = 'access' | 'erasure';
+type SubjectRequestStatus = 'open' | 'fulfilled' | 'refused' | 'erased';
+
+export const submitSubjectRequest = onCall<{
+  type: SubjectRequestType;
+  subjectRole: 'student' | 'faculty';
+  subjectId: string;
+  /** What the person asked for, in their words. Free text. */
+  basis?: string;
+  /** When the PERSON asked — ISO date. Defaults to now if omitted. */
+  receivedAt?: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const { type, subjectRole, subjectId, basis, receivedAt } = request.data || ({} as never);
+  if (type !== 'access' && type !== 'erasure') {
+    throw new HttpsError('invalid-argument', 'type must be access or erasure.');
+  }
+  if (subjectRole !== 'student' && subjectRole !== 'faculty') {
+    throw new HttpsError('invalid-argument', 'subjectRole must be student or faculty.');
+  }
+  if (!subjectId) throw new HttpsError('invalid-argument', 'subjectId is required.');
+
+  const db = getFirestore();
+  const actor = actorFrom(request);
+  if (actor.actorRole !== 'webOwner' && actor.actorRole !== 'institute') {
+    throw new HttpsError('permission-denied', 'Only staff may log a subject request.');
+  }
+
+  const col = subjectRole === 'student' ? 'students' : 'faculty';
+  const snap = await db.collection(col).doc(subjectId).get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Subject not found.');
+  const subjectInstituteId = (snap.get('instituteId') as string) ?? null;
+
+  if (actor.actorRole === 'institute') {
+    if (!actor.instituteId || actor.instituteId !== subjectInstituteId) {
+      throw new HttpsError('permission-denied', 'Different institute.');
+    }
+  }
+
+  // One open request per subject per type. A person asking twice is one
+  // request; two rows would mean two decisions to make and two chances to
+  // give inconsistent answers.
+  const dupe = await db.collection('subjectRequests')
+    .where('subjectId', '==', subjectId)
+    .where('type', '==', type)
+    .where('status', '==', 'open')
+    .limit(1)
+    .get();
+  if (!dupe.empty) {
+    throw new HttpsError('already-exists', 'An open request of this type already exists for this person.');
+  }
+
+  const nowIso = new Date().toISOString();
+  const ref = db.collection('subjectRequests').doc();
+  await ref.set({
+    id: ref.id,
+    type,
+    status: 'open' as SubjectRequestStatus,
+    subjectRole,
+    subjectId,
+    subjectLabel: (snap.get('name') as string) || (snap.get('email') as string) || null,
+    requestedBy: actor.actorUid,
+    requestedByRole: actor.actorRole,
+    instituteId: subjectInstituteId,
+    basis: basis ?? null,
+    receivedAt: receivedAt || nowIso,
+    decision: null,
+    decidedBy: null,
+    decidedAt: null,
+    exportGeneratedAt: null,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+
+  return { ok: true as const, id: ref.id };
+});
+
+export const decideSubjectRequest = onCall<{
+  requestId: string;
+  outcome: 'fulfilled' | 'refused';
+  /** Required on refusal. Recorded verbatim — this is the artifact. */
+  decision?: string;
+  /** Set when an access export was produced for the person. */
+  exportGenerated?: boolean;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const { requestId, outcome, decision, exportGenerated } = request.data || ({} as never);
+  if (!requestId) throw new HttpsError('invalid-argument', 'requestId is required.');
+  if (outcome !== 'fulfilled' && outcome !== 'refused') {
+    throw new HttpsError('invalid-argument', 'outcome must be fulfilled or refused.');
+  }
+
+  // A refusal without a reason is indistinguishable from ignoring the
+  // request, which is the thing this record exists to disprove.
+  if (outcome === 'refused' && (!decision || !decision.trim())) {
+    throw new HttpsError('invalid-argument', 'A refusal must record a reason.');
+  }
+
+  const db = getFirestore();
+  const actor = actorFrom(request);
+  const ref = db.collection('subjectRequests').doc(requestId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Request not found.');
+  const req = snap.data() as Record<string, unknown>;
+
+  if (req.status !== 'open') {
+    throw new HttpsError('failed-precondition', 'This request has already been decided.');
+  }
+
+  if (actor.actorRole !== 'webOwner') {
+    if (actor.actorRole !== 'institute'
+        || !actor.instituteId
+        || actor.instituteId !== req.instituteId) {
+      throw new HttpsError('permission-denied', 'Insufficient permissions.');
+    }
+    // An institute may fulfil an ACCESS request itself — getSubjectData is
+    // already scoped to its own members. It may also refuse either type,
+    // since refusing destroys nothing. What it cannot do is fulfil an
+    // ERASURE request: that requires touching attempts, which is
+    // Web-Owner-only, and 7c is where it actually happens.
+    if (req.type === 'erasure' && outcome === 'fulfilled') {
+      throw new HttpsError(
+        'permission-denied',
+        'Erasure is carried out by the Web Owner. Leave this open for them, or refuse it with a reason.',
+      );
+    }
+  }
+
+  // Guard against a fulfilled erasure before 7c exists. Marking one fulfilled
+  // when nothing was destroyed would make the record claim something untrue —
+  // worse than having no record.
+  if (req.type === 'erasure' && outcome === 'fulfilled') {
+    throw new HttpsError(
+      'failed-precondition',
+      'Erasure execution is not yet available. Refuse with a reason, or leave the request open.',
+    );
+  }
+
+  const nowIso = new Date().toISOString();
+  await ref.update({
+    status: outcome as SubjectRequestStatus,
+    decision: decision?.trim() || null,
+    decidedBy: actor.actorUid,
+    decidedAt: nowIso,
+    exportGeneratedAt: exportGenerated ? nowIso : (req.exportGeneratedAt ?? null),
+    updatedAt: nowIso,
+  });
+
+  return { ok: true as const, status: outcome };
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // SUBJECT DATA — everything held about one person (Feature #15, Phase 7a)
 //
 // DESTROYS NOTHING. Read-only, no legal precondition, safe to call any time.

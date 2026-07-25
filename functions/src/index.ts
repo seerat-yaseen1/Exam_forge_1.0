@@ -314,6 +314,96 @@ function resolveDeletionModeS(
   return 'none';
 }
 
+/**
+ * Perform an account deletion. THE ONE PLACE THIS HAPPENS.
+ *
+ * Extracted in Phase 4 so that a deletion executed by an APPROVER
+ * (resolveDeletionRequest) and one executed DIRECTLY (deleteAuthUser) run
+ * byte-identical logic. Duplicating a destructive path is how two paths
+ * silently diverge — one gains a cascade fix or an audit field the other
+ * never gets.
+ *
+ * Assumes authorization has ALREADY been decided by the caller. This function
+ * enforces nothing; it only executes.
+ *
+ * `requestId` is set when the deletion came from an approved request, so the
+ * audit row links back to it and the trail reads as one story.
+ */
+async function performAccountDeletion(
+  db: FirebaseFirestore.Firestore,
+  params: {
+    role: Role;
+    uid: string;
+    profileRef: FirebaseFirestore.DocumentReference;
+    auditLabel: string | null;
+    auditFromState: LifecycleStateS;
+    targetInstituteId: string | null;
+    actorUid: string;
+    actorRole: string;
+    requestId?: string | null;
+    reason?: string | null;
+  },
+): Promise<void> {
+  const { role, uid, profileRef } = params;
+
+  try {
+    await getAuth().deleteUser(uid);
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code !== 'auth/user-not-found') {
+      console.error('Failed to delete auth user', uid, err);
+      throw new HttpsError('internal', 'Failed to delete auth user.', code);
+    }
+  }
+
+  await profileRef.delete();
+  const credCol = CREDENTIALS_BY_ROLE[role];
+  if (credCol) await db.collection(credCol).doc(uid).delete().catch(() => undefined);
+  if (role === 'institute') {
+    await db.collection('instituteLogos').doc(uid).delete().catch(() => undefined);
+  }
+  if (role === 'student') {
+    // Cascade: academic-hierarchy mappings for a deleted student are pure
+    // orphans — remove them so node rosters don't render ghosts. Attempts
+    // and questionReports are DELIBERATELY kept: they are the institute's
+    // exam records / audit trail.
+    try {
+      const mapSnap = await db.collection('academicMappings')
+        .where('studentId', '==', uid).get();
+      let batch = db.batch();
+      let n = 0;
+      for (const d of mapSnap.docs) {
+        batch.delete(d.ref);
+        if (++n >= 400) { await batch.commit(); batch = db.batch(); n = 0; }
+      }
+      if (n > 0) await batch.commit();
+    } catch (err) {
+      console.error('performAccountDeletion: mapping cascade failed for', uid, err);
+    }
+  }
+
+  // Lifecycle audit. Still a HARD delete — Phase 6 routes accounts through
+  // soft-delete + retention. What Phase 1 changed is that the action stopped
+  // being invisible.
+  //
+  // Written LAST, deliberately. The row asserts the deletion happened, so it
+  // must not precede it. writeAuditRow never throws, so a logging failure
+  // cannot roll back a completed removal — it logs loudly instead.
+  await writeAuditRow(db, {
+    action: 'purge',
+    entityType: role,
+    entityId: uid,
+    entityLabel: params.auditLabel,
+    fromState: params.auditFromState,
+    toState: 'purged',
+    actorUid: params.actorUid,
+    actorRole: params.actorRole,
+    instituteId: params.targetInstituteId,
+    requestId: params.requestId ?? null,
+    reason: params.reason ?? null,
+  });
+}
+
 export const deleteAuthUser = onCall<DeleteAuthUserData>(
   { region: 'us-central1' },
   async (request) => {
@@ -388,12 +478,12 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
       const mode = resolveDeletionModeS(callerRole, resource, ceiling, facultyRights);
 
       if (mode === 'request') {
-        // Held, but not directly exercisable. Phase 4 turns this into a real
-        // submission; until then it is an explicit, honest refusal rather
-        // than a silent success or a generic denial.
+        // Held, but not directly exercisable. The client calls
+        // submitDeletionRequest instead; this is a distinct error CODE so the
+        // UI can branch on it rather than parsing prose.
         throw new HttpsError(
-          'permission-denied',
-          'This deletion requires approval. The request workflow is not yet available — ask your administrator to perform it.',
+          'failed-precondition',
+          'DELETION_REQUIRES_APPROVAL',
         );
       }
       if (mode !== 'direct') {
@@ -406,62 +496,15 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
       }
     }
 
-    try {
-      await getAuth().deleteUser(uid);
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code;
-      if (code !== 'auth/user-not-found') {
-        console.error('Failed to delete auth user', uid, err);
-        throw new HttpsError('internal', 'Failed to delete auth user.', code);
-      }
-    }
-
-    await profileRef.delete();
-    const credCol = CREDENTIALS_BY_ROLE[role];
-    if (credCol) await db.collection(credCol).doc(uid).delete().catch(() => undefined);
-    if (role === 'institute') {
-      await db.collection('instituteLogos').doc(uid).delete().catch(() => undefined);
-    }
-    if (role === 'student') {
-      // Cascade: academic-hierarchy mappings for a deleted student are pure
-      // orphans — remove them so node rosters don't render ghosts. Attempts
-      // and questionReports are DELIBERATELY kept: they are the institute's
-      // exam records / audit trail.
-      try {
-        const mapSnap = await db.collection('academicMappings')
-          .where('studentId', '==', uid).get();
-        let batch = db.batch();
-        let n = 0;
-        for (const d of mapSnap.docs) {
-          batch.delete(d.ref);
-          if (++n >= 400) { await batch.commit(); batch = db.batch(); n = 0; }
-        }
-        if (n > 0) await batch.commit();
-      } catch (err) {
-        console.error('deleteAuthUser: mapping cascade failed for', uid, err);
-      }
-    }
-
-    // Lifecycle audit (Feature #15, Phase 1). deleteAuthUser remains a HARD
-    // delete for now — Phase 6 routes it through soft-delete + retention. What
-    // changes here is that the action stops being invisible: until now nothing
-    // in the platform recorded who removed an account.
-    //
-    // Written LAST, deliberately. The row asserts the deletion happened, so it
-    // must not be written before the deletion succeeds. writeAuditRow never
-    // throws, so a logging failure cannot roll back a completed removal —
-    // it logs loudly to Cloud Logging instead.
-    const actor = actorFrom(request);
-    await writeAuditRow(db, {
-      action: 'purge',
-      entityType: role,
-      entityId: uid,
-      entityLabel: auditLabel,
-      fromState: auditFromState,
-      toState: 'purged',
-      actorUid: actor.actorUid,
-      actorRole: actor.actorRole,
-      instituteId: targetInstituteId ?? null,
+    await performAccountDeletion(db, {
+      role,
+      uid,
+      profileRef,
+      auditLabel,
+      auditFromState,
+      targetInstituteId: targetInstituteId ?? null,
+      actorUid: actorFrom(request).actorUid,
+      actorRole: actorFrom(request).actorRole,
     });
 
     return { ok: true };
@@ -716,6 +759,288 @@ export const setHierarchyNodeLifecycle = onCall<{
   await batch.commit();
 
   return { ok: true as const, fromState, toState };
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// DELETION REQUESTS — the approval workflow (Feature #15, Phase 4)
+//
+// TWO HOPS, ONE MECHANISM
+//   faculty  (mode 'request') → institute admin approves
+//   institute(selfMode 'request') → Web Owner approves
+// Same collection, same callables, same inbox component — the approver is
+// derived from the requester's role, never passed in by the client.
+//
+// THE APPROVER'S RIGHTS DECIDE, AND THEY ARE CHECKED AT EXECUTION TIME.
+// Not the requester's, and not at submission time. A request can sit in an
+// inbox for days: the ceiling may narrow, the approver may lose the right,
+// the target may already be gone. So resolveDeletionRequest re-resolves
+// everything from scratch before it executes. This mirrors how
+// resolveQuestionRequest already works.
+// ═══════════════════════════════════════════════════════════════════
+
+type DeletionRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+/** Who must approve a request raised by this role? */
+function approverRoleFor(requesterRole: string): 'institute' | 'webOwner' | null {
+  if (requesterRole === 'faculty') return 'institute';
+  if (requesterRole === 'institute') return 'webOwner';
+  return null;   // webOwner answers to nobody
+}
+
+export const submitDeletionRequest = onCall<{
+  entityType: 'student' | 'faculty';
+  entityId: string;
+  reason?: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const { entityType, entityId, reason } = request.data || ({} as never);
+  if (entityType !== 'student' && entityType !== 'faculty') {
+    throw new HttpsError('invalid-argument', 'Unsupported entityType.');
+  }
+  if (!entityId) throw new HttpsError('invalid-argument', 'entityId is required.');
+
+  const db = getFirestore();
+  const actor = actorFrom(request);
+  const approver = approverRoleFor(actor.actorRole);
+  if (!approver) {
+    throw new HttpsError('failed-precondition', 'The Web Owner does not raise requests.');
+  }
+  if (!actor.instituteId) {
+    throw new HttpsError('permission-denied', 'Missing tenant claim.');
+  }
+
+  // The target must exist and be inside the requester's tenant. Checked here
+  // so an impossible request never reaches an approver's inbox.
+  const targetRef = db.collection(entityType === 'student' ? 'students' : 'faculty').doc(entityId);
+  const targetSnap = await targetRef.get();
+  if (!targetSnap.exists) throw new HttpsError('not-found', 'Target not found.');
+  const targetInstituteId = targetSnap.get('instituteId') as string | undefined;
+  if (targetInstituteId !== actor.instituteId) {
+    throw new HttpsError('permission-denied', 'Different institute.');
+  }
+
+  // Faculty may only request student deletion — the same role boundary
+  // deleteAuthUser enforces. A request must never be a way around it.
+  if (actor.actorRole === 'faculty' && entityType !== 'student') {
+    throw new HttpsError('permission-denied', 'Faculty may only request student deletion.');
+  }
+
+  // The requester must actually HOLD the right in request mode. Without this,
+  // anyone could flood an inbox with requests for rights they were never
+  // granted, and an approving admin would have no way to tell.
+  const instSnap = await db.collection('institutes').doc(actor.instituteId).get();
+  const ceiling = instSnap.exists
+    ? (instSnap.get('deletionRightsCeiling') as DeletionCeilingS | undefined)
+    : undefined;
+
+  let facultyRights: FacultyDeletionRightsS | undefined;
+  if (actor.actorRole === 'faculty') {
+    const meSnap = await db.collection('faculty').doc(request.auth.uid).get();
+    facultyRights = meSnap.exists
+      ? (meSnap.get('deletionRights') as FacultyDeletionRightsS | undefined)
+      : undefined;
+  }
+
+  const mode = resolveDeletionModeS(
+    actor.actorRole, entityType as DeletableResourceS, ceiling, facultyRights,
+  );
+  if (mode !== 'request') {
+    throw new HttpsError(
+      'failed-precondition',
+      mode === 'direct'
+        ? 'You can perform this deletion directly — no request needed.'
+        : 'You have not been granted this right, so it cannot be requested.',
+    );
+  }
+
+  // One pending request per target. Without this a faculty member can submit
+  // the same deletion twenty times and the approver sees twenty rows for one
+  // decision.
+  const dupe = await db.collection('deletionRequests')
+    .where('entityId', '==', entityId)
+    .where('status', '==', 'pending')
+    .limit(1)
+    .get();
+  if (!dupe.empty) {
+    throw new HttpsError('already-exists', 'A pending request for this already exists.');
+  }
+
+  const nowIso = new Date().toISOString();
+  const ref = db.collection('deletionRequests').doc();
+  await ref.set({
+    id: ref.id,
+    status: 'pending' as DeletionRequestStatus,
+    entityType,
+    entityId,
+    // Captured at submission so the inbox reads legibly even if the target is
+    // renamed — or removed by some other path — before anyone looks.
+    entityLabel: (targetSnap.get('name') as string) || (targetSnap.get('email') as string) || null,
+    requesterUid: request.auth.uid,
+    requesterRole: actor.actorRole,
+    requesterName: null,
+    approverRole: approver,
+    instituteId: actor.instituteId,
+    reason: reason ?? null,
+    reviewedBy: null,
+    reviewedAt: null,
+    reviewNote: null,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+
+  await writeAuditRow(db, {
+    action: 'requestSubmitted',
+    entityType,
+    entityId,
+    entityLabel: (targetSnap.get('name') as string) ?? null,
+    actorUid: actor.actorUid,
+    actorRole: actor.actorRole,
+    instituteId: actor.instituteId,
+    reason: reason ?? null,
+    requestId: ref.id,
+  });
+
+  return { ok: true as const, id: ref.id };
+});
+
+export const resolveDeletionRequest = onCall<{
+  requestId: string;
+  decision: 'approve' | 'reject';
+  reviewNote?: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const { requestId, decision, reviewNote } = request.data || ({} as never);
+  if (!requestId) throw new HttpsError('invalid-argument', 'requestId is required.');
+  if (decision !== 'approve' && decision !== 'reject') {
+    throw new HttpsError('invalid-argument', 'decision must be approve or reject.');
+  }
+
+  const db = getFirestore();
+  const actor = actorFrom(request);
+
+  const reqRef = db.collection('deletionRequests').doc(requestId);
+  const reqSnap = await reqRef.get();
+  if (!reqSnap.exists) throw new HttpsError('not-found', 'Request not found.');
+  const req = reqSnap.data() as Record<string, unknown>;
+
+  if (req.status !== 'pending') {
+    throw new HttpsError('failed-precondition', 'This request has already been resolved.');
+  }
+
+  // Only the designated approver may resolve, and only inside the right
+  // tenant. approverRole was written at submission from the requester's role,
+  // so a client cannot choose its own approver.
+  const approverRole = req.approverRole as string;
+  if (actor.actorRole !== approverRole) {
+    throw new HttpsError('permission-denied', 'You are not the approver for this request.');
+  }
+  if (approverRole === 'institute'
+      && (!actor.instituteId || actor.instituteId !== req.instituteId)) {
+    throw new HttpsError('permission-denied', 'Different institute.');
+  }
+
+  const nowIso = new Date().toISOString();
+  const entityType = req.entityType as 'student' | 'faculty';
+  const entityId = req.entityId as string;
+
+  if (decision === 'reject') {
+    await reqRef.update({
+      status: 'rejected' as DeletionRequestStatus,
+      reviewedBy: actor.actorUid,
+      reviewedAt: nowIso,
+      reviewNote: reviewNote ?? null,
+      updatedAt: nowIso,
+    });
+    await writeAuditRow(db, {
+      action: 'requestRejected',
+      entityType,
+      entityId,
+      entityLabel: (req.entityLabel as string) ?? null,
+      actorUid: actor.actorUid,
+      actorRole: actor.actorRole,
+      instituteId: (req.instituteId as string) ?? null,
+      reason: reviewNote ?? null,
+      requestId,
+    });
+    return { ok: true as const, status: 'rejected' as const };
+  }
+
+  // ── APPROVE: re-check everything, then execute ──────────────────
+  // The APPROVER's rights are what matter, resolved NOW. A request may have
+  // sat here for days while the ceiling narrowed or the approver's own rights
+  // changed. Nothing about the submission is trusted.
+  if (actor.actorRole !== 'webOwner') {
+    if (!actor.instituteId) throw new HttpsError('permission-denied', 'Missing tenant claim.');
+    const instSnap = await db.collection('institutes').doc(actor.instituteId).get();
+    const ceiling = instSnap.exists
+      ? (instSnap.get('deletionRightsCeiling') as DeletionCeilingS | undefined)
+      : undefined;
+    const approverMode = resolveDeletionModeS(
+      actor.actorRole, entityType as DeletableResourceS, ceiling, undefined,
+    );
+    if (approverMode !== 'direct') {
+      throw new HttpsError(
+        'permission-denied',
+        'You can no longer perform this deletion yourself, so it cannot be approved.',
+      );
+    }
+  }
+
+  // The target may have been removed by another path while this sat pending.
+  const targetRef = db.collection(entityType === 'student' ? 'students' : 'faculty').doc(entityId);
+  const targetSnap = await targetRef.get();
+  if (!targetSnap.exists) {
+    await reqRef.update({
+      status: 'cancelled' as DeletionRequestStatus,
+      reviewedBy: actor.actorUid,
+      reviewedAt: nowIso,
+      reviewNote: 'Target no longer exists.',
+      updatedAt: nowIso,
+    });
+    throw new HttpsError('not-found', 'The target no longer exists; the request was cancelled.');
+  }
+
+  const profile = targetSnap.data() as Record<string, unknown>;
+  const auditFromState: LifecycleStateS =
+    (profile.lifecycleState as LifecycleStateS) ??
+    (profile.isDeleted === true ? 'softDeleted' : 'active');
+
+  await performAccountDeletion(db, {
+    role: entityType as Role,
+    uid: entityId,
+    profileRef: targetRef,
+    auditLabel: (profile.name as string) || (profile.email as string) || null,
+    auditFromState,
+    targetInstituteId: (profile.instituteId as string) ?? null,
+    actorUid: actor.actorUid,
+    actorRole: actor.actorRole,
+    requestId,
+    reason: reviewNote ?? (req.reason as string) ?? null,
+  });
+
+  await reqRef.update({
+    status: 'approved' as DeletionRequestStatus,
+    reviewedBy: actor.actorUid,
+    reviewedAt: nowIso,
+    reviewNote: reviewNote ?? null,
+    updatedAt: nowIso,
+  });
+
+  await writeAuditRow(db, {
+    action: 'requestApproved',
+    entityType,
+    entityId,
+    entityLabel: (req.entityLabel as string) ?? null,
+    actorUid: actor.actorUid,
+    actorRole: actor.actorRole,
+    instituteId: (req.instituteId as string) ?? null,
+    reason: reviewNote ?? null,
+    requestId,
+  });
+
+  return { ok: true as const, status: 'approved' as const };
 });
 
 // ═══════════════════════════════════════════════════════════════════

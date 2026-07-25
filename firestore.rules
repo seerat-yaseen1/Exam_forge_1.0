@@ -874,17 +874,35 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // deletionRequests/{autoId} — the approval workflow (Phase 4).
+    // deletionRequests/{autoId} — the two-hop approval workflow (Phase 4).
     //
-    // Declared NOW, denied entirely, on purpose: the collection is named in
-    // the Phase 0a client module, and a named-but-unmatched collection would
-    // fall through to the default deny with no explanation of why. Phase 4
-    // replaces this block with real read scoping (requester sees own,
-    // approver sees the inbox for their tenant). Writes stay server-only
-    // permanently — submit and resolve are callables, so that the server can
-    // enforce rights and EXECUTE the approved action in one operation.
+    //   faculty  (mode 'request')      → institute admin approves
+    //   institute(selfMode 'request')  → Web Owner approves
+    //
+    // READS are scoped so each party sees exactly their own slice:
+    //   • webOwner  — everything (they are the approver for institute-raised
+    //     requests, and oversee the rest).
+    //   • institute — every request in their own tenant: the ones their
+    //     faculty raised to them, AND the ones they raised upward, so a
+    //     single inbox shows both sides of their position in the chain.
+    //   • faculty   — only requests they raised themselves.
+    //
+    // WRITES are server-only, permanently. submitDeletionRequest and
+    // resolveDeletionRequest are callables because the server must (a) verify
+    // the requester actually holds the right in request mode, (b) re-check the
+    // APPROVER's rights at execution time rather than submission time, and
+    // (c) EXECUTE the deletion itself. A client-writable status field would
+    // let a requester approve their own request.
+    function ownsDeletionRequest(d) {
+      return isWebOwner()
+        || (role() == 'institute' && request.auth.token.instituteId == d.instituteId)
+        || (role() == 'faculty'
+            && request.auth.token.instituteId == d.instituteId
+            && request.auth.uid == d.requesterUid);
+    }
     match /deletionRequests/{id} {
-      allow read, write: if false;
+      allow read:  if signedIn() && ownsDeletionRequest(resource.data);
+      allow write: if false;
     }
 
     // ═════════════════════════════════════════════════════════════════════════

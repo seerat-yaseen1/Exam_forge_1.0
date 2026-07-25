@@ -730,6 +730,282 @@ export const getInstitutePurgePreview = onCall<{ instituteId: string }>(
   },
 );
 
+// ── Soft delete + restore (Feature #15, Phase 6a) ─────────────────
+//
+// CLOSES BUG (b). Until now every account removal was immediate and
+// irreversible — one misclick destroyed a person's record with no undo.
+// Deletion now enters a recoverable state first; destruction happens only at
+// PURGE, after the retention window or by explicit Web Owner action.
+//
+// THE AUTH USER IS DISABLED, NOT DELETED.
+// Disabling is the only option that makes restore real: the account comes
+// back instantly and the person keeps their password. Deleting the Auth user
+// would mean restore had to recreate it and reissue credentials, which is a
+// different feature wearing the word "restore".
+//
+// The tradeoff, stated plainly: a disabled Auth user still CLAIMS its email,
+// so the same address cannot be re-registered until the record is purged.
+// That is the correct trade for a reversibility feature — an email freed
+// early is an email that can be re-registered while the original owner is
+// still restorable, which would make restore fail in a far more confusing way.
+
+/** Server twin of RETENTION_DAYS in src/lib/lifecycle.ts. KEEP IN SYNC. */
+const RETENTION_DAYS_S: Record<string, number> = {
+  student: 30,
+  faculty: 30,
+  institute: 180,
+  assessment: 90,
+  question: 90,
+  questionBank: 90,
+  subjectTopic: 90,
+  hierarchyNode: 90,
+};
+
+function computePurgeAfterS(entity: string, from: Date = new Date()): string | null {
+  const days = RETENTION_DAYS_S[entity];
+  if (days == null) return null;
+  const d = new Date(from.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString();
+}
+
+/**
+ * Move an account into the recoverable soft-deleted state.
+ *
+ * Destroys NOTHING. No cascade runs here — for an institute in particular,
+ * its faculty, students and content stay exactly where they are, because the
+ * whole point is that the tenant can come back intact. The cascade moves to
+ * purge, where it belongs.
+ */
+async function performAccountSoftDelete(
+  db: FirebaseFirestore.Firestore,
+  params: {
+    role: Role;
+    uid: string;
+    profileRef: FirebaseFirestore.DocumentReference;
+    auditLabel: string | null;
+    auditFromState: LifecycleStateS;
+    targetInstituteId: string | null;
+    actorUid: string;
+    actorRole: string;
+    reason?: string | null;
+    requestId?: string | null;
+    /**
+     * Faculty only. Captured NOW but applied at PURGE, because succession is
+     * irreversible and soft delete is not. The admin who knew this person is
+     * the one qualified to choose, and they are here today — asking again
+     * months later, of whoever happens to run the purge, would get a worse
+     * answer. Re-validated at execution regardless.
+     */
+    pendingSuccessorId?: string | null;
+  },
+): Promise<void> {
+  const now = new Date();
+
+  // Access is revoked FIRST. If the profile were flagged first and this then
+  // failed, a person marked deleted would still be able to sign in.
+  try {
+    await getAuth().updateUser(params.uid, { disabled: true });
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code !== 'auth/user-not-found') {
+      console.error('softDelete: could not disable auth user', params.uid, err);
+      throw new HttpsError('internal', 'Could not revoke sign-in for this account.');
+    }
+  }
+
+  await params.profileRef.update({
+    lifecycleState: 'softDeleted',
+    deletedAt: now.toISOString(),
+    deletedBy: params.actorUid,
+    deletedByRole: params.actorRole,
+    lifecycleReason: params.reason ?? null,
+    purgeAfter: computePurgeAfterS(params.role, now),
+    pendingSuccessorId: params.pendingSuccessorId ?? null,
+    updatedAt: now.toISOString(),
+  });
+
+  await writeAuditRow(db, {
+    action: 'softDelete',
+    entityType: params.role,
+    entityId: params.uid,
+    entityLabel: params.auditLabel,
+    fromState: params.auditFromState,
+    toState: 'softDeleted',
+    actorUid: params.actorUid,
+    actorRole: params.actorRole,
+    instituteId: params.targetInstituteId,
+    reason: params.reason ?? null,
+    requestId: params.requestId ?? null,
+  });
+}
+
+/**
+ * Bring a soft-deleted account back.
+ *
+ * Clears every marker set on the way out — including purgeAfter, which must
+ * not survive: a restored record with a live purgeAfter would be silently
+ * destroyed later by the scheduled job.
+ */
+export const restoreEntity = onCall<{
+  role: Role;
+  uid: string;
+  reason?: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const { role, uid, reason } = request.data || ({} as never);
+  if (!role || !COLLECTION_BY_ROLE[role]) throw new HttpsError('invalid-argument', 'Invalid role.');
+  if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
+
+  const db = getFirestore();
+  const actor = actorFrom(request);
+  const ref = db.collection(COLLECTION_BY_ROLE[role]).doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Record not found.');
+
+  const data = snap.data() as Record<string, unknown>;
+  const targetInstituteId =
+    role === 'institute' ? uid : (data.instituteId as string | undefined) ?? null;
+
+  // Restoring is a lower bar than deleting — it is non-destructive — but it
+  // is still scoped: an institute may only restore inside its own tenant, and
+  // only the Web Owner may restore an institute.
+  if (actor.actorRole !== 'webOwner') {
+    if (actor.actorRole !== 'institute' || role === 'institute') {
+      throw new HttpsError('permission-denied', 'Insufficient permissions.');
+    }
+    if (!actor.instituteId || actor.instituteId !== targetInstituteId) {
+      throw new HttpsError('permission-denied', 'Different institute.');
+    }
+  }
+
+  const current: LifecycleStateS =
+    (data.lifecycleState as LifecycleStateS) ??
+    (data.isDeleted === true ? 'softDeleted' : 'active');
+  if (current !== 'softDeleted' && current !== 'archived') {
+    throw new HttpsError('failed-precondition', 'This record is not deleted or archived.');
+  }
+
+  try {
+    await getAuth().updateUser(uid, { disabled: false });
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code !== 'auth/user-not-found') {
+      console.error('restore: could not re-enable auth user', uid, err);
+      throw new HttpsError('internal', 'Could not restore sign-in for this account.');
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  await ref.update({
+    lifecycleState: 'active',
+    // Cleared absolutely. A stale purgeAfter on a restored record is a
+    // scheduled deletion nobody asked for.
+    purgeAfter: null,
+    deletedAt: null,
+    deletedBy: null,
+    deletedByRole: null,
+    archivedAt: null,
+    archivedBy: null,
+    archivedByRole: null,
+    lifecycleReason: null,
+    pendingSuccessorId: null,
+    status: 'active',
+    updatedAt: nowIso,
+  });
+
+  await writeAuditRow(db, {
+    action: 'restore',
+    entityType: role,
+    entityId: uid,
+    entityLabel: (data.name as string) || (data.email as string) || null,
+    fromState: current,
+    toState: 'active',
+    actorUid: actor.actorUid,
+    actorRole: actor.actorRole,
+    instituteId: targetInstituteId,
+    reason: reason ?? null,
+  });
+
+  return { ok: true as const, restored: role, uid };
+});
+
+/**
+ * Destroy a soft-deleted record for good. Web Owner only.
+ *
+ * This is where the Phase 5b cascade now lives. It moved off the delete path
+ * deliberately: deletion is recoverable and must destroy nothing, so a
+ * cascade there would have made "soft" a lie.
+ */
+export const purgeEntity = onCall<{
+  role: Role;
+  uid: string;
+  deleteAttemptsOnWebOwnerAssessments?: string[];
+  /** Faculty only — who inherits their content, validated at execution. */
+  successorId?: string;
+  reason?: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+  const actor = actorFrom(request);
+  if (actor.actorRole !== 'webOwner') {
+    throw new HttpsError('permission-denied', 'Only the Web Owner may permanently delete.');
+  }
+
+  const { role, uid, deleteAttemptsOnWebOwnerAssessments, successorId, reason } =
+    request.data || ({} as never);
+  if (!role || !COLLECTION_BY_ROLE[role]) throw new HttpsError('invalid-argument', 'Invalid role.');
+  if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
+
+  const db = getFirestore();
+  const profileRef = db.collection(COLLECTION_BY_ROLE[role]).doc(uid);
+  const snap = await profileRef.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Record not found.');
+
+  const data = snap.data() as Record<string, unknown>;
+  const state: LifecycleStateS =
+    (data.lifecycleState as LifecycleStateS) ??
+    (data.isDeleted === true ? 'softDeleted' : 'active');
+
+  // Purge is reachable only from the recoverable state. Without this, a
+  // single call could destroy a live tenant with no soft-delete step and no
+  // window in which anyone could have noticed.
+  if (state !== 'softDeleted') {
+    throw new HttpsError(
+      'failed-precondition',
+      'Only a deleted record can be permanently removed. Delete it first.',
+    );
+  }
+
+  const targetInstituteId =
+    role === 'institute' ? uid : (data.instituteId as string | undefined) ?? null;
+
+  let cascadeCounts: Record<string, number> | null = null;
+  if (role === 'institute') {
+    cascadeCounts = await performInstituteCascade(db, uid, {
+      deleteAttemptsOnWebOwnerAssessments,
+    });
+  }
+
+  await performAccountDeletion(db, {
+    role,
+    uid,
+    profileRef,
+    auditLabel: (data.name as string) || (data.email as string) || null,
+    auditFromState: 'softDeleted',
+    targetInstituteId,
+    actorUid: actor.actorUid,
+    actorRole: actor.actorRole,
+    reason: reason ?? null,
+    impact: cascadeCounts,
+    // An explicit choice at purge wins; otherwise honour what the admin
+    // picked when they removed the account.
+    successorId: successorId ?? (data.pendingSuccessorId as string | null) ?? null,
+  });
+
+  return { ok: true as const, purged: role, uid, counts: cascadeCounts };
+});
+
 /**
  * Perform an account deletion. THE ONE PLACE THIS HAPPENS.
  *
@@ -961,18 +1237,17 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
       }
     }
 
-    // ── Institute cascade (Feature #15, Phase 5b) ──────────────────
-    // Runs BEFORE the institute doc goes. Everything below is reachable only
-    // via instituteId; if the parent were removed first and this then failed,
-    // the remainder would be unreachable orphans with nothing pointing at them.
-    let cascadeCounts: Record<string, number> | null = null;
-    if (role === 'institute') {
-      cascadeCounts = await performInstituteCascade(db, uid, {
-        deleteAttemptsOnWebOwnerAssessments,
-      });
-    }
-
-    await performAccountDeletion(db, {
+    // ── SOFT delete (Feature #15, Phase 6a) ────────────────────────
+    // This path no longer destroys anything. The record enters the
+    // recoverable state and the Auth user is disabled; the cascade and the
+    // actual removal moved to purgeEntity, where they belong. Closes bug (b).
+    //
+    // NOTE ON SUCCESSION: ownership transfer deliberately does NOT run here.
+    // Soft delete is reversible, so moving a departing faculty member's
+    // content now would mean a restore left their questions belonging to
+    // someone else. Succession runs at PURGE, when the departure is final —
+    // which is exactly what the locked design says.
+    await performAccountSoftDelete(db, {
       role,
       uid,
       profileRef,
@@ -981,8 +1256,7 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
       targetInstituteId: targetInstituteId ?? null,
       actorUid: actorFrom(request).actorUid,
       actorRole: actorFrom(request).actorRole,
-      successorId: successorId ?? null,
-      impact: cascadeCounts,
+      pendingSuccessorId: successorId ?? null,
     });
 
     return { ok: true };

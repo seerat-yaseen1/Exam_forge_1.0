@@ -16,6 +16,7 @@ import { RIGHT_NAMES, grantableModes } from '../../../lib/questionRights';
 import type { DeletionRightsCeiling } from '../../../lib/deletionRights';
 import { grantableModes as grantableDeletionModes, instituteMode, DELETABLE_RESOURCES } from '../../../lib/deletionRights';
 import { DeletionApprovalsInbox } from '../../components/DeletionApprovalsInbox';
+import { TrashPanel } from '../../components/TrashPanel';
 import { getPendingDeletionRequestCount } from '../../../lib/deletionRequestService';
 import { getPendingRequestCount } from '../../../lib/questionRequestService';
 import { FacultyTab } from '../../components/faculty/FacultyTab';
@@ -415,7 +416,12 @@ export function InstituteLandingPage() {
     (r) => grantableDeletionModes(deletionCeiling, r).includes('request')
       || instituteMode(deletionCeiling, r) === 'request',
   );
-  const approvalsTabEnabled = requestModeEnabled || deletionRequestModeEnabled;
+  // Feature #15 Phase 6a — this tab is now ALWAYS available, because it also
+  // holds the trash. Deleted records need a home regardless of whether any
+  // request mode is configured; gating it on requests would make recovery
+  // unreachable for exactly the institutes that delete directly.
+  const approvalsTabEnabled = true;
+  const hasApprovalSections = requestModeEnabled || deletionRequestModeEnabled;
   const [pendingDeletionCount, setPendingDeletionCount] = useState(0);
   const [permissionLoading, setPermissionLoading] = useState(false);
 
@@ -454,7 +460,11 @@ export function InstituteLandingPage() {
     { key: 'students',  label: 'Students', icon: <GraduationCap size={12} strokeWidth={1.5} /> },
     { key: 'schools',   label: 'Schools',  icon: <School size={12} strokeWidth={1.5} /> },
     ...(approvalsTabEnabled
-      ? [{ key: 'approvals' as Tab, label: 'Approvals', icon: <Inbox size={12} strokeWidth={1.5} /> }]
+      ? [{
+          key: 'approvals' as Tab,
+          label: hasApprovalSections ? 'Approvals & Trash' : 'Trash',
+          icon: <Inbox size={12} strokeWidth={1.5} />,
+        }]
       : []),
   ];
 
@@ -635,6 +645,15 @@ export function InstituteLandingPage() {
                   />
                 </div>
               )}
+
+              {/* Feature #15 Phase 6a — the institute's own trash. Restore
+                  only: permanent deletion stays with the Web Owner. */}
+              <div className="mt-6 pt-5" style={{ borderTop: '1px solid #E3E1DB' }}>
+                <p className="text-xs mb-3" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>
+                  RECENTLY DELETED
+                </p>
+                <TrashPanel instituteId={session.instituteId} />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

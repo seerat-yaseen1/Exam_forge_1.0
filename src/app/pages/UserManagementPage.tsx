@@ -23,6 +23,7 @@ import { auth, functions } from '../../lib/firebase';
 import { DeletionImpactPanel } from '../components/DeletionImpactPanel';
 import { DeletionApprovalsInbox } from '../components/DeletionApprovalsInbox';
 import { InstitutePurgePanel } from '../components/InstitutePurgePanel';
+import { TrashPanel } from '../components/TrashPanel';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -804,6 +805,13 @@ export function UserManagementPage() {
              costs no space in the normal case. */}
         <div className="mb-5">
           <DeletionApprovalsInbox viewerRole="webOwner" />
+        </div>
+
+        {/* Feature #15 Phase 6a — deleted records are recoverable now, so the
+            trash needs a home. Web Owner sees every tenant and is the only
+            role that can permanently delete. */}
+        <div className="mb-5">
+          <TrashPanel canPurge />
         </div>
 
         {/* ── Table ── */}

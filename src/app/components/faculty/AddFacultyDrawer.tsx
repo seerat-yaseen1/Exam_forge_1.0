@@ -26,6 +26,9 @@ export interface Faculty {
   canCreateStudents?: boolean;
   canManageExamRosters?: boolean;
   questionRights?: import('../../../lib/firebaseService').FacultyQuestionRights;
+  // Feature #15 Phase 3 — granted by the institute admin at or below the
+  // institute's deletion ceiling. Absent ⇒ nothing granted.
+  deletionRights?: import('../../../lib/deletionRights').FacultyDeletionRights;
   createdAt: string;
   updatedAt: string;
 }

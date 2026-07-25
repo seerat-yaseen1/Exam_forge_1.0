@@ -14,6 +14,7 @@ import { db } from './firebase';
 import type {
   DeletionRightsCeiling,
   ContentTransferRight,
+  FacultyDeletionRights,
 } from './deletionRights';
 
 // ──────────────────────────────────────────────────────────────────
@@ -125,6 +126,13 @@ export type Faculty = {
   // server-side in the question callables. In Phase 2 only 'direct' mode
   // takes effect; 'request' is stored but its workflow lands in Phase 3.
   questionRights?: FacultyQuestionRights;
+  // ── Per-faculty deletion rights (Feature #15, Phase 3) ─────────────
+  // Granted by the institute admin, AT OR BELOW the institute's
+  // deletionRightsCeiling. Absent ⇒ nothing granted (secure-by-default),
+  // which is the migration posture: existing faculty hold no deletion
+  // rights and must be granted them explicitly. Enforced server-side in
+  // deleteAuthUser; the UI mirrors it.
+  deletionRights?: FacultyDeletionRights;
   createdAt: string;
   updatedAt: string;
 }
@@ -1430,6 +1438,22 @@ export async function setInstituteContentTransferRight(
     contentTransferRight: transfer,
     updatedAt: new Date().toISOString(),
   } as Partial<Institute>);
+}
+
+/**
+ * Institute Admin: set a faculty member's DELETION rights (Feature #15).
+ * Callers should clampRightsToCeiling() against the institute's deletion
+ * ceiling first; deleteAuthUser re-resolves the same logic server-side on
+ * every deletion, so a tampered grant cannot exceed the ceiling.
+ */
+export async function setFacultyDeletionRights(
+  facultyId: string,
+  rights: FacultyDeletionRights,
+): Promise<void> {
+  return firestoreUpdate<Faculty>('faculty', facultyId, {
+    deletionRights: rights,
+    updatedAt: new Date().toISOString(),
+  } as Partial<Faculty>);
 }
 
 /**

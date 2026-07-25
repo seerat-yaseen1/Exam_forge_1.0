@@ -245,6 +245,75 @@ const CREDENTIALS_BY_ROLE: Partial<Record<Role, string>> = {
   student: 'studentCredentials',
 };
 
+// ── Deletion rights enforcement (Feature #15, Phase 3) ────────────
+// Server twin of src/lib/deletionRights.ts. THIS IS THE GATE — the client
+// mirrors this logic to shape its UI, but this copy is what decides.
+// KEEP IN SYNC with the client module.
+//
+// Closes bug (f): until now deleteAuthUser had ROLE gating (institute may
+// delete faculty/students, faculty may delete students, tenant-matched) but
+// no RIGHTS check at all. Any faculty member could delete any student in
+// their institute, ungoverned — the widest blast radius on the platform with
+// the least oversight.
+
+type DeletionModeS = 'direct' | 'request';
+type DeletableResourceS =
+  | 'institute' | 'faculty' | 'student' | 'assessment' | 'questionBank' | 'subjectTopic' | 'attempt';
+
+type DeletionCeilingRightS = { allowed?: boolean; modes?: DeletionModeS[]; selfMode?: DeletionModeS };
+type DeletionCeilingS = Partial<Record<DeletableResourceS, DeletionCeilingRightS>>;
+type FacultyDeletionRightsS = Partial<Record<DeletableResourceS, { granted?: boolean; mode?: DeletionModeS }>>;
+
+/**
+ * Resources no institute may ever hold, whatever a stored ceiling says.
+ * Twin of WEBOWNER_ONLY_RESOURCES in the client module.
+ *
+ *   attempt   — attempts are the audit trail; a tenant that can delete them
+ *               can delete the evidence of what happened in an exam.
+ *   institute — a tenant deleting tenants is a containment breach, including
+ *               deleting itself (which would strand every user under it).
+ */
+const WEBOWNER_ONLY_S: DeletableResourceS[] = ['attempt', 'institute'];
+
+/**
+ * The effective deletion mode for an actor on a resource: 'direct' (do it
+ * now), 'request' (needs approval — Phase 4), or 'none' (not permitted).
+ *
+ * Fails closed on every missing input: no ceiling, no grant, or a grant whose
+ * mode the ceiling no longer permits all yield 'none'.
+ */
+function resolveDeletionModeS(
+  callerRole: string | undefined,
+  resource: DeletableResourceS,
+  ceiling: DeletionCeilingS | undefined,
+  facultyRights: FacultyDeletionRightsS | undefined,
+): DeletionModeS | 'none' {
+  if (callerRole === 'webOwner') return 'direct';
+
+  // Forced off regardless of what the ceiling document contains.
+  if (WEBOWNER_ONLY_S.includes(resource)) return 'none';
+
+  const c = ceiling?.[resource];
+  if (!c?.allowed) return 'none';
+
+  if (callerRole === 'institute') {
+    // Absent selfMode reads as 'direct' — matches the client default and the
+    // questionRights shape, which has no equivalent field.
+    return c.selfMode === 'request' ? 'request' : 'direct';
+  }
+
+  if (callerRole === 'faculty') {
+    const fr = facultyRights?.[resource];
+    if (!fr?.granted || !fr.mode) return 'none';
+    // A ceiling narrowed AFTER the grant must bite immediately, without
+    // needing every faculty document to be rewritten.
+    if (!(c.modes ?? []).includes(fr.mode)) return 'none';
+    return fr.mode;
+  }
+
+  return 'none';
+}
+
 export const deleteAuthUser = onCall<DeleteAuthUserData>(
   { region: 'us-central1' },
   async (request) => {
@@ -292,6 +361,48 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
         }
       } else {
         throw new HttpsError('permission-denied', 'Insufficient permissions.');
+      }
+
+      // ── Deletion-rights gate (Feature #15, Phase 3) ────────────────
+      // The role checks above establish WHO may act on WHOM. This
+      // establishes whether they hold the RIGHT to do so at all — the
+      // check that did not exist before, and the closure of bug (f).
+      //
+      // Runs for institute and faculty callers only; the Web Owner short-
+      // circuits above. Reads the ceiling from the tenant's institute doc
+      // and, for faculty, the grant from their own profile.
+      const ceilingSnap = await db.collection('institutes').doc(callerInstituteId).get();
+      const ceiling = ceilingSnap.exists
+        ? (ceilingSnap.get('deletionRightsCeiling') as DeletionCeilingS | undefined)
+        : undefined;
+
+      let facultyRights: FacultyDeletionRightsS | undefined;
+      if (callerRole === 'faculty') {
+        const callerSnap = await db.collection('faculty').doc(request.auth.uid).get();
+        facultyRights = callerSnap.exists
+          ? (callerSnap.get('deletionRights') as FacultyDeletionRightsS | undefined)
+          : undefined;
+      }
+
+      const resource = role as DeletableResourceS;
+      const mode = resolveDeletionModeS(callerRole, resource, ceiling, facultyRights);
+
+      if (mode === 'request') {
+        // Held, but not directly exercisable. Phase 4 turns this into a real
+        // submission; until then it is an explicit, honest refusal rather
+        // than a silent success or a generic denial.
+        throw new HttpsError(
+          'permission-denied',
+          'This deletion requires approval. The request workflow is not yet available — ask your administrator to perform it.',
+        );
+      }
+      if (mode !== 'direct') {
+        throw new HttpsError(
+          'permission-denied',
+          callerRole === 'faculty'
+            ? 'You have not been granted permission to delete this. Ask your institute administrator.'
+            : 'This institute has not been granted permission to delete this. Ask the Web Owner.',
+        );
       }
     }
 

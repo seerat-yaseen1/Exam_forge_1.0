@@ -9,6 +9,17 @@ import { AddFacultyDrawer, type Faculty } from './AddFacultyDrawer';
 import { FacultyQuestionRightsEditor } from './FacultyQuestionRightsEditor';
 import type { QuestionRightsCeiling } from '../../../lib/firebaseService';
 import { instituteHasRight, RIGHT_NAMES } from '../../../lib/questionRights';
+// NAME COLLISION (documented in deletionRights.ts): both modules export
+// instituteHasRight. This file needs BOTH, so the deletion one is aliased.
+// Never let these two resolve to the same identifier — they read different
+// ceilings and would silently answer the wrong question.
+import {
+  instituteHasRight as instituteHasDeletionRight,
+  grantableModes as grantableDeletionModes,
+  DELETABLE_RESOURCES,
+  type DeletionRightsCeiling,
+} from '../../../lib/deletionRights';
+import { FacultyDeletionRightsEditor } from './FacultyDeletionRightsEditor';
 import { BulkFacultyModal } from './BulkFacultyModal';
 import {
   getFacultyByInstitute,
@@ -52,6 +63,10 @@ interface Props {
   // and any right is allowed, each faculty row gets an expandable question-
   // rights editor. Absent ⇒ no rights UI (institute has no ceiling yet).
   questionRightsCeiling?: QuestionRightsCeiling;
+  // Institute deletion-rights ceiling (Feature #15, Phase 3). When set and
+  // any resource is DELEGATABLE, the expanded panel also offers a deletion-
+  // rights editor. Absent ⇒ no deletion UI.
+  deletionRightsCeiling?: DeletionRightsCeiling;
 }
 
 export function FacultyTab({
@@ -61,12 +76,21 @@ export function FacultyTab({
   instituteFacultyCreateStudentsEnabled = false,
   instituteFacultyManageRostersEnabled = false,
   questionRightsCeiling,
+  deletionRightsCeiling,
 }: Props) {
   const [faculties, setFaculties]     = useState<Faculty[]>([]);
   // Which faculty row has its question-rights editor expanded.
   const [rightsExpandedId, setRightsExpandedId] = useState<string | null>(null);
   // Whether the institute ceiling offers any right at all (gates the UI).
   const ceilingHasAnyRight = RIGHT_NAMES.some((r) => instituteHasRight(questionRightsCeiling, r));
+  // Deletion rights are delegatable only when the institute both HOLDS the
+  // resource and has a grantable mode for it — holding a right with modes:[]
+  // means "institute may use it, may not delegate it".
+  const ceilingHasAnyDeletionRight = DELETABLE_RESOURCES.some(
+    (r) => instituteHasDeletionRight(deletionRightsCeiling, r)
+      && grantableDeletionModes(deletionRightsCeiling, r).length > 0,
+  );
+  const showRightsPanel = ceilingHasAnyRight || ceilingHasAnyDeletionRight;
   const [loading, setLoading]         = useState(true);
   const [fetchError, setFetchError]   = useState('');
   const [lastSynced, setLastSynced]   = useState<Date | null>(null);
@@ -573,7 +597,7 @@ export function FacultyTab({
                     ) : (
                       <div className="flex items-center justify-end gap-0.5">
                         {/* Question-rights editor toggle (Phase 2) */}
-                        {ceilingHasAnyRight && (
+                        {showRightsPanel && (
                           <button
                             onClick={() => setRightsExpandedId((prev) => (prev === faculty.id ? null : faculty.id))}
                             title="Question rights"
@@ -638,7 +662,7 @@ export function FacultyTab({
 
       {/* Expanded question-rights editor — rendered outside the table so it
           isn't constrained by cell layout; keyed to the selected faculty. */}
-      {rightsExpandedId && ceilingHasAnyRight && (() => {
+      {rightsExpandedId && showRightsPanel && (() => {
         const fac = faculties.find((f) => f.id === rightsExpandedId);
         if (!fac) return null;
         return (
@@ -648,20 +672,32 @@ export function FacultyTab({
           >
             <div className="flex items-center justify-between mb-1">
               <p className="text-xs" style={{ color: '#0C0C0B' }}>
-                Question rights — <span style={{ color: '#6B6B66' }}>{fac.name}</span>
+                Permissions — <span style={{ color: '#6B6B66' }}>{fac.name}</span>
               </p>
               <button onClick={() => setRightsExpandedId(null)} className="p-1" style={{ color: '#9A9891' }}>
                 <X size={13} strokeWidth={1.5} />
               </button>
             </div>
-            <FacultyQuestionRightsEditor
-              facultyId={fac.id}
-              ceiling={questionRightsCeiling}
-              initial={fac.questionRights}
-              onSaved={(rights) =>
-                setFaculties((prev) => prev.map((f) => (f.id === fac.id ? { ...f, questionRights: rights } : f)))
-              }
-            />
+            {ceilingHasAnyRight && (
+              <FacultyQuestionRightsEditor
+                facultyId={fac.id}
+                ceiling={questionRightsCeiling}
+                initial={fac.questionRights}
+                onSaved={(rights) =>
+                  setFaculties((prev) => prev.map((f) => (f.id === fac.id ? { ...f, questionRights: rights } : f)))
+                }
+              />
+            )}
+            {ceilingHasAnyDeletionRight && (
+              <FacultyDeletionRightsEditor
+                facultyId={fac.id}
+                ceiling={deletionRightsCeiling}
+                initial={fac.deletionRights}
+                onSaved={(rights) =>
+                  setFaculties((prev) => prev.map((f) => (f.id === fac.id ? { ...f, deletionRights: rights } : f)))
+                }
+              />
+            )}
           </div>
         );
       })()}

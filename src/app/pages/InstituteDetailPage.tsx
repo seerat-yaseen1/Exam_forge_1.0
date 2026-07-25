@@ -388,6 +388,7 @@ export function InstituteDetailPage() {
                     instituteFacultyCreateStudentsEnabled={facultyCreateStudentsPerm}
                     instituteFacultyManageRostersEnabled={facultyManageRostersPerm}
                     questionRightsCeiling={institute.questionRightsCeiling}
+                    deletionRightsCeiling={institute.deletionRightsCeiling}
                   />
                 </motion.div>
               )}

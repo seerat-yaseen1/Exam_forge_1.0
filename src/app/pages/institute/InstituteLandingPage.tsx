@@ -13,6 +13,7 @@ import {
 import { SchoolsTab } from '../../components/schools/SchoolsTab';
 import { ApprovalsInbox } from '../../components/questions/ApprovalsInbox';
 import { RIGHT_NAMES, grantableModes } from '../../../lib/questionRights';
+import type { DeletionRightsCeiling } from '../../../lib/deletionRights';
 import { getPendingRequestCount } from '../../../lib/questionRequestService';
 import { FacultyTab } from '../../components/faculty/FacultyTab';
 import { StudentTab } from '../../components/student/StudentTab';
@@ -396,6 +397,8 @@ export function InstituteLandingPage() {
   const [facultyCanCreateStud, setFacultyCanCreateStud] = useState(session?.facultyCanCreateStudents  ?? false);
   const [canCreateQuestions,   setCanCreateQuestions]   = useState(session?.canAdminCreateQuestions   ?? false);
   const [questionCeiling, setQuestionCeiling] = useState<QuestionRightsCeiling | undefined>(undefined);
+  // Feature #15 Phase 3 — drives the per-faculty deletion-rights editor.
+  const [deletionCeiling, setDeletionCeiling] = useState<DeletionRightsCeiling | undefined>(undefined);
   const [pendingCount, setPendingCount] = useState(0);
   // The approvals inbox is relevant only when the ceiling permits at least one
   // right to be granted to faculty in REQUEST mode.
@@ -414,6 +417,7 @@ export function InstituteLandingPage() {
           setFacultyCanCreateStud(inst.facultyCanCreateStudents ?? false);
           setCanCreateQuestions(inst.canAdminCreateQuestions  ?? false);
           setQuestionCeiling(inst.questionRightsCeiling);
+          setDeletionCeiling(inst.deletionRightsCeiling);
         }
       })
       .finally(() => setPermissionLoading(false));
@@ -515,6 +519,7 @@ export function InstituteLandingPage() {
                   instituteSchoolsEnabled={canManageSchools}
                   instituteFacultyCreateStudentsEnabled={facultyCanCreateStud}
                   questionRightsCeiling={questionCeiling}
+                  deletionRightsCeiling={deletionCeiling}
                 />
               ) : (
                 <FacultyList instituteId={session.instituteId} />

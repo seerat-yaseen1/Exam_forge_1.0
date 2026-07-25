@@ -246,6 +246,13 @@ interface DeleteAuthUserData {
   successorId?: string;
   /** Set once the admin has acknowledged live-exam ownership. */
   confirmLiveOwnership?: boolean;
+  /**
+   * Institute only (Feature #15, Phase 5b). WebOwner-owned assessments whose
+   * attempts by this institute's students should ALSO be deleted. Absent ⇒
+   * none, which is the safe default: a cascade that destroys the Web Owner's
+   * own exam history by omission is the worst failure mode available here.
+   */
+  deleteAttemptsOnWebOwnerAssessments?: string[];
 }
 
 const CREDENTIALS_BY_ROLE: Partial<Record<Role, string>> = {
@@ -466,6 +473,263 @@ async function countLiveOwnedAssessments(
   }
 }
 
+// ── Institute cascade (Feature #15, Phase 5b) ─────────────────────
+//
+// CLOSES BUG (a). Until now, deleting an institute removed only its own
+// profile, credentials and logo. Its faculty, students, assessments,
+// questions, banks, attempts and mappings were left behind — still stamped
+// with the id of a tenant that no longer existed, invisible to everyone but
+// the Web Owner, and impossible to clean up through any UI.
+//
+// LOCKED DECISION (D4): "institute goes so goes with their data". The chain
+// is purge institute → purge its students → purge their attempts. This is the
+// ONE path permitted to destroy attempt data outside the Phase 7 erasure
+// flow, and it is permitted only because the students themselves are going.
+//
+// THE ONE EXCEPTION, and it is the Web Owner's call:
+// A WEBOWNER-OWNED assessment survives the wipe — ownership was never the
+// institute's, and who sat the exam does not determine who owns it. But the
+// attempts on it by this institute's students are a genuine judgement call:
+//   • if that assessment was ONLY ever sat by this institute's students, its
+//     results are worthless once they are gone — deleting is reasonable
+//   • if it spans several institutes, deleting would silently gut a
+//     cross-institute exam's results and analytics with no record of why
+// So the caller passes an explicit list of webOwner assessment ids whose
+// attempts should ALSO go. Absent ⇒ none of them, which is the safe default:
+// a cascade that destroys the Web Owner's own exam history by omission would
+// be the worst possible failure mode here.
+
+/** Delete every doc matching one equality filter, in batches. Returns the count. */
+async function purgeWhere(
+  db: FirebaseFirestore.Firestore,
+  collection: string,
+  field: string,
+  value: string,
+): Promise<number> {
+  let removed = 0;
+  try {
+    const snap = await db.collection(collection).where(field, '==', value).get();
+    let batch = db.batch();
+    let n = 0;
+    for (const d of snap.docs) {
+      batch.delete(d.ref);
+      removed++;
+      if (++n >= 400) { await batch.commit(); batch = db.batch(); n = 0; }
+    }
+    if (n > 0) await batch.commit();
+  } catch (err) {
+    console.error('purgeWhere failed', collection, field, value, err);
+  }
+  return removed;
+}
+
+/**
+ * Remove an assessment's materialized membership and its allocation doc.
+ *
+ * Fixes a long-parked orphan: deleteAssessment never cleaned up
+ * assessmentMembers or the allocations doc, so soft-deleted assessments left
+ * member rows behind indefinitely. Harmless in isolation (the student query
+ * joins against live assessment docs) but it accumulates, and at institute
+ * purge it would leave rows pointing at assessments that no longer exist.
+ */
+async function purgeAssessmentSatellites(
+  db: FirebaseFirestore.Firestore,
+  assessmentId: string,
+): Promise<{ members: number; allocations: number }> {
+  const members = await purgeWhere(db, 'assessmentMembers', 'assessmentId', assessmentId);
+  let allocations = 0;
+  try {
+    await db.collection('allocations').doc(assessmentId).delete();
+    allocations = 1;
+  } catch {
+    // No allocation doc — normal for legacy-targeted assessments.
+  }
+  return { members, allocations };
+}
+
+/**
+ * Purge everything belonging to an institute.
+ *
+ * Ordered leaves-first: satellites before their parents, content before the
+ * accounts that own it, accounts before the institute itself. If the run dies
+ * partway, what remains is still reachable from the institute doc — the
+ * opposite order would strand orphans with nothing pointing at them.
+ *
+ * Auth users are removed alongside their profiles; a profile deleted without
+ * its Auth user leaves a credential that can still sign in.
+ */
+async function performInstituteCascade(
+  db: FirebaseFirestore.Firestore,
+  instituteId: string,
+  opts: { deleteAttemptsOnWebOwnerAssessments?: string[] } = {},
+): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+
+  // 1. Assessments owned by this institute (and their satellites).
+  let memberRows = 0;
+  let allocationRows = 0;
+  const ownAssessments = await db.collection('assessments')
+    .where('ownerType', '==', 'institute')
+    .where('ownerId', '==', instituteId)
+    .get()
+    .catch(() => null);
+
+  if (ownAssessments) {
+    for (const a of ownAssessments.docs) {
+      const sat = await purgeAssessmentSatellites(db, a.id);
+      memberRows += sat.members;
+      allocationRows += sat.allocations;
+      // Attempts on the institute's OWN assessments go unconditionally —
+      // both the exam and the people who sat it are being destroyed.
+      counts.attempts = (counts.attempts ?? 0)
+        + await purgeWhere(db, 'attempts', 'assessmentId', a.id);
+      await a.ref.delete().catch(() => undefined);
+    }
+    counts.assessments = ownAssessments.size;
+  }
+
+  // 2. Attempts on WEBOWNER-owned assessments — only where the Web Owner
+  //    explicitly said so. Default is to keep them.
+  for (const assessmentId of opts.deleteAttemptsOnWebOwnerAssessments ?? []) {
+    const snap = await db.collection('attempts')
+      .where('assessmentId', '==', assessmentId)
+      .where('instituteId', '==', instituteId)
+      .get()
+      .catch(() => null);
+    if (!snap) continue;
+    let batch = db.batch();
+    let n = 0;
+    for (const d of snap.docs) {
+      batch.delete(d.ref);
+      counts.attempts = (counts.attempts ?? 0) + 1;
+      if (++n >= 400) { await batch.commit(); batch = db.batch(); n = 0; }
+    }
+    if (n > 0) await batch.commit();
+    // Their membership rows go with them; the assessment itself stays.
+    memberRows += await purgeWhere(db, 'assessmentMembers', 'assessmentId', assessmentId);
+  }
+
+  counts.assessmentMembers = memberRows;
+  counts.allocations = allocationRows;
+
+  // 3. Content owned by the institute or its faculty.
+  counts.questions = await purgeWhere(db, 'questions', 'instituteId', instituteId);
+  counts.questionBanks = await purgeWhere(db, 'questionBanks', 'instituteId', instituteId);
+  counts.questionShares = await purgeWhere(db, 'questionShares', 'instituteId', instituteId);
+  counts.questionReports = await purgeWhere(db, 'questionReports', 'instituteId', instituteId);
+
+  // 4. Academic hierarchy + mappings.
+  counts.academicMappings = await purgeWhere(db, 'academicMappings', 'instituteId', instituteId);
+  for (const c of HIERARCHY_COLLECTIONS) {
+    counts[c] = await purgeWhere(db, c, 'instituteId', instituteId);
+  }
+
+  // 5. People — Auth user first, then profile and credentials. Any remaining
+  //    attempts belonging to these students go with them (D4).
+  for (const [col, credCol] of [
+    ['students', 'studentCredentials'],
+    ['faculty', 'facultyCredentials'],
+  ] as const) {
+    const snap = await db.collection(col).where('instituteId', '==', instituteId).get()
+      .catch(() => null);
+    if (!snap) continue;
+    for (const d of snap.docs) {
+      if (col === 'students') {
+        counts.attempts = (counts.attempts ?? 0)
+          + await purgeWhere(db, 'attempts', 'studentId', d.id);
+      }
+      try {
+        await getAuth().deleteUser(d.id);
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (code !== 'auth/user-not-found') {
+          console.error('cascade: auth delete failed', d.id, err);
+        }
+      }
+      await db.collection(credCol).doc(d.id).delete().catch(() => undefined);
+      await d.ref.delete().catch(() => undefined);
+    }
+    counts[col] = snap.size;
+  }
+
+  // 6. Requests and grants referencing this tenant.
+  counts.deletionRequests = await purgeWhere(db, 'deletionRequests', 'instituteId', instituteId);
+  counts.questionRequests = await purgeWhere(db, 'questionRequests', 'instituteId', instituteId);
+
+  return counts;
+}
+
+/**
+ * Classify the WEBOWNER-owned assessments this institute's students have sat,
+ * so the Web Owner can decide per assessment whether the attempts go too.
+ *
+ * EXCLUSIVE — every attempt on it came from this institute. Its results become
+ *             meaningless once they are gone, so deleting is reasonable.
+ * SHARED     — other institutes sat it too. Deleting would silently remove a
+ *             slice of a cross-institute exam's history.
+ *
+ * Read-only; safe to call whenever.
+ */
+export const getInstitutePurgePreview = onCall<{ instituteId: string }>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    if ((request.auth.token.role as string) !== 'webOwner') {
+      throw new HttpsError('permission-denied', 'Only the Web Owner may inspect an institute purge.');
+    }
+    const { instituteId } = request.data || ({} as never);
+    if (!instituteId) throw new HttpsError('invalid-argument', 'instituteId is required.');
+
+    const db = getFirestore();
+
+    // Every assessment this tenant's students have attempted.
+    const attemptSnap = await db.collection('attempts')
+      .where('instituteId', '==', instituteId)
+      .select('assessmentId')
+      .get();
+    const assessmentIds = Array.from(
+      new Set(attemptSnap.docs.map((d) => d.get('assessmentId') as string).filter(Boolean)),
+    );
+
+    const rows: Array<{
+      assessmentId: string;
+      title: string | null;
+      ownAttempts: number;
+      otherInstituteAttempts: number | null;
+      exclusive: boolean;
+    }> = [];
+
+    for (const id of assessmentIds) {
+      const aSnap = await db.collection('assessments').doc(id).get();
+      // Only webOwner-owned assessments are a question at all — the
+      // institute's own go unconditionally, and there is nothing to decide.
+      if (!aSnap.exists || aSnap.get('ownerType') !== 'webOwner') continue;
+
+      const own = attemptSnap.docs.filter((d) => d.get('assessmentId') === id).length;
+      let total: number | null = null;
+      try {
+        const totalSnap = await db.collection('attempts')
+          .where('assessmentId', '==', id).count().get();
+        total = totalSnap.data().count;
+      } catch (err) {
+        console.error('purge preview: total count failed', id, err);
+      }
+
+      rows.push({
+        assessmentId: id,
+        title: (aSnap.get('title') as string) ?? null,
+        ownAttempts: own,
+        otherInstituteAttempts: total === null ? null : Math.max(0, total - own),
+        // Unknown totals are treated as SHARED — the conservative reading,
+        // since wrongly marking something exclusive invites its deletion.
+        exclusive: total !== null && total - own <= 0,
+      });
+    }
+
+    return { ok: true as const, instituteId, assessments: rows };
+  },
+);
+
 /**
  * Perform an account deletion. THE ONE PLACE THIS HAPPENS.
  *
@@ -496,6 +760,8 @@ async function performAccountDeletion(
     reason?: string | null;
     /** Faculty only — successor chosen by the admin, validated at execution. */
     successorId?: string | null;
+    /** Institute only — what the cascade actually removed, for the audit row. */
+    impact?: Record<string, number> | null;
   },
 ): Promise<void> {
   const { role, uid, profileRef } = params;
@@ -571,6 +837,7 @@ async function performAccountDeletion(
     instituteId: params.targetInstituteId,
     requestId: params.requestId ?? null,
     reason: params.reason ?? null,
+    impact: params.impact ?? null,
     succession: succession
       ? {
           fromOwnerType: 'faculty',
@@ -591,7 +858,8 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
     const callerRole = request.auth.token.role as Role | undefined;
     const callerInstituteId = request.auth.token.instituteId as string | undefined;
 
-    const { role, uid, successorId, confirmLiveOwnership } =
+    const { role, uid, successorId, confirmLiveOwnership,
+            deleteAttemptsOnWebOwnerAssessments } =
       request.data || ({} as DeleteAuthUserData);
     if (!role || !COLLECTION_BY_ROLE[role]) throw new HttpsError('invalid-argument', 'Invalid role.');
     if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
@@ -693,6 +961,17 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
       }
     }
 
+    // ── Institute cascade (Feature #15, Phase 5b) ──────────────────
+    // Runs BEFORE the institute doc goes. Everything below is reachable only
+    // via instituteId; if the parent were removed first and this then failed,
+    // the remainder would be unreachable orphans with nothing pointing at them.
+    let cascadeCounts: Record<string, number> | null = null;
+    if (role === 'institute') {
+      cascadeCounts = await performInstituteCascade(db, uid, {
+        deleteAttemptsOnWebOwnerAssessments,
+      });
+    }
+
     await performAccountDeletion(db, {
       role,
       uid,
@@ -703,6 +982,7 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
       actorUid: actorFrom(request).actorUid,
       actorRole: actorFrom(request).actorRole,
       successorId: successorId ?? null,
+      impact: cascadeCounts,
     });
 
     return { ok: true };

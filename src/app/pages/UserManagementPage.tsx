@@ -22,6 +22,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../lib/firebase';
 import { DeletionImpactPanel } from '../components/DeletionImpactPanel';
 import { DeletionApprovalsInbox } from '../components/DeletionApprovalsInbox';
+import { InstitutePurgePanel } from '../components/InstitutePurgePanel';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -503,6 +504,9 @@ export function UserManagementPage() {
 
   // Delete (per-row) — requires Web Owner password
   const [deletingId, setDeletingId]           = useState<string | null>(null);
+  // Feature #15 Phase 5b — webOwner-owned assessments whose attempts the
+  // Web Owner opted to delete along with the institute. Empty = keep all.
+  const [purgeSelection, setPurgeSelection] = useState<string[]>([]);
   const [deletePassword, setDeletePassword]   = useState('');
   const [deletePassVisible, setDeletePassVisible] = useState(false);
   const [deletePassError, setDeletePassError] = useState('');
@@ -557,6 +561,7 @@ export function UserManagementPage() {
   useEffect(() => {
     if (deletingId) {
       setDeletePassword(''); setDeletePassError(''); setDeletePassVisible(false);
+      setPurgeSelection([]);
       setTimeout(() => deleteInputRef.current?.focus(), 60);
     }
   }, [deletingId]);
@@ -646,11 +651,20 @@ export function UserManagementPage() {
     if (!deletingId) return;
     setDeleteLoading(true);
     try {
-      const deleteAuthUser = httpsCallable<{ role: string; uid: string }, { ok: boolean }>(
+      const deleteAuthUser = httpsCallable<
+        { role: string; uid: string; deleteAttemptsOnWebOwnerAssessments?: string[] },
+        { ok: boolean }
+      >(
         functions,
         'deleteAuthUser'
       );
-      await deleteAuthUser({ role: 'institute', uid: deletingId });
+      await deleteAuthUser({
+        role: 'institute',
+        uid: deletingId,
+        // Feature #15 Phase 5b — empty unless the Web Owner explicitly opted
+        // in per assessment. Omitting it keeps every platform-exam result.
+        deleteAttemptsOnWebOwnerAssessments: purgeSelection.length ? purgeSelection : undefined,
+      });
       setInstitutes((prev) => prev.filter((i) => i.id !== deletingId));
       setDeletingId(null);
       setLastSynced(new Date());
@@ -910,6 +924,13 @@ export function UserManagementPage() {
                               whether to type it at all, not appear after the
                               decision is already made. */}
                           <DeletionImpactPanel entityType="institute" entityId={institute.id} />
+                          <div className="mt-2">
+                            <InstitutePurgePanel
+                              instituteId={institute.id}
+                              selected={purgeSelection}
+                              onChange={setPurgeSelection}
+                            />
+                          </div>
                           <div className="flex items-center gap-1.5">
                             <ShieldAlert size={11} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />
                             <span className="text-xs" style={{ color: '#9B2828', letterSpacing: '0.04em' }}>

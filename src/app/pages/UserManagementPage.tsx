@@ -24,6 +24,7 @@ import { DeletionImpactPanel } from '../components/DeletionImpactPanel';
 import { DeletionApprovalsInbox } from '../components/DeletionApprovalsInbox';
 import { TrashPanel } from '../components/TrashPanel';
 import { SubjectRequestsInbox } from '../components/SubjectRequestsInbox';
+import { ErasurePolicyPanel } from '../components/ErasurePolicyPanel';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -490,7 +491,7 @@ function SkeletonRow() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function UserManagementPage() {
-  const { verifyPassword } = useAuth();
+  const { verifyPassword, user } = useAuth();
   const navigate = useNavigate();
 
   const [institutes, setInstitutes] = useState<Institute[]>([]);
@@ -804,8 +805,21 @@ export function UserManagementPage() {
             deletion inbox because both are "things awaiting a decision", and
             an admin should have one place to look. */}
         <div className="mb-5">
-          <SubjectRequestsInbox />
+          <SubjectRequestsInbox canErase />
         </div>
+
+        {/* Feature #15 Phase 7c — the two values that arm erasure. Until both
+            are set the server refuses every erasure, which is deliberate:
+            they are legal answers, not engineering ones. */}
+        {user?.uid && (
+          <div className="mb-5 px-3 py-3"
+            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
+            <p className="text-xs mb-2" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>
+              ERASURE POLICY
+            </p>
+            <ErasurePolicyPanel webOwnerUid={user.uid} />
+          </div>
+        )}
 
         {/* Feature #15 Phase 6a — deleted records are recoverable now, so the
             trash needs a home. Web Owner sees every tenant and is the only

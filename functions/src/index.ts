@@ -1947,6 +1947,267 @@ export const resolveDeletionRequest = onCall<{
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// ERASURE EXECUTION (Feature #15, Phase 7c)
+//
+// THE MOST DESTRUCTIVE CODE IN THE PLATFORM. It is the only path besides
+// institute purge permitted to touch attempt data, and unlike everything else
+// in Feature #15 it is deliberately irreversible — it bypasses the retention
+// window entirely, because a person exercising an erasure right should not
+// have their data sit recoverable for another 30 days.
+//
+// SHIPS INERT. platformSettings/erasure holds two values:
+//
+//   retentionYears : how long exam records must be kept
+//   mode           : 'delete' | 'anonymize'
+//
+// UNSET MEANS REFUSE. Until a human writes both, every erasure is rejected
+// with "Retention policy not configured." Those two values are legal answers,
+// not engineering ones, so the code declines to guess at them — the same
+// fail-closed posture as scheduledPurge's dry-run default.
+//
+// FIVE GATES, IN ORDER (§6.1 of the spec)
+//   1. Web Owner only. Not delegable — no ceiling entry exists for erasure.
+//   2. An OPEN erasure request must exist. No ad-hoc destruction.
+//   3. Policy configured, else refuse.
+//   4. Retention window: if the subject has attempts inside it, refuse BY
+//      DEFAULT. Overridable only with an explicit acknowledgement, which is
+//      recorded in the decision text.
+//   5. Typed confirmation of the subject's name.
+//
+// THE AUDIT PARADOX
+// Erasing someone while logging "webOwner erased <name>" creates a fresh
+// record of the person just erased. So the surviving audit row keeps a
+// reference, a date and an entity type — NO name, no email, no label — and
+// the subjectRequests row is redacted the same way. This is the ONE place in
+// Feature #15 where the trail is deliberately made less complete. It is not a
+// bug and must not be "fixed".
+// ═══════════════════════════════════════════════════════════════════
+
+type ErasureMode = 'delete' | 'anonymize';
+
+type ErasurePolicy = {
+  retentionYears?: number;
+  mode?: ErasureMode;
+  configuredBy?: string;
+  configuredAt?: string;
+};
+
+async function readErasurePolicy(
+  db: FirebaseFirestore.Firestore,
+): Promise<ErasurePolicy | null> {
+  try {
+    const snap = await db.collection('platformSettings').doc('erasure').get();
+    return snap.exists ? (snap.data() as ErasurePolicy) : null;
+  } catch (err) {
+    // Unreadable policy ⇒ treated as unconfigured. The safe reading of
+    // "I don't know what the rules are" is "do not destroy anything".
+    console.error('readErasurePolicy failed', err);
+    return null;
+  }
+}
+
+function policyIsConfigured(p: ErasurePolicy | null): boolean {
+  return !!p
+    && typeof p.retentionYears === 'number'
+    && p.retentionYears >= 0
+    && (p.mode === 'delete' || p.mode === 'anonymize');
+}
+
+/**
+ * The subject's most recent attempt, or null if they have none / it cannot be
+ * determined. Fails CLOSED: an unreadable query returns a sentinel that keeps
+ * the record inside the retention window, so uncertainty blocks erasure
+ * rather than permitting it.
+ */
+async function latestAttemptAt(
+  db: FirebaseFirestore.Firestore,
+  studentId: string,
+): Promise<{ iso: string | null; unknown: boolean }> {
+  try {
+    const snap = await db.collection('attempts')
+      .where('studentId', '==', studentId)
+      .select('startedAt')
+      .get();
+    if (snap.empty) return { iso: null, unknown: false };
+    let latest = '';
+    for (const d of snap.docs) {
+      const v = (d.get('startedAt') as string) ?? '';
+      if (v > latest) latest = v;
+    }
+    return { iso: latest || null, unknown: false };
+  } catch (err) {
+    console.error('latestAttemptAt failed', studentId, err);
+    return { iso: null, unknown: true };
+  }
+}
+
+/** Strip identity from a subject's attempts, keeping them as statistical rows. */
+async function anonymizeAttempts(
+  db: FirebaseFirestore.Firestore,
+  studentId: string,
+): Promise<number> {
+  let touched = 0;
+  try {
+    const snap = await db.collection('attempts').where('studentId', '==', studentId).get();
+    let batch = db.batch();
+    let n = 0;
+    for (const d of snap.docs) {
+      batch.update(d.ref, {
+        // The link is SEVERED, not remapped. Keeping any mapping back to the
+        // person would make this pseudonymisation, which does not satisfy an
+        // erasure right.
+        studentId: `erased:${d.id}`,
+        studentName: 'Erased',
+        anonymizedAt: new Date().toISOString(),
+      });
+      touched++;
+      if (++n >= 400) { await batch.commit(); batch = db.batch(); n = 0; }
+    }
+    if (n > 0) await batch.commit();
+  } catch (err) {
+    console.error('anonymizeAttempts failed', studentId, err);
+  }
+  return touched;
+}
+
+export const executeErasure = onCall<{
+  requestId: string;
+  /** Must exactly match the subject's stored name. */
+  confirmName: string;
+  /** Required to proceed when attempts sit inside the retention window. */
+  acknowledgeRetentionOverride?: boolean;
+  /** Recorded verbatim on the request before it is redacted. */
+  decision?: string;
+}>({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+  const actor = actorFrom(request);
+  // GATE 1 — Web Owner only, and deliberately not delegable.
+  if (actor.actorRole !== 'webOwner') {
+    throw new HttpsError('permission-denied', 'Only the Web Owner may carry out an erasure.');
+  }
+
+  const { requestId, confirmName, acknowledgeRetentionOverride, decision } =
+    request.data || ({} as never);
+  if (!requestId) throw new HttpsError('invalid-argument', 'requestId is required.');
+
+  const db = getFirestore();
+
+  // GATE 2 — an open erasure request must exist. No ad-hoc destruction.
+  const reqRef = db.collection('subjectRequests').doc(requestId);
+  const reqSnap = await reqRef.get();
+  if (!reqSnap.exists) throw new HttpsError('not-found', 'Request not found.');
+  const req = reqSnap.data() as Record<string, unknown>;
+  if (req.type !== 'erasure') {
+    throw new HttpsError('failed-precondition', 'That request is not an erasure request.');
+  }
+  if (req.status !== 'open') {
+    throw new HttpsError('failed-precondition', 'This request has already been decided.');
+  }
+
+  // GATE 3 — policy configured, else refuse.
+  const policy = await readErasurePolicy(db);
+  if (!policyIsConfigured(policy)) {
+    throw new HttpsError(
+      'failed-precondition',
+      'ERASURE_POLICY_NOT_CONFIGURED',
+    );
+  }
+  const mode = policy!.mode as ErasureMode;
+  const retentionYears = policy!.retentionYears as number;
+
+  const subjectRole = req.subjectRole as Role;
+  const subjectId = req.subjectId as string;
+  const profileRef = db.collection(COLLECTION_BY_ROLE[subjectRole]).doc(subjectId);
+  const profileSnap = await profileRef.get();
+  if (!profileSnap.exists) throw new HttpsError('not-found', 'Subject no longer exists.');
+  const profile = profileSnap.data() as Record<string, unknown>;
+
+  // GATE 5 — typed confirmation. Checked before the retention gate so a
+  // mistyped name never reaches the override path.
+  const storedName = ((profile.name as string) || '').trim();
+  if (!confirmName || confirmName.trim() !== storedName) {
+    throw new HttpsError('invalid-argument', 'The typed name does not match this person.');
+  }
+
+  // GATE 4 — retention window. Refuse by default; override must be explicit
+  // and is recorded.
+  let retentionNote = '';
+  if (subjectRole === 'student' && retentionYears > 0) {
+    const { iso, unknown } = await latestAttemptAt(db, subjectId);
+    const cutoff = new Date();
+    cutoff.setUTCFullYear(cutoff.getUTCFullYear() - retentionYears);
+
+    const insideWindow = unknown || (iso !== null && Date.parse(iso) >= cutoff.getTime());
+    if (insideWindow && !acknowledgeRetentionOverride) {
+      throw new HttpsError(
+        'failed-precondition',
+        unknown
+          ? 'RETENTION_UNKNOWN'
+          : `RETENTION_WINDOW_ACTIVE:${iso}`,
+      );
+    }
+    if (insideWindow) {
+      retentionNote = unknown
+        ? ' [retention status could not be determined; override acknowledged]'
+        : ` [within ${retentionYears}-year retention window; override acknowledged]`;
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const counts: Record<string, number> = {};
+
+  // ── Attempts: the one thing ordinary deletion never touches ──────
+  if (subjectRole === 'student') {
+    if (mode === 'anonymize') {
+      counts.attemptsAnonymized = await anonymizeAttempts(db, subjectId);
+    } else {
+      counts.attemptsDeleted = await purgeWhere(db, 'attempts', 'studentId', subjectId);
+    }
+    counts.questionReports = await purgeWhere(db, 'questionReports', 'studentId', subjectId);
+    counts.assessmentMembers = await purgeWhere(db, 'assessmentMembers', 'studentId', subjectId);
+  }
+
+  // ── The account itself, via the one place deletion happens ───────
+  await performAccountDeletion(db, {
+    role: subjectRole,
+    uid: subjectId,
+    profileRef,
+    // NO LABEL. This is the audit paradox resolution: the surviving row must
+    // not name the person it records the erasure of.
+    auditLabel: null,
+    auditFromState:
+      (profile.lifecycleState as LifecycleStateS) ??
+      (profile.isDeleted === true ? 'softDeleted' : 'active'),
+    targetInstituteId: (profile.instituteId as string) ?? null,
+    actorUid: actor.actorUid,
+    actorRole: actor.actorRole,
+    reason: `Erasure request ${requestId}${retentionNote}`,
+    requestId,
+    impact: counts,
+  });
+
+  // ── Redact the request row ───────────────────────────────────────
+  // Keeps enough to prove the request was received and honoured — id, dates,
+  // who decided, and the reason — and drops everything that identifies who it
+  // concerned. Deliberately less complete than every other record in this
+  // feature.
+  await reqRef.update({
+    status: 'erased',
+    subjectId: FieldValue.delete(),
+    subjectLabel: FieldValue.delete(),
+    basis: FieldValue.delete(),
+    redacted: true,
+    decision: `${(decision ?? 'Erased under data-subject request').trim()}${retentionNote}`,
+    decidedBy: actor.actorUid,
+    decidedAt: nowIso,
+    updatedAt: nowIso,
+  });
+
+  return { ok: true as const, mode, counts };
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // SUBJECT REQUESTS — access & erasure requests (Feature #15, Phase 7b)
 //
 // RECORDS DECISIONS. DESTROYS NOTHING. No policy configuration required.

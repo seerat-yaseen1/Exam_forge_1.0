@@ -21,6 +21,7 @@
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { defineSecret } from 'firebase-functions/params';
 
@@ -1005,6 +1006,145 @@ export const purgeEntity = onCall<{
 
   return { ok: true as const, purged: role, uid, counts: cascadeCounts };
 });
+
+// ── Scheduled purge (Feature #15, Phase 6b) ───────────────────────
+//
+// Destroys soft-deleted records whose retention window has expired.
+//
+// THIS IS THE MOST DANGEROUS CODE IN THE FEATURE. A timer that hard-deletes
+// tenants, unattended, with nobody watching. So it is built to be timid:
+//
+//   • DRY RUN BY DEFAULT. It logs exactly what it WOULD purge and changes
+//     nothing. Flipping it on is a deliberate act — set the platform flag
+//     platformSettings/lifecycle.purgeEnabled to true — not something that
+//     happens because the code shipped.
+//   • FAILS CLOSED on every uncertainty. Missing purgeAfter, unparseable
+//     purgeAfter, a record that is not softDeleted, or a lifecycleState the
+//     job does not recognise: all skipped. A record is destroyed only when
+//     the evidence positively says it is due.
+//   • CAPPED PER RUN. A bug that made everything look eligible can damage at
+//     most PURGE_BATCH_LIMIT records before someone sees the logs.
+//   • INSTITUTES ARE NEVER AUTO-PURGED. Their blast radius is a whole tenant
+//     — every faculty member, student, assessment and attempt. That decision
+//     stays with a human. The job reports them as due and leaves them alone.
+//
+// Everything it does route through the same performInstituteCascade /
+// performAccountDeletion used by the manual path, so there is no second
+// implementation of destruction to keep in sync.
+
+const PURGE_BATCH_LIMIT = 50;
+
+/** Roles the scheduled job may purge on its own. Institutes deliberately absent. */
+const AUTO_PURGEABLE_ROLES: Role[] = ['faculty', 'student'];
+
+async function isPurgeEnabled(db: FirebaseFirestore.Firestore): Promise<boolean> {
+  try {
+    const snap = await db.collection('platformSettings').doc('lifecycle').get();
+    return snap.exists && snap.get('purgeEnabled') === true;
+  } catch (err) {
+    // Unreadable flag ⇒ stay in dry run. The safe reading of "I don't know".
+    console.error('purge: could not read platformSettings/lifecycle', err);
+    return false;
+  }
+}
+
+/** Is this record positively due for purge? Fails closed on every doubt. */
+function isDueForPurge(data: Record<string, unknown>, now: Date): boolean {
+  if (data.lifecycleState !== 'softDeleted') return false;
+  const after = data.purgeAfter;
+  if (typeof after !== 'string' || !after) return false;
+  const t = Date.parse(after);
+  if (Number.isNaN(t)) return false;
+  return now.getTime() >= t;
+}
+
+export const scheduledPurge = onSchedule(
+  { schedule: 'every day 03:00', timeZone: 'Etc/UTC', region: 'us-central1' },
+  async () => {
+    const db = getFirestore();
+    const now = new Date();
+    const live = await isPurgeEnabled(db);
+
+    console.log(`[scheduledPurge] start — mode=${live ? 'LIVE' : 'DRY RUN'}`);
+
+    let examined = 0;
+    let purged = 0;
+    const skipped: string[] = [];
+
+    for (const role of AUTO_PURGEABLE_ROLES) {
+      const col = COLLECTION_BY_ROLE[role];
+      let snap;
+      try {
+        snap = await db.collection(col)
+          .where('lifecycleState', '==', 'softDeleted')
+          .limit(PURGE_BATCH_LIMIT)
+          .get();
+      } catch (err) {
+        console.error(`[scheduledPurge] query failed for ${col}`, err);
+        continue;
+      }
+
+      for (const doc of snap.docs) {
+        examined++;
+        const data = doc.data() as Record<string, unknown>;
+
+        if (!isDueForPurge(data, now)) {
+          skipped.push(`${role}/${doc.id} (not due)`);
+          continue;
+        }
+        if (purged >= PURGE_BATCH_LIMIT) {
+          console.warn('[scheduledPurge] batch limit reached — remainder deferred to next run');
+          break;
+        }
+
+        const label = (data.name as string) || (data.email as string) || null;
+
+        if (!live) {
+          console.log(`[scheduledPurge] WOULD PURGE ${role}/${doc.id} (${label ?? 'unnamed'}) — purgeAfter ${data.purgeAfter}`);
+          purged++;
+          continue;
+        }
+
+        try {
+          await performAccountDeletion(db, {
+            role,
+            uid: doc.id,
+            profileRef: doc.ref,
+            auditLabel: label,
+            auditFromState: 'softDeleted',
+            targetInstituteId: (data.instituteId as string) ?? null,
+            actorUid: 'system:scheduledPurge',
+            actorRole: 'system',
+            reason: 'Retention window expired',
+            successorId: (data.pendingSuccessorId as string | null) ?? null,
+          });
+          purged++;
+          console.log(`[scheduledPurge] purged ${role}/${doc.id}`);
+        } catch (err) {
+          console.error(`[scheduledPurge] FAILED on ${role}/${doc.id}`, err);
+        }
+      }
+    }
+
+    // Institutes are reported, never acted on — a human decides.
+    try {
+      const instSnap = await db.collection('institutes')
+        .where('lifecycleState', '==', 'softDeleted')
+        .limit(PURGE_BATCH_LIMIT)
+        .get();
+      for (const d of instSnap.docs) {
+        if (isDueForPurge(d.data() as Record<string, unknown>, now)) {
+          console.warn(`[scheduledPurge] institute ${d.id} is past its retention window — awaiting manual purge (never automatic)`);
+        }
+      }
+    } catch (err) {
+      console.error('[scheduledPurge] institute survey failed', err);
+    }
+
+    console.log(`[scheduledPurge] done — examined=${examined} ${live ? 'purged' : 'would purge'}=${purged} skipped=${skipped.length}`);
+    if (skipped.length) console.log('[scheduledPurge] skipped:', skipped.join(', '));
+  },
+);
 
 /**
  * Perform an account deletion. THE ONE PLACE THIS HAPPENS.

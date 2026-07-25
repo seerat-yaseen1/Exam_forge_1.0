@@ -159,7 +159,13 @@ service cloud.firestore {
                        || (signedIn() && request.auth.token.instituteId == instituteId);
       allow create: if isWebOwner();
       allow update: if isWebOwner() || isInstituteSelf(instituteId);
-      allow delete: if isWebOwner();
+      // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
+      // removal now goes through the deleteAuthUser / purgeEntity callables,
+      // which enforce the deletion-rights ceiling, write the audit row and
+      // run the cascade. A client-side delete would bypass all three.
+      // Verified before locking: no call site in src/ deletes these
+      // collections directly (deleteInstitute was imported but never called).
+      allow delete: if false;
     }
 
     // instituteCredentials — only holds firstLoginRequired + migration
@@ -170,7 +176,13 @@ service cloud.firestore {
       allow read:   if isWebOwner() || isInstituteSelf(instituteId);
       allow create: if isWebOwner();
       allow update: if isWebOwner() || isInstituteSelf(instituteId);
-      allow delete: if isWebOwner();
+      // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
+      // removal now goes through the deleteAuthUser / purgeEntity callables,
+      // which enforce the deletion-rights ceiling, write the audit row and
+      // run the cascade. A client-side delete would bypass all three.
+      // Verified before locking: no call site in src/ deletes these
+      // collections directly (deleteInstitute was imported but never called).
+      allow delete: if false;
     }
 
     // Logo upload: institute admin manages own; webOwner override; structural
@@ -215,8 +227,13 @@ service cloud.firestore {
       // clause let any faculty member set canCreateStudents on themselves.
       allow update: if isWebOwner()
                        || isInstituteOf(resource.data.instituteId);
-      allow delete: if isWebOwner()
-                       || isInstituteOf(resource.data.instituteId);
+      // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
+      // removal now goes through the deleteAuthUser / purgeEntity callables,
+      // which enforce the deletion-rights ceiling, write the audit row and
+      // run the cascade. A client-side delete would bypass all three.
+      // Verified before locking: no call site in src/ deletes these
+      // collections directly (deleteInstitute was imported but never called).
+      allow delete: if false;
     }
 
     match /facultyCredentials/{facultyId} {
@@ -240,11 +257,13 @@ service cloud.firestore {
                             exists(/databases/$(database)/documents/faculty/$(facultyId))
                             && isInstituteOf(get(/databases/$(database)/documents/faculty/$(facultyId)).data.instituteId)
                           );
-      allow delete: if isWebOwner()
-                       || (
-                            exists(/databases/$(database)/documents/faculty/$(facultyId))
-                            && isInstituteOf(get(/databases/$(database)/documents/faculty/$(facultyId)).data.instituteId)
-                          );
+      // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
+      // removal now goes through the deleteAuthUser / purgeEntity callables,
+      // which enforce the deletion-rights ceiling, write the audit row and
+      // run the cascade. A client-side delete would bypass all three.
+      // Verified before locking: no call site in src/ deletes these
+      // collections directly (deleteInstitute was imported but never called).
+      allow delete: if false;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -273,10 +292,13 @@ service cloud.firestore {
       // N4: isStudentSelf removed from update — no client code self-writes
       // the profile doc (contexts write studentCredentials only), and the
       // clause let a disabled student flip their own status back to active.
-      allow delete: if isWebOwner()
-                       || isInstituteOf(resource.data.instituteId)
-                       || (role() == 'faculty'
-                           && request.auth.token.instituteId == resource.data.instituteId);
+      // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
+      // removal now goes through the deleteAuthUser / purgeEntity callables,
+      // which enforce the deletion-rights ceiling, write the audit row and
+      // run the cascade. A client-side delete would bypass all three.
+      // Verified before locking: no call site in src/ deletes these
+      // collections directly (deleteInstitute was imported but never called).
+      allow delete: if false;
     }
 
     match /studentCredentials/{studentId} {
@@ -312,15 +334,13 @@ service cloud.firestore {
                                      && request.auth.token.instituteId == get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
                                )
                           );
-      allow delete: if isWebOwner()
-                       || (
-                            exists(/databases/$(database)/documents/students/$(studentId))
-                            && (
-                                 isInstituteOf(get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
-                                 || (role() == 'faculty'
-                                     && request.auth.token.instituteId == get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
-                               )
-                          );
+      // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
+      // removal now goes through the deleteAuthUser / purgeEntity callables,
+      // which enforce the deletion-rights ceiling, write the audit row and
+      // run the cascade. A client-side delete would bypass all three.
+      // Verified before locking: no call site in src/ deletes these
+      // collections directly (deleteInstitute was imported but never called).
+      allow delete: if false;
     }
 
     // ═════════════════════════════════════════════════════════════════════════

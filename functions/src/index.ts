@@ -3702,6 +3702,7 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
     const assessment = aSnap.data() as GradingAssessmentDoc & {
       status?: string;
       assignedTo?: { type: string; instituteIds?: string[]; studentIds?: string[] };
+      blockedStudents?: string[];
     };
 
     // AuthZ — assigned & published, OR the student already has an attempt
@@ -3768,10 +3769,80 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
         createdAt?: string;
       })
       .sort((x, y) => (y.createdAt ?? '').localeCompare(x.createdAt ?? ''))[0];
+
+    // ── S-01 (audit 2026-07-26) — no paper without a live sitting ─────
+    // Before this gate, `published && assigned` was sufficient to receive the
+    // whole paper. AssessmentStatus has no 'scheduled' state (draft|active|
+    // closed), so an exam published for next week is 'active' today: every
+    // assigned student could download the entire question set before it
+    // opened, with no attempt and — because the SEB check below keyed off
+    // `liveAttempt?.status === 'in_progress'`, undefined when no attempt
+    // exists — without Safe Exam Browser either.
+    //
+    // The fix is to require a live attempt rather than to re-list startExam's
+    // schedule checks. A live attempt can only exist because startExam
+    // admitted it, and startExam gates on startDate, endDate, maxAttempts,
+    // blockedStudents, targeting, device class, camera and SEB (:4461-4558).
+    // Requiring one is therefore strictly stronger than re-checking the
+    // schedule here, and it cannot drift from startExam the way a duplicated
+    // copy of those checks would.
+    //
+    // Deliberately NOT re-checking startDate/endDate: those are evaluated at
+    // admission, and re-evaluating them on every fetch would cut off a student
+    // who is legitimately mid-exam when the window closes or when staff edit
+    // the schedule underneath them. ExamShell:872 states the same rule from
+    // the client side — "once started, letting a running attempt continue is
+    // the right thing."
+    //
+    // blockedStudents IS re-checked, because unlike the schedule it is a live
+    // invigilation action: a student blocked mid-exam must stop being able to
+    // re-fetch the paper on reload.
+    //
+    // 'frozen' counts as live. It is a paused sitting, not a finished one, and
+    // both startExam (:4547-4550) and ExamShell (:876, :901) already treat
+    // in_progress|frozen as the live pair. Gating on 'in_progress' alone would
+    // break resume for any student an invigilator has frozen.
+    //
+    // Both modes are gated. 'review' is NOT a safe default: the authz check
+    // above passes on `published && assigned` alone, so a caller who simply
+    // sends mode:'review' would otherwise walk out with the same paper the
+    // live-attempt requirement is meant to protect. Review therefore requires
+    // an attempt to exist — proof the student actually sat the paper.
+    //
+    // hasAttempt (any status), not hasFinishedAttempt: it mirrors the client's
+    // own precondition (ExamResultsPage:327 gates on `att &&`), and it is
+    // already sufficient here — creating an attempt at all means clearing
+    // every startExam gate, so a caller who can do that could equally read the
+    // paper through exam mode. Requiring 'finished' would buy no security and
+    // would break a student who opens results with a sitting still open.
+    if (mode === 'review') {
+      if (!hasAttempt) {
+        throw new HttpsError('failed-precondition', 'You have not sat this exam.');
+      }
+    } else {
+      if ((assessment.blockedStudents ?? []).includes(studentId)) {
+        throw new HttpsError('permission-denied', 'This exam is not available to you.');
+      }
+      const liveStatus = liveAttempt?.status;
+      if (liveStatus !== 'in_progress' && liveStatus !== 'frozen') {
+        throw new HttpsError(
+          'failed-precondition',
+          'Start the exam before fetching questions.',
+        );
+      }
+    }
+
     // Phase 3 — gate the LIVE exam fetch only. 'review' runs after submission,
     // when the student has quit SEB; requiring SEB there would make results
     // permanently unviewable.
-    if (mode !== 'review' && liveAttempt?.status === 'in_progress') {
+    //
+    // S-01: the gate above guarantees a live attempt in every non-review call,
+    // so this no longer needs its own status test — and dropping that test is
+    // what closes the frozen-resume hole, where SEB was previously skipped.
+    // The attempt's FROZEN securityConfig.requireSEB is still the input, never
+    // the client's claim; ExamShell arms the token manager at :867 on the
+    // resume path too, so a frozen resume carries a proof.
+    if (mode !== 'review') {
       assertSEB(request.data?.sebToken, request.auth.uid, liveAttempt?.securityConfig?.requireSEB, assessmentId);
     }
 

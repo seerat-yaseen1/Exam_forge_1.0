@@ -12,7 +12,7 @@ import {
 } from './bulkUploadParser';
 import { getAllSubjects, getAllTopics, ensureSubject, bumpTaxonomyCounts, type Subject, type Topic } from '../../../lib/subjectService';
 import {
-  createQuestion, getDuplicateCheckPool,
+  createQuestion, createQuestionsBulkAsRole, getDuplicateCheckPool,
   type QuestionOwnerType, type Question,
 } from '../../../lib/questionBankService';
 import { pct as fmtPct } from '../../../lib/duplicateDetection';
@@ -576,6 +576,8 @@ function Step3({
 
 // ── Step 4 — Saving ───────────────────────────────────────────────────────────
 
+const MAX_UPLOAD_ROWS = 500;
+
 function Step4({
   rows,
   subjects,
@@ -607,38 +609,85 @@ function Step4({
       const subjectCache = [...subjects];
       let savedCount  = 0;
       let skippedCount = 0;
-      const subjectDeltas = new Map<string, number>();
-      const topicDeltas   = new Map<string, number>();
 
+      // ── Phase 1: resolve subjects, build payloads ────────────────
+      // Stays client-side and per-row. ensureSubject only touches the network
+      // for a subject it has not seen, so a file with a handful of distinct
+      // subjects resolves in a handful of calls regardless of row count.
+      const payloads: QuestionDraft[] = [];
       for (const row of rows) {
         try {
-          // Ensure subject exists (creates if new)
           const { canonicalName } = await ensureSubject(row.draft.subject ?? '', subjectCache);
           const draft = { ...row.draft, subject: canonicalName } as QuestionDraft;
-          const created = await createQuestion({
+          payloads.push({
             ...draft,
             ...(ownerType ? { ownerType, ownerId: ownerId ?? ownerType } : {}),
             // Tenant stamp: institute/faculty-authored questions carry the
             // author's institute (rules validate it); webOwner content never
             // carries one.
             ...(ownerType && ownerType !== 'webOwner' && instituteId ? { instituteId } : {}),
-          }, { skipCounterBump: true });
-          if (created.subjectId) subjectDeltas.set(created.subjectId, (subjectDeltas.get(created.subjectId) ?? 0) + 1);
-          if (created.topicId)   topicDeltas.set(created.topicId, (topicDeltas.get(created.topicId) ?? 0) + 1);
-          savedCount++;
+          } as QuestionDraft);
         } catch (err: any) {
-          console.warn(`[BulkUpload] skipped row ${row.rowIndex}:`, err?.message);
+          console.warn(`[BulkUpload] subject resolution failed for row ${row.rowIndex}:`, err?.message);
           skippedCount++;
+          setDone((d) => d + 1);
         }
-        setDone((d) => d + 1);
       }
 
-      // One counter write per subject/topic instead of one per question.
-      for (const [subjectId, delta] of subjectDeltas) {
-        await bumpTaxonomyCounts({ subjectId }, delta);
-      }
-      for (const [topicId, delta] of topicDeltas) {
-        await bumpTaxonomyCounts({ topicId }, delta);
+      // ── Phase 2: write ───────────────────────────────────────────
+      // Audit S-02. This used to be one direct createQuestion per row for
+      // EVERY role, which meant bulk upload bypassed the question-rights model
+      // outright: a faculty member with no create grant could not add one
+      // question through the UI but could import a thousand here. Institute
+      // and faculty now go through createQuestionsBulkAsRole, which applies
+      // the same ceiling and grant check as single-create — once per chunk
+      // rather than once per row, so the fix costs nothing in speed.
+      //
+      // webOwner keeps the direct path. assertQuestionRight resolves an
+      // institute-or-faculty owner and has no webOwner branch by design — the
+      // ceiling exists to constrain tenants, and the platform owner is who
+      // sets it. This mirrors Phase 2A, where single-create made the same
+      // split for the same reason.
+      const useRightsGatedPath = !!ownerType && ownerType !== 'webOwner';
+
+      if (useRightsGatedPath) {
+        const res = await createQuestionsBulkAsRole(
+          payloads.map((q) => ({
+            question: q as any,
+            subjectId: (q as any).subjectId ?? null,
+            topicId:   (q as any).topicId   ?? null,
+          })),
+          (doneCount) => setDone(skippedCount + doneCount),
+        );
+        savedCount   = res.ids.length;
+        skippedCount += res.skipped;
+        // Taxonomy counters are aggregated and bumped server-side by the
+        // callable — deliberately NOT also bumped here, or every count would
+        // be double-applied.
+      } else {
+        const subjectDeltas = new Map<string, number>();
+        const topicDeltas   = new Map<string, number>();
+
+        for (const q of payloads) {
+          try {
+            const created = await createQuestion(q as any, { skipCounterBump: true });
+            if (created.subjectId) subjectDeltas.set(created.subjectId, (subjectDeltas.get(created.subjectId) ?? 0) + 1);
+            if (created.topicId)   topicDeltas.set(created.topicId, (topicDeltas.get(created.topicId) ?? 0) + 1);
+            savedCount++;
+          } catch (err: any) {
+            console.warn('[BulkUpload] skipped a row:', err?.message);
+            skippedCount++;
+          }
+          setDone((d) => d + 1);
+        }
+
+        // One counter write per subject/topic instead of one per question.
+        for (const [subjectId, delta] of subjectDeltas) {
+          await bumpTaxonomyCounts({ subjectId }, delta);
+        }
+        for (const [topicId, delta] of topicDeltas) {
+          await bumpTaxonomyCounts({ topicId }, delta);
+        }
       }
 
       setSaved(savedCount);
@@ -756,6 +805,19 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId, insti
         match: scoreDuplicatesInRows(withSubjects.match, pool),
       };
       const allRows = getAllRows(resolved);
+      // Row cap (audit S-02). There was no limit at all before this — a file of
+      // any size was accepted and written one question at a time. 500 is the
+      // largest import that still behaves like a single action: three chunked
+      // calls, and a failure you can still reason about. Enforced again
+      // server-side per chunk, since a client-side limit is a courtesy rather
+      // than a control.
+      if (allRows.length > MAX_UPLOAD_ROWS) {
+        setParseErr(
+          `This file has ${allRows.length} questions. The limit is ${MAX_UPLOAD_ROWS} per upload — `
+          + `please split it into smaller files.`,
+        );
+        return;
+      }
       const sum = computeSummary(allRows);
       setWorkbook(resolved);
       setSummary(sum);

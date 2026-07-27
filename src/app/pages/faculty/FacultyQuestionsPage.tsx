@@ -5,7 +5,7 @@ import {
   AlertTriangle, Search, Upload, Download, Share2,
 } from 'lucide-react';
 import {
-  getQuestionsByOwner, createQuestion, updateQuestion, softDeleteQuestion,
+  getQuestionsByOwner,
   createQuestionAsRole, editQuestionAsRole, deleteQuestionAsRole,
   questionTypeBadge, difficultyColor,
   type Question, type Difficulty,

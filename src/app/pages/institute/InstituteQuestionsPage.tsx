@@ -5,7 +5,8 @@ import {
   AlertTriangle, Search, Upload, Download,
 } from 'lucide-react';
 import {
-  getQuestionsByOwner, getQuestionsByInstitute, createQuestion, updateQuestion, softDeleteQuestion,
+  getQuestionsByOwner, getQuestionsByInstitute,
+  createQuestionAsRole, editQuestionAsRole, deleteQuestionAsRole,
   questionTypeBadge, difficultyColor,
   type Question, type Difficulty,
 } from '../../../lib/questionBankService';
@@ -559,15 +560,44 @@ export function InstituteQuestionsPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // ── Save handler ──────────────────────────────────────────────────
+  // Audit S-02. These three actions used to write straight to Firestore via
+  // createQuestion / updateQuestion / softDeleteQuestion, which meant the
+  // institute path skipped the question-rights ceiling entirely — an institute
+  // whose ceiling says create is not allowed could still create. Phase 2A
+  // moved the FACULTY page onto the *AsRole callables and this page was never
+  // brought along, so the enforcement existed but only half the callers used
+  // it. The callables apply the same ceiling check server-side and are now the
+  // only write path, since the rules no longer accept these writes from
+  // anyone but the webOwner.
+  //
+  // No request-mode branch here, unlike the faculty page: an institute admin
+  // always resolves to direct mode (assertQuestionRight returns 'direct' for
+  // admins and throws on requireMode 'request'), because request mode means
+  // "ask the institute admin" and there is nobody above them to ask.
   const handleSave = async (draft: QuestionDraft) => {
-    // instituteId = tenant stamp (rules validate it equals the author's institute)
-    const payload = { ...draft, ownerType: 'institute' as const, ownerId: instituteId, instituteId };
     if (panelMode === 'create') {
-      const saved = await createQuestion(payload);
+      // Owner and tenant stamp are assigned SERVER-side from the caller's
+      // verified claims; anything sent from here would be ignored.
+      const { id } = await createQuestionAsRole(
+        draft as Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>,
+      );
+      const saved = {
+        ...draft,
+        id,
+        ownerType: 'institute' as const,
+        ownerId: instituteId,
+        instituteId,
+        isDeleted: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as Question;
       setQuestions((prev) => [saved, ...prev]);
     } else if (editTarget) {
-      await updateQuestion(editTarget.id, payload);
-      const updated = { ...editTarget, ...payload, updatedAt: new Date().toISOString() } as Question;
+      await editQuestionAsRole(editTarget.id, draft as Partial<Question>, {
+        prevSubjectId: editTarget.subjectId ?? null,
+        prevTopicId:   editTarget.topicId ?? null,
+      });
+      const updated = { ...editTarget, ...draft, updatedAt: new Date().toISOString() } as Question;
       setQuestions((prev) => prev.map((q) => (q.id === editTarget.id ? updated : q)));
     }
     setPanelOpen(false);
@@ -579,7 +609,10 @@ export function InstituteQuestionsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await softDeleteQuestion(deleteTarget.id);
+      await deleteQuestionAsRole(deleteTarget.id, {
+        subjectId: deleteTarget.subjectId ?? null,
+        topicId:   deleteTarget.topicId ?? null,
+      });
       setQuestions((prev) => prev.filter((q) => q.id !== deleteTarget.id));
       setDeleteTarget(null);
     } finally {

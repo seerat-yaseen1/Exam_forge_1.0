@@ -442,15 +442,21 @@ service cloud.firestore {
             && request.auth.token.facultyId == ownerId);
     }
 
-    // Tenant stamp check for question docs (permission-model Phase 0):
-    // institute/faculty-authored content must be stamped with the writer's
-    // own institute; webOwner content must carry no stamp. Evaluated on the
-    // FINAL doc state (create payload / post-merge update result).
-    function questionInstituteStampOk(d) {
-      return d.get('ownerType', 'webOwner') == 'webOwner'
-        ? !('instituteId' in d)
-        : d.get('instituteId', '') == request.auth.token.instituteId;
-    }
+    // questionInstituteStampOk was retired here (audit S-02). It validated
+    // that institute/faculty content carried the writer's own institute and
+    // webOwner content carried none — but it only ever guarded the question
+    // write rules, and those are now webOwner-only, so nothing referenced it.
+    //
+    // The invariant did not go away; it moved somewhere stronger. The
+    // *AsRole callables assign ownerType, ownerId and instituteId from the
+    // caller's verified claims and ignore whatever the client sent, so the
+    // stamp is now correct BY CONSTRUCTION rather than merely validated after
+    // the fact.
+    //
+    // Deliberately NOT reapplied to the webOwner rule: it demands
+    // `instituteId == request.auth.token.instituteId` for any non-webOwner
+    // doc, and a webOwner has no instituteId claim — so adding it would deny
+    // the webOwner every write to institute- or faculty-authored questions.
 
     // Is this student actually assigned to assessment `id`? Mirrors the split
     // startExam / getExamQuestions / getStudentAssessments all use: under
@@ -717,19 +723,51 @@ service cloud.firestore {
       // one. Enforced on the FINAL doc state for both create and update
       // (updates are partial merges client-side, so backfilled stamps
       // survive edits untouched).
-      allow create: if canWriteOwned(request.resource.data.ownerType,
-                                     request.resource.data.ownerId)
-                    && questionInstituteStampOk(request.resource.data);
-      allow update: if canWriteOwned(
-                          resource.data.get('ownerType', 'webOwner'),
-                          resource.data.get('ownerId',   'webOwner'))
-                    && questionInstituteStampOk(request.resource.data);
-      allow delete: if canWriteOwned(
-                          resource.data.get('ownerType', 'webOwner'),
-                          resource.data.get('ownerId',   'webOwner'));
+      // WRITES: webOwner only (audit 2026-07-26, S-02).
+      //
+      // These previously read `canWriteOwned(...) && questionInstituteStampOk(...)`,
+      // which checks IDENTITY and TENANT but knows nothing about
+      // questionRightsCeiling or Faculty.questionRights. The entire Phase
+      // 2A/2B/3 rights model — ceilings, per-faculty grants, direct vs request
+      // mode, the approvals inbox — lives inside assertQuestionRight, which
+      // only runs when a client chooses to call createQuestionAsRole /
+      // editQuestionAsRole / deleteQuestionAsRole. Nothing forced that choice,
+      // so a faculty member with zero grants could create, edit and delete
+      // their own questions straight from the console, and an institute whose
+      // ceiling forbade a right could exercise it anyway. The feature was
+      // decorative for anyone willing to open DevTools.
+      //
+      // The tenant fence was never the weak part — cross-institute stamping
+      // and forging webOwner-owned content were correctly denied, and still
+      // are. The gap was entirely WITHIN a caller's own institute.
+      //
+      // Narrowing to isWebOwner() makes the callables the only way in for
+      // institute and faculty, which is where the ceiling is actually
+      // enforced. webOwner keeps the direct path because the ceiling exists to
+      // constrain tenants and the platform owner is who sets it —
+      // assertQuestionRight has no webOwner branch by design.
+      //
+      // KEEP IN SYNC: every institute/faculty write path must go through a
+      // callable. At the time of writing those are createQuestionAsRole,
+      // editQuestionAsRole, deleteQuestionAsRole, createQuestionsBulkAsRole,
+      // and the approval path in resolveQuestionRequest. Adding a new
+      // client-side write to this collection will fail silently for every role
+      // except webOwner — that is the intended behaviour, not a bug to route
+      // around by loosening this rule.
+      // Scoped to webOwner-OWNED docs, not simply to the webOwner principal.
+      // `if isWebOwner()` alone would have been a privilege EXPANSION hidden
+      // inside a restriction: the old rule was canWriteOwned(...), whose
+      // webOwner branch only matches ownerType == 'webOwner', so the platform
+      // owner could never directly write an institute- or faculty-authored
+      // question. Preserving that exactly keeps this change subtractive, which
+      // is the property that makes it safe to ship. webOwner still administers
+      // that content through the callables and the lifecycle tooling, as
+      // before.
+      allow create: if isWebOwner()
+                       && request.resource.data.get('ownerType', 'webOwner') == 'webOwner';
+      allow update, delete: if isWebOwner()
+                               && resource.data.get('ownerType', 'webOwner') == 'webOwner';
     }
-
-    // questionAnswers/{id} — sibling collection holding correctIds /
     // correctPairs / modelAnswer for each question.
     //
     // READ — owner-scoped (was: any signed-in non-student, which let ANY
@@ -754,14 +792,24 @@ service cloud.firestore {
       allow read:   if isWebOwner()
                        || canWriteOwned(resource.data.ownerType,
                                         resource.data.ownerId);
-      allow create: if canWriteOwned(request.resource.data.ownerType,
-                                     request.resource.data.ownerId);
-      allow update: if canWriteOwned(
-                          resource.data.get('ownerType', 'webOwner'),
-                          resource.data.get('ownerId',   'webOwner'));
-      allow delete: if canWriteOwned(
-                          resource.data.get('ownerType', 'webOwner'),
-                          resource.data.get('ownerId',   'webOwner'));
+      // WRITES: webOwner only (audit S-02) — same reasoning as the questions
+      // collection above, and they must move together. The answer key is the
+      // half of a question that matters most: leaving these writable by
+      // identity alone would let a faculty member with no edit right rewrite
+      // the correct answer of their own question directly, which is the
+      // sharpest version of the bypass rather than a lesser one.
+      //
+      // READS are deliberately unchanged. The owner-scoped read is what lets
+      // an author see their own keys, and it is not part of this finding.
+      //
+      // Scoped to webOwner-owned docs for the same reason as the questions
+      // collection: the old canWriteOwned() never let the webOwner write
+      // institute- or faculty-authored answer keys, and this change must not
+      // quietly grant that.
+      allow create: if isWebOwner()
+                       && request.resource.data.get('ownerType', 'webOwner') == 'webOwner';
+      allow update, delete: if isWebOwner()
+                               && resource.data.get('ownerType', 'webOwner') == 'webOwner';
     }
 
     // questionBanks — owned by Web Owner only (no instituteId on the doc).

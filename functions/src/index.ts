@@ -5533,13 +5533,30 @@ function stripUndefined<T extends Record<string, unknown>>(o: T): T {
 
 type QOwner = { ownerType: 'institute' | 'faculty'; ownerId: string; instituteId: string };
 
-async function execCreateQuestion(
-  db: FirebaseFirestore.Firestore,
+/**
+ * Build the two documents one question becomes, without writing them.
+ *
+ * Extracted from execCreateQuestion (audit S-02) so the single-create path and
+ * the bulk path produce byte-identical documents. They differ ONLY in how the
+ * writes are committed — one batch per question versus one batch per chunk —
+ * and that difference must never leak into the document shape. Same reasoning
+ * as the Phase 3A exec* extraction: if two paths write the same entity, they
+ * share the code that decides what the entity looks like.
+ *
+ * `seq` disambiguates ids inside a single chunk. The id carries Date.now(),
+ * which is identical across a tight server-side loop, so the random suffix
+ * would be the only thing keeping two questions apart. That is fine in
+ * isolation and needlessly fragile at 200 per call — the sequence number makes
+ * a collision structurally impossible rather than merely unlikely. Omitting it
+ * reproduces the original format exactly, so the single path is unchanged.
+ */
+function buildQuestionDocs(
   owner: QOwner,
   src: Record<string, unknown>,
-  taxonomy: { subjectId?: string | null; topicId?: string | null },
-): Promise<{ id: string }> {
-  const id = `q_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  seq?: number,
+): { id: string; publicDoc: Record<string, unknown>; answerDoc: Record<string, unknown> } {
+  const suffix = seq === undefined ? '' : `_${seq}`;
+  const id = `q_${Date.now()}_${Math.random().toString(36).slice(2, 9)}${suffix}`;
   const nowIso = new Date().toISOString();
   const full: Record<string, unknown> = {
     ...src,
@@ -5557,6 +5574,16 @@ async function execCreateQuestion(
     id, ownerType: owner.ownerType, ownerId: owner.ownerId,
     correctIds: [], correctPairs: [], modelAnswer: '', ...answerPart, updatedAt: nowIso,
   });
+  return { id, publicDoc, answerDoc };
+}
+
+async function execCreateQuestion(
+  db: FirebaseFirestore.Firestore,
+  owner: QOwner,
+  src: Record<string, unknown>,
+  taxonomy: { subjectId?: string | null; topicId?: string | null },
+): Promise<{ id: string }> {
+  const { id, publicDoc, answerDoc } = buildQuestionDocs(owner, src);
   const batch = db.batch();
   batch.set(db.collection('questions').doc(id), publicDoc);
   batch.set(db.collection('questionAnswers').doc(id), answerDoc);
@@ -5722,6 +5749,119 @@ export const createQuestionAsRole = onCall<QWritePayload>(
       topicId:   request.data?.topicId ?? null,
     });
     return { ok: true, id };
+  },
+);
+
+/**
+ * Bulk-create questions as institute/faculty — gated by the create right,
+ * checked ONCE for the whole chunk.
+ *
+ * Audit S-02. Bulk upload previously wrote straight to Firestore in a
+ * client-side loop, which meant it bypassed the rights model entirely: a
+ * faculty member with no create grant could not add a single question through
+ * the UI but could import a thousand through the same page. Routing it through
+ * createQuestionAsRole one row at a time would have closed that, but at the
+ * cost of one HTTPS round-trip per question — roughly 2-4 minutes for a
+ * 500-row file against about 40 seconds for the direct writes it replaced.
+ * A security fix that makes a routine task four times slower does not survive
+ * contact with the people using it.
+ *
+ * So the chunk is the unit of work. 500 rows becomes three calls instead of
+ * five hundred, and the per-question work happens next to Firestore rather
+ * than across the wire — which lands it FASTER than the direct path it
+ * replaces, not slower.
+ *
+ * Sizing, and why 200:
+ *   • each question writes TWO documents, so 200 items is 400 writes and stays
+ *     under Firestore's hard 500-per-batch ceiling with headroom
+ *   • the rights check runs once per call rather than once per row
+ *   • counter bumps are AGGREGATED per chunk — a naive loop would issue two
+ *     increments per question (400 extra round-trips) to reach the same totals
+ *
+ * The cap is enforced here as well as in the client. A client-side limit is a
+ * usability affordance; this one is the actual constraint, since the endpoint
+ * can be called directly.
+ */
+const BULK_CREATE_MAX_PER_CALL = 200;
+
+interface BulkQuestionItem {
+  question: Record<string, unknown>;
+  subjectId?: string | null;
+  topicId?: string | null;
+}
+
+export const createQuestionsBulkAsRole = onCall<{ items?: BulkQuestionItem[] }>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    // One check for the chunk. Identical gate to createQuestionAsRole — same
+    // ceiling, same per-faculty grant, same direct-mode requirement — so bulk
+    // can never be a softer door than single-create. That asymmetry was the
+    // bug.
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, 'create');
+
+    const items = request.data?.items;
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new HttpsError('invalid-argument', 'items must be a non-empty array.');
+    }
+    if (items.length > BULK_CREATE_MAX_PER_CALL) {
+      throw new HttpsError(
+        'invalid-argument',
+        `At most ${BULK_CREATE_MAX_PER_CALL} questions per call; send in chunks.`,
+      );
+    }
+
+    // Per-item validation SKIPS rather than throws, deliberately. The client
+    // loop this replaces caught per row and incremented a "skipped" counter,
+    // so one unusable row never cost the other 499. Throwing here would have
+    // quietly converted a partial import into a total failure — the kind of
+    // regression that hides behind a green test run because the happy path is
+    // identical. Skipped indexes come back so the caller's count stays true.
+    const batch = db.batch();
+    const ids: string[] = [];
+    const skipped: number[] = [];
+    const subjectDeltas = new Map<string, number>();
+    const topicDeltas   = new Map<string, number>();
+
+    items.forEach((it, i) => {
+      if (!it || typeof it !== 'object' || !it.question || typeof it.question !== 'object') {
+        skipped.push(i);
+        return;
+      }
+      const { id, publicDoc, answerDoc } = buildQuestionDocs(owner, it.question, i);
+      batch.set(db.collection('questions').doc(id), publicDoc);
+      batch.set(db.collection('questionAnswers').doc(id), answerDoc);
+      ids.push(id);
+      if (it.subjectId) subjectDeltas.set(String(it.subjectId), (subjectDeltas.get(String(it.subjectId)) ?? 0) + 1);
+      if (it.topicId)   topicDeltas.set(String(it.topicId),     (topicDeltas.get(String(it.topicId))     ?? 0) + 1);
+    });
+
+    if (ids.length > 0) await batch.commit();
+
+    // After the commit, and best-effort — matching execCreateQuestion, where a
+    // counter failure warns rather than throws. The questions exist at this
+    // point; a drifted count is a cosmetic problem that refreshAllSubjectCounts
+    // repairs, whereas throwing here would report failure for an import that
+    // actually succeeded and invite a duplicate re-run.
+    try {
+      const bumps: Promise<unknown>[] = [];
+      for (const [subjectId, delta] of subjectDeltas) {
+        bumps.push(db.collection('subjects').doc(subjectId).update({ questionCount: FieldValue.increment(delta) }));
+      }
+      for (const [topicId, delta] of topicDeltas) {
+        bumps.push(db.collection('topics').doc(topicId).update({ questionCount: FieldValue.increment(delta) }));
+      }
+      await Promise.all(bumps);
+    } catch (e) {
+      console.warn('[createQuestionsBulkAsRole] counter bump skipped', e);
+    }
+
+    return { ok: true, ids, skipped };
   },
 );
 

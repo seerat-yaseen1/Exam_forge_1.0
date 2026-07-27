@@ -1355,6 +1355,48 @@ export async function createQuestionAsRole(
   return { id: res.data.id };
 }
 
+/**
+ * Bulk-create questions through the rights-gated callable, in chunks.
+ *
+ * Audit S-02: bulk upload used to write straight to Firestore, so it bypassed
+ * the ceiling and per-faculty grants that single-create respects. Chunking
+ * rather than one call per row is what keeps the fix from costing minutes on a
+ * large import — see createQuestionsBulkAsRole for the sizing rationale.
+ *
+ * CHUNK_SIZE mirrors the server's BULK_CREATE_MAX_PER_CALL. If you raise one,
+ * raise the other: the server rejects anything larger, so a client that sends
+ * more just fails every call.
+ *
+ * onProgress reports questions completed, so the caller can drive a progress
+ * bar over the whole import rather than per chunk.
+ */
+const BULK_CREATE_CHUNK_SIZE = 200;
+
+export async function createQuestionsBulkAsRole(
+  items: Array<{
+    question: Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>;
+    subjectId?: string | null;
+    topicId?: string | null;
+  }>,
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ ids: string[]; skipped: number }> {
+  const call = httpsCallable<
+    { items: typeof items },
+    { ok: boolean; ids: string[]; skipped: number[] }
+  >(functions, 'createQuestionsBulkAsRole');
+
+  const ids: string[] = [];
+  let skippedCount = 0;
+  for (let i = 0; i < items.length; i += BULK_CREATE_CHUNK_SIZE) {
+    const chunk = items.slice(i, i + BULK_CREATE_CHUNK_SIZE);
+    const res = await call({ items: chunk });
+    ids.push(...(res.data.ids ?? []));
+    skippedCount += (res.data.skipped ?? []).length;
+    onProgress?.(Math.min(i + chunk.length, items.length), items.length);
+  }
+  return { ids, skipped: skippedCount };
+}
+
 export async function editQuestionAsRole(
   id: string,
   patch: Partial<Question>,

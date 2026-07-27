@@ -14,6 +14,9 @@ import { FacultyDashboardLayout } from './layouts/FacultyDashboardLayout';
 import { StudentDashboardLayout } from './layouts/StudentDashboardLayout';
 import { FacultyRoot } from './pages/faculty/FacultyRoot';
 import { StudentRoot } from './pages/student/StudentRoot';
+// Eager on purpose: a boundary that arrives as its own lazy chunk cannot
+// catch the failure of the chunk it is supposed to be guarding.
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // ── Lazy: every page ──────────────────────────────────────────────
 // Remediation plan Batch C / ext #18. Each page becomes its own chunk, so a
@@ -165,8 +168,36 @@ export const router = createBrowserRouter([
           { path: 'forgot-password',  element: <StudentForgotPasswordPage /> },
           { path: 'reset-password',   element: <ResetPasswordActionPage role="student" /> },
           // ── Exam routes (outside dashboard layout — full page takeover) ──
-          { path: 'exam/:assessmentId/briefing', element: <ExamBriefingPage /> },
-          { path: 'exam/:assessmentId/shell',    element: <ExamShell /> },
+          // Wrapped in their OWN error boundary (audit E-01), for two reasons.
+          //
+          // Placement: it has to be here, around the element, not inside
+          // ExamShell. A boundary rendered BY the component that throws cannot
+          // catch it — ExamShell's own hooks run before its return, so a throw
+          // during its render would sail straight past a boundary nested in
+          // its output and hit the root one instead.
+          //
+          // Variant: 'exam' strips every exit control from the fallback. The
+          // root boundary offers "Back to sign in", which inside a supervised
+          // sitting would be a way to walk out of an exam without submitting
+          // and without the abandonment being recorded. Reload is the only
+          // recovery offered, and it is safe because it re-enters ExamShell
+          // against the same server-side attempt.
+          {
+            path: 'exam/:assessmentId/briefing',
+            element: (
+              <ErrorBoundary variant="exam" label="exam-briefing">
+                <ExamBriefingPage />
+              </ErrorBoundary>
+            ),
+          },
+          {
+            path: 'exam/:assessmentId/shell',
+            element: (
+              <ErrorBoundary variant="exam" label="exam-shell">
+                <ExamShell />
+              </ErrorBoundary>
+            ),
+          },
           {
             element: <StudentDashboardLayout />,
             children: [

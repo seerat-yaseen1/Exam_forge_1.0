@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { RouterProvider } from 'react-router';
 import { router } from './routes';
 import { RouteFallback } from './components/RouteFallback';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 /**
  * Suspense boundary for the lazily-loaded pages in routes.tsx
@@ -21,11 +22,25 @@ import { RouteFallback } from './components/RouteFallback';
  * a second <Suspense> around <Outlet /> inside the four dashboard layouts
  * makes the inner boundary win for dashboard routes and keeps the sidebar
  * painted — no change needed here, nested boundaries resolve innermost-first.
+ *
+ * ── ErrorBoundary placement (audit E-01) ──────────────────────────
+ * ABOVE Suspense, deliberately. A lazy import() that fails to resolve — the
+ * classic case being a stale cached chunk URL 404ing after a redeploy —
+ * rejects rather than suspends, and React routes that to the nearest ERROR
+ * boundary, not the Suspense one. Putting it outside means a post-deploy
+ * chunk miss shows a reload prompt instead of a white screen; putting it
+ * inside would leave exactly that case uncovered.
+ *
+ * This is the outermost net. Routes that need different recovery behaviour
+ * wrap themselves — see the exam routes in routes.tsx, which must not offer
+ * a way out of a locked-down sitting.
  */
 export default function App() {
   return (
-    <Suspense fallback={<RouteFallback />}>
-      <RouterProvider router={router} />
-    </Suspense>
+    <ErrorBoundary variant="app" label="root">
+      <Suspense fallback={<RouteFallback />}>
+        <RouterProvider router={router} />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

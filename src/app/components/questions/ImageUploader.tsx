@@ -3,7 +3,14 @@
  * returns the public download URL via onUpload.
  *
  * Shows a drag-over zone → progress bar → thumbnail with remove button.
- * Accepts JPEG, PNG, GIF, WebP, SVG. Max 8 MB.
+ * Accepts JPEG, PNG, GIF, WebP. Max 5 MB.
+ *
+ * EVERY constant below mirrors storage.rules.tsx `match /question-images/`.
+ * They are a contract, not defaults: the rules are the enforcement and this
+ * file only exists to fail early with a readable message. Audit 2026-07-26
+ * B-01 was four separate drifts between the two (path, size, type, help
+ * text), the first of which denied 100% of uploads. If you change a limit
+ * here, change it there in the same batch.
  */
 
 import React, { useRef, useState, useCallback } from 'react';
@@ -11,16 +18,29 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebas
 import { storage } from '../../../lib/firebase';
 import { ImageIcon, X, Loader2, Upload } from 'lucide-react';
 
-const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
-// SVG dropped (external review #4): scriptable format, and storage rules now
+// storage.rules.tsx: request.resource.size < 5 * 1024 * 1024
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+// storage.rules.tsx: contentType.matches('image/(png|jpe?g|gif|webp)')
+// SVG dropped (external review #4): scriptable format, and the storage rules
 // reject it server-side. Existing uploaded SVGs keep rendering (rules gate
 // writes, not reads).
-const ACCEPT    = 'image/jpeg,image/png,image/gif,image/webp';
+// image/jpg is included deliberately — the rules regex is `jpe?g`, so it
+// accepts both spellings, and some systems label JPEGs that way. Leaving it
+// out would refuse a file the server would have taken.
+const ALLOWED_TYPES = [
+  'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+] as const;
+const ACCEPT        = ALLOWED_TYPES.join(',');
+const TYPE_LABEL    = 'JPEG · PNG · GIF · WebP';
+const SIZE_LABEL    = '5 MB';
 
 function randomPath(file: File): string {
   const ext = file.name.split('.').pop() ?? 'jpg';
   const rand = Math.random().toString(36).slice(2, 9);
-  return `question-media/${Date.now()}-${rand}.${ext}`;
+  // MUST stay under question-images/ — storage.rules.tsx grants write to
+  // exactly this prefix (plus seb-configs/), and everything else falls to
+  // the deny-all catch-all at the bottom of the rules file.
+  return `question-images/${Date.now()}-${rand}.${ext}`;
 }
 
 export interface ImageUploaderProps {
@@ -41,12 +61,19 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
 
   const upload = useCallback(async (file: File) => {
     setError(null);
-    if (!file.type.startsWith('image/')) {
-      setError('Only image files are accepted.');
+    // Not startsWith('image/'): that admits image/svg+xml, which the rules
+    // reject. The `accept` attribute only filters the file PICKER — a
+    // drag-and-drop bypasses it entirely, so this is the real gate.
+    if (!(ALLOWED_TYPES as readonly string[]).includes(file.type)) {
+      setError(`Only ${TYPE_LABEL} files are accepted.`);
       return;
     }
-    if (file.size > MAX_BYTES) {
-      setError('File must be under 8 MB.');
+    // >= not >: the rule is `size < 5 * 1024 * 1024`, so a file of EXACTLY
+    // 5 MB is denied server-side. Using > here would let that one size
+    // through the client and fail late — the same client/rules drift this
+    // whole file is documented against.
+    if (file.size >= MAX_BYTES) {
+      setError(`File must be under ${SIZE_LABEL}.`);
       return;
     }
 
@@ -170,7 +197,7 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
           {dragOver ? 'Drop to upload' : label}
         </span>
         <span className="text-xs ml-auto" style={{ color: '#C4C3BD' }}>
-          JPEG · PNG · GIF · WebP · SVG &lt;8 MB
+          {TYPE_LABEL} &lt;{SIZE_LABEL}
         </span>
       </div>
 

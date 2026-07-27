@@ -1461,7 +1461,27 @@ export function ExamShell() {
     submittingRef.current = true;
 
     setShellStatus('submitting_section');
-    await flushAnswers();
+    // B-02 (audit 2026-07-26): this flush MUST NOT be allowed to throw past
+    // here. submittingRef is already engaged above, and every release below
+    // sits after this line — so an exception escaping flushAnswers strands the
+    // lock at `true` forever, and because doSectionSubmit, handleFinalSubmit
+    // and the Retry button all share that one ref, the student can no longer
+    // submit this section OR the exam by any route. The failure is silent:
+    // each retry hits its own `if (submittingRef.current) return`.
+    //
+    // Failing loudly is also better than continuing: if the answers did not
+    // reach Firestore, submitting the section would grade against a stale
+    // snapshot and quietly drop whatever the student typed last. Release,
+    // report, let them retry — the answers are still in localAnswersRef.
+    try {
+      await flushAnswers();
+    } catch (e) {
+      console.error('[ExamShell] flush before section submit failed', e);
+      submittingRef.current = false;
+      setErrorMsg('Could not save your answers. Check your connection and try again.');
+      setShellStatus('error');
+      return;
+    }
 
     const sectionId = currentSection.id;
     const startedAt = att.sectionTimings[sectionId]?.startedAt ?? new Date().toISOString();
@@ -1758,7 +1778,21 @@ export function ExamShell() {
   ) => {
     if (submittingRef.current) return; // another submit path is already running
     submittingRef.current = true;
-    await doFinalSubmit(reason);
+    // B-02 backstop. doFinalSubmit handles its own known failures, but this
+    // outer catch is what guarantees the invariant "the lock is never held by
+    // a call that is no longer running". Anything unforeseen — a render-time
+    // throw inside a setState, a future edit that adds an unguarded await —
+    // lands here instead of stranding every submit path for the rest of the
+    // sitting. Cheap insurance on the one code path where failure costs the
+    // student their entire exam.
+    try {
+      await doFinalSubmit(reason);
+    } catch (e) {
+      console.error('[ExamShell] final submit threw', e);
+      submittingRef.current = false;
+      setErrorMsg('Your exam could not be submitted. Your answers are saved — check your connection and press Retry submission.');
+      setShellStatus('submit_failed');
+    }
   }, []); // eslint-disable-line
 
   const doFinalSubmit = useCallback(async (
@@ -1766,11 +1800,34 @@ export function ExamShell() {
   ) => {
     const att = attemptRef.current;
     const a   = assessmentRef.current;
-    if (!att || !a) return;
+    // B-02: release before bailing. handleFinalSubmit and the Retry button
+    // both engage the lock and then delegate here, so returning without
+    // releasing leaves every submit path permanently disabled. (Callers that
+    // deliberately hand the lock over — doSectionSubmit at the overall-deadline
+    // and last-section branches — are unaffected: they only reach this line
+    // when the attempt is already gone, at which point nothing can submit
+    // anyway and a released lock is strictly safer than a stuck one.)
+    if (!att || !a) {
+      submittingRef.current = false;
+      return;
+    }
 
     lastFinalReasonRef.current = reason;
     setShellStatus('submitting_exam');
-    await flushAnswers();
+    // B-02: same reasoning as the section-submit flush above. Do not grade an
+    // attempt whose latest answers failed to persist — that would submit a
+    // stale snapshot and silently lose the student's last answers. This file
+    // already refuses to fake success at submit time (see the gradeAttempt
+    // catch below); this extends the same rule to the save that precedes it.
+    try {
+      await flushAnswers();
+    } catch (e) {
+      console.error('[ExamShell] flush before final submit failed', e);
+      submittingRef.current = false;
+      setErrorMsg('Your answers could not be saved, so the exam was not submitted. Check your connection and press Retry submission.');
+      setShellStatus('submit_failed');
+      return;
+    }
 
     try {
       await gradeAttempt({ attemptId: att.id, reason });
@@ -2075,9 +2132,14 @@ export function ExamShell() {
         <p className="text-xs mt-4 px-8 text-center" style={{ color: '#9B2828' }}>{errorMsg}</p>
         <button
           onClick={() => {
-            if (submittingRef.current) return;
-            submittingRef.current = true;
-            doFinalSubmit(lastFinalReasonRef.current);
+            // B-02: goes through handleFinalSubmit rather than re-implementing
+            // the guard/engage pair and calling doFinalSubmit directly. The
+            // old form was a floating promise with no catch, so a throw became
+            // an unhandled rejection AND left the lock engaged — which killed
+            // this very button, the one control whose whole job is to recover
+            // from a failed submit. Reusing the wrapper means retry gets the
+            // same backstop as every other submit path, for free.
+            void handleFinalSubmit(lastFinalReasonRef.current);
           }}
           className="text-xs mt-6 px-4 py-2"
           style={{ background: '#2F2F2B', color: '#FFFFFF', borderRadius: 2 }}

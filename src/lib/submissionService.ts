@@ -820,11 +820,33 @@ export async function registerSession(
 // Sets isDeleted = true. The attempt is filtered from the live roster
 // but remains visible in the student's attempt history drawer.
 
-export async function softDeleteAttempt(attemptId: string): Promise<void> {
-  await updateDoc(doc(db, 'attempts', attemptId), {
-    isDeleted: true,
-    updatedAt: now(),
-  });
+/**
+ * Soft-delete an exam attempt. webOwner only, enforced server-side.
+ *
+ * Audit 2026-07-26 S-03. This was a bare updateDoc writing `isDeleted`, which
+ * firestore.rules permitted for any institute or faculty in the owning tenant
+ * — contradicting the deletion rights model, where WEBOWNER_ONLY_RESOURCES
+ * lists 'attempt' precisely because attempts are the audit trail of an exam.
+ * It also wrote no deletionAudit row, so an attempt could vanish with no
+ * record of who removed it.
+ *
+ * The softDeleteAttempt callable is now the only path: it checks the role,
+ * and it commits the state change and the audit row in one transaction. The
+ * rules no longer accept `isDeleted` from staff at all, so this cannot be
+ * bypassed by writing to Firestore directly.
+ *
+ * Idempotent server-side — deleting an already-deleted attempt is a no-op and
+ * does not produce a second audit row.
+ */
+export async function softDeleteAttempt(
+  attemptId: string,
+  reason?: string,
+): Promise<void> {
+  const call = httpsCallable<
+    { attemptId: string; reason?: string },
+    { ok: true }
+  >(functions, 'softDeleteAttempt');
+  await call({ attemptId, reason });
 }
 
 // ── Regrade attempts after a question fix ────────────────────────

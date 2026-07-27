@@ -4036,8 +4036,103 @@ export const getStudentAssessments = onCall(
 );
 
 // ══════════════════════════════════════════════════════════════════
-// SERVER-AUTHORITATIVE TIME TRANSITIONS
+// ATTEMPT SOFT DELETE  (audit 2026-07-26, S-03)
 // ══════════════════════════════════════════════════════════════════
+// Attempts were deletable by any institute or faculty in the owning tenant:
+// firestore.rules listed 'isDeleted' in staffAttemptUpdateFieldsAllowed(), and
+// the client did it with a bare updateDoc. That contradicted the deletion
+// rights model outright — WEBOWNER_ONLY_S names 'attempt' precisely because
+// "attempts are the audit trail; a tenant that can delete them can delete the
+// evidence of what happened in an exam". Two defects, not one:
+//
+//   1. the wrong principals could do it at all, and
+//   2. nothing was recorded when they did — a bare updateDoc writes no
+//      deletionAudit row, so evidence could disappear without a trace of who
+//      removed it. For an attempt that is the whole problem.
+//
+// This callable is now the only path. It is webOwner-only, and it writes the
+// state change and the audit row in ONE transaction so an attempt can never be
+// deleted without a corresponding record.
+//
+// Scope note: the bare-updateDoc pattern is shared by softDeleteQuestion,
+// softDeleteQuestionBank and softDeleteAssessment, which are equally
+// unaudited. Those are resources a tenant is legitimately allowed to delete,
+// so the missing audit row there is a gap rather than a contradiction, and
+// closing it is its own change. Only attempts are fixed here.
+
+interface SoftDeleteAttemptData {
+  attemptId: string;
+  reason?: string;
+}
+
+export const softDeleteAttempt = onCall<SoftDeleteAttemptData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+    // webOwner ONLY. Not "owner of the assessment" — the owning institute is
+    // exactly the principal this finding is about, since an institute deleting
+    // the attempts of an exam it ran is the evidence-destruction case.
+    if ((request.auth.token.role as string | undefined) !== 'webOwner') {
+      throw new HttpsError(
+        'permission-denied',
+        'Only the platform owner may delete exam attempts.',
+      );
+    }
+
+    const attemptId = request.data?.attemptId;
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    const reason = typeof request.data?.reason === 'string'
+      ? request.data.reason.slice(0, 500)
+      : null;
+
+    const db = getFirestore();
+    const ref = db.collection('attempts').doc(attemptId);
+
+    await db.runTransaction(async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+
+      const a = snap.data() as {
+        isDeleted?: boolean;
+        studentId?: string;
+        studentName?: string;
+        instituteId?: string;
+        assessmentTitle?: string;
+        status?: string;
+      };
+
+      // Idempotent: deleting an already-deleted attempt is a no-op rather than
+      // an error, so a double-click cannot produce two audit rows for one act.
+      if (a.isDeleted === true) return;
+
+      txn.update(ref, { isDeleted: true, updatedAt: new Date().toISOString() });
+
+      // Bound to the same transaction, so there is no window in which the
+      // attempt is gone but the record of its removal is not.
+      await writeAuditRow(db, {
+        action: 'softDelete',
+        entityType: 'attempt',
+        entityId: attemptId,
+        entityLabel: a.studentName
+          ? `${a.studentName} — ${a.assessmentTitle ?? 'attempt'}`
+          : attemptId,
+        fromState: 'active',
+        toState: 'softDeleted',
+        actorUid: request.auth!.uid,
+        actorRole: 'webOwner',
+        actorName: (request.auth!.token.name as string | undefined) ?? null,
+        instituteId: a.instituteId ?? null,
+        reason,
+      }, txn);
+    });
+
+    return { ok: true };
+  }
+);
+
+
 // The exam clock must not be spoofable via the student's local system
 // time. These callables own every time transition: exam start, section
 // start, and section submit. `new Date()` inside a Cloud Function is the

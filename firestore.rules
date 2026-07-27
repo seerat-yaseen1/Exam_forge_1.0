@@ -607,15 +607,27 @@ service cloud.firestore {
 
     // Staff (institute / faculty) invigilation whitelist — the ONLY fields
     // their client code writes (verified against submissionService.ts:
-    // freezeAttempt, unfreezeAttempt, softDeleteAttempt). hasOnly() gates
-    // top-level keys of the patch, same mechanism as the student whitelist.
+    // freezeAttempt, unfreezeAttempt). hasOnly() gates top-level keys of the
+    // patch, same mechanism as the student whitelist.
+    //
+    // S-03 (audit 2026-07-26): 'isDeleted' was on this list, which let any
+    // institute or faculty in the owning tenant soft-delete any attempt. That
+    // contradicted the deletion rights model, where WEBOWNER_ONLY_RESOURCES
+    // names 'attempt' for a specific reason — attempts ARE the audit trail of
+    // an exam, so a tenant able to delete them can delete the evidence of what
+    // happened in one, including evidence about itself. Worse, the client did
+    // it with a bare updateDoc, so nothing recorded that it had happened.
+    //
+    // Deletion now goes through the softDeleteAttempt callable: webOwner only,
+    // and it writes the deletionAudit row in the same transaction as the state
+    // change. Freeze / unfreeze stay here — those are genuine invigilation
+    // powers and staff need them live during a sitting.
     function staffAttemptUpdateFieldsAllowed() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'frozenAt',
         'frozenBy',
         'frozenReason',
         'totalFrozenSeconds',
-        'isDeleted',
         'updatedAt'
       ]);
     }

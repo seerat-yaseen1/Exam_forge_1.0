@@ -937,6 +937,7 @@ function AttemptsPanel({
   studentId,
   assessment,
   canManageAttempts,
+  canDeleteAttempts,
   onOverrideSaved,
   onRequestDelete,
 }: {
@@ -947,6 +948,11 @@ function AttemptsPanel({
    *  exams this viewer doesn't own instead of offering a button that
    *  always fails permission-denied. */
   canManageAttempts: boolean;
+  /** webOwner ONLY (audit S-03). Deliberately NOT canManageAttempts,
+   *  which is owner-based: the owning institute is exactly the principal
+   *  that must not be able to delete attempts, since they are the
+   *  evidence of what happened in its own exam. */
+  canDeleteAttempts: boolean;
   onOverrideSaved: () => void;
   onRequestDelete: (attemptId: string, attemptNumber: number) => void;
 }) {
@@ -1209,8 +1215,14 @@ function AttemptsPanel({
                     ) : (
                       <span className="text-xs" style={{ color: '#1E7B3C' }}>Live</span>
                     )}
-                    {/* Soft-delete button — only for completed, non-deleted attempts */}
-                    {done && !isDeleted && (
+                    {/* Soft-delete button — completed, non-deleted attempts, and
+                        webOwner ONLY (audit S-03). Attempts are the evidence of
+                        what happened in an exam, so no tenant may remove them —
+                        not even the institute that owns the assessment. The
+                        softDeleteAttempt callable enforces this server-side; this
+                        gate exists so staff are not shown a control that can only
+                        fail. Previously the button had NO permission gate at all. */}
+                    {canDeleteAttempts && done && !isDeleted && (
                       <button
                         onClick={() => onRequestDelete(a.id, i + 1)}
                         className="p-1 transition-opacity hover:opacity-70"
@@ -1243,12 +1255,13 @@ function AttemptDrawer({
   row, onClose, onRequestFreeze, onRequestUnfreeze, freezeLoading,
   onRequestBlock, onRequestUnblock, blockLoading,
   assessment, onOverrideSaved, onRequestDelete,
-  canSeeResults, canReview, canManageAttempts,
+  canSeeResults, canReview, canManageAttempts, canDeleteAttempts,
 }: {
   row: RosterRow;
   canSeeResults: boolean;
   canReview: boolean;
   canManageAttempts: boolean;
+  canDeleteAttempts: boolean;
   onClose: () => void;
   onRequestFreeze: (attemptId: string, studentName: string) => void;
   onRequestUnfreeze: (attempt: Attempt, studentName: string) => void;
@@ -1584,6 +1597,7 @@ function AttemptDrawer({
                 studentId={student.id}
                 assessment={assessment}
                 canManageAttempts={canManageAttempts}
+                canDeleteAttempts={canDeleteAttempts}
                 onOverrideSaved={onOverrideSaved}
                 onRequestDelete={onRequestDelete}
               />
@@ -2290,6 +2304,7 @@ export function AssessmentRosterCore({
               canSeeResults={canSeeResults}
               canReview={canReview}
               canManageAttempts={fullAccess}
+              canDeleteAttempts={reviewerRole === 'web_owner'}
               onClose={() => setSelectedRow(null)}
               onRequestFreeze={handleRequestFreeze}
               onRequestUnfreeze={handleRequestUnfreeze}

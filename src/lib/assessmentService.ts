@@ -1257,64 +1257,36 @@ export async function updateAssessmentStatus(
 // filters client-side by the assignment target.
 // Students never see draft assessments.
 
-export async function getAssessmentsForStudent(
-  studentId: string,
-  instituteId: string
-): Promise<Assessment[]> {
-  // Fetch only active or closed assessments — students never see drafts.
-  // Two queries (one per status value) instead of a full collection scan so
-  // we don't pull every other institute's drafts across the wire.
-  const [activeSnap, closedSnap] = await Promise.all([
-    getDocs(query(collection(db, 'assessments'),
-      where('status', '==', 'active'),
-      where('isDeleted', '==', false))),
-    getDocs(query(collection(db, 'assessments'),
-      where('status', '==', 'closed'),
-      where('isDeleted', '==', false))),
-  ]);
-
-  const all = [
-    ...activeSnap.docs.map((d) => d.data() as Assessment),
-    ...closedSnap.docs.map((d) => d.data() as Assessment),
-  ];
-
-  // Legacy-path docs: filter by assignedTo exactly as before. Rule-path docs
-  // (allocationMode === 'rules') are handled via the membership query below —
-  // exclude them here so assignedTo, which no longer governs them, can't leak
-  // one in or wrongly hide one.
-  const legacyVisible = all.filter((a) => {
-    if (a.allocationMode === 'rules') return false;
-    const t = a.assignedTo;
-    if (!t) return true; // pre-assignedTo legacy docs = webOwner-global
-    if (t.type === 'all') return true;
-    if (t.type === 'institutes') return t.instituteIds.includes(instituteId);
-    if (t.type === 'students') return t.studentIds.includes(studentId);
-    return false;
-  });
-
-  // Rule-path discovery: the student's own membership docs (rules enforce that
-  // a student may read only their own). Join back to the active/closed docs we
-  // already fetched — no extra assessment reads.
-  const byId = new Map<string, Assessment>();
-  [...activeSnap.docs, ...closedSnap.docs].forEach((d) => byId.set(d.id, d.data() as Assessment));
-  let ruleVisible: Assessment[] = [];
-  try {
-    const memberSnap = await getDocs(query(
-      collection(db, 'assessmentMembers'),
-      where('studentId', '==', studentId),
-      where('active', '==', true),
-    ));
-    ruleVisible = memberSnap.docs
-      .map((m) => byId.get(String(m.get('assessmentId'))))
-      .filter((a): a is Assessment => Boolean(a) && a!.allocationMode === 'rules');
-  } catch {
-    ruleVisible = []; // never let discovery of new-path exams break the legacy list
-  }
-
-  // Merge, dedupe by id.
-  const merged = new Map<string, Assessment>();
-  [...legacyVisible, ...ruleVisible].forEach((a) => merged.set(a.id, a));
-  return [...merged.values()];
+/**
+ * The student's own assessment list, resolved SERVER-SIDE.
+ *
+ * Audit 2026-07-26 S-04. This function used to run two unfiltered collection
+ * queries — every 'active' doc and every 'closed' doc, with no tenant or
+ * assignment constraint — and then filter the result in the browser. The
+ * filter was cosmetic: every assessment on the platform, including other
+ * institutes', had already crossed the wire, and firestore.rules permitted it
+ * because the student read branch checked only `status in ['active','closed']`.
+ * Titles, schedules, blueprints, pass marks and the ids of blocked students
+ * were all readable by any signed-in student from the console.
+ *
+ * Identity is no longer passed in. The callable derives studentId and
+ * instituteId from the verified ID token, so the caller cannot ask for someone
+ * else's list — the previous signature took them as arguments, which was
+ * harmless while the filtering was client-side and pointless afterwards.
+ *
+ * Visibility logic is unchanged and now lives in getStudentAssessments
+ * (functions/src/index.ts): rules-mode exams resolve through assessmentMembers,
+ * everything else through assignedTo, legacy docs without assignedTo stay
+ * webOwner-global. The server also reduces blockedStudents and attemptOverrides
+ * to this student's own entry before returning.
+ */
+export async function getAssessmentsForStudent(): Promise<Assessment[]> {
+  const call = httpsCallable<
+    Record<string, never>,
+    { ok: true; assessments: Assessment[] }
+  >(functions, 'getStudentAssessments');
+  const res = await call({});
+  return res.data.assessments ?? [];
 }
 
 // ══════════════════════════════════════════════════════════════════

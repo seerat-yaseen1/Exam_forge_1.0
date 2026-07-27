@@ -452,6 +452,29 @@ service cloud.firestore {
         : d.get('instituteId', '') == request.auth.token.instituteId;
     }
 
+    // Is this student actually assigned to assessment `id`? Mirrors the split
+    // startExam / getExamQuestions / getStudentAssessments all use: under
+    // allocationMode 'rules' the materialized membership doc is authoritative
+    // and assignedTo is stale by design (resolveAllocation never clears it),
+    // so consulting assignedTo for a rules-mode exam would readmit exactly the
+    // leak this is closing — those docs commonly carry assignedTo.type 'all'.
+    //
+    // Uses exists(), which costs one document access. That is affordable here
+    // ONLY because this predicate is reachable from `allow get` alone: a
+    // single-document request carries a budget of 10 accesses. It must never
+    // be moved onto a list rule, where the budget is shared across the whole
+    // result set and a large page would blow it.
+    function studentAssignedToAssessment(id, d) {
+      return d.get('allocationMode', '') == 'rules'
+        ? exists(/databases/$(database)/documents/assessmentMembers/$(id + '_' + request.auth.token.studentId))
+        : (!('assignedTo' in d)
+           || d.assignedTo.type == 'all'
+           || (d.assignedTo.type == 'institutes'
+               && request.auth.token.instituteId in d.assignedTo.instituteIds)
+           || (d.assignedTo.type == 'students'
+               && request.auth.token.studentId in d.assignedTo.studentIds));
+    }
+
     match /assessments/{id} {
       // Read access:
       //   • webOwner — always (owns all content)
@@ -463,9 +486,9 @@ service cloud.firestore {
       //     rejected wholesale), PLUS published assessments assigned to their
       //     institute (assignedTo.type == 'all', or their instituteId in
       //     assignedTo.instituteIds).
-      //   • student — only published docs (list queries filter by
-      //     status == active|closed; the startExam Cloud Function enforces
-      //     assignedTo server-side before an attempt can be created).
+      //   • student — NO list access at all, and single-doc get only for an
+      //     assessment they are actually assigned to. See the second allow
+      //     statement below.
       //
       // Query provability notes (keep queries and rule in sync):
       //   owner listing     → where ownerType==, ownerId==        (provable)
@@ -475,8 +498,6 @@ service cloud.firestore {
       //                        array-contains <claim instituteId>,
       //                        status=='active'|'closed'          (provable)
       allow read: if isWebOwner()
-                     || (role() == 'student'
-                         && resource.data.status in ['active', 'closed'])
                      || ((role() == 'institute' || role() == 'faculty')
                          && canWriteOwned(resource.data.ownerType, resource.data.ownerId))
                      || ((role() == 'institute' || role() == 'faculty')
@@ -484,6 +505,30 @@ service cloud.firestore {
                          && (resource.data.assignedTo.type == 'all'
                              || (resource.data.assignedTo.type == 'institutes'
                                  && request.auth.token.instituteId in resource.data.assignedTo.instituteIds)));
+
+      // ── Students (audit 2026-07-26, S-04) ──────────────────────────
+      // `get`, never `list`. Rule statements are additive, so this grants
+      // students single-document reads WITHOUT reopening list on the branches
+      // above — and without restating those branches, which duplication would
+      // eventually drift.
+      //
+      // What this closes: the student branch used to sit inside `allow read`
+      // gated on nothing but `status in ['active','closed']`. Any signed-in
+      // student could therefore enumerate every published assessment on the
+      // platform and read its title, schedule, blueprint, pass mark, question
+      // ids and the ids of every blocked student — at other institutes
+      // included. That enumeration is how a target for the S-01 paper download
+      // was found in the first place.
+      //
+      // Students no longer list this collection at all; their dashboard is
+      // served by the getStudentAssessments callable, which resolves
+      // visibility server-side and strips other students' ids before
+      // returning. The three remaining single-doc reads (ExamShell,
+      // ExamBriefingPage, ExamResultsPage) are what this `get` serves, and
+      // each is for an exam the student is entering or reviewing.
+      allow get: if role() == 'student'
+                    && resource.data.status in ['active', 'closed']
+                    && studentAssignedToAssessment(id, resource.data);
       allow create: if canWriteOwned(request.resource.data.ownerType,
                                      request.resource.data.ownerId);
       // Owners edit freely UNTIL the first attempt sets securityLockedAt

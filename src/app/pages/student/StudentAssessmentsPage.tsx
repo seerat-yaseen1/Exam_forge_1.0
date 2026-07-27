@@ -631,7 +631,7 @@ export function StudentAssessmentsPage() {
     setError('');
     try {
       const [aList, attemptList] = await Promise.all([
-        getAssessmentsForStudent(session.studentId, session.instituteId),
+        getAssessmentsForStudent(),
         getAttemptsByStudent(session.studentId),
       ]);
 

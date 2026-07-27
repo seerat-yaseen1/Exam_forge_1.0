@@ -3879,6 +3879,163 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
 );
 
 // ══════════════════════════════════════════════════════════════════
+// STUDENT ASSESSMENT LIST  (audit 2026-07-26, S-04)
+// ══════════════════════════════════════════════════════════════════
+// Replaces a client-side collection scan. The old getAssessmentsForStudent
+// ran two UNFILTERED queries — status=='active' and status=='closed', with no
+// tenant or assignment constraint — pulling every assessment on the platform
+// to every student's browser and filtering there. The filtering was cosmetic:
+// the full set, including other institutes' exams, was already on the wire.
+//
+// That could not be fixed in firestore.rules alone. Rules are evaluated per
+// returned document and one failure rejects the whole query, so tightening
+// the student read rule while the client still issued an unscoped query would
+// simply have emptied every student's dashboard. The list has to move to a
+// place that can filter BEFORE returning, which means here.
+//
+// Deliberately the same visibility logic and the same two queries the client
+// ran, executed server-side. Matching current behaviour exactly is the point:
+// this is a security fix, not a rewrite, and a targeted-query optimisation
+// would change which exams appear. Reducing the read cost is worth doing —
+// see P-02 — but as its own change, where a visibility regression would be
+// attributable.
+//
+// Legacy docs with no assignedTo field at all are treated as webOwner-global,
+// byte-for-byte as the client did (`if (!t) return true`). They cannot be
+// found by query — Firestore cannot match a missing field — which is the
+// other reason the scan stays.
+
+/** Fields a student may see in their OWN assessment list. */
+interface StudentAssessmentSummary {
+  id: string;
+  title?: unknown;
+  subject?: unknown;
+  status?: unknown;
+  startDate?: unknown;
+  endDate?: unknown;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  totalMarks?: unknown;
+  passingScore?: unknown;
+  maxAttempts?: unknown;
+  showResults?: unknown;
+  allowReview?: unknown;
+  questions?: unknown;
+  sections?: unknown;
+  blockedStudents: string[];
+  attemptOverrides: Record<string, number>;
+}
+
+/**
+ * Field WHITELIST, same construction as sanitizeQuestionForStudent — anything
+ * not named here never reaches a student, so a leaky field added to assessment
+ * docs later is contained by default rather than by remembering to exclude it.
+ *
+ * Two fields are REDUCED rather than dropped, because the list UI genuinely
+ * needs them but only ever reads this student's own entry:
+ *
+ *   blockedStudents  — a roster of other students' ids. The page asks exactly
+ *                      one question of it (`includes(studentId)`, :50 and
+ *                      :300), so returning either [] or [studentId] preserves
+ *                      that check bit-for-bit while disclosing nobody else.
+ *   attemptOverrides — a map keyed by student id. Read only as
+ *                      `[studentId]` (:52, :258), so a single-entry map is
+ *                      indistinguishable to the client.
+ *
+ * questions / sections are kept INTACT. Question ids used to matter because
+ * they were half the input to the S-01 paper-download attack, but that is
+ * closed: getExamQuestions now demands a live attempt, and firestore.rules:621
+ * denies students direct reads of the questions collection. An id on its own
+ * is inert, and the list needs `questions.length` plus each section's id, name
+ * and timeLimit to render.
+ */
+function sanitizeAssessmentForStudent(
+  id: string,
+  a: Record<string, unknown>,
+  studentId: string,
+): StudentAssessmentSummary {
+  const blocked = Array.isArray(a.blockedStudents) ? (a.blockedStudents as string[]) : [];
+  const overrides = (a.attemptOverrides ?? {}) as Record<string, number>;
+  const own = overrides[studentId];
+
+  return {
+    id,
+    title: a.title,
+    subject: a.subject,
+    status: a.status,
+    startDate: a.startDate,
+    endDate: a.endDate,
+    createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
+    totalMarks: a.totalMarks,
+    passingScore: a.passingScore,
+    maxAttempts: a.maxAttempts,
+    showResults: a.showResults,
+    allowReview: a.allowReview,
+    questions: a.questions ?? [],
+    sections: a.sections ?? [],
+    blockedStudents: blocked.includes(studentId) ? [studentId] : [],
+    attemptOverrides: own === undefined ? {} : { [studentId]: own },
+  };
+}
+
+export const getStudentAssessments = onCall(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const role        = request.auth.token.role        as string | undefined;
+    const studentId   = request.auth.token.studentId   as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    if (role !== 'student' || !studentId || !instituteId) {
+      throw new HttpsError('permission-denied', 'Only students may list their assessments here.');
+    }
+
+    const db = getFirestore();
+
+    const [activeSnap, closedSnap, memberSnap] = await Promise.all([
+      db.collection('assessments')
+        .where('status', '==', 'active').where('isDeleted', '==', false).get(),
+      db.collection('assessments')
+        .where('status', '==', 'closed').where('isDeleted', '==', false).get(),
+      db.collection('assessmentMembers')
+        .where('studentId', '==', studentId).where('active', '==', true).get(),
+    ]);
+
+    const memberOf = new Set(memberSnap.docs.map((d) => String(d.get('assessmentId'))));
+
+    const assessments: StudentAssessmentSummary[] = [];
+    for (const doc of [...activeSnap.docs, ...closedSnap.docs]) {
+      const a = doc.data() as Record<string, unknown> & {
+        allocationMode?: string;
+        assignedTo?: { type?: string; instituteIds?: string[]; studentIds?: string[] };
+      };
+
+      // Two paths, chosen per-assessment by allocationMode — the same split
+      // startExam and getExamQuestions use. Under 'rules' the materialized
+      // membership list is authoritative and assignedTo is stale by design
+      // (resolveAllocation does not clear it), so consulting assignedTo here
+      // would let a rules-allocated exam carrying assignedTo.type 'all' show
+      // up for every student on the platform.
+      let visible: boolean;
+      if (a.allocationMode === 'rules') {
+        visible = memberOf.has(doc.id);
+      } else {
+        const t = a.assignedTo;
+        visible = !t
+          || t.type === 'all'
+          || (t.type === 'institutes' && (t.instituteIds ?? []).includes(instituteId))
+          || (t.type === 'students'   && (t.studentIds   ?? []).includes(studentId));
+      }
+      if (!visible) continue;
+
+      assessments.push(sanitizeAssessmentForStudent(doc.id, a, studentId));
+    }
+
+    return { ok: true, assessments };
+  }
+);
+
+// ══════════════════════════════════════════════════════════════════
 // SERVER-AUTHORITATIVE TIME TRANSITIONS
 // ══════════════════════════════════════════════════════════════════
 // The exam clock must not be spoofable via the student's local system

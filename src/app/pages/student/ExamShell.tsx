@@ -713,7 +713,7 @@ export function ExamShell() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { session } = useStudentAuth();
+  const { session, loading } = useStudentAuth();
 
   // Navigation state from ExamBriefingPage
   const navState = location.state as { cameraDeclined?: boolean; cameraGranted?: boolean } | null;
@@ -842,6 +842,19 @@ export function ExamShell() {
   // ── LOAD: assessment + attempt + questions ─────────────────────
 
   useEffect(() => {
+    // Auth rehydration guard. Firebase restores the session from IndexedDB
+    // asynchronously, so on a refresh this effect's FIRST run always sees
+    // session === null while loading is still true. Acting on that null threw
+    // the student out of a live exam and onto the login page — the worst place
+    // this race could land, since re-entry means signing back in and, on a SEB
+    // exam, reopening the .seb file.
+    //
+    // `session` is already in the deps, but that does not save it: by the time
+    // the effect re-runs with a real session the navigate has fired and this
+    // component is gone. The decision has to be deferred, not corrected after
+    // the fact. `loading` is in the deps so a genuinely signed-out student
+    // still gets redirected the moment the answer is known.
+    if (loading) return;
     if (!assessmentId || !session) {
       navigate('/student/login', { replace: true });
       return;
@@ -1099,7 +1112,7 @@ export function ExamShell() {
     };
 
     load();
-  }, [assessmentId, session]); // eslint-disable-line
+  }, [assessmentId, session, loading]); // eslint-disable-line
 
   // ── onSnapshot: watch attempt for freeze + session conflict ──────
 

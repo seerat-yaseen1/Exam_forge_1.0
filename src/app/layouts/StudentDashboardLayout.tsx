@@ -5,6 +5,7 @@ import { User, Lock, LogOut, Building2, LayoutDashboard, ClipboardList } from 'l
 import { useStudentAuth } from '../context/StudentAuthContext';
 import { useAuth } from '../context/AuthContext';
 import { LogoMark } from '../components/PlatformLogo';
+import { RouteFallback } from '../components/RouteFallback';
 
 // ── Institute logo mark ───────────────────────────────────────────
 
@@ -141,12 +142,19 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
 // ── Main layout ───────────────────────────────────────────────────
 
 export function StudentDashboardLayout() {
-  const { session, instituteLogo, logoLoading } = useStudentAuth();
+  const { session, instituteLogo, logoLoading, loading } = useStudentAuth();
   const { platformSettings } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
 
+  // Auth rehydration guard. Firebase restores the session from IndexedDB
+  // ASYNCHRONOUSLY, so on a page refresh the first render always has
+  // {user/session: null, loading: true}. Redirecting on the null alone raced
+  // that restore and bounced the user to the login page on refresh —
+  // intermittently, because whether it happened depended on which resolved
+  // first. Wait for the answer before acting on it.
+  if (loading) return <RouteFallback />;
   if (!session) return <Navigate to="/student/login" replace />;
   if (session.firstLoginRequired) return <Navigate to="/student/change-password" replace />;
 

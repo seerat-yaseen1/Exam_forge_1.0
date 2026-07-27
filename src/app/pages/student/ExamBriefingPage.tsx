@@ -145,7 +145,7 @@ function RuleItem({ icon, text }: { icon: React.ReactNode; text: string }) {
 export function ExamBriefingPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
-  const { session } = useStudentAuth();
+  const { session, loading: authLoading } = useStudentAuth();
 
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [existingAttempt, setExistingAttempt] = useState<Attempt | null>(null);
@@ -181,10 +181,16 @@ export function ExamBriefingPage() {
     getSEBPublicInfo().then((i) => setPlatformSebUrl(i.configFileUrl ?? '')).catch(() => {});
   }, [assessment?.requireSEB]);
 
-  // Redirect if not logged in
+  // Redirect if not logged in — but only once auth has finished rehydrating.
+  // Firebase restores the session from IndexedDB asynchronously, so the first
+  // run after a refresh always sees session === null with loading still true;
+  // redirecting on that raced the restore and bounced the student to login.
+  // Deferring is required rather than cosmetic: the effect does re-run when
+  // session arrives, but the navigate has already happened by then.
   useEffect(() => {
+    if (authLoading) return;
     if (!session) navigate('/student/login', { replace: true });
-  }, [session, navigate]);
+  }, [authLoading, session, navigate]);
 
   // Track fullscreen state
   useEffect(() => {

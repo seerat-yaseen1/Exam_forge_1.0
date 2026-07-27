@@ -5,6 +5,7 @@ import { User, Shield, LogOut, Building2, BookOpen, ClipboardList, Flag, FolderT
 import { useAuth } from '../context/AuthContext';
 import { PlatformLogo } from '../components/PlatformLogo';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { RouteFallback } from '../components/RouteFallback';
 
 // ── Profile dropdown ──────────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ function SidebarNavItem({ to, icon, label, isActive }: NavItemProps) {
 const SIDEBAR_W = 180;
 
 export function DashboardLayout() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
@@ -172,6 +173,13 @@ export function DashboardLayout() {
   // If user resizes from phone → desktop while drawer is open, close it
   useEffect(() => { if (!isMobile) setNavOpen(false); }, [isMobile]);
 
+  // Auth rehydration guard. Firebase restores the session from IndexedDB
+  // ASYNCHRONOUSLY, so on a page refresh the first render always has
+  // {user/session: null, loading: true}. Redirecting on the null alone raced
+  // that restore and bounced the user to the login page on refresh —
+  // intermittently, because whether it happened depended on which resolved
+  // first. Wait for the answer before acting on it.
+  if (loading) return <RouteFallback />;
   if (!user) return <Navigate to="/login" replace />;
 
   const initials = user.name

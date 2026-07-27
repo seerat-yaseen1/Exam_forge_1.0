@@ -5,6 +5,7 @@ import { User, Upload, LogOut, Building2, Loader2, LayoutDashboard, BookOpen, Cl
 import { useInstituteAuth } from '../context/InstituteAuthContext';
 import { useAuth } from '../context/AuthContext';
 import { LogoMark } from '../components/PlatformLogo';
+import { RouteFallback } from '../components/RouteFallback';
 
 // ── Institute logo / avatar ───────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ function SidebarNavItem({
 const SIDEBAR_W = 180;
 
 export function InstituteDashboardLayout() {
-  const { session, logo, logoLoading, uploadLogo } = useInstituteAuth();
+  const { session, logo, logoLoading, uploadLogo, loading } = useInstituteAuth();
   const { platformSettings } = useAuth();
   const location = useLocation();
 
@@ -217,6 +218,13 @@ export function InstituteDashboardLayout() {
   const fileInputRef                  = useRef<HTMLInputElement>(null);
 
   // Guards
+  // Auth rehydration guard. Firebase restores the session from IndexedDB
+  // ASYNCHRONOUSLY, so on a page refresh the first render always has
+  // {user/session: null, loading: true}. Redirecting on the null alone raced
+  // that restore and bounced the user to the login page on refresh —
+  // intermittently, because whether it happened depended on which resolved
+  // first. Wait for the answer before acting on it.
+  if (loading) return <RouteFallback />;
   if (!session) return <Navigate to="/institute/login" replace />;
   if (session.firstLoginRequired) return <Navigate to="/institute/change-password" replace />;
 

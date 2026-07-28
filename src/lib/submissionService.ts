@@ -343,6 +343,80 @@ const VIOLATION_COUNTER: Record<ViolationType, keyof IntegrityLog> = {
 // Throws 'ATTEMPT_LIMIT_EXCEEDED:<used>:<max>' if the student has
 // exhausted their allowed attempts.
 
+// ── Staggered exam start ──────────────────────────────────────────
+// A cohort does not converge on the start button naturally — the briefing
+// page runs a countdown to the window opening, so students sitting and waiting
+// are all released at the same instant. That synchronisation is manufactured
+// by our own UI, and it is what turns 10,000 students into a single spike
+// instead of an arrival curve.
+//
+// Rather than absorb the spike with more instances, spread it. Each client
+// waits a random moment inside a window sized to the cohort, so the load
+// arrives at a rate we choose instead of all at once.
+//
+// This costs students NOTHING, which is what makes it worth doing. Every timer
+// in the system anchors on attempt.startedAt — written server-side when the
+// attempt is actually created — not on when the exam window opened. A student
+// held back eight seconds starts eight seconds later and still receives their
+// full duration. Staggering would be unacceptable in a system where the clock
+// ran from the window opening; here it is free.
+
+/** Students admitted per second. 10,000 spread over ~10s at this rate. */
+const STAGGER_RATE_PER_SECOND = 1000;
+
+/**
+ * Below this cohort size, no delay at all. A 30-student quiz has no thundering
+ * herd to smooth, and making it feel sluggish to solve a problem it does not
+ * have would be a bad trade.
+ */
+const STAGGER_MIN_COHORT = 200;
+
+/** Ceiling on the spread, so a very large cohort cannot delay anyone absurdly. */
+const STAGGER_MAX_WINDOW_MS = 20_000;
+
+/**
+ * How long THIS client should wait before calling startExam.
+ *
+ * Exported for testing — the distribution is the whole point, so it needs to
+ * be checkable without mounting the shell.
+ */
+export function staggerDelayMs(
+  cohortSize: number | undefined,
+  rand: () => number = Math.random,
+): number {
+  if (!cohortSize || cohortSize < STAGGER_MIN_COHORT) return 0;
+  const windowMs = Math.min(
+    (cohortSize / STAGGER_RATE_PER_SECOND) * 1000,
+    STAGGER_MAX_WINDOW_MS,
+  );
+  return Math.floor(rand() * windowMs);
+}
+
+/**
+ * Firebase error codes worth retrying.
+ *
+ * DELIBERATELY NARROW. Every error startExam itself raises is a real verdict —
+ * permission-denied, failed-precondition, not-found, invalid-argument,
+ * unauthenticated — and retrying those would make a student out of attempts
+ * sit through several pointless waits before seeing the same refusal. Only
+ * infrastructure-level failures, where the request never got a real answer,
+ * are retried.
+ */
+const RETRYABLE_CODES = new Set([
+  'unavailable',
+  'deadline-exceeded',
+  'internal',
+  'resource-exhausted',
+  'aborted',
+]);
+
+function isRetryable(e: unknown): boolean {
+  const code = (e as { code?: string })?.code ?? '';
+  return RETRYABLE_CODES.has(code.replace(/^functions\//, ''));
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export async function startAttempt(params: {
   assessmentId: string;
   assessmentTitle: string;
@@ -362,6 +436,16 @@ export async function startAttempt(params: {
   // the assessment demands SEB; the server re-derives that requirement, so an
   // omitted token on a SEB exam is rejected regardless of what the client says.
   sebToken?: string;
+  /**
+   * Cohort size, used to size the stagger window. Comes from
+   * assessment.allocatedCount — the denormalized head-count already on the
+   * doc, so this costs no extra read. Undefined or small means no delay.
+   */
+  cohortSize?: number;
+  /** Called once if this client is going to wait, with the delay in ms. */
+  onStaggerWait?: (delayMs: number) => void;
+  /** Called before each backoff, so the UI can say it is still trying. */
+  onRetry?: (attemptNo: number, backoffMs: number) => void;
 }): Promise<Attempt> {
   // Server-authoritative: the startExam Cloud Function owns schedule
   // enforcement (startDate/endDate), the attempt-limit check, and all
@@ -383,25 +467,56 @@ export async function startAttempt(params: {
     { ok: true; attempt: Attempt }
   >(functions, 'startExam');
 
-  try {
-    const res = await call({
-      assessmentId: params.assessmentId,
-      sections: params.sections,
-      shuffleQuestions: params.shuffleQuestions,
-      sectionStartOrder: params.sectionStartOrder,
-      cameraDeclined: params.cameraDeclined,
-      deviceClass: detectDeviceClass(),
-      sebToken: params.sebToken,
-    });
-    return res.data.attempt;
-  } catch (e) {
-    const msg = (e as { message?: string })?.message ?? '';
-    if (msg.includes('ATTEMPT_LIMIT_EXCEEDED')) {
-      const m = msg.match(/ATTEMPT_LIMIT_EXCEEDED:\d+:\d+/);
-      throw new Error(m ? m[0] : 'ATTEMPT_LIMIT_EXCEEDED');
-    }
-    throw e;
+  // Spread the arrival before the request is made. onStaggerWait lets the
+  // caller show "Preparing your exam…" so the wait reads as loading rather
+  // than as an unexplained pause.
+  const delay = staggerDelayMs(params.cohortSize);
+  if (delay > 0) {
+    params.onStaggerWait?.(delay);
+    await sleep(delay);
   }
+
+  // Retry only infrastructure failures, and only a few times. startExam is
+  // IDEMPOTENT — it returns any existing in_progress or frozen attempt rather
+  // than creating a second one — so a retry after an ambiguous failure cannot
+  // produce a duplicate attempt. That property is what makes retrying safe
+  // here; without it, a timed-out-but-actually-succeeded call would be
+  // dangerous to repeat.
+  const MAX_TRIES = 4;
+  let lastErr: unknown;
+
+  for (let attemptNo = 1; attemptNo <= MAX_TRIES; attemptNo++) {
+    try {
+      const res = await call({
+        assessmentId: params.assessmentId,
+        sections: params.sections,
+        shuffleQuestions: params.shuffleQuestions,
+        sectionStartOrder: params.sectionStartOrder,
+        cameraDeclined: params.cameraDeclined,
+        deviceClass: detectDeviceClass(),
+        sebToken: params.sebToken,
+      });
+      return res.data.attempt;
+    } catch (e) {
+      const msg = (e as { message?: string })?.message ?? '';
+      if (msg.includes('ATTEMPT_LIMIT_EXCEEDED')) {
+        const m = msg.match(/ATTEMPT_LIMIT_EXCEEDED:\d+:\d+/);
+        throw new Error(m ? m[0] : 'ATTEMPT_LIMIT_EXCEEDED');
+      }
+      lastErr = e;
+      if (!isRetryable(e) || attemptNo === MAX_TRIES) throw e;
+
+      // Exponential backoff with FULL jitter (random across the whole window,
+      // not a fixed delay plus a wobble). Fixed backoff would re-synchronise
+      // everyone who failed together into a second spike at the same instant —
+      // the exact problem the stagger above exists to prevent.
+      const backoffMs = Math.floor(Math.random() * (250 * 2 ** (attemptNo - 1)));
+      params.onRetry?.(attemptNo, backoffMs);
+      await sleep(backoffMs);
+    }
+  }
+
+  throw lastErr;
 }
 
 // ── Save answer ───────────────────────────────────────────────────

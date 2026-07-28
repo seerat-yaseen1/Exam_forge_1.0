@@ -725,6 +725,9 @@ export function ExamShell() {
 
   // ── Core data ──────────────────────────────────────────────────
   const [shellStatus, setShellStatus]       = useState<ShellStatus>('loading');
+  // Sub-state of 'loading' explaining WHY we are still waiting, so a
+  // staggered student sees purpose rather than a stalled spinner.
+  const [startPhase, setStartPhase]         = useState<'queued' | 'retrying' | null>(null);
   const [errorMsg, setErrorMsg]             = useState('');
   // Phase 3 (Stage 3): true when errorMsg is an SEB rejection, so the error
   // screen renders the guided SEB panel instead of the generic message.
@@ -955,7 +958,14 @@ export function ExamShell() {
             cameraDeclined,
             effectiveMaxAttempts,
             sebToken,
+            // Stagger the arrival (see staggerDelayMs). allocatedCount is the
+            // head-count already denormalized onto the assessment doc, so
+            // sizing the window costs no extra read. Small cohorts wait zero.
+            cohortSize: a.allocatedCount,
+            onStaggerWait: () => setStartPhase('queued'),
+            onRetry: () => setStartPhase('retrying'),
           });
+          setStartPhase(null);
         }
 
         // Reorder effSections to match the attempt's frozen section order.
@@ -2069,7 +2079,18 @@ export function ExamShell() {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
         <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-        <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Preparing your exam…</p>
+        {/* Copy varies with startPhase so a staggered wait reads as progress
+            rather than a stalled spinner. Deliberately NOT a countdown or a
+            queue position: both invite students to compare with a neighbour
+            and conclude something is wrong, when in fact the delay costs them
+            nothing — their timer starts when their attempt does. */}
+        <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>
+          {startPhase === 'retrying'
+            ? 'Still preparing your exam…'
+            : startPhase === 'queued'
+              ? 'Preparing your exam… your time starts when it opens.'
+              : 'Preparing your exam…'}
+        </p>
       </div>
     );
   }

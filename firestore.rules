@@ -535,8 +535,21 @@ service cloud.firestore {
       allow get: if role() == 'student'
                     && resource.data.status in ['active', 'closed']
                     && studentAssignedToAssessment(id, resource.data);
+      // P-01 / "no compromise": an assessment may not become live without its
+      // security config frozen. The stamp is set client-side by
+      // assessmentService.stampIfPublishing, but a client-side convention is
+      // not enforcement — this clause is what makes publishing without a lock
+      // impossible, including from the console.
+      //
+      // Scoped to the TRANSITION into 'active', not to every write on a live
+      // doc. Assessments published before this rule existed have no stamp, and
+      // gating all their updates on one would freeze schedule and access edits
+      // on exams that are already running. Those get stamped lazily by
+      // startExam's legacy fallback instead.
       allow create: if canWriteOwned(request.resource.data.ownerType,
-                                     request.resource.data.ownerId);
+                                     request.resource.data.ownerId)
+                       && (request.resource.data.get('status', 'draft') != 'active'
+                           || 'securityLockedAt' in request.resource.data);
       // Owners edit freely UNTIL the first attempt sets securityLockedAt
       // (stamped by the startExam Cloud Function via the Admin SDK, which
       // bypasses these rules). Once locked, the security-relevant fields are
@@ -548,6 +561,13 @@ service cloud.firestore {
                        // Function (Admin SDK) — clients may never set or change it.
                        && request.resource.data.get('allocationMode', null)
                             == resource.data.get('allocationMode', null)
+                       // P-01: going live requires the security freeze. Fires only
+                       // on the draft → active transition; an already-active doc
+                       // (including a legacy one with no stamp) is unaffected, so
+                       // schedule and access edits on running exams still work.
+                       && (resource.data.get('status', 'draft') == 'active'
+                           || request.resource.data.get('status', 'draft') != 'active'
+                           || 'securityLockedAt' in request.resource.data)
                        && (
                             !('securityLockedAt' in resource.data)
                             || (

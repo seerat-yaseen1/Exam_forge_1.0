@@ -608,6 +608,11 @@ export async function createAssessment(
     isDeleted: false,
     createdAt: now(),
     updatedAt: now(),
+    // Freeze the security config AT PUBLISH (audit P-01). See
+    // stampIfPublishing below for why this moved off the first-attempt path.
+    ...(draft.status === 'active' && !draft.securityLockedAt
+      ? { securityLockedAt: now() }
+      : {}),
   };
 
   await setDoc(doc(db, 'assessments', id), removeUndefined(assessment));
@@ -696,6 +701,44 @@ export async function getAssessmentsVisibleToInstitute(
 
 // ── Update assessment ─────────────────────────────────────────────
 
+/**
+ * Freeze the security config the moment an assessment goes live.
+ *
+ * Audit P-01, and a security decision as much as a scale one.
+ *
+ * SECURITY: previously the freeze happened when the FIRST STUDENT STARTED, so
+ * between publishing and that first start there was a window where staff could
+ * downgrade securityTier, deliveryMode, requireCamera, allowMobile,
+ * requireExtensionCheck or autoResume — after students had already seen the
+ * briefing describing the requirements they'd face. Publishing is the honest
+ * moment to lock: it is when the exam becomes real to students. Once live, the
+ * security posture is what was advertised, and nobody can quietly soften it.
+ *
+ * SCALE: it also removes the only shared-document write from the exam hot
+ * path. The old lazy stamp lived inside startExam, so at a 10,000-student
+ * opening every invocation that read the doc before the first write propagated
+ * ALSO wrote — hundreds to thousands of writes onto one document, against
+ * Firestore's ~1-write-per-second-per-document limit. Worse, that write was
+ * not wrapped, so a contention failure threw and blocked that student from
+ * starting at all. Stamping here means the hot path writes nothing shared.
+ *
+ * NOT reversible by design. There is deliberately no unlock: an escape hatch
+ * from a security freeze is the thing the freeze exists to prevent. If a
+ * published exam has the wrong security settings, duplicate it — duplication
+ * already resets status to draft and clears this stamp — and publish the copy.
+ *
+ * Enforced in firestore.rules too, not just here. A client-side stamp alone
+ * would be a convention; the rule makes publishing without it impossible.
+ */
+function stampIfPublishing<T extends { status?: AssessmentStatus; securityLockedAt?: string }>(
+  patch: T,
+  currentStatus?: AssessmentStatus,
+): T {
+  const goingLive = patch.status === 'active' && currentStatus !== 'active';
+  if (!goingLive || patch.securityLockedAt) return patch;
+  return { ...patch, securityLockedAt: now() };
+}
+
 export async function updateAssessment(
   id: string,
   draft: Partial<AssessmentDraft>
@@ -705,6 +748,22 @@ export async function updateAssessment(
   // Recalculate total marks if questions changed
   if (draft.questions) {
     updates.totalMarks = draft.questions.reduce((sum, q) => sum + q.marks, 0);
+  }
+
+  // Read-before-write ONLY on the publish transition, so an ordinary edit to a
+  // live exam costs nothing extra. Publishing happens once per assessment, by
+  // one member of staff — there is no contention here to worry about.
+  if (draft.status === 'active') {
+    const existing = await getDoc(doc(db, 'assessments', id));
+    const currentStatus = existing.exists()
+      ? (existing.data() as Assessment).status
+      : undefined;
+    const alreadyStamped = existing.exists()
+      ? Boolean((existing.data() as Assessment).securityLockedAt)
+      : false;
+    if (!alreadyStamped) {
+      Object.assign(updates, stampIfPublishing({ status: 'active' as const }, currentStatus));
+    }
   }
 
   await updateDoc(doc(db, 'assessments', id), removeUndefined(updates));

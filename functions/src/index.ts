@@ -28,6 +28,40 @@ import { defineSecret } from 'firebase-functions/params';
 // Phase 3 — shared with Vercel's /api/seb-verify. Declared at module top so
 // every callable that lists it in `secrets` can reference it (const, not hoisted).
 const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
+
+/**
+ * Capacity settings for the SIX functions a whole cohort hits at once
+ * (audit P-01 / 10k scale target).
+ *
+ * Nothing in this file previously set maxInstances, minInstances or
+ * concurrency, so every function ran on pure Gen2 defaults: 100 instances x 80
+ * concurrent requests. Capacity is measured in requests IN FLIGHT, not
+ * requests served — in-flight is arrival rate x handler duration — so the
+ * default 8,000 is ample for a 10,000-student opening spread over a minute,
+ * and still fine for one compressed into a second at normal ~300ms handlers.
+ *
+ * The failure mode is not steady-state throughput, it's the cold-start
+ * thundering herd: minInstances defaults to 0, so the first burst of an exam
+ * window meets zero warm instances, every request pays a multi-second cold
+ * start, slow handlers inflate the in-flight count, and THAT is what walks
+ * into the ceiling. It is self-reinforcing — the burst causes cold starts,
+ * cold starts slow handlers, slow handlers trigger more instances.
+ *
+ * maxInstances 400 gives roughly 4x headroom (32,000 in flight) and costs
+ * nothing when unused — it is a ceiling, not a reservation.
+ *
+ * minInstances is deliberately left at the default 0 here, because warm
+ * instances bill continuously whether or not an exam is running. Set it to 2-3
+ * on startExam and getExamQuestions before a large scheduled sitting to remove
+ * the cold-start cliff, and back to 0 afterwards. Applied ONLY to these six —
+ * the other 34 are staff-driven and will never see a cohort-sized burst.
+ */
+const EXAM_HOT_PATH = {
+  region: 'us-central1',
+  secrets: [SEB_SIGNING_SECRET],
+  maxInstances: 400,
+  concurrency: 80,
+};
 import { initializeApp } from 'firebase-admin/app';
 import {
   ANCESTOR_FIELD,
@@ -3683,7 +3717,7 @@ function sanitizeQuestionForStudent(q: Record<string, unknown>, includeExplanati
 }
 
 export const getExamQuestions = onCall<GetExamQuestionsData>(
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  EXAM_HOT_PATH,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role        = request.auth.token.role        as string | undefined;
@@ -4180,7 +4214,7 @@ interface HeartbeatData { attemptId: string;   sebToken?: string;
 }
 
 export const examHeartbeat = onCall<HeartbeatData>(
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  EXAM_HOT_PATH,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerStudentId = request.auth.token.studentId as string | undefined;
@@ -4353,7 +4387,7 @@ interface SubmitAnswerAndAdvanceData {
 }
 
 export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  EXAM_HOT_PATH,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role      = request.auth.token.role      as string | undefined;
@@ -4697,7 +4731,8 @@ interface StartExamData {
 export const startExam = onCall<StartExamData>(
   // Phase 3: the secret must be declared here or SEB_SIGNING_SECRET.value()
   // is empty at runtime and assertSEB would fail closed on every call.
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  // EXAM_HOT_PATH carries that secret plus the capacity settings.
+  EXAM_HOT_PATH,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role = request.auth.token.role as string | undefined;
@@ -4884,15 +4919,32 @@ export const startExam = onCall<StartExamData>(
     // ── Build frozen state (mirrors legacy startAttempt) ──────────
     const nowIso = new Date().toISOString();
 
-    // ── Freeze the security config on the FIRST attempt (Phase 0) ──
-    // Idempotent: only writes if not already locked. Written via the Admin
-    // SDK, which bypasses firestore.rules — so the function can always stamp
-    // even though clients are forbidden from editing a locked doc's security
-    // fields. Reached only after the idempotency return above, i.e. only when
-    // a brand-new attempt is actually being created.
+    // ── Legacy fallback for the security freeze (audit P-01) ───────
+    // The freeze now happens at PUBLISH (assessmentService.stampIfPublishing,
+    // enforced by firestore.rules), so any assessment published after that
+    // change arrives here already stamped and this block is skipped entirely.
+    //
+    // It remains for assessments that went live BEFORE that change and carry
+    // no stamp. Removing it outright would leave those exams' security config
+    // editable forever, which is the opposite of the intent.
+    //
+    // NON-FATAL, and that is the whole point at scale. This is the only write
+    // to a SHARED document anywhere on the student hot path. At a large
+    // simultaneous opening every invocation that reads the doc before the
+    // first write propagates also writes — hundreds to thousands of writes
+    // onto one document, against Firestore's ~1-write-per-second-per-document
+    // ceiling. Previously this was a bare `await`, so a contention rejection
+    // threw and STOPPED THAT STUDENT SITTING THE EXAM. Swallowing it is
+    // correct: the stamp is idempotent and racing writers all write the same
+    // instant, so with thousands trying at least one lands, and a student is
+    // never blocked from starting because of a bookkeeping write.
     if (!a.securityLockedAt) {
-      await db.collection('assessments').doc(assessmentId)
-        .set({ securityLockedAt: nowIso, updatedAt: nowIso }, { merge: true });
+      try {
+        await db.collection('assessments').doc(assessmentId)
+          .set({ securityLockedAt: nowIso, updatedAt: nowIso }, { merge: true });
+      } catch (e) {
+        console.warn('[startExam] legacy securityLockedAt stamp skipped', assessmentId, e);
+      }
     }
 
     let ordered = sections;
@@ -5088,7 +5140,7 @@ function breakAfterCompletion(
   return brk && typeof brk.durationMinutes === 'number' && brk.durationMinutes > 0 ? brk : null;
 }
 export const startSection = onCall<StartSectionData>(
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  EXAM_HOT_PATH,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role = request.auth.token.role as string | undefined;
@@ -5228,7 +5280,7 @@ interface SubmitSectionData {
 // default 30 s). timeUsedSeconds is computed server-side. When advancing
 // with no break/pick, starts the next section's timer atomically.
 export const submitSection = onCall<SubmitSectionData>(
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  EXAM_HOT_PATH,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role = request.auth.token.role as string | undefined;

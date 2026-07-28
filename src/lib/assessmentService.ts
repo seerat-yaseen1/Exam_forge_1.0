@@ -33,6 +33,35 @@ function removeUndefined<T extends Record<string, any>>(obj: T): T {
   return out as T;
 }
 
+/**
+ * updateDoc payload builder that can actually CLEAR a field.
+ *
+ * The bug this exists for (2026-07-28): every update path ran its patch
+ * through removeUndefined, which DROPS undefined keys. In Firestore a field
+ * omitted from updateDoc is left untouched — clearing requires deleteField().
+ * So once a value was saved it could never be removed: the builder emitted
+ * `endDate: undefined`, removeUndefined deleted the key, updateDoc changed
+ * nothing, and the old deadline survived. The UI showed an empty field and
+ * reported success, so the author believed the exam had no window while
+ * students were told "Window closed" by the stale date. Confirmed repro: set a
+ * deadline, then switch to "No deadline".
+ *
+ * The discriminator is key PRESENCE, not value. `{ endDate: undefined }` and
+ * `{}` are different intents — "clear this" versus "don't touch this" — and
+ * `for…in` sees only the former. Callers that want a field left alone must
+ * omit it, which is exactly what the narrow patch helpers already do.
+ *
+ * NOT for creates. deleteField() is only meaningful in an update; setDoc still
+ * uses removeUndefined above, where dropping the key is the correct behaviour.
+ */
+function withClears<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const key in obj) {
+    out[key] = obj[key] === undefined ? deleteField() : obj[key];
+  }
+  return out;
+}
+
 function newId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -766,7 +795,7 @@ export async function updateAssessment(
     }
   }
 
-  await updateDoc(doc(db, 'assessments', id), removeUndefined(updates));
+  await updateDoc(doc(db, 'assessments', id), withClears(updates));
 }
 
 // ── Narrow patch helpers (focused edit panels) ────────────────────
@@ -776,17 +805,17 @@ export async function updateAssessment(
 
 export type DetailsPatch = Partial<Pick<Assessment, 'title' | 'description' | 'subject' | 'tags'>>;
 export async function updateAssessmentDetails(id: string, patch: DetailsPatch): Promise<void> {
-  await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
+  await updateDoc(doc(db, 'assessments', id), withClears({ ...patch, updatedAt: now() }));
 }
 
 export type SchedulePatch = Partial<Pick<Assessment, 'startDate' | 'endDate' | 'maxAttempts' | 'attemptOverrides' | 'sectionGraceSeconds'>>;
 export async function updateAssessmentSchedule(id: string, patch: SchedulePatch): Promise<void> {
-  await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
+  await updateDoc(doc(db, 'assessments', id), withClears({ ...patch, updatedAt: now() }));
 }
 
 export type AccessPatch = Partial<Pick<Assessment, 'assignedTo' | 'blockedStudents'>>;
 export async function updateAssessmentAccess(id: string, patch: AccessPatch): Promise<void> {
-  await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
+  await updateDoc(doc(db, 'assessments', id), withClears({ ...patch, updatedAt: now() }));
 }
 
 export type BehaviourPatch = Partial<Pick<Assessment,
@@ -795,7 +824,7 @@ export type BehaviourPatch = Partial<Pick<Assessment,
   | 'overallTimeLimit' | 'overallGraceSeconds'
 >>;
 export async function updateAssessmentBehaviour(id: string, patch: BehaviourPatch): Promise<void> {
-  await updateDoc(doc(db, 'assessments', id), removeUndefined({ ...patch, updatedAt: now() }));
+  await updateDoc(doc(db, 'assessments', id), withClears({ ...patch, updatedAt: now() }));
 }
 
 // ── Duplicate an assessment ───────────────────────────────────────

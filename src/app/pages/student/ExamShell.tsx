@@ -474,12 +474,20 @@ function SessionConflictOverlay() {
 function SubmitConfirmModal({
   sectionName,
   unanswered,
+  unseen,
+  totalInSection,
   isFinal,
   onConfirm,
   onCancel,
 }: {
   sectionName: string;
+  /** Served questions left blank. In linear delivery this EXCLUDES anything
+   *  the server has not handed out yet — see `unseen`. */
   unanswered: number;
+  /** Linear/adaptive only: questions in this section not yet shown. Zero in
+   *  standard delivery, where the student already has the whole section. */
+  unseen: number;
+  totalInSection: number;
   isFinal: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -511,13 +519,38 @@ function SubmitConfirmModal({
           </p>
         </div>
         <div className="px-5 py-5">
-          {unanswered > 0 && (
+          {/* Gated on unseen too, not just unanswered — that omission was the
+              sharper half of the bug. In linear delivery a student who had
+              ANSWERED both served questions while sitting on Q2 of 5 hit
+              unanswered === 0 and got NO warning at all, then submitted and
+              silently forfeited three questions they were never shown.
+
+              The copy leads with the unseen count because that is the only
+              part the student can still act on. Linear delivery has no back
+              navigation, so naming the questions they already passed is
+              information they cannot use; the questions still to come are
+              recoverable simply by not submitting. The unrecoverable ones are
+              still counted honestly in the second clause rather than hidden. */}
+          {(unanswered > 0 || unseen > 0) && (
             <div className="flex items-start gap-2.5 px-3 py-3 mb-4"
               style={{ background: '#FEF9EC', border: '1px solid #F5DFA0', borderRadius: 2 }}>
               <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#92680A', flexShrink: 0, marginTop: 1 }} />
               <p className="text-xs" style={{ color: '#92680A', lineHeight: 1.6 }}>
-                You have <strong>{unanswered} unanswered question{unanswered !== 1 ? 's' : ''}</strong>{' '}
-                in this section. Unanswered questions receive 0 marks.
+                {unseen > 0 ? (
+                  <>
+                    <strong>
+                      {unseen} question{unseen !== 1 ? 's' : ''} in this section
+                      {unseen !== 1 ? ' have' : ' has'} not been shown yet.
+                    </strong>{' '}
+                    Submitting now ends the section — {unanswered + unseen} of {totalInSection}{' '}
+                    will receive 0 marks.
+                  </>
+                ) : (
+                  <>
+                    You have <strong>{unanswered} unanswered question{unanswered !== 1 ? 's' : ''}</strong>{' '}
+                    in this section. Unanswered questions receive 0 marks.
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -1304,6 +1337,24 @@ export function ExamShell() {
   const unansweredInSection = useMemo(() => {
     return currentSectionQIds.filter((qId) => isAnswerEmpty(localAnswers[qId])).length;
   }, [currentSectionQIds, localAnswers]);
+
+  // Questions in this section the server has not handed out yet.
+  //
+  // currentSectionQIds is the SERVED slice in linear/adaptive (it grows 1 → N),
+  // so unansweredInSection above can only ever see what the student has
+  // reached. On Q2 of 5 it reports 2 and says nothing about the other 3 — the
+  // student is told they are forfeiting two questions when in fact they are
+  // forfeiting five. currentSectionTotal already carries the section's true
+  // size (added for the "Q1 of 1" counter fix), so the gap is just arithmetic.
+  //
+  // Always 0 in standard delivery: the whole section is served up front, so
+  // served length === total and there is nothing unseen. That keeps the
+  // existing message untouched for the mode where the student CAN navigate
+  // back and the unanswered count is genuinely actionable.
+  const unseenInSection = useMemo(() => {
+    if (!isLinear) return 0;
+    return Math.max(0, currentSectionTotal - currentSectionQIds.length);
+  }, [isLinear, currentSectionTotal, currentSectionQIds.length]);
 
   // ══════════════════════════════════════════════════════════════════
   // ANSWER HANDLING
@@ -2660,6 +2711,8 @@ export function ExamShell() {
             key="submit-modal"
             sectionName={currentSection.name}
             unanswered={unansweredInSection}
+            unseen={unseenInSection}
+            totalInSection={currentSectionTotal}
             isFinal={isLastSection}
             onConfirm={async () => {
               setShowSubmitModal(false);

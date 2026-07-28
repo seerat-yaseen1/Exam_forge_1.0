@@ -240,6 +240,25 @@ function breakAfterCompletion(
  * count so the two never disagree (e.g. a whitespace-only text answer must
  * read the same way in both places).
  */
+/**
+ * Did this write fail because the exam's answer window has closed?
+ *
+ * firestore.rules denies answer writes once answersLockedAfter has passed
+ * (audit 2026-07-28). That denial is not a fault to recover from — it is the
+ * deadline doing its job, and it means the attempt must now be SUBMITTED
+ * rather than retried. Treating it like a network failure would strand the
+ * student on an error screen with an exam they can neither continue nor close,
+ * which is exactly what the two flush handlers below used to do.
+ *
+ * Only the final flush is affected. Everything the student answered before the
+ * deadline was already persisted by the 1.5s autosave; what is refused here is
+ * at most the last unflushed moment, which is precisely what expiring means.
+ */
+function isAnswerWindowClosed(e: unknown): boolean {
+  const code = String((e as { code?: string })?.code ?? '');
+  return code === 'permission-denied' || code.endsWith('/permission-denied');
+}
+
 function isAnswerEmpty(ans: AttemptAnswer | undefined): boolean {
   if (!ans) return true;
   if (ans.type === 'text') return !(ans.value as string).trim();
@@ -1586,11 +1605,17 @@ export function ExamShell() {
     try {
       await flushAnswers();
     } catch (e) {
-      console.error('[ExamShell] flush before section submit failed', e);
-      submittingRef.current = false;
-      setErrorMsg('Could not save your answers. Check your connection and try again.');
-      setShellStatus('error');
-      return;
+      // Window closed -> keep going. The submit itself runs through
+      // submitSection (Admin SDK, rules do not apply), so the section can
+      // still be closed out properly even though this last write was refused.
+      if (!isAnswerWindowClosed(e)) {
+        console.error('[ExamShell] flush before section submit failed', e);
+        submittingRef.current = false;
+        setErrorMsg('Could not save your answers. Check your connection and try again.');
+        setShellStatus('error');
+        return;
+      }
+      console.warn('[ExamShell] answer window closed before section submit — submitting anyway');
     }
 
     const sectionId = currentSection.id;
@@ -1932,11 +1957,16 @@ export function ExamShell() {
     try {
       await flushAnswers();
     } catch (e) {
-      console.error('[ExamShell] flush before final submit failed', e);
-      submittingRef.current = false;
-      setErrorMsg('Your answers could not be saved, so the exam was not submitted. Check your connection and press Retry submission.');
-      setShellStatus('submit_failed');
-      return;
+      // Same reasoning as the section flush: a closed window must not block
+      // finalising. gradeAttempt is a callable and is unaffected by the rule.
+      if (!isAnswerWindowClosed(e)) {
+        console.error('[ExamShell] flush before final submit failed', e);
+        submittingRef.current = false;
+        setErrorMsg('Your answers could not be saved, so the exam was not submitted. Check your connection and press Retry submission.');
+        setShellStatus('submit_failed');
+        return;
+      }
+      console.warn('[ExamShell] answer window closed before final submit — submitting anyway');
     }
 
     try {

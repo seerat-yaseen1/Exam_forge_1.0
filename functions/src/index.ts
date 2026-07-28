@@ -47,8 +47,20 @@ const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
  * into the ceiling. It is self-reinforcing — the burst causes cold starts,
  * cold starts slow handlers, slow handlers trigger more instances.
  *
- * maxInstances 400 gives roughly 4x headroom (32,000 in flight) and costs
- * nothing when unused — it is a ceiling, not a reservation.
+ * maxInstances 200 is the CEILING THIS PROJECT ALLOWS, not a free choice.
+ * Cloud Run validates maxScale x CPU against the CpuAllocPerProjectRegion
+ * quota, which is 200 CPU in us-central1 here; at 1 CPU per instance that caps
+ * maxScale at 200. A first attempt at 400 was rejected outright with
+ * "Max instances must be set to 200 or fewer to set the requested total CPU"
+ * — the deploy fails, it does not silently clamp. Raising this requires a
+ * quota increase request in the Cloud Console first.
+ *
+ * 200 is still double the Gen2 default and gives 16,000 in-flight capacity,
+ * comfortably past the 10,000-student target — remember in-flight is arrival
+ * rate x handler duration, so 10,000 starts over even ten seconds at ~300ms
+ * handlers is only ~300 in flight. The headroom is for the cold-start
+ * pathological case, not the steady state. It costs nothing when unused: this
+ * is a ceiling, not a reservation.
  *
  * minInstances is deliberately left at the default 0 here, because warm
  * instances bill continuously whether or not an exam is running. Set it to 2-3
@@ -59,7 +71,7 @@ const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
 const EXAM_HOT_PATH = {
   region: 'us-central1',
   secrets: [SEB_SIGNING_SECRET],
-  maxInstances: 400,
+  maxInstances: 200,
   concurrency: 80,
 };
 import { initializeApp } from 'firebase-admin/app';

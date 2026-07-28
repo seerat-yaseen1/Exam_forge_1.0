@@ -4740,6 +4740,35 @@ interface StartExamData {
 // the assessment doc (not client-supplied values), then writes the
 // attempt with server-set timestamps. Idempotent: returns an existing
 // in_progress/frozen attempt if one is present.
+/**
+ * Classify a student's existing attempts for one assessment.
+ *
+ * Extracted (audit 2026-07-28) so the cheap pre-check and the authoritative
+ * in-transaction check cannot drift. They ask the same question at two
+ * different moments; if their answers ever disagreed because someone edited
+ * one and not the other, the bug would surface as a duplicate attempt under
+ * load and be near-impossible to reproduce.
+ */
+function evaluateStudentAttempts(
+  docs: FirebaseFirestore.QueryDocumentSnapshot[],
+  effectiveMax: number,
+): {
+  live: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  finished: number;
+  limitReached: boolean;
+} {
+  const statusOf = (d: FirebaseFirestore.QueryDocumentSnapshot) =>
+    (d.data() as { status?: string }).status;
+  const live = docs.find(
+    (d) => statusOf(d) === 'in_progress' || statusOf(d) === 'frozen',
+  );
+  const finished = docs.filter((d) => {
+    const s = statusOf(d);
+    return s === 'submitted' || s === 'auto_submitted' || s === 'terminated';
+  }).length;
+  return { live, finished, limitReached: finished >= effectiveMax };
+}
+
 export const startExam = onCall<StartExamData>(
   // Phase 3: the secret must be declared here or SEB_SIGNING_SECRET.value()
   // is empty at runtime and assertSEB would fail closed on every call.
@@ -4908,24 +4937,26 @@ export const startExam = onCall<StartExamData>(
       throw new HttpsError('failed-precondition', 'This exam has closed.');
     }
 
-    // Idempotency + attempt-limit — read attempts server-side (trusted).
-    const attemptsSnap = await db.collection('attempts')
+    // ── Fast path (NOT authoritative) ─────────────────────────────
+    // A plain read that short-circuits the two common cases without paying to
+    // build an attempt: resuming a live sitting, and a student who is already
+    // out of attempts. The transaction at the end of this function is what
+    // actually decides — see the note there for why this read alone is not
+    // enough.
+    const attemptsQuery = db.collection('attempts')
       .where('studentId', '==', studentId)
-      .where('assessmentId', '==', assessmentId)
-      .get();
-    const attempts = attemptsSnap.docs.map((d) => d.data() as { status: string });
-    const live = attemptsSnap.docs.find(
-      (d) => (d.data() as { status: string }).status === 'in_progress'
-        || (d.data() as { status: string }).status === 'frozen',
-    );
-    if (live) return { ok: true, attempt: live.data() };
+      .where('assessmentId', '==', assessmentId);
 
     const effectiveMax = a.attemptOverrides?.[studentId] ?? a.maxAttempts ?? 1;
-    const finished = attempts.filter(
-      (t) => t.status === 'submitted' || t.status === 'auto_submitted' || t.status === 'terminated',
-    ).length;
-    if (finished >= effectiveMax) {
-      throw new HttpsError('resource-exhausted', `ATTEMPT_LIMIT_EXCEEDED:${finished}:${effectiveMax}`);
+
+    const preSnap = await attemptsQuery.get();
+    const pre = evaluateStudentAttempts(preSnap.docs, effectiveMax);
+    if (pre.live) return { ok: true, attempt: pre.live.data() };
+    if (pre.limitReached) {
+      throw new HttpsError(
+        'resource-exhausted',
+        `ATTEMPT_LIMIT_EXCEEDED:${pre.finished}:${effectiveMax}`,
+      );
     }
 
     // ── Build frozen state (mirrors legacy startAttempt) ──────────
@@ -5100,8 +5131,51 @@ export const startExam = onCall<StartExamData>(
       updatedAt: nowIso,
     };
 
-    await db.collection('attempts').doc(id).set(attempt);
-    return { ok: true, attempt };
+    // ── Authoritative create (audit 2026-07-28) ───────────────────
+    // The check above is a plain read, and a plain read followed by a plain
+    // write is NOT atomic. Two concurrent startExam calls for the same student
+    // both read, both see no live attempt, both generate a different random
+    // id, and both write — producing TWO live attempts for one student, and
+    // letting both pass an attempt-limit check that should have admitted one.
+    //
+    // That was reachable before (double-click, two tabs, flaky network) but
+    // the client-side retry added for the staggered start made it far more
+    // likely: 'deadline-exceeded' means "the client stopped waiting", not
+    // "the server failed", so the original call may still be running and about
+    // to succeed when the retry arrives. Retrying was justified on the grounds
+    // that startExam is idempotent — true only for SEQUENTIAL calls. This
+    // transaction is what makes that claim true under concurrency, and
+    // therefore what makes the retry safe.
+    //
+    // Scope is deliberate. The read set is a single student's attempts for a
+    // single assessment, so two students never contend — unlike a transaction
+    // on the shared assessment doc, which is exactly what was rejected for
+    // P-01. Only a student's own racing requests serialise, which is the point.
+    //
+    // Everything expensive — SEB verification, camera and targeting gates,
+    // section building and shuffling — stays OUTSIDE. A transaction body can
+    // re-run on contention, so anything in here is work that may be repeated,
+    // and Firestore requires all reads before all writes within it.
+    const created = await db.runTransaction(async (txn) => {
+      const snap = await txn.get(attemptsQuery);
+      const nowState = evaluateStudentAttempts(snap.docs, effectiveMax);
+
+      // Someone won the race. Return THEIR attempt rather than creating a
+      // second one — this is the case the fast path could not see.
+      if (nowState.live) return nowState.live.data();
+
+      if (nowState.limitReached) {
+        throw new HttpsError(
+          'resource-exhausted',
+          `ATTEMPT_LIMIT_EXCEEDED:${nowState.finished}:${effectiveMax}`,
+        );
+      }
+
+      txn.set(db.collection('attempts').doc(id), attempt);
+      return attempt as FirebaseFirestore.DocumentData;
+    });
+
+    return { ok: true, attempt: created };
   },
 );
 

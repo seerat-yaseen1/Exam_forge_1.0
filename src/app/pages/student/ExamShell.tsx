@@ -484,6 +484,12 @@ function SubmitConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  // Guards the window between the click and the shell switching to a
+  // submitting state. Without it the confirm button stayed live and identical,
+  // so an impatient second click fired onConfirm twice — harmless today only
+  // because submittingRef swallows the duplicate, which is a fragile thing to
+  // rely on for correctness.
+  const [confirming, setConfirming] = useState(false);
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -523,20 +529,28 @@ function SubmitConfirmModal({
         </div>
         <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button
-            onClick={onConfirm}
+            onClick={() => { if (confirming) return; setConfirming(true); onConfirm(); }}
+            disabled={confirming}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5"
             style={{
-              background: '#0C0C0B',
+              background: confirming ? '#5A5A54' : '#0C0C0B',
               color: '#FFFFFF', borderRadius: 2,
-              cursor: 'pointer',
+              cursor: confirming ? 'wait' : 'pointer',
             }}
           >
-            {isFinal ? 'Submit exam' : `Submit ${sectionName}`}
+            {confirming
+              ? 'Submitting…'
+              : isFinal ? 'Submit exam' : `Submit ${sectionName}`}
           </button>
           <button
             onClick={onCancel}
+            disabled={confirming}
             className="text-xs px-4 py-2.5"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{
+              color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2,
+              cursor: confirming ? 'not-allowed' : 'pointer',
+              opacity: confirming ? 0.5 : 1,
+            }}
           >
             Continue reviewing
           </button>
@@ -575,6 +589,18 @@ function BreakScreen({
     if (expired && state.mandatory) onContinue();
   }, [expired, state.mandatory, onContinue]);
 
+  // A mandatory break that has run out is ALREADY continuing on its own via
+  // the effect above. Previously the button simply flipped to "Continue to X"
+  // at that moment, offering an action the student did not need to take and
+  // which did nothing when taken — the exam moved on regardless. Say what is
+  // actually happening instead of presenting a decision that isn't one.
+  const autoContinuing = expired && state.mandatory;
+
+  // Set on click so a manual continue (skippable break) visibly registers
+  // rather than looking ignored while handleEndBreak does its work.
+  const [continuing, setContinuing] = useState(false);
+  const busy = autoContinuing || continuing;
+
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
       <div className="flex flex-col items-center gap-4" style={{ maxWidth: 440, textAlign: 'center', padding: '0 24px' }}>
@@ -601,18 +627,20 @@ function BreakScreen({
             : 'You may skip this break and continue immediately.'}
         </p>
         <button
-          onClick={onContinue}
-          disabled={!canContinue}
+          onClick={() => { if (busy) return; setContinuing(true); onContinue(); }}
+          disabled={!canContinue || busy}
           className="text-xs px-5 py-2.5 mt-2"
           style={{
-            background: canContinue ? '#0C0C0B' : '#C8C7C2',
+            background: canContinue && !busy ? '#0C0C0B' : '#C8C7C2',
             color: '#FFFFFF', borderRadius: 2,
-            cursor: canContinue ? 'pointer' : 'not-allowed',
+            cursor: canContinue && !busy ? 'pointer' : 'not-allowed',
           }}
         >
-          {expired
-            ? (state.then === 'choose' ? 'Choose next section' : `Continue to ${state.nextSectionName}`)
-            : (state.mandatory ? 'Please wait…' : `Skip break`)}
+          {busy
+            ? 'Continuing…'
+            : expired
+              ? (state.then === 'choose' ? 'Choose next section' : `Continue to ${state.nextSectionName}`)
+              : (state.mandatory ? 'Please wait…' : `Skip break`)}
         </button>
       </div>
     </div>
@@ -1483,7 +1511,15 @@ export function ExamShell() {
     if (submittingRef.current) return; // another submit path is already running
     submittingRef.current = true;
 
-    setShellStatus('submitting_section');
+    // On the FINAL section there is no section-submit step worth showing: the
+    // very next thing doSectionSubmit does is hand off to doFinalSubmit. Going
+    // through 'submitting_section' first made the student watch two different
+    // progress states for one action they confirmed as "Submit exam" — the
+    // internal two-phase implementation leaking into the UI. Same test the
+    // advance branch uses at the bottom of this function (nextSection is
+    // effectiveSections[currentSectionIdx + 1]), so the two cannot disagree.
+    const isFinalSection = currentSectionIdx + 1 >= effectiveSections.length;
+    setShellStatus(isFinalSection ? 'submitting_exam' : 'submitting_section');
     // B-02 (audit 2026-07-26): this flush MUST NOT be allowed to throw past
     // here. submittingRef is already engaged above, and every release below
     // sits after this line — so an exception escaping flushAnswers strands the
@@ -2180,6 +2216,20 @@ export function ExamShell() {
         >
           Retry submission
         </button>
+      </div>
+    );
+  }
+
+  // 'submitting_section' previously had NO render case, so it fell through to
+  // the live exam UI — the student confirmed a submit and then watched the
+  // paper sit there unchanged until the next state arrived. Nothing signalled
+  // that the click had registered, which is what made it feel inert and
+  // invited a second click on an already-submitting section.
+  if (shellStatus === 'submitting_section') {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+        <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Submitting this section…</p>
       </div>
     );
   }

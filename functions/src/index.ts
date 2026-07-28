@@ -90,7 +90,7 @@ import {
   type SubNodeType,
 } from './allocationCore';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 initializeApp();
 
@@ -1110,6 +1110,78 @@ function isDueForPurge(data: Record<string, unknown>, now: Date): boolean {
   if (Number.isNaN(t)) return false;
   return now.getTime() >= t;
 }
+
+/**
+ * Close attempts whose writable window has expired (audit 2026-07-28).
+ *
+ * The rule change stops a late student WRITING, but on its own it leaves the
+ * attempt sitting in_progress forever. That matters for three reasons: the
+ * attempt is never graded, so the student has no result; it occupies one of
+ * their attempt slots indefinitely, since evaluateStudentAttempts counts
+ * in_progress as live and returns it instead of allowing a fresh start; and
+ * abandoned attempts accumulate without bound, which at a 10,000-student scale
+ * is a real pile.
+ *
+ * It is also the only thing that covers attempts created BEFORE
+ * answersLockedAfter existed. Those have no lock field, the rule deliberately
+ * lets them through rather than freezing every exam in flight at deploy, and
+ * this sweep is what actually closes them.
+ *
+ * Marks them auto_submitted rather than deleting anything — the answers the
+ * student did record stand, exactly as they would if the client had hit its
+ * own timer. Grading is left to the existing gradeAttempt path rather than
+ * duplicated here, so there is one scoring implementation, not two that can
+ * drift.
+ *
+ * Hourly, not by-the-minute: this is a backstop for abandonment, and the rule
+ * above is what enforces the deadline precisely. A student who walks away is
+ * closed out within the hour; a student still at the keyboard is stopped at
+ * the exact second by the rule.
+ */
+export const scheduledCloseExpiredAttempts = onSchedule(
+  { schedule: 'every 60 minutes', timeZone: 'Etc/UTC', region: 'us-central1' },
+  async () => {
+    const db = getFirestore();
+    const now = Timestamp.now();
+
+    // Only attempts that carry a lock AND whose lock has passed. Firestore
+    // range queries skip documents missing the field entirely, which is
+    // exactly right — a legacy or genuinely untimed attempt has no deadline to
+    // be past.
+    const expired = await db.collection('attempts')
+      .where('status', '==', 'in_progress')
+      .where('answersLockedAfter', '<', now)
+      .limit(500)
+      .get();
+
+    if (expired.empty) {
+      console.log('[closeExpiredAttempts] nothing to close');
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    let closed = 0;
+
+    // Chunked to stay under the 500-write batch ceiling. The query limit is
+    // already 500 so one batch suffices today, but the split keeps it correct
+    // if that limit is ever raised.
+    for (let i = 0; i < expired.docs.length; i += 400) {
+      const batch = db.batch();
+      for (const doc of expired.docs.slice(i, i + 400)) {
+        batch.update(doc.ref, {
+          status: 'auto_submitted',
+          submittedAt: nowIso,
+          autoSubmitReason: 'deadline_expired_sweep',
+          updatedAt: nowIso,
+        });
+        closed++;
+      }
+      await batch.commit();
+    }
+
+    console.log(`[closeExpiredAttempts] closed ${closed} expired attempt(s)`);
+  },
+);
 
 export const scheduledPurge = onSchedule(
   { schedule: 'every day 03:00', timeZone: 'Etc/UTC', region: 'us-central1' },
@@ -4823,6 +4895,15 @@ export const startExam = onCall<StartExamData>(
       sebConfigKeys?: string[];
       securityLockedAt?: string;
       gradingConfig?: AssessmentGradingConfigS;   // frozen onto the attempt below
+      // Timing, read for the answer-write lock (audit 2026-07-28). Section
+      // limits come from HERE, never from the client's sections payload —
+      // that array is caller-supplied and a forged timeLimit would buy the
+      // student a longer writable window, which is the whole thing being
+      // closed.
+      sections?: Array<{ id: string; timeLimit?: number }>;
+      sectionGraceSeconds?: number;
+      overallTimeLimit?: number;
+      overallGraceSeconds?: number;
     };
 
     // ── Effective security config, re-derived SERVER-SIDE (Phase 0) ──
@@ -5074,6 +5155,24 @@ export const startExam = onCall<StartExamData>(
       };
     });
 
+    // Answer-write lock for the FIRST section (audit 2026-07-28). startSection
+    // recomputes this on every later section, but section one is auto-started
+    // here and never passes through it, so without this the opening section
+    // would be the one stretch of the exam with no server-side time bound.
+    //
+    // student_choice defers the first start, so there is no section clock to
+    // bound yet — the overall deadline still applies if the exam has one, and
+    // the student's own startSection call sets the section bound when they
+    // pick. computeAnswersLockedAfter handles that by taking whichever bounds
+    // exist.
+    const firstSectionId = autoStartFirst ? ordered[0]?.id : undefined;
+    const initialLockedAfter = computeAnswersLockedAfter(
+      nowIso,
+      firstSectionId ? nowIso : undefined,
+      a.sections?.find((sec) => sec.id === firstSectionId)?.timeLimit,
+      a,
+    );
+
     // Random component FIRST — monotonically increasing document IDs cluster
     // index writes and hotspot above ~500 creates/sec. Random prefix spreads
     // them. Timestamp kept (after) for human readability in the console.
@@ -5090,6 +5189,7 @@ export const startExam = onCall<StartExamData>(
       currentSectionIdx: 0,
       sectionIds,
       sectionTimings,
+      answersLockedAfter: initialLockedAfter ? Timestamp.fromDate(initialLockedAfter) : null,
       questionOrder,
       servedQuestions,
       answers: {},
@@ -5225,6 +5325,74 @@ function breakAfterCompletion(
   const brk = ordered[completedCount - 1]?.breakAfter;
   return brk && typeof brk.durationMinutes === 'number' && brk.durationMinutes > 0 ? brk : null;
 }
+/**
+ * Absolute instant after which a student may no longer write answers.
+ *
+ * Audit 2026-07-28, exam integrity. firestore.rules had NO time dimension at
+ * all — the student attempt-update branch checked ownership, status
+ * in_progress and a field whitelist, and nothing else. So while an attempt was
+ * in_progress a student could keep writing answers indefinitely, hours past
+ * every deadline. Time was enforced only inside submitSection / gradeAttempt,
+ * both of which the STUDENT triggers, which made the limits advisory: leave
+ * mid-exam, come back after the clock ran out, keep working. gradeAttempt then
+ * scored every one of those late answers.
+ *
+ * The lock has to be a materialized Firestore Timestamp rather than something
+ * the rules derive, because every clock anchor on the attempt is an ISO
+ * STRING (attempt.startedAt, sectionTimings[id].startedAt) and rules cannot
+ * parse a string into a timestamp. So the server computes the instant and
+ * stores it; the rule does one comparison against request.time.
+ *
+ * It is the EARLIER of the two live deadlines, recomputed whenever a section
+ * starts:
+ *   section — sectionTimings[id].startedAt + timeLimit + sectionGrace
+ *   overall — attempt.startedAt + overallTimeLimit + overallGrace
+ * An untimed section contributes no section bound; an exam with no overall
+ * limit contributes no overall bound; with neither there is nothing to lock
+ * and this returns null, which the rule reads as "no time constraint".
+ *
+ * FREEZE IS DELIBERATELY NOT CREDITED, matching submitSection's documented
+ * posture exactly (see the note above its overall-deadline check): the server
+ * ignores freeze, grace absorbs the slack, and freeze is credited only in the
+ * client display. Doing anything else here would make the rule disagree with
+ * the callable that grades the attempt — and it also means an invigilator
+ * unfreezing does NOT have to recompute this field, so staff cannot lengthen
+ * a student's writable window by toggling freeze.
+ */
+function computeAnswersLockedAfter(
+  attemptStartedAtIso: string | undefined,
+  sectionStartedAtIso: string | undefined,
+  sectionTimeLimitMin: number | undefined,
+  a: {
+    sectionGraceSeconds?: number;
+    overallTimeLimit?: number;
+    overallGraceSeconds?: number;
+  },
+): Date | null {
+  const bounds: number[] = [];
+
+  if (sectionStartedAtIso && sectionTimeLimitMin && sectionTimeLimitMin > 0) {
+    const graceSec = a.sectionGraceSeconds ?? DEFAULT_SECTION_GRACE_SECONDS;
+    bounds.push(
+      new Date(sectionStartedAtIso).getTime()
+      + sectionTimeLimitMin * 60_000
+      + graceSec * 1000,
+    );
+  }
+
+  if (attemptStartedAtIso && a.overallTimeLimit && a.overallTimeLimit > 0) {
+    const graceSec = a.overallGraceSeconds ?? DEFAULT_OVERALL_GRACE_SECONDS;
+    bounds.push(
+      new Date(attemptStartedAtIso).getTime()
+      + a.overallTimeLimit * 60_000
+      + graceSec * 1000,
+    );
+  }
+
+  if (bounds.length === 0) return null;
+  return new Date(Math.min(...bounds));
+}
+
 export const startSection = onCall<StartSectionData>(
   EXAM_HOT_PATH,
   async (request) => {
@@ -5249,6 +5417,9 @@ export const startSection = onCall<StartSectionData>(
       assessmentId: string;
       sectionIds: string[];
       sectionTimings: Record<string, AttemptSectionTiming>;
+      // Wall-clock start of the whole sitting — the overall-clock anchor, and
+      // one of the two bounds computeAnswersLockedAfter needs.
+      startedAt?: string;
       // Phase 2.5 — needed to serve the section's first question in linear mode
       questionOrder?: Record<string, string[]>;
       servedQuestions?: Array<{
@@ -5304,10 +5475,34 @@ export const startSection = onCall<StartSectionData>(
     }
 
     const nowIso = new Date().toISOString();
+
+    // Recompute the answer-write lock for the section being entered (audit
+    // 2026-07-28). Read here rather than reusing the conditional read above,
+    // which only happens on the mandatory-break path and fetches a narrower
+    // shape. One extra document read per section start is a fair price for the
+    // rule that stops a student answering after their time is gone.
+    const lockSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    const lockA = (lockSnap.data() ?? {}) as {
+      sections?: Array<{ id: string; timeLimit?: number }>;
+      sectionGraceSeconds?: number;
+      overallTimeLimit?: number;
+      overallGraceSeconds?: number;
+    };
+    const lockedAfter = computeAnswersLockedAfter(
+      attempt.startedAt,
+      nowIso,
+      lockA.sections?.find((s) => s.id === sectionId)?.timeLimit,
+      lockA,
+    );
+
     const updates: Record<string, unknown> = {
       currentSectionIdx: idx,
       [`sectionTimings.${sectionId}.startedAt`]: nowIso,
       [`sectionTimings.${sectionId}.timeUsedSeconds`]: 0,
+      // Null when the exam has no timed bound at all — the rule treats a
+      // missing/null lock as "no time constraint", which is also what keeps
+      // untimed exams working.
+      answersLockedAfter: lockedAfter ? Timestamp.fromDate(lockedAfter) : null,
       updatedAt: nowIso,
     };
 

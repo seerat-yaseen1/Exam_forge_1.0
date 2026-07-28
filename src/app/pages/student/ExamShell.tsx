@@ -2137,6 +2137,16 @@ export function ExamShell() {
   // SECTION TIMER EXPIRY
   // ══════════════════════════════════════════════════════════════════
 
+  // Fires on a normal tick to zero AND on mount when the timer is ALREADY
+  // past zero — SectionTimer calls tick() immediately, so returning to an
+  // abandoned exam triggers this straight away rather than waiting for a
+  // transition that already happened while nobody was watching.
+  //
+  // The `shellStatus !== 'ready'` guard stays: it prevents a stray expiry
+  // during a break, a section pick or an in-flight submit. It is not the
+  // enforcement, though. Server-side, answersLockedAfter now blocks the write
+  // outright and scheduledCloseExpiredAttempts closes the attempt — this
+  // handler only makes the client do the polite thing promptly.
   const handleSectionTimerExpire = useCallback(() => {
     if (shellStatus !== 'ready') return;
     if (isFrozenRef.current) return; // paused by invigilator — don't auto-submit

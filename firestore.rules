@@ -678,6 +678,34 @@ service cloud.firestore {
       ]);
     }
 
+    // Has this attempt's writable window closed? (audit 2026-07-28)
+    //
+    // answersLockedAfter is a materialized Timestamp written by startExam and
+    // recomputed by startSection: the EARLIER of the current section's
+    // deadline and the whole exam's, both including their grace. It exists as
+    // a stored instant because every other clock anchor on the attempt is an
+    // ISO STRING and rules cannot parse a string into a timestamp — so the
+    // deadline has to arrive here already computed.
+    //
+    // Before this, these rules had no time dimension whatsoever. A student
+    // whose attempt was in_progress could write answers indefinitely: leave
+    // mid-exam, return after the clock ran out, keep working. Time was checked
+    // only inside submitSection and gradeAttempt, both of which the STUDENT
+    // triggers, so the limits were advisory.
+    //
+    // Absent or null means NO time bound, and that is deliberate on two
+    // counts: exams with no section limit and no overall limit are genuinely
+    // unbounded, and attempts created before this field existed must keep
+    // working rather than have every in-flight exam freeze on deploy. Those
+    // legacy attempts are closed by the scheduledCloseExpiredAttempts sweep
+    // instead. A student cannot exploit the default — answersLockedAfter is
+    // not in studentAttemptUpdateFieldsAllowed, so they can neither set nor
+    // clear it.
+    function attemptWriteWindowOpen() {
+      return resource.data.get('answersLockedAfter', null) == null
+          || request.time < resource.data.answersLockedAfter;
+    }
+
     match /attempts/{id} {
       allow read: if isWebOwner()
                      || (role() == 'student'
@@ -693,7 +721,8 @@ service cloud.firestore {
                            && resource.data.status == 'in_progress'
                            && request.resource.data.status == 'in_progress'
                            && studentAttemptUpdateFieldsAllowed()
-                           && studentAnswerWriteAllowed())
+                           && studentAnswerWriteAllowed()
+                           && attemptWriteWindowOpen())
                        || ((role() == 'institute' || role() == 'faculty')
                            && request.auth.token.instituteId == resource.data.instituteId
                            && staffAttemptUpdateFieldsAllowed());

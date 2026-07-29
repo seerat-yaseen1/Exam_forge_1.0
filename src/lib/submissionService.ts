@@ -207,6 +207,18 @@ export type IntegrityLog = {
 // ── Main attempt document ─────────────────────────────────────────
 
 export type Attempt = {
+  /**
+   * Absolute instant after which firestore.rules refuses answer writes for
+   * this attempt — the earlier of the current section's deadline and the whole
+   * exam's, grace included. Written by startExam and recomputed by
+   * startSection (audit 2026-07-28).
+   *
+   * Present so the CLIENT can make the same decision the rules already
+   * enforce, without waiting for a timer callback to fire. Null or absent
+   * means no time bound: an untimed exam, or an attempt that predates the
+   * field. A Firestore Timestamp over the wire, hence the loose shape.
+   */
+  answersLockedAfter?: { toMillis: () => number } | string | null;
   id: string;
   assessmentId: string;
   assessmentTitle: string;

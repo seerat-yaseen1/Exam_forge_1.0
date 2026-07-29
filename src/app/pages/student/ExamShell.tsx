@@ -254,6 +254,32 @@ function breakAfterCompletion(
  * deadline was already persisted by the 1.5s autosave; what is refused here is
  * at most the last unflushed moment, which is precisely what expiring means.
  */
+/**
+ * Has this attempt's answer window already closed?
+ *
+ * Reads the same answersLockedAfter that firestore.rules enforces, so the
+ * client reaches the identical verdict without waiting for a timer callback.
+ *
+ * That independence is the point (audit 2026-07-28). Auto-submit used to hang
+ * entirely off SectionTimer's onExpire, which only fires if the component is
+ * mounted, unfrozen, and the shell happens to be in 'ready' at that instant.
+ * A student who walked away and came back met all the wrong conditions: the
+ * clock had run out while nothing was watching, so there was no tick to
+ * transition on, and they landed on a live question with 00:00 showing. The
+ * server refuses their answers now, but leaving them staring at a Save & next
+ * button that silently fails is not an answer — the attempt should finalise
+ * itself the moment we know the window is shut.
+ *
+ * Tolerates Timestamp, ISO string, or absent, because the value arrives from
+ * Firestore in the first shape and from an optimistic local copy in the others.
+ */
+function answerWindowClosed(attempt: Attempt | null, nowMs = Date.now()): boolean {
+  const raw = attempt?.answersLockedAfter;
+  if (raw === null || raw === undefined) return false;   // untimed, or legacy
+  const ms = typeof raw === 'string' ? new Date(raw).getTime() : raw.toMillis();
+  return Number.isFinite(ms) && nowMs >= ms;
+}
+
 function isAnswerWindowClosed(e: unknown): boolean {
   const code = String((e as { code?: string })?.code ?? '');
   return code === 'permission-denied' || code.endsWith('/permission-denied');
@@ -2197,6 +2223,34 @@ export function ExamShell() {
     if (isFrozenRef.current) return;
     handleFinalSubmit('time_expired');
   }, [shellStatus, handleFinalSubmit]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // EXPIRED-ON-ARRIVAL (audit 2026-07-28)
+  // ══════════════════════════════════════════════════════════════════
+  // Finalise an attempt whose window shut while nobody was watching.
+  //
+  // The two handlers above are TRANSITION-driven: they need a tick that
+  // crosses zero while the timer is mounted. A student who leaves mid-exam and
+  // returns after the clock ran out never produces that transition — the
+  // crossing happened with the tab closed. They arrive on a live question with
+  // 00:00 on both clocks, which is exactly what was reported.
+  //
+  // This is STATE-driven instead: it asks "is the window shut?" rather than
+  // "did it just shut?", so it is correct on arrival as well as mid-sitting.
+  // It re-runs on every attempt update, so it also covers the case where the
+  // lock moves (a new section starting) or the subscription delivers late.
+  //
+  // Server-side enforcement does not depend on this — firestore.rules already
+  // refuses the answers and scheduledCloseExpiredAttempts closes the attempt
+  // within the hour. This exists so the STUDENT gets a truthful screen and a
+  // graded result immediately, instead of a question they cannot answer.
+  useEffect(() => {
+    if (shellStatus !== 'ready') return;
+    if (isFrozenRef.current) return;
+    if (submittingRef.current) return;
+    if (!answerWindowClosed(attempt)) return;
+    handleFinalSubmit('time_expired');
+  }, [shellStatus, attempt, handleFinalSubmit]);
 
   // ══════════════════════════════════════════════════════════════════
   // RENDER: LOADING / ERROR

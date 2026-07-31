@@ -219,6 +219,21 @@ export type Attempt = {
    * field. A Firestore Timestamp over the wire, hence the loose shape.
    */
   answersLockedAfter?: { toMillis: () => number } | string | null;
+  /**
+   * The two bounds that `answersLockedAfter` is the minimum of (Phase 0 of the
+   * timer plan, 2026-07-31).
+   *
+   * The combined field above is the correct WRITE gate but cannot say which
+   * clock ran out, and the two need different outcomes: an expired SECTION
+   * advances to the next section, an expired OVERALL ends the sitting. Reading
+   * only the minimum is why a student who stepped away during section 2 of 4
+   * used to lose sections 3 and 4.
+   *
+   * Absent on attempts that started before this shipped — the client falls
+   * back to the previous behaviour for those, which drains within one sitting.
+   */
+  sectionLockedAfter?: { toMillis: () => number } | string | null;
+  overallLockedAfter?: { toMillis: () => number } | string | null;
   id: string;
   assessmentId: string;
   assessmentTitle: string;

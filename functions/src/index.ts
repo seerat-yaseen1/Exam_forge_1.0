@@ -5163,10 +5163,10 @@ export const startExam = onCall<StartExamData>(
     // student_choice defers the first start, so there is no section clock to
     // bound yet — the overall deadline still applies if the exam has one, and
     // the student's own startSection call sets the section bound when they
-    // pick. computeAnswersLockedAfter handles that by taking whichever bounds
+    // pick. computeAttemptLocks handles that by taking whichever bounds
     // exist.
     const firstSectionId = autoStartFirst ? ordered[0]?.id : undefined;
-    const initialLockedAfter = computeAnswersLockedAfter(
+    const initialLocks = computeAttemptLocks(
       nowIso,
       firstSectionId ? nowIso : undefined,
       a.sections?.find((sec) => sec.id === firstSectionId)?.timeLimit,
@@ -5189,7 +5189,12 @@ export const startExam = onCall<StartExamData>(
       currentSectionIdx: 0,
       sectionIds,
       sectionTimings,
-      answersLockedAfter: initialLockedAfter ? Timestamp.fromDate(initialLockedAfter) : null,
+      // Combined = min(section, overall); still exactly what the rules gate on.
+      answersLockedAfter: initialLocks.combined ? Timestamp.fromDate(initialLocks.combined) : null,
+      // Split bounds (Phase 0) — the resume path needs to know WHICH clock
+      // tripped, which the minimum alone cannot say.
+      sectionLockedAfter: initialLocks.section ? Timestamp.fromDate(initialLocks.section) : null,
+      overallLockedAfter: initialLocks.overall ? Timestamp.fromDate(initialLocks.overall) : null,
       questionOrder,
       servedQuestions,
       answers: {},
@@ -5358,8 +5363,29 @@ function breakAfterCompletion(
  * the callable that grades the attempt — and it also means an invigilator
  * unfreezing does NOT have to recompute this field, so staff cannot lengthen
  * a student's writable window by toggling freeze.
+ *
+ * ── Phase 0 (timer plan, 2026-07-31) ──────────────────────────────
+ * Renamed from computeAnswersLockedAfter, and now returns the two bounds
+ * SEPARATELY as well as their minimum.
+ *
+ * WHY. The single value this used to return was min(section, overall), which
+ * is the correct WRITE gate but destroys the one fact the resume path needs:
+ * WHICH clock ran out. The client could only ask "is the window shut?", and
+ * the only safe answer to that question is to finalise the whole attempt — so
+ * a student who stepped away during section 2 of 4 lost sections 3 and 4.
+ * Section expiry must advance to the next section; only OVERALL expiry ends
+ * the sitting.
+ *
+ * `combined` keeps the exact previous semantics and is still what
+ * `answersLockedAfter` stores, so firestore.rules and
+ * scheduledCloseExpiredAttempts are untouched. The two new fields are purely
+ * additive: attempts that started before this shipped simply lack them, and
+ * the client falls back to the previous behaviour for those.
+ *
+ * The freeze note above still holds — crediting freeze is Phase 2's job, and
+ * it will move BOTH bounds together. Nothing in Phase 0 alters a deadline.
  */
-function computeAnswersLockedAfter(
+function computeAttemptLocks(
   attemptStartedAtIso: string | undefined,
   sectionStartedAtIso: string | undefined,
   sectionTimeLimitMin: number | undefined,
@@ -5368,12 +5394,13 @@ function computeAnswersLockedAfter(
     overallTimeLimit?: number;
     overallGraceSeconds?: number;
   },
-): Date | null {
-  const bounds: number[] = [];
+): { section: Date | null; overall: Date | null; combined: Date | null } {
+  let section: Date | null = null;
+  let overall: Date | null = null;
 
   if (sectionStartedAtIso && sectionTimeLimitMin && sectionTimeLimitMin > 0) {
     const graceSec = a.sectionGraceSeconds ?? DEFAULT_SECTION_GRACE_SECONDS;
-    bounds.push(
+    section = new Date(
       new Date(sectionStartedAtIso).getTime()
       + sectionTimeLimitMin * 60_000
       + graceSec * 1000,
@@ -5382,15 +5409,19 @@ function computeAnswersLockedAfter(
 
   if (attemptStartedAtIso && a.overallTimeLimit && a.overallTimeLimit > 0) {
     const graceSec = a.overallGraceSeconds ?? DEFAULT_OVERALL_GRACE_SECONDS;
-    bounds.push(
+    overall = new Date(
       new Date(attemptStartedAtIso).getTime()
       + a.overallTimeLimit * 60_000
       + graceSec * 1000,
     );
   }
 
-  if (bounds.length === 0) return null;
-  return new Date(Math.min(...bounds));
+  const bounds = [section, overall].filter((d): d is Date => d !== null);
+  const combined = bounds.length === 0
+    ? null
+    : new Date(Math.min(...bounds.map((d) => d.getTime())));
+
+  return { section, overall, combined };
 }
 
 export const startSection = onCall<StartSectionData>(
@@ -5418,7 +5449,7 @@ export const startSection = onCall<StartSectionData>(
       sectionIds: string[];
       sectionTimings: Record<string, AttemptSectionTiming>;
       // Wall-clock start of the whole sitting — the overall-clock anchor, and
-      // one of the two bounds computeAnswersLockedAfter needs.
+      // one of the two bounds computeAttemptLocks needs.
       startedAt?: string;
       // Phase 2.5 — needed to serve the section's first question in linear mode
       questionOrder?: Record<string, string[]>;
@@ -5488,7 +5519,7 @@ export const startSection = onCall<StartSectionData>(
       overallTimeLimit?: number;
       overallGraceSeconds?: number;
     };
-    const lockedAfter = computeAnswersLockedAfter(
+    const locks = computeAttemptLocks(
       attempt.startedAt,
       nowIso,
       lockA.sections?.find((s) => s.id === sectionId)?.timeLimit,
@@ -5502,7 +5533,13 @@ export const startSection = onCall<StartSectionData>(
       // Null when the exam has no timed bound at all — the rule treats a
       // missing/null lock as "no time constraint", which is also what keeps
       // untimed exams working.
-      answersLockedAfter: lockedAfter ? Timestamp.fromDate(lockedAfter) : null,
+      answersLockedAfter: locks.combined ? Timestamp.fromDate(locks.combined) : null,
+      // Split bounds (Phase 0). Recomputed on every section entry: the section
+      // bound moves with the new section, the overall bound does not move at
+      // all, but writing both together keeps the three fields consistent by
+      // construction rather than by remembering to update them separately.
+      sectionLockedAfter: locks.section ? Timestamp.fromDate(locks.section) : null,
+      overallLockedAfter: locks.overall ? Timestamp.fromDate(locks.overall) : null,
       updatedAt: nowIso,
     };
 

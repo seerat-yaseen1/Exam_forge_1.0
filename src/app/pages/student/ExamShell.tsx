@@ -273,11 +273,46 @@ function breakAfterCompletion(
  * Tolerates Timestamp, ISO string, or absent, because the value arrives from
  * Firestore in the first shape and from an optimistic local copy in the others.
  */
-function answerWindowClosed(attempt: Attempt | null, nowMs = Date.now()): boolean {
-  const raw = attempt?.answersLockedAfter;
+type AttemptLock = { toMillis: () => number } | string | null | undefined;
+
+/** Has this specific bound passed? Null/absent = no bound, never closed. */
+function lockPassed(raw: AttemptLock, nowMs: number): boolean {
   if (raw === null || raw === undefined) return false;   // untimed, or legacy
   const ms = typeof raw === 'string' ? new Date(raw).getTime() : raw.toMillis();
   return Number.isFinite(ms) && nowMs >= ms;
+}
+
+function answerWindowClosed(attempt: Attempt | null, nowMs = Date.now()): boolean {
+  return lockPassed(attempt?.answersLockedAfter, nowMs);
+}
+
+/**
+ * Which clock ran out? (Phase 0 of the timer plan, 2026-07-31.)
+ *
+ * 'overall'  — the whole sitting is over; finalise.
+ * 'section'  — this section is over but the sitting is not; close the section
+ *              and let the normal advance/break path run.
+ * 'unknown'  — the combined bound has passed but the split bounds are absent,
+ *              i.e. an attempt that started before this shipped. Treated as
+ *              'overall' because that is the previous behaviour, and because
+ *              the alternative — doing nothing — strands the student on a live
+ *              question whose answers the rules will refuse. Self-clearing:
+ *              no new attempt lacks these fields.
+ * null       — nothing has expired.
+ *
+ * Order matters and mirrors the spec's precedence: overall outranks section.
+ */
+function expiredClock(
+  attempt: Attempt | null,
+  nowMs = Date.now(),
+): 'overall' | 'section' | 'unknown' | null {
+  if (!attempt) return null;
+  if (lockPassed(attempt.overallLockedAfter, nowMs)) return 'overall';
+  if (lockPassed(attempt.sectionLockedAfter, nowMs)) return 'section';
+  if (!answerWindowClosed(attempt, nowMs)) return null;
+  const hasSplit =
+    attempt.overallLockedAfter !== undefined || attempt.sectionLockedAfter !== undefined;
+  return hasSplit ? null : 'unknown';
 }
 
 function isAnswerWindowClosed(e: unknown): boolean {
@@ -2244,13 +2279,31 @@ export function ExamShell() {
   // refuses the answers and scheduledCloseExpiredAttempts closes the attempt
   // within the hour. This exists so the STUDENT gets a truthful screen and a
   // graded result immediately, instead of a question they cannot answer.
+  //
+  // ── Phase 0 (timer plan, 2026-07-31) ────────────────────────────
+  // This used to call handleFinalSubmit unconditionally, because the only
+  // thing it could read was min(section, overall) — which says that SOMETHING
+  // expired but not WHAT. Ending the whole sitting is the right answer for the
+  // overall clock and much too blunt for the section clock: a student who
+  // stepped away during section 2 of 4 lost sections 3 and 4.
+  //
+  // Now it routes to the same two handlers the live (transition-driven) path
+  // already uses, so a clock that runs out at the desk and one that runs out
+  // while the tab is closed reach an identical outcome. doSectionSubmit
+  // already tolerates the flush being refused on an expired section, and
+  // already evaluates the break and advances, so nothing new is needed here.
   useEffect(() => {
     if (shellStatus !== 'ready') return;
     if (isFrozenRef.current) return;
     if (submittingRef.current) return;
-    if (!answerWindowClosed(attempt)) return;
+    const expired = expiredClock(attempt);
+    if (!expired) return;
+    if (expired === 'section') {
+      doSectionSubmit('time_expired');
+      return;
+    }
     handleFinalSubmit('time_expired');
-  }, [shellStatus, attempt, handleFinalSubmit]);
+  }, [shellStatus, attempt, handleFinalSubmit, doSectionSubmit]);
 
   // ══════════════════════════════════════════════════════════════════
   // RENDER: LOADING / ERROR

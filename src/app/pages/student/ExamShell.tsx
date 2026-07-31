@@ -36,6 +36,7 @@ import {
   MAX_INTEGRITY_WARNINGS,
   MAX_LOGGED_VIOLATION_EVENTS,
   getAttemptByStudentAndAssessment,
+  getAttempt,
   getServerSkew,
   subscribeToAttempt,
   registerSession,
@@ -280,6 +281,65 @@ function lockPassed(raw: AttemptLock, nowMs: number): boolean {
   if (raw === null || raw === undefined) return false;   // untimed, or legacy
   const ms = typeof raw === 'string' ? new Date(raw).getTime() : raw.toMillis();
   return Number.isFinite(ms) && nowMs >= ms;
+}
+
+/**
+ * Build the break state from the section's AUTHORITATIVE submit time.
+ * (Phase 0.1, timer plan — 2026-07-31.)
+ *
+ * There were two code paths that entered a break and they disagreed. The
+ * RESUME path read the server's persisted `submittedAt`, which submitSection
+ * CLAMPS to the section's true deadline when a submit arrives late — so a
+ * break whose window had already passed correctly showed as elapsed. The
+ * in-session TRANSITION path invented its own `Date.now()` instead, so the
+ * same break started fresh from the moment the student walked back.
+ *
+ * That stayed hidden until Phase 0, because before it a section expiring while
+ * the student was away finalised the whole attempt and the break code never
+ * ran at all. Reported live: a mandatory break made the student wait its full
+ * minute after returning, hours after that break was due.
+ *
+ * One builder, two callers, so they cannot drift again. `submittedAtIso` must
+ * come from the server — never from the client's clock.
+ *
+ * Returns null when the break has no duration left AND the caller should skip
+ * straight past it; returns an `elapsed` state when the break is over but a
+ * gesture is still needed (fullscreen re-entry requires a real click).
+ */
+function buildBreakState(args: {
+  submittedAtIso: string;
+  durationMinutes: number;
+  mandatory: boolean;
+  sectionId: string;
+  sectionName: string;
+  isChoice: boolean;
+  nextSectionId?: string;
+  nextSectionIdx?: number;
+  nextSectionName?: string;
+  nowMs?: number;
+}): BreakState {
+  const now = args.nowMs ?? Date.now();
+  const endsAt = new Date(args.submittedAtIso).getTime() + args.durationMinutes * 60 * 1000;
+  const live = Number.isFinite(endsAt) && endsAt > now;
+
+  // An elapsed break is never mandatory: the wait it was enforcing is already
+  // over, so holding the student is punishing them for the server's clamp.
+  // mandatory=false lets the Continue click through immediately, which is also
+  // the gesture the fullscreen re-entry needs.
+  return {
+    justSubmittedSectionId: args.sectionId,
+    justSubmittedSectionName: args.sectionName,
+    endsAt: live ? endsAt : now,
+    mandatory: live ? args.mandatory : false,
+    then: args.isChoice ? 'choose' : 'start_next',
+    ...(args.isChoice
+      ? {}
+      : {
+          nextSectionId: args.nextSectionId,
+          nextSectionIdx: args.nextSectionIdx,
+          nextSectionName: args.nextSectionName,
+        }),
+  } as BreakState;
 }
 
 function answerWindowClosed(attempt: Attempt | null, nowMs = Date.now()): boolean {
@@ -1199,17 +1259,27 @@ export function ExamShell() {
           const endsAt = brk
             ? new Date(curTiming.submittedAt).getTime() + brk.durationMinutes * 60 * 1000
             : 0;
-          if (brk && endsAt > Date.now()) {
-            setBreakState({
-              justSubmittedSectionId: curSec.id,
-              justSubmittedSectionName: curSec.name,
-              endsAt,
+          if (brk) {
+            // Shared builder (Phase 0.1) — same function the in-session
+            // transition uses, so a break cannot read as live on one path and
+            // elapsed on the other. Handles both cases: still running, or
+            // already over (in which case it comes back non-mandatory so the
+            // Continue click goes straight through).
+            if (endsAt <= Date.now() && isChoice) {
+              setShellStatus('choosing_section');
+              return;
+            }
+            setBreakState(buildBreakState({
+              submittedAtIso: curTiming.submittedAt,
+              durationMinutes: brk.durationMinutes,
               mandatory: brk.mandatory,
-              then: isChoice ? 'choose' : 'start_next',
-              ...(isChoice
-                ? {}
-                : { nextSectionId: nextSec.id, nextSectionIdx: att.currentSectionIdx + 1, nextSectionName: nextSec.name }),
-            });
+              sectionId: curSec.id,
+              sectionName: curSec.name,
+              isChoice,
+              nextSectionId: nextSec.id,
+              nextSectionIdx: att.currentSectionIdx + 1,
+              nextSectionName: nextSec.name,
+            }));
             setShellStatus('on_break');
             return;
           }
@@ -1217,11 +1287,10 @@ export function ExamShell() {
             setShellStatus('choosing_section');
             return;
           }
-          // Break already elapsed while away (or none configured — possible
-          // when the server force-paused a mandatory break an older bundle
-          // didn't schedule). Show the break screen in its expired state:
-          // mandatory=false so the Continue click (a real gesture, needed for
-          // the fullscreen re-entry) drives endBreak → startSection.
+          // No break configured, but the server force-paused one an older
+          // bundle didn't schedule. Show the expired break screen so the
+          // Continue click (a real gesture, needed for fullscreen re-entry)
+          // drives endBreak → startSection.
           setBreakState({
             justSubmittedSectionId: curSec.id,
             justSubmittedSectionName: curSec.name,
@@ -1747,17 +1816,36 @@ export function ExamShell() {
       // first section — doSectionSubmit and handleFinalSubmit both early-
       // returned forever.)
       submittingRef.current = false;
-      const submittedAtMs = Date.now();
-      setBreakState({
-        justSubmittedSectionId: sectionId,
-        justSubmittedSectionName: currentSection.name,
-        endsAt: submittedAtMs + breakCfg.durationMinutes * 60 * 1000,
+      // AUTHORITATIVE submit time (Phase 0.1). submitSection clamps this to the
+      // section's true deadline when the submit arrives late, so on a
+      // return-from-away it is far in the past and the break is correctly
+      // already over. Using Date.now() here — which is what this did — handed
+      // the student a fresh break starting the moment they walked back, and
+      // made an hours-overdue mandatory break block them for its full duration.
+      //
+      // One extra read, only on section transitions that actually have a
+      // break. Falls back to the local clock only if the read fails, which
+      // reproduces the old behaviour rather than stranding the student.
+      let submittedAtIso = new Date().toISOString();
+      try {
+        const fresh = await getAttempt(att.id);
+        const serverIso = fresh?.sectionTimings?.[sectionId]?.submittedAt;
+        if (serverIso) submittedAtIso = serverIso;
+      } catch {
+        console.warn('[ExamShell] could not read authoritative submittedAt; using local clock');
+      }
+      const submittedAtMs = new Date(submittedAtIso).getTime();
+      setBreakState(buildBreakState({
+        submittedAtIso,
+        durationMinutes: breakCfg.durationMinutes,
         mandatory: breakCfg.mandatory,
-        then: isStudentChoice ? 'choose' : 'start_next',
-        ...(isStudentChoice
-          ? {}
-          : { nextSectionId: nextSection.id, nextSectionIdx: nextIdx, nextSectionName: nextSection.name }),
-      });
+        sectionId,
+        sectionName: currentSection.name,
+        isChoice: isStudentChoice,
+        nextSectionId: nextSection.id,
+        nextSectionIdx: nextIdx,
+        nextSectionName: nextSection.name,
+      }));
       setAttempt((prev) =>
         prev
           ? {

@@ -361,14 +361,49 @@ function answerWindowClosed(attempt: Attempt | null, nowMs = Date.now()): boolea
  * null       — nothing has expired.
  *
  * Order matters and mirrors the spec's precedence: overall outranks section.
+ *
+ * ── STALE-LOCK GUARD (Phase 0.2, 2026-07-31) ────────────────────
+ * `sectionLockedAfter` is written by the SERVER when a section starts. All
+ * three client advance paths (section submit, end break, pick section) update
+ * currentSectionIdx and the new section's startedAt optimistically, but none
+ * of them can know the new lock — it only arrives when the Firestore
+ * subscription catches up. For that window the attempt carries the PREVIOUS
+ * section's lock, which is already in the past.
+ *
+ * That window is why entering section B instantly submitted it, then C, then
+ * D: each advance set shellStatus to 'ready' while the stale lock still read
+ * as expired, so this effect fired again immediately. A cascade, not a
+ * one-off.
+ *
+ * The guard is a consistency check, NOT a re-derivation of the deadline: a
+ * lock bounds a section, so it must fall AFTER that section started. If the
+ * current section started later than the lock, the lock provably belongs to an
+ * earlier section and is ignored until the real one arrives. Being briefly
+ * permissive here is safe — firestore.rules still refuses late answers, and
+ * the scheduled sweep still closes abandoned attempts.
+ *
+ * The overall bound needs no such guard: it is anchored on attempt.startedAt,
+ * which never moves, so a stale copy holds the identical value.
  */
 function expiredClock(
   attempt: Attempt | null,
   nowMs = Date.now(),
+  currentSectionStartedAtIso?: string,
 ): 'overall' | 'section' | 'unknown' | null {
   if (!attempt) return null;
   if (lockPassed(attempt.overallLockedAfter, nowMs)) return 'overall';
-  if (lockPassed(attempt.sectionLockedAfter, nowMs)) return 'section';
+
+  if (lockPassed(attempt.sectionLockedAfter, nowMs)) {
+    const raw = attempt.sectionLockedAfter;
+    const lockMs = typeof raw === 'string' ? new Date(raw).getTime() : raw!.toMillis();
+    const startedMs = currentSectionStartedAtIso
+      ? new Date(currentSectionStartedAtIso).getTime()
+      : NaN;
+    // Stale: this lock predates the section it would be closing.
+    const stale = Number.isFinite(startedMs) && startedMs >= lockMs;
+    if (!stale) return 'section';
+  }
+
   if (!answerWindowClosed(attempt, nowMs)) return null;
   const hasSplit =
     attempt.overallLockedAfter !== undefined || attempt.sectionLockedAfter !== undefined;
@@ -2384,14 +2419,18 @@ export function ExamShell() {
     if (shellStatus !== 'ready') return;
     if (isFrozenRef.current) return;
     if (submittingRef.current) return;
-    const expired = expiredClock(attempt);
+    const expired = expiredClock(
+      attempt,
+      Date.now(),
+      currentSection ? attempt?.sectionTimings?.[currentSection.id]?.startedAt : undefined,
+    );
     if (!expired) return;
     if (expired === 'section') {
       doSectionSubmit('time_expired');
       return;
     }
     handleFinalSubmit('time_expired');
-  }, [shellStatus, attempt, handleFinalSubmit, doSectionSubmit]);
+  }, [shellStatus, attempt, handleFinalSubmit, doSectionSubmit, currentSection]);
 
   // ══════════════════════════════════════════════════════════════════
   // RENDER: LOADING / ERROR

@@ -476,9 +476,22 @@ export type Assessment = {
   allocatedCount?: number;
 
   // Attempt limits
-  // maxAttempts: undefined = unlimited; integer = max finished attempts allowed
-  // attemptOverrides: per-student override of maxAttempts
+  // maxAttempts: number of FINISHED attempts (submitted | auto_submitted |
+  // terminated) a student may accumulate before startExam refuses a new one.
+  //
+  // UNSET MEANS ONE, NOT UNLIMITED. This comment previously read
+  // "undefined = unlimited", which contradicted the server:
+  //   const effectiveMax = a.attemptOverrides?.[studentId] ?? a.maxAttempts ?? 1;
+  // Nullish coalescing turns an absent value into 1, so an assessment authored
+  // on the assumption that clearing the field removes the cap gets the
+  // strictest setting instead of the loosest. The server behaviour is the
+  // safer default and is what ships; the comment was the thing that was wrong.
+  //
+  // There is no "unlimited" value. A very large number is the way to express
+  // it, and attemptOverrides is the per-student escape hatch.
   maxAttempts?: number;
+  // attemptOverrides: per-student override of maxAttempts. Takes precedence
+  // over maxAttempts entirely — it is not additive.
   attemptOverrides?: Record<string, number>;
 
   // Section grace period — extra seconds allowed past each section's timer

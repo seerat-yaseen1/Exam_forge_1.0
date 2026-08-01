@@ -63,6 +63,28 @@ function sanitizeGradingConfig(
   return clean;
 }
 
+/**
+ * Parse the attempts field, refusing anything that is not a positive integer.
+ *
+ * The old expression was `maxAttempts ? parseInt(maxAttempts, 10) : undefined`,
+ * which has no NaN guard. A non-numeric value reaches Firestore as NaN, and the
+ * server gate is
+ *   limitReached: finished >= effectiveMax
+ * — every comparison against NaN is false, so the attempt limit silently
+ * becomes unlimited. The roster's own override input already guards this way
+ * (`if (isNaN(parsed) || parsed < 1) return`); the builder did not.
+ *
+ * Returning undefined for a blank field is correct and means ONE attempt —
+ * the server reads `?? 1`. There is no "unlimited" value; see the note on
+ * Assessment.maxAttempts in assessmentService.ts.
+ */
+function parsePositiveIntOrUndefined(raw: string): number | undefined {
+  const trimmed = (raw ?? '').trim();
+  if (trimmed === '') return undefined;
+  const n = parseInt(trimmed, 10);
+  return Number.isFinite(n) && n >= 1 ? n : undefined;
+}
+
 export function DetailsStep({
   mode, assessment, originalStatus, allQuestions, sections, setSections, onBack, onSave,
   title, description, subject, status,
@@ -495,7 +517,7 @@ export function DetailsStep({
         // policy and grades exactly like legacy), and prunes empty overrides.
         gradingConfig: sanitizeGradingConfig(gradingConfig, deliveryMode),
         passingScore: passingScore ? parseInt(passingScore, 10) : undefined,
-        maxAttempts: maxAttempts ? parseInt(maxAttempts, 10) : undefined,
+        maxAttempts: parsePositiveIntOrUndefined(maxAttempts),
         sectionGraceSeconds: sectionGraceSeconds ? parseInt(sectionGraceSeconds, 10) : undefined,
         shuffleQuestions,
         sectionStartOrder,

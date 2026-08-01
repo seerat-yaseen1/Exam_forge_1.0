@@ -52,12 +52,67 @@ type RosterStatus =
   | 'auto_submitted'
   | 'terminated';
 
+/** Which score the roster emphasises when a student has sat more than once. */
+type ScoreView = 'latest' | 'best';
+
 type RosterRow = {
   student: Student;
+  /**
+   * The student's MOST RECENT attempt — and the only one that drives status,
+   * live progress, freeze/unfreeze and the drawer.
+   *
+   * This deliberately does NOT follow the Latest/Best toggle. Switching to
+   * "Best" while a student is mid-sitting would otherwise point the status
+   * chip and the freeze button at a finished attempt, so an invigilator
+   * clicking Pause would act on the wrong sitting — or on nothing. The toggle
+   * changes what is DISPLAYED; it never changes what is ACTED ON.
+   */
   attempt: Attempt | null;
+  /**
+   * Highest-scoring attempt, or null when the student has no graded attempt.
+   * May be the same object as `attempt` when their latest is also their best.
+   */
+  bestAttempt: Attempt | null;
+  /**
+   * How many non-deleted attempts this student has on this assessment.
+   * >1 means `attempt` above is only the most recent one — the full list
+   * lives in the drawer's HISTORY panel.
+   */
+  attemptCount: number;
   rosterStatus: RosterStatus;
   isBlocked: boolean;
 };
+
+/**
+ * Pick the best attempt: highest percentage among GRADED, NON-TERMINATED
+ * attempts. Ties go to the more recent one.
+ *
+ * Terminated attempts are excluded on purpose. "Best demonstrated performance"
+ * should not be a score the student obtained in a sitting that was voided for
+ * misconduct — surfacing it on the roster as their best would be actively
+ * misleading. They remain visible in the drawer's HISTORY panel, which is the
+ * right place to see a voided sitting and its mark. If you would rather
+ * include them, drop the status check on the next line and nothing else
+ * changes.
+ */
+function pickBestAttempt(attempts: Attempt[]): Attempt | null {
+  const eligible = attempts.filter(
+    (a) => a.scores != null && a.status !== 'terminated'
+  );
+  if (eligible.length === 0) return null;
+  return eligible.reduce((best, cur) => {
+    const d = (cur.scores!.percentage ?? 0) - (best.scores!.percentage ?? 0);
+    if (d !== 0) return d > 0 ? cur : best;
+    return attemptStartedMs(cur) >= attemptStartedMs(best) ? cur : best;
+  });
+}
+
+/** Sort key for "most recent". Missing/garbage timestamps sort as epoch. */
+function attemptStartedMs(a: Attempt): number {
+  const raw = a.startedAt ?? (a as { createdAt?: string }).createdAt;
+  const t = raw ? Date.parse(raw) : NaN;
+  return Number.isNaN(t) ? 0 : t;
+}
 
 // ══════════════════════════════════════════════════════════════════
 // HELPERS
@@ -1617,9 +1672,10 @@ function AttemptDrawer({
 function RosterTableRow({
   row, onSelect, onRequestFreeze, onRequestUnfreeze, freezeLoadingId,
   onRequestBlock, onRequestUnblock, blockLoadingId,
-  attemptOverrides, sections, nowMs,
+  attemptOverrides, sections, nowMs, scoreView,
 }: {
   row: RosterRow;
+  scoreView: ScoreView;
   onSelect: () => void;
   onRequestFreeze: (attemptId: string, studentName: string) => void;
   onRequestUnfreeze: (attempt: Attempt, studentName: string) => void;
@@ -1631,7 +1687,7 @@ function RosterTableRow({
   sections: AssessmentSection[];
   nowMs: number;
 }) {
-  const { student, attempt, rosterStatus, isBlocked } = row;
+  const { student, attempt, bestAttempt, rosterStatus, isBlocked } = row;
   const isLive    = rosterStatus === 'in_progress';
   const breakInfo = attempt && isLive ? getBreakState(attempt, sections, nowMs) : null;
   const isFrozen  = rosterStatus === 'frozen';
@@ -1640,6 +1696,15 @@ function RosterTableRow({
   const blockLoading  = blockLoadingId === student.id;
   const violations = attempt?.integrityLog.totalViolations ?? 0;
   const hasConflict = !!attempt?.sessionConflictAt;
+  const attemptCount = row.attemptCount ?? (attempt ? 1 : 0);
+  // Two figures are only worth the space when they actually differ. When the
+  // latest sitting is also the best one, a single score plus a marker says
+  // more with less.
+  const showBothScores =
+    attemptCount > 1 &&
+    !!bestAttempt?.scores &&
+    !!attempt?.scores &&
+    bestAttempt.id !== attempt.id;
 
   return (
     <div
@@ -1650,7 +1715,24 @@ function RosterTableRow({
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <div className="w-full sm:w-[200px] sm:flex-shrink-0 min-w-0">
-        <p className="text-xs" style={{ color: '#0C0C0B' }}>{student.name}</p>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{student.name}</p>
+          {/* Multiple sittings: the row shows only the LATEST. Without this
+              badge a second attempt is invisible from the list, and staff have
+              no cue that the score they are reading is one of several. */}
+          {attemptCount > 1 && (
+            <span
+              className="text-xs px-1.5 flex-shrink-0"
+              title={`${attemptCount} attempts — showing the most recent. Open to see all.`}
+              style={{
+                background: '#F0EFEA', border: '1px solid #E3E1DB', borderRadius: 2,
+                color: '#6B6A64', fontVariantNumeric: 'tabular-nums', lineHeight: '16px',
+              }}
+            >
+              ×{attemptCount}
+            </span>
+          )}
+        </div>
         <p className="text-xs mt-0.5 truncate" style={{ color: '#C4C3BD' }}>{student.email}</p>
       </div>
 
@@ -1686,12 +1768,48 @@ function RosterTableRow({
           <p className="text-xs" style={{ color: '#1D4ED8' }}>Paused {formatRelative(attempt.frozenAt!)}</p>
         )}
         {attempt && isDone && attempt.scores && (
-          <p className="text-xs" style={{ color: '#4A4A45' }}>
-            {attempt.scores.total}/{attempt.scores.available} marks · {attempt.scores.percentage}%
-          </p>
+          showBothScores ? (
+            /* ── Multiple sittings with different marks ──────────────
+               Both figures inline, the one matching the current view in full
+               contrast and the other muted. Seeing the pair at a glance is the
+               point: a wide gap between latest and best is exactly the signal
+               — a student who peaked and fell back reads very differently from
+               one still climbing, and neither is visible from a single mark. */
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs" style={{
+                color: scoreView === 'latest' ? '#0C0C0B' : '#9A9891',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                Latest: {attempt.scores.percentage}%
+              </span>
+              <span className="text-xs" style={{ color: '#E3E1DB' }}>|</span>
+              <span className="text-xs" style={{
+                color: scoreView === 'best' ? '#1E7B3C' : '#9A9891',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                Best: {bestAttempt!.scores!.percentage}%
+              </span>
+            </div>
+          ) : (
+            <p className="text-xs" style={{ color: '#4A4A45' }}>
+              {attempt.scores.total}/{attempt.scores.available} marks · {attempt.scores.percentage}%
+              {/* Their most recent sitting IS their best — worth saying, so a
+                  ×3 badge with no second figure isn't read as missing data. */}
+              {attemptCount > 1 && <span style={{ color: '#1E7B3C' }}> · best</span>}
+            </p>
+          )
         )}
         {attempt && isDone && !attempt.scores && (
-          <p className="text-xs" style={{ color: '#C4C3BD' }}>Awaiting score</p>
+          <p className="text-xs" style={{ color: '#C4C3BD' }}>
+            Awaiting score
+            {/* An ungraded latest attempt would otherwise hide a graded earlier
+                one entirely — the row would read as if nothing was marked. */}
+            {bestAttempt?.scores && (
+              <span style={{ color: '#4A4A45' }}>
+                {' · '}Best: {bestAttempt.scores.percentage}%
+              </span>
+            )}
+          </p>
         )}
         {!attempt && <p className="text-xs" style={{ color: '#C4C3BD' }}>—</p>}
       </div>
@@ -1820,6 +1938,9 @@ export function AssessmentRosterCore({
   reviewerRole = 'web_owner',
 }: AssessmentRosterCoreProps) {
   const [view, setView] = useState<'roster' | 'reports'>('roster');
+  // Latest vs Best is a DISPLAY choice only — see the note on RosterRow.attempt.
+  // Latest is the default because the roster's first job is live monitoring.
+  const [scoreView, setScoreView] = useState<ScoreView>('latest');
   // (guarded below: the reports view renders only when canReview)
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [students, setStudents]     = useState<Student[]>([]);
@@ -1934,17 +2055,48 @@ export function AssessmentRosterCore({
     : fullAccess || (viewerAudience !== null && reviewAudienceAllows(assessment, viewerAudience));
 
   const rows: RosterRow[] = useMemo(() => {
-    const attemptByStudent = new Map<string, Attempt>(attempts.map((a) => [a.studentId, a]));
+    // ── One row per student, showing their LATEST attempt ─────────
+    //
+    // This used to be `new Map(attempts.map(a => [a.studentId, a]))`, which is
+    // last-write-wins over an UNORDERED snapshot — subscribeToAttemptsByAssessment
+    // issues no orderBy. So for a student with several attempts the row showed
+    // an arbitrarily chosen one: not the newest, not the best, and liable to
+    // change between snapshots. Staff comparing a score against what the
+    // student reported could be looking at a different sitting each refresh.
+    //
+    // Deterministic now: most recent by startedAt, falling back to createdAt
+    // and then the doc id so the choice is still stable when timestamps are
+    // missing or tie. The count rides along so the row can say "there is more
+    // here" — the full list is in the drawer's HISTORY panel, which reads its
+    // own query and already handles soft-deleted attempts.
+    const grouped = new Map<string, Attempt[]>();
+    for (const a of attempts) {
+      const list = grouped.get(a.studentId);
+      if (list) list.push(a); else grouped.set(a.studentId, [a]);
+    }
+
     return students.map((s) => {
-      const attempt = attemptByStudent.get(s.id) ?? null;
+      const mine = grouped.get(s.id) ?? [];
+      const latest = mine.length === 0 ? null : mine.reduce((best, cur) => {
+        const d = attemptStartedMs(cur) - attemptStartedMs(best);
+        if (d !== 0) return d > 0 ? cur : best;
+        return cur.id > best.id ? cur : best;   // stable tiebreak
+      });
       return {
         student: s,
-        attempt,
-        rosterStatus: deriveRosterStatus(attempt),
+        attempt: latest,
+        bestAttempt: pickBestAttempt(mine),
+        attemptCount: mine.length,
+        rosterStatus: deriveRosterStatus(latest),
         isBlocked: blockedSet.has(s.id),
       };
     });
   }, [students, attempts, blockedSet]);
+
+  // Only surface the Latest/Best toggle when somebody has actually sat more
+  // than once. On a first-run exam it would be a control with no effect, and
+  // the roster is busy enough already.
+  const anyRetakes = useMemo(() => rows.some((r) => r.attemptCount > 1), [rows]);
 
   // ── Filter ─────────────────────────────────────────────────────
   const filtered = useMemo(() => rows.filter((row) => {
@@ -1973,10 +2125,21 @@ export function AssessmentRosterCore({
   // ── Keep drawer in sync with live data ────────────────────────
   useEffect(() => {
     if (!selectedRow) return;
-    const updatedAttempt = attempts.find((a) => a.studentId === selectedRow.student.id) ?? null;
+    // Same latest-wins selection as the row list. `find` returned whichever
+    // attempt happened to come first in an unordered snapshot, so a student
+    // with several sittings could have the drawer re-point at a different one
+    // on every tick.
+    const mine = attempts.filter((a) => a.studentId === selectedRow.student.id);
+    const updatedAttempt = mine.length === 0 ? null : mine.reduce((best, cur) => {
+      const d = attemptStartedMs(cur) - attemptStartedMs(best);
+      if (d !== 0) return d > 0 ? cur : best;
+      return cur.id > best.id ? cur : best;
+    });
     setSelectedRow({
       ...selectedRow,
       attempt: updatedAttempt,
+      bestAttempt: pickBestAttempt(mine),
+      attemptCount: mine.length,
       rosterStatus: deriveRosterStatus(updatedAttempt),
       isBlocked: blockedSet.has(selectedRow.student.id),
     });
@@ -2191,6 +2354,32 @@ export function AssessmentRosterCore({
               {v === 'roster' ? 'Roster' : 'Reports'}
             </button>
           ))}
+
+          {/* ── Score view: Latest | Best ──────────────────────────
+              Only rendered once somebody has actually sat more than once.
+              On a first-run exam this would be a control that changes
+              nothing, and the toolbar is busy enough. */}
+          {view === 'roster' && anyRetakes && (
+            <div className="flex items-center gap-1 ml-3 pl-3"
+              style={{ borderLeft: '1px solid #E3E1DB' }}>
+              <span className="text-xs mr-1" style={{ color: '#9A9891' }}>Show</span>
+              {(['latest', 'best'] as const).map((sv) => (
+                <button key={sv} onClick={() => setScoreView(sv)}
+                  title={sv === 'latest'
+                    ? 'Emphasise each student\u2019s most recent score'
+                    : 'Emphasise each student\u2019s highest score (voided sittings excluded)'}
+                  className="text-xs px-2.5 py-1"
+                  style={{
+                    borderRadius: 2, cursor: 'pointer',
+                    background: scoreView === sv ? '#F0EFEA' : 'transparent',
+                    color: scoreView === sv ? '#0C0C0B' : '#9A9891',
+                    border: `1px solid ${scoreView === sv ? '#D8D6CF' : 'transparent'}`,
+                  }}>
+                  {sv === 'latest' ? 'Latest' : 'Best'}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Export results — one implementation, all three staff roles. */}
           <button
             onClick={() => setShowExport(true)}
@@ -2283,6 +2472,7 @@ export function AssessmentRosterCore({
                 attemptOverrides={assessment.attemptOverrides}
                 sections={assessment.sections ?? []}
                 nowMs={breakTick}
+                scoreView={scoreView}
               />
             ))
           )}

@@ -322,15 +322,17 @@ function buildBreakState(args: {
   const endsAt = new Date(args.submittedAtIso).getTime() + args.durationMinutes * 60 * 1000;
   const live = Number.isFinite(endsAt) && endsAt > now;
 
-  // An elapsed break is never mandatory: the wait it was enforcing is already
-  // over, so holding the student is punishing them for the server's clamp.
-  // mandatory=false lets the Continue click through immediately, which is also
-  // the gesture the fullscreen re-entry needs.
+  // `mandatory` is reported honestly, including for an elapsed break. It only
+  // governs whether the student may leave EARLY; once the clock reaches zero
+  // BreakScreen continues on its own regardless of which kind it was. An
+  // earlier version forced mandatory=false on elapsed breaks to let the click
+  // through, which was a lie in the state and — because auto-continue was
+  // gated on mandatory — turned every elapsed break into a dead screen.
   return {
     justSubmittedSectionId: args.sectionId,
     justSubmittedSectionName: args.sectionName,
     endsAt: live ? endsAt : now,
-    mandatory: live ? args.mandatory : false,
+    mandatory: args.mandatory,
     then: args.isChoice ? 'choose' : 'start_next',
     ...(args.isChoice
       ? {}
@@ -792,17 +794,32 @@ function BreakScreen({
   const expired = remainingMs <= 0;
   const canContinue = expired || !state.mandatory;
 
-  // Auto-continue once a mandatory break expires
+  // ── Auto-continue once the break's time is up (fixed 2026-08-01) ──
+  // This used to require `state.mandatory`, so an OPTIONAL break that ran down
+  // to 0:00 just sat there waiting for a click, and after Phase 0.1 marked
+  // elapsed breaks non-mandatory every resumed break landed in the same dead
+  // state. "Optional" means the student may leave EARLY — not that they must
+  // dismiss a break that is already over. When the clock reaches zero the exam
+  // resumes, whichever kind it was.
+  //
+  // Fires once: onContinue is stable while this screen is up (its only dep is
+  // breakState), and the ref guards a re-fire if React re-runs the effect.
+  const autoFiredRef = useRef(false);
+  const [autoFailed, setAutoFailed] = useState(false);
   useEffect(() => {
-    if (expired && state.mandatory) onContinue();
-  }, [expired, state.mandatory, onContinue]);
+    if (!expired || autoFiredRef.current) return;
+    autoFiredRef.current = true;
+    onContinue();
+    // If we are still on this screen several seconds later the advance did not
+    // take (a refused start, a dropped connection). Hand the student a working
+    // button back rather than leaving them on a disabled "Continuing…" with no
+    // way out — being stuck with no recourse is the failure mode this module
+    // has already produced twice.
+    const t = setTimeout(() => setAutoFailed(true), 5000);
+    return () => clearTimeout(t);
+  }, [expired, onContinue]);
 
-  // A mandatory break that has run out is ALREADY continuing on its own via
-  // the effect above. Previously the button simply flipped to "Continue to X"
-  // at that moment, offering an action the student did not need to take and
-  // which did nothing when taken — the exam moved on regardless. Say what is
-  // actually happening instead of presenting a decision that isn't one.
-  const autoContinuing = expired && state.mandatory;
+  const autoContinuing = expired && !autoFailed;
 
   // Set on click so a manual continue (skippable break) visibly registers
   // rather than looking ignored while handleEndBreak does its work.

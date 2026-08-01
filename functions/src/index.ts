@@ -4820,7 +4820,8 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     // question of every section untimed). Reported only.
     auditTiming('submitAnswerAndAdvance', attemptId,
       attempt as unknown as Record<string, unknown>,
-      assessment as unknown as Record<string, unknown> | undefined, 'question');
+      assessment as unknown as Record<string, unknown> | undefined,
+      ['question', 'section', 'break', 'choose', 'ended']);
     const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;
     let lateAnswer = false;
@@ -6073,7 +6074,15 @@ function auditTiming(
   attemptId: string,
   attemptRaw: Record<string, unknown>,
   assessmentRaw: Record<string, unknown> | undefined,
-  decided: string,
+  /**
+   * What the callable decided, as the set of verdicts that would agree with
+   * it. A set rather than a string because some inline decisions are
+   * genuinely ambiguous: `pauseBeforeNext` is client-supplied and covers BOTH
+   * "there is a break here" and "this exam lets you pick the next section", so
+   * insisting on one verdict reported a disagreement that was mine, not the
+   * resolver's.
+   */
+  decided: string[],
   /**
    * State the callable is ABOUT to write, applied before resolving.
    *
@@ -6094,10 +6103,10 @@ function auditTiming(
     const asmt = toCoreAssessment(assessmentRaw);
     const verdict = resolveTiming(a, asmt, Date.now());
 
-    if (verdict.kind !== decided) {
+    if (!decided.includes(verdict.kind)) {
       console.log(`[timing/${where}] verdict=${verdict.kind}` +
         (verdict.kind === 'ended' ? `:${verdict.reason}` : '') +
-        ` decided=${decided} attempt=${attemptId}`);
+        ` decided=${decided.join('|')} attempt=${attemptId}`);
     }
 
     // Invariants are checked against the STORED state, never the projection —
@@ -6406,7 +6415,8 @@ export const startSection = onCall<StartSectionData>(
     assertNotBlocked(lockA, studentId);
     // Phase 3b shadow — the resolver's view of a section that is starting.
     auditTiming('startSection', attemptId,
-      attempt as unknown as Record<string, unknown>, lockSnap.data(), 'section');
+      attempt as unknown as Record<string, unknown>, lockSnap.data(),
+      ['section', 'question']);
 
     const locks = computeAttemptLocks(
       attempt.startedAt,
@@ -6657,10 +6667,12 @@ export const submitSection = onCall<SubmitSectionData>(
     // it stands the instant before this write? Reported, never acted on.
     auditTiming('submitSection', attemptId,
       attempt as unknown as Record<string, unknown>, aSnap.data(),
-      !nextSectionId ? 'ended'
-        : mandatoryBreakDue ? 'break'
-        : pauseBeforeNext ? 'choose'
-        : 'section',
+      !nextSectionId ? ['ended']
+        : mandatoryBreakDue ? ['break']
+        // pauseBeforeNext is the client saying "stop here" — which it does for
+        // a break OR for student-choice. Either verdict agrees.
+        : pauseBeforeNext ? ['break', 'choose']
+        : ['section', 'question'],
       // Apply the submit this call is about to make, so the resolver is asked
       // the same question the callable just answered.
       (core) => ({
@@ -6728,8 +6740,29 @@ export const submitSection = onCall<SubmitSectionData>(
             const qData = qSnap.data() as Record<string, unknown>;
             nextQuestion = sanitizeQuestionForStudent(qData, false);
             if (!existingHere) {
+              // ── D-23 (Phase 3b): lock what we are leaving behind ──────
+              //
+              // This appended the next section's question WITHOUT locking the
+              // outgoing section's current one, so every linear/adaptive
+              // multi-section attempt ended up with a permanently unlocked
+              // question from a section the student had already left — and a
+              // fresh one appended at each boundary, so the count grew.
+              //
+              // Found by the Phase 3b shadow, which reported INV-2 ("2
+              // unlocked served questions") on every advance of a real
+              // sitting, always pairing the same stranded question with a
+              // rotating current one.
+              //
+              // Benign today: the stranded question sits in a closed section
+              // and submitAnswerAndAdvance resolves the current one
+              // positionally, so nothing misbehaves. It is still wrong state,
+              // and anything that reasons about "which question is live" by
+              // lock status — the resolver included — gets a second answer it
+              // should never see. Closing it here rather than teaching every
+              // reader to tolerate it.
               updates.servedQuestions = [
-                ...served,
+                ...served.map((sq) =>
+                  sq.locked === true ? sq : { ...sq, locked: true }),
                 {
                   questionId: firstQid,
                   sectionId: nextSectionId,

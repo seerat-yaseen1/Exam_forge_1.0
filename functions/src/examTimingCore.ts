@@ -63,10 +63,35 @@ export function toMs(v: TimeInput): number | null {
 export type SectionStartOrder = 'sequential' | 'random' | 'student_choice';
 export type DeliveryMode = 'standard' | 'linear' | 'adaptive';
 
+/**
+ * A break configured after a section.
+ *
+ * MATCHES THE STORED SHAPE EXACTLY: `type BreakCfg = { durationMinutes:
+ * number; mandatory: boolean }`. There is no `enabled` flag — a break exists
+ * when `breakAfter` is PRESENT with a positive duration, and that is the only
+ * test.
+ *
+ * An earlier version of this file invented `enabled` and gated on it, so the
+ * resolver was blind to every break in the system and reported "advance to the
+ * next section" where the callable correctly said "break". Caught by the Phase
+ * 3b shadow on a real sitting, not by 13,446 generated states — because the
+ * generator was building the invented shape too. A test fixture that agrees
+ * with the bug proves nothing.
+ */
 export interface CoreBreak {
-  enabled?: boolean;
   durationMinutes?: number;
   mandatory?: boolean;
+}
+
+/**
+ * Is a break actually configured here? Presence + positive duration.
+ * A type predicate, so callers get `durationMinutes` narrowed to a number and
+ * nobody has to reach for a non-null assertion.
+ */
+export function hasBreak(
+  b: CoreBreak | undefined,
+): b is CoreBreak & { durationMinutes: number } {
+  return !!b && typeof b.durationMinutes === 'number' && b.durationMinutes > 0;
 }
 
 export interface CoreSection {
@@ -574,7 +599,7 @@ function afterSection(
 
   const sec = sectionById(asmt, sectionId);
   const brk = sec?.breakAfter;
-  if (brk?.enabled && (brk.durationMinutes ?? 0) > 0) {
+  if (hasBreak(brk)) {
     // Break anchors on the section's submit instant when there is one; when
     // the section expired rather than being submitted, on the deadline itself.
     // Using `now` instead would hand a student extra break time for arriving
@@ -582,11 +607,11 @@ function afterSection(
     const anchor = toMs(a.sectionTimings?.[sectionId]?.submittedAt)
       ?? deadlines.sectionEndsAt
       ?? nowMs;
-    const endsAt = anchor + (brk.durationMinutes ?? 0) * 60_000;
+    const endsAt = anchor + brk.durationMinutes * 60_000;
     if (nowMs < endsAt) {
       return {
         kind: 'break', sectionId, nextSectionId: nextId,
-        endsAt, mandatory: brk.mandatory !== false, deadlines,
+        endsAt, mandatory: brk.mandatory === true, deadlines,
       };
     }
   }
@@ -616,14 +641,14 @@ function pendingBreak(
   if (hasStarted(a.sectionTimings?.[nextId])) return null;
 
   const brk = sectionById(asmt, last.id)?.breakAfter;
-  if (!brk?.enabled || (brk.durationMinutes ?? 0) <= 0) return null;
+  if (!hasBreak(brk)) return null;
 
-  const endsAt = last.at + (brk.durationMinutes ?? 0) * 60_000;
+  const endsAt = last.at + brk.durationMinutes * 60_000;
   if (nowMs >= endsAt) return null;
 
   return {
     kind: 'break', sectionId: last.id, nextSectionId: nextId,
-    endsAt, mandatory: brk.mandatory !== false,
+    endsAt, mandatory: brk.mandatory === true,
   };
 }
 

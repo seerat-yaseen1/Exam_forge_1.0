@@ -43,8 +43,12 @@ function makeAssessment(opts) {
       id: `S${i}`,
       timeLimit: opts.timed ? opts.sectionMinutes : 0,
       questionTimeLimit: opts.sequential ? opts.questionSeconds : undefined,
+      // EXACTLY the stored shape: { durationMinutes, mandatory }. No `enabled`
+      // flag exists. The generator previously built an invented shape, so it
+      // agreed with the resolver's invented check and proved nothing — the
+      // real mismatch only surfaced in the Phase 3b production shadow.
       breakAfter: opts.breaks && i < opts.sectionCount - 1
-        ? { enabled: true, durationMinutes: opts.breakMinutes, mandatory: opts.mandatoryBreak }
+        ? { durationMinutes: opts.breakMinutes, mandatory: opts.mandatoryBreak }
         : undefined,
       questionIds: Array.from({ length: opts.questionsPerSection }, (_, q) => `S${i}q${q}`),
     });
@@ -421,6 +425,26 @@ regression('the \'\' startedAt sentinel means NOT started', () => {
   const dB = C.computeDeadlines(inB, asmt);
   assert.ok(dB.sectionEndsAt > dA.sectionEndsAt,
     'the deadline follows the student, it does not stay pinned to section one');
+});
+
+regression('a break is recognised from the STORED shape (no enabled flag)', () => {
+  const asmt = { sectionGraceSeconds: 30, sections: [
+    { id: 'A', timeLimit: 2, questionIds: ['a'], breakAfter: { durationMinutes: 5, mandatory: true } },
+    { id: 'B', timeLimit: 2, questionIds: ['b'] }] };
+  const a = { status: 'in_progress', startedAt: iso(T0), sectionIds: ['A', 'B'],
+    sectionTimings: {
+      A: { startedAt: iso(T0), submittedAt: iso(T0 + min(1)) },
+      B: { startedAt: '', timeUsedSeconds: 0 } } };
+  const v = C.resolve(a, asmt, T0 + min(2));
+  assert.strictEqual(v.kind, 'break', 'a configured break must be seen');
+  assert.strictEqual(v.mandatory, true);
+  assert.strictEqual(v.nextSectionId, 'B');
+  // And it must END when the duration is up.
+  assert.notStrictEqual(C.resolve(a, asmt, T0 + min(7)).kind, 'break');
+  // A section with no breakAfter at all must NOT produce a break.
+  const noBreak = { ...asmt, sections: [
+    { id: 'A', timeLimit: 2, questionIds: ['a'] }, { id: 'B', timeLimit: 2, questionIds: ['b'] }] };
+  assert.strictEqual(C.resolve(a, noBreak, T0 + min(2)).kind, 'section');
 });
 
 regression('INV-6 · nothing leaves a terminal state', () => {

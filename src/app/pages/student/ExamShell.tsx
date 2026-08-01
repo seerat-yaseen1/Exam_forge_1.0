@@ -1042,6 +1042,11 @@ export function ExamShell() {
   const [currentQIdx, setCurrentQIdx]             = useState(0);
   // ── Sequential delivery state (Phase 2.5) ──────────────────────
   const [linearSectionComplete, setLinearSectionComplete] = useState(false);
+  /** Mirror of linearAdvancing for the answer handler, which is a stable
+   *  callback and would otherwise close over a stale value (D-27). */
+  const linearAdvancingRef = useRef(false);
+  /** Current question id, readable from stable callbacks (D-25 flush). */
+  const currentQIdRef = useRef<string | null>(null);
   const [linearAdvancing, setLinearAdvancing]             = useState(false);
   const [linearError, setLinearError]                     = useState<string | undefined>();
 
@@ -1531,8 +1536,29 @@ export function ExamShell() {
   const isLastSection = currentSectionIdx >= totalSections - 1;
   // Standard: last index of the paper's section. Linear: the SERVER tells us
   // (sectionComplete) — the client never knows how many questions remain.
+  // ── D-26: recognise the last question BEFORE the student leaves it ──
+  //
+  // This used to be `linearSectionComplete`, which the SERVER only reports
+  // once the student has already advanced PAST the final question. So the
+  // button read "Save & next" on the last question, the student clicked it,
+  // nothing appeared to happen, and only then did a separate "Submit section"
+  // button show up. Two actions for one intent, and on a timer expiry the
+  // section just sat there until the section clock caught up.
+  //
+  // questionOrder holds the section's full ordered list and is on the attempt
+  // already. Using its LENGTH reveals nothing — knowing a section has five
+  // questions is not knowing what they are, which is why the display still
+  // draws from servedQuestions. Falls back to the server's flag when
+  // questionOrder is missing, so nothing regresses on an older attempt.
+  const linearOnFinalQuestion = useMemo(() => {
+    if (!isLinear || !attempt || !currentSection || !currentQId) return false;
+    const order = attempt.questionOrder?.[currentSection.id] ?? [];
+    if (order.length === 0) return false;
+    return order.indexOf(currentQId) === order.length - 1;
+  }, [isLinear, attempt, currentSection, currentQId]);
+
   const isLastQuestion = isLinear
-    ? linearSectionComplete
+    ? (linearSectionComplete || linearOnFinalQuestion)
     : currentQIdx >= currentSectionQIds.length - 1;
 
   // ── Count unanswered in current section ────────────────────────
@@ -1580,6 +1606,14 @@ export function ExamShell() {
       sectionId,
     };
 
+    // ── D-27: refuse edits while an answer is in flight ────────────
+    // submitAnswerAndAdvance takes a couple of seconds, and the inputs stayed
+    // live for all of it — so a student could change their selection AFTER the
+    // answer had already been sent. The sent one counts; the screen showed the
+    // other. Whichever way that resolves, the student has been misled about
+    // what they submitted, which is worse than the wait itself.
+    if (linearAdvancingRef.current) return;
+
     // Immediate local update
     setLocalAnswers((prev) => ({ ...prev, [questionId]: answer }));
 
@@ -1608,14 +1642,70 @@ export function ExamShell() {
   // version fired one updateDoc per answered question in parallel against the
   // same attempt doc, which caused heavy write contention (aborted/retried
   // commits) exactly at submit time on long papers.
+  /**
+   * Commit the one uncommitted answer in sequential delivery (D-25).
+   *
+   * Only fires when there is something to lose: a served question that is
+   * still UNLOCKED (so the server has not recorded an answer for it) and a
+   * local selection to send. Anything else is a no-op, so this is safe to call
+   * on every submit path including the ordinary ones.
+   *
+   * Bounded by a timeout. This runs inside the expiry path now, and a slow
+   * network must not be able to hang a student's section submit — losing one
+   * answer is bad, failing to submit at all is worse.
+   */
+  const flushSequentialCurrent = useCallback(async () => {
+    const att = attemptRef.current;
+    const qid = currentQIdRef.current;
+    if (!att || !qid || linearAdvancingRef.current) return;
+
+    const entry = (att.servedQuestions ?? []).find((sq) => sq.questionId === qid);
+    if (!entry || entry.locked === true) return;      // already committed
+
+    const ans = localAnswersRef.current[qid];
+    if (!ans || isAnswerEmpty(ans)) return;           // nothing selected
+
+    try {
+      await Promise.race([
+        submitAnswerAndAdvance({
+          attemptId: att.id,
+          questionId: qid,
+          answer: { type: ans.type, value: ans.value as unknown },
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
+      ]);
+    } catch (e) {
+      console.error('[ExamShell] final sequential answer flush failed', e);
+    }
+  }, []);
+
   const flushAnswers = useCallback(async () => {
     for (const [, timer] of answerTimersRef.current) clearTimeout(timer);
     answerTimersRef.current.clear();
 
     const att = attemptRef.current;
     if (!att) return;
-    // Sequential delivery: answers are already committed server-side by
-    // submitAnswerAndAdvance, and a direct write would be rejected by rules.
+    // ── D-25: the CURRENT sequential answer is not committed yet ────
+    //
+    // In linear/adaptive, answers reach the server only through
+    // submitAnswerAndAdvance — a direct write is rejected by rules. This
+    // function used to return here, which is correct for every question the
+    // student has already advanced past and WRONG for the one in front of
+    // them: their selection lived only in localAnswers and was discarded the
+    // moment the section or overall clock expired.
+    //
+    // Very reachable — any student still working when time ran out. Same class
+    // of loss as D-01, on a different path, and invisible in exactly the same
+    // way: the UI showed the option selected right up to the submit.
+    //
+    // Standard delivery already flushed everything; sequential only needs the
+    // one uncommitted question, because the rest are on the server already.
+    // NOT flushSequentialCurrent() here, deliberately. flushAnswers also runs
+    // when a FREEZE lands, and submitAnswerAndAdvance does not merely save —
+    // it ADVANCES. Pausing a student and moving them past their question would
+    // be a worse bug than the one being fixed. The sequential flush is called
+    // explicitly from the two submit paths instead, where advancing is moot
+    // because the section is ending anyway.
     const dMode = att.securityConfig?.deliveryMode;
     if (dMode === 'linear' || dMode === 'adaptive') return;
     await saveAnswers(att.id, localAnswersRef.current);
@@ -1651,6 +1741,7 @@ export function ExamShell() {
     const att = attemptRef.current;
     if (!att || !currentQId || linearAdvancing) return;
     setLinearAdvancing(true);
+    linearAdvancingRef.current = true;
     setLinearError(undefined);
     try {
       const ans = localAnswersRef.current[currentQId];
@@ -1699,6 +1790,7 @@ export function ExamShell() {
       );
     } finally {
       setLinearAdvancing(false);
+      linearAdvancingRef.current = false;
     }
   }, [currentQId, linearAdvancing, currentSection]);
 
@@ -1706,7 +1798,10 @@ export function ExamShell() {
   useEffect(() => { setLinearSectionComplete(false); }, [currentSectionIdx]);
 
   // Clear any advance error once the student is on a new question.
-  useEffect(() => { setLinearError(undefined); }, [currentQId]);
+  useEffect(() => {
+    setLinearError(undefined);
+    currentQIdRef.current = currentQId ?? null;
+  }, [currentQId]);
 
   // ── Per-question timer (Phase 2.5 Stage 3) ─────────────────────
   // Authority toggle: currentSection.questionTimeLimit (seconds). Undefined =
@@ -1780,6 +1875,11 @@ export function ExamShell() {
     if (!att || !a || !currentSection) return;
     if (submittingRef.current) return; // another submit path is already running
     submittingRef.current = true;
+
+    // D-25: commit the one uncommitted sequential answer before anything
+    // closes. No-op in standard delivery and no-op when nothing is pending,
+    // so it is safe on the ordinary path as well as on expiry.
+    await flushSequentialCurrent();
 
     // On the FINAL section there is no section-submit step worth showing: the
     // very next thing doSectionSubmit does is hand off to doFinalSubmit. Going
@@ -2157,6 +2257,11 @@ export function ExamShell() {
   ) => {
     if (submittingRef.current) return; // another submit path is already running
     submittingRef.current = true;
+
+    // D-25: commit the one uncommitted sequential answer before anything
+    // closes. No-op in standard delivery and no-op when nothing is pending,
+    // so it is safe on the ordinary path as well as on expiry.
+    await flushSequentialCurrent();
     // B-02 backstop. doFinalSubmit handles its own known failures, but this
     // outer catch is what guarantees the invariant "the lock is never held by
     // a call that is no longer running". Anything unforeseen — a render-time
@@ -2976,12 +3081,28 @@ export function ExamShell() {
 
                 {isLastQuestion ? (
                   <button
-                    onClick={() => setShowSubmitModal(true)}
+                    disabled={isLinear && linearAdvancing}
+                    onClick={async () => {
+                      // D-26: one action. On the final question of a sequential
+                      // section the answer has not been committed yet — it is
+                      // only sent by submitAnswerAndAdvance — so save it first,
+                      // THEN offer the submit. Splitting these was how a
+                      // student could answer the last question, see nothing
+                      // happen, and lose the answer if they walked away.
+                      if (isLinear && !linearSectionComplete) {
+                        await handleLinearNext();
+                      }
+                      setShowSubmitModal(true);
+                    }}
                     className="flex items-center gap-1.5 text-xs px-4 py-2"
                     style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}
                   >
                     <Send size={11} strokeWidth={1.5} />
-                    {isLastSection ? 'Submit exam' : `Submit ${currentSection.name}`}
+                    {isLinear && linearAdvancing
+                      ? 'Saving…'
+                      : isLinear && !linearSectionComplete
+                        ? (isLastSection ? 'Save & submit exam' : 'Save & submit section')
+                        : (isLastSection ? 'Submit exam' : `Submit ${currentSection.name}`)}
                   </button>
                 ) : (
                   <button

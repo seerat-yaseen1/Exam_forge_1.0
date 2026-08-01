@@ -6069,6 +6069,37 @@ function toCoreAttempt(raw: Record<string, unknown>): CoreAttempt {
  * surprising. Never throws — a telemetry fault must not cost a student their
  * exam, which is the whole reason this phase reports rather than decides.
  */
+/**
+ * Append a newly served question, locking everything already served.
+ * (D-23, master plan Phase 3b.)
+ *
+ * INV-2: at most one served question is unlocked at any moment.
+ *
+ * BOTH serve sites — startSection and submitSection — used to do
+ * `[...served, {locked: false}]`, leaving the outgoing section's current
+ * question unlocked forever. Every linear/adaptive multi-section attempt
+ * therefore accumulated one stranded question per boundary. The Phase 3b
+ * shadow reported it as INV-2 on every advance of a real sitting.
+ *
+ * Fixing only submitSection left startSection producing the same state, which
+ * is exactly why this is now ONE function rather than two similar blocks: two
+ * copies of a rule is how the rule ends up applied in one place and not the
+ * other.
+ *
+ * Benign in itself — a stranded question sits in a closed section and cannot
+ * be answered — but it is wrong state, and anything identifying "the live
+ * question" by lock status gets a second answer it should never see.
+ */
+function appendServedQuestion<T extends { locked?: boolean }>(
+  served: T[],
+  entry: T,
+): T[] {
+  return [
+    ...served.map((sq) => (sq.locked === true ? sq : { ...sq, locked: true })),
+    entry,
+  ];
+}
+
 function auditTiming(
   where: string,
   attemptId: string,
@@ -6416,7 +6447,11 @@ export const startSection = onCall<StartSectionData>(
     // Phase 3b shadow — the resolver's view of a section that is starting.
     auditTiming('startSection', attemptId,
       attempt as unknown as Record<string, unknown>, lockSnap.data(),
-      ['section', 'question']);
+      // 'break' belongs here: startSection is exactly how a student LEAVES a
+      // break, and the gate above only blocks MANDATORY ones — so skipping an
+      // optional break is legal, and the resolver reporting "on a break" at
+      // that instant is correct rather than a disagreement.
+      ['section', 'question', 'break']);
 
     const locks = computeAttemptLocks(
       attempt.startedAt,
@@ -6461,16 +6496,15 @@ export const startSection = onCall<StartSectionData>(
           const qData = qSnap.data() as Record<string, unknown>;
           servedQuestion = sanitizeQuestionForStudent(qData, false);
           if (!existingHere) {
-            updates.servedQuestions = [
-              ...served,
-              {
-                questionId: firstQid,
-                sectionId,
-                difficulty: (qData.difficulty as string) ?? 'medium',
-                servedAt: nowIso,
-                locked: false,
-              },
-            ];
+            // D-23: same rule as submitSection. Fixing one and not the other
+            // is what left INV-2 still firing after the first attempt at this.
+            updates.servedQuestions = appendServedQuestion(served, {
+              questionId: firstQid,
+              sectionId,
+              difficulty: (qData.difficulty as string) ?? 'medium',
+              servedAt: nowIso,
+              locked: false,
+            });
           }
         }
       }
@@ -6760,17 +6794,13 @@ export const submitSection = onCall<SubmitSectionData>(
               // lock status — the resolver included — gets a second answer it
               // should never see. Closing it here rather than teaching every
               // reader to tolerate it.
-              updates.servedQuestions = [
-                ...served.map((sq) =>
-                  sq.locked === true ? sq : { ...sq, locked: true }),
-                {
-                  questionId: firstQid,
-                  sectionId: nextSectionId,
-                  difficulty: (qData.difficulty as string) ?? 'medium',
-                  servedAt: nowIso,
-                  locked: false,
-                },
-              ];
+              updates.servedQuestions = appendServedQuestion(served, {
+                questionId: firstQid,
+                sectionId: nextSectionId,
+                difficulty: (qData.difficulty as string) ?? 'medium',
+                servedAt: nowIso,
+                locked: false,
+              });
             }
           }
         }

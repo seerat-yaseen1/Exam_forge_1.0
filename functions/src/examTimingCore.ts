@@ -310,18 +310,28 @@ export function sectionById(asmt: CoreAssessment, id: string): CoreSection | und
  *
  * Returns null when nothing is open — between sections, on a break, or before
  * the first section starts.
+ *
+ * "Started" means a PARSEABLE timestamp, not merely a present field: startExam
+ * seeds unstarted sections with `startedAt: ''`.
  */
+export function hasStarted(t: CoreSectionTiming | undefined): boolean {
+  return toMs(t?.startedAt) !== null;
+}
+export function hasSubmitted(t: CoreSectionTiming | undefined): boolean {
+  return toMs(t?.submittedAt) !== null;
+}
+
 export function openSectionId(a: CoreAttempt): string | null {
   for (const id of a.sectionIds) {
     const t = a.sectionTimings?.[id];
-    if (t?.startedAt != null && t?.submittedAt == null) return id;
+    if (hasStarted(t) && !hasSubmitted(t)) return id;
   }
   return null;
 }
 
 /** Sections in play order that have not been submitted. */
 export function remainingSectionIds(a: CoreAttempt): string[] {
-  return a.sectionIds.filter((id) => a.sectionTimings?.[id]?.submittedAt == null);
+  return a.sectionIds.filter((id) => !hasSubmitted(a.sectionTimings?.[id]));
 }
 
 /** The last section the student submitted, by submit time. */
@@ -603,7 +613,7 @@ function pendingBreak(
   const idx = a.sectionIds.indexOf(last.id);
   const nextId = idx >= 0 ? a.sectionIds[idx + 1] : undefined;
   if (!nextId) return null;
-  if (a.sectionTimings?.[nextId]?.startedAt != null) return null;
+  if (hasStarted(a.sectionTimings?.[nextId])) return null;
 
   const brk = sectionById(asmt, last.id)?.breakAfter;
   if (!brk?.enabled || (brk.durationMinutes ?? 0) <= 0) return null;
@@ -644,7 +654,7 @@ export function checkInvariants(a: CoreAttempt, asmt: CoreAssessment): Violation
   // ── INV-1 · exactly one section open ────────────────────────────
   const open = a.sectionIds.filter((id) => {
     const t = a.sectionTimings?.[id];
-    return t?.startedAt != null && t?.submittedAt == null;
+    return hasStarted(t) && !hasSubmitted(t);
   });
   if (open.length > 1) {
     v.push(err('INV-1', `${open.length} sections open at once: ${open.join(', ')}`));
@@ -747,6 +757,16 @@ export function checkInvariants(a: CoreAttempt, asmt: CoreAssessment): Violation
     if (st === null && sub !== null) {
       v.push(err('INV-9', `section ${id} has submittedAt but no startedAt`));
     }
+    // NOTE on the '' sentinel: startExam seeds every section with
+    // `startedAt: ''` and overwrites it on entry, so "not started" arrives as
+    // an EMPTY STRING, not as an absent field. `'' != null` is true, so a
+    // naive null check counts every section as open from the first instant —
+    // which made openSectionId return section one for the whole exam and
+    // would have re-anchored every deadline to it. That is D-01 rebuilt inside
+    // the resolver written to prevent it. Every started/submitted test in this
+    // module goes through hasStarted/hasSubmitted, which parse rather than
+    // null-check, so the sentinel can only ever mean "not started".
+    // Caught by the Phase 3b shadow on the first real sitting.
   }
   for (const s of a.servedQuestions ?? []) {
     const served = toMs(s.servedAt);

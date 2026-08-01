@@ -78,6 +78,14 @@ function makeAttempt(asmt, opts, completed, nowOffsetMin) {
   if (openIdx < sectionIds.length && !opts.leaveClosed) {
     timings[sectionIds[openIdx]] = { startedAt: iso(cursor) };
   }
+  // startExam seeds EVERY section with `startedAt: ''` and overwrites it on
+  // entry, so unstarted sections arrive as an empty string rather than an
+  // absent field. The generator must reproduce that or the sweep tests a
+  // shape production never produces — which is how the sentinel bug survived
+  // 13,446 generated states and was only caught by the Phase 3b shadow.
+  for (const id of sectionIds) {
+    if (!timings[id]) timings[id] = { startedAt: '', timeUsedSeconds: 0 };
+  }
 
   const served = [];
   if (opts.sequential && openIdx < sectionIds.length && !opts.leaveClosed) {
@@ -383,6 +391,36 @@ regression('INV-3 has no monotonicity rule for the combined lock', () => {
     'the combined bound moving earlier here is CORRECT behaviour');
   assert.strictEqual(C.checkTransition(inA, inB).length, 0,
     'checkTransition must not flag it');
+});
+
+regression('the \'\' startedAt sentinel means NOT started', () => {
+  // Caught in production by the Phase 3b shadow: `'' != null` is true, so a
+  // null check counted all four sections as open, openSectionId returned
+  // section one for the whole exam, and every deadline would have re-anchored
+  // to it — D-01 rebuilt inside the resolver meant to prevent it.
+  const asmt = { sections: [
+    { id: 'A', timeLimit: 2, questionIds: ['a'] },
+    { id: 'B', timeLimit: 2, questionIds: ['b'] },
+    { id: 'C', timeLimit: 2, questionIds: ['c'] }], sectionGraceSeconds: 30 };
+  const a = { status: 'in_progress', startedAt: iso(T0), sectionIds: ['A', 'B', 'C'],
+    sectionTimings: {
+      A: { startedAt: iso(T0), timeUsedSeconds: 0 },
+      B: { startedAt: '', timeUsedSeconds: 0 },
+      C: { startedAt: '', timeUsedSeconds: 0 } } };
+  assert.strictEqual(C.openSectionId(a), 'A', 'only the genuinely started section is open');
+  assert.strictEqual(C.checkInvariants(a, asmt).filter((x) => x.severity === 'error').length, 0,
+    'the seeded shape must not trip INV-1');
+
+  // And once A is submitted and B entered, the bound must follow B.
+  const inB = { ...a, sectionTimings: {
+    A: { startedAt: iso(T0), submittedAt: iso(T0 + min(1)) },
+    B: { startedAt: iso(T0 + min(1)), timeUsedSeconds: 0 },
+    C: { startedAt: '', timeUsedSeconds: 0 } } };
+  assert.strictEqual(C.openSectionId(inB), 'B');
+  const dA = C.computeDeadlines(a, asmt);
+  const dB = C.computeDeadlines(inB, asmt);
+  assert.ok(dB.sectionEndsAt > dA.sectionEndsAt,
+    'the deadline follows the student, it does not stay pinned to section one');
 });
 
 regression('INV-6 · nothing leaves a terminal state', () => {

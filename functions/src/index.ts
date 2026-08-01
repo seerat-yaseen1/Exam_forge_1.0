@@ -6074,10 +6074,23 @@ function auditTiming(
   attemptRaw: Record<string, unknown>,
   assessmentRaw: Record<string, unknown> | undefined,
   decided: string,
+  /**
+   * State the callable is ABOUT to write, applied before resolving.
+   *
+   * Without this the comparison is unfair and useless. submitSection decides
+   * "what happens now this section is submitted", but the attempt it holds in
+   * memory still shows that section OPEN — so the resolver answers a different
+   * question ("where is the student right now?") and reports a disagreement on
+   * every single submit. The first real sitting produced exactly that:
+   *     verdict=question decided=break
+   * which was my instrumentation being wrong, not the resolver.
+   */
+  project?: (a: CoreAttempt) => CoreAttempt,
 ): void {
   if (!assessmentRaw) return;
   try {
-    const a = toCoreAttempt(attemptRaw);
+    const a0 = toCoreAttempt(attemptRaw);
+    const a = project ? project(a0) : a0;
     const asmt = toCoreAssessment(assessmentRaw);
     const verdict = resolveTiming(a, asmt, Date.now());
 
@@ -6087,7 +6100,9 @@ function auditTiming(
         ` decided=${decided} attempt=${attemptId}`);
     }
 
-    const errs = checkTimingInvariants(a, asmt).filter((v) => v.severity === 'error');
+    // Invariants are checked against the STORED state, never the projection —
+    // the point is to detect what is really in the database.
+    const errs = checkTimingInvariants(a0, asmt).filter((v) => v.severity === 'error');
     if (errs.length > 0) {
       console.error(`[timing/${where}] INVARIANT VIOLATION attempt=${attemptId} ` +
         errs.map((e) => `${e.id}(${e.message})`).join('; '));
@@ -6645,7 +6660,16 @@ export const submitSection = onCall<SubmitSectionData>(
       !nextSectionId ? 'ended'
         : mandatoryBreakDue ? 'break'
         : pauseBeforeNext ? 'choose'
-        : 'section');
+        : 'section',
+      // Apply the submit this call is about to make, so the resolver is asked
+      // the same question the callable just answered.
+      (core) => ({
+        ...core,
+        sectionTimings: {
+          ...core.sectionTimings,
+          [sectionId]: { ...core.sectionTimings?.[sectionId], submittedAt: nowIso },
+        },
+      }));
 
     if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
       updates.currentSectionIdx = nextSectionIdx;

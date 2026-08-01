@@ -1047,6 +1047,9 @@ export function ExamShell() {
   const linearAdvancingRef = useRef(false);
   /** Current question id, readable from stable callbacks (D-25 flush). */
   const currentQIdRef = useRef<string | null>(null);
+  /** Whether the student is on the final question, readable from the timer
+   *  effect without re-arming it on every change (D-26). */
+  const isLastQuestionRef = useRef(false);
   const [linearAdvancing, setLinearAdvancing]             = useState(false);
   const [linearError, setLinearError]                     = useState<string | undefined>();
 
@@ -1560,6 +1563,7 @@ export function ExamShell() {
   const isLastQuestion = isLinear
     ? (linearSectionComplete || linearOnFinalQuestion)
     : currentQIdx >= currentSectionQIds.length - 1;
+  isLastQuestionRef.current = isLastQuestion;
 
   // ── Count unanswered in current section ────────────────────────
 
@@ -1846,8 +1850,20 @@ export function ExamShell() {
       setQSecondsLeft(left);
       if (left <= 0 && !fired) {
         fired = true;
-        // Auto-advance. handleLinearNext sends the current selection (or null).
-        handleLinearNext();
+        // D-26: on the LAST question, save AND close the section.
+        //
+        // This called handleLinearNext() alone, which commits the answer and
+        // stops — so the student sat on a finished section watching the
+        // section clock run down with nothing left to do. The spec is explicit
+        // (Assignment-Timers-Explained §9): the last question's clock running
+        // out is the section running out.
+        //
+        // Sequenced, not fired in parallel: doSectionSubmit must see the
+        // answer already committed, or it races its own flush.
+        void (async () => {
+          await handleLinearNext();
+          if (isLastQuestionRef.current) await doSectionSubmit('time_expired');
+        })();
       }
     };
     tick();
@@ -2947,7 +2963,13 @@ export function ExamShell() {
           </span>
         </div>
 
-        {/* Submit button */}
+        {/* Submit button.
+            Hidden on the final question of a sequential section, where the
+            action bar already carries "Save & submit section" — that one also
+            commits the current answer, so showing both offered the student two
+            visually identical buttons for one intent and no way to tell which
+            was safe. One control, in the place they are already looking. */}
+        {!(isLinear && isLastQuestion) && (
         <button
           onClick={() => setShowSubmitModal(true)}
           disabled={shellStatus !== 'ready'}
@@ -2960,6 +2982,7 @@ export function ExamShell() {
           <Send size={11} strokeWidth={1.5} />
           {isLastSection ? 'Submit exam' : `Submit ${currentSection.name}`}
         </button>
+        )}
       </div>
 
       {/* ── BODY ── */}

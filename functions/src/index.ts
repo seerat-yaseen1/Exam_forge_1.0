@@ -3288,7 +3288,10 @@ function reviewAudienceAllows(
 type EffectiveSection = {
   id: string;
   name: string;
-  questions: Array<{ questionId: string; marks: number }>;
+  // `order` is present on stored AssessmentQuestion entries and is what
+  // startExam sorts by when building questionOrder. Grading ignores it, which
+  // is why it was previously undeclared — the data always carried it.
+  questions: Array<{ questionId: string; marks: number; order?: number }>;
   questionTimeLimit?: number;
 };
 
@@ -4721,6 +4724,8 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
 interface SubmitAnswerAndAdvanceData {
   attemptId: string;
   sebToken?: string;
+  /** Phase 2 — the browser session driving this sitting (INV-5a). */
+  sessionId?: string;
   questionId: string;
   // null = no answer (e.g. per-question timer expired). We deliberately do NOT
   // write a blank answer: an unanswered served question already scores 0, and
@@ -4757,11 +4762,13 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
         servedAt: string; locked: boolean;
       }>;
       securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
+      activeSessionId?: string | null;
     };
 
     if (attempt.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
+    assertSession(attempt, request.data?.sessionId, 'submitAnswerAndAdvance');
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
     }
@@ -4790,6 +4797,8 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     // servedAt is the only clock that counts.
     const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     const assessment = aSnap.exists ? (aSnap.data() as GradingAssessmentDoc) : undefined;
+    // D-21: reuses the read above — no extra cost.
+    assertNotBlocked(assessment as { blockedStudents?: string[] } | undefined, studentId);
     const sectionsNorm = assessment ? normalizeSections(assessment) : [];
     const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;
@@ -5054,15 +5063,26 @@ interface StartExamData {
   assessmentId: string;
   // Phase 3 — short-lived proof minted by /api/seb-verify on our own origin.
   sebToken?: string;
-  sections: Array<{
+  // ── IGNORED as of master plan Phase 2 (D-07 / doctrine D6) ──────
+  // These three used to define the exam's SHAPE and were taken from the
+  // caller verbatim. They are still ACCEPTED so a cached older client keeps
+  // working (and so a server rollback is clean), but nothing reads them —
+  // sections, question order, shuffling and section order are all derived
+  // from the assessment document now. Remove the fields once no client sends
+  // them.
+  sections?: Array<{
     id: string;
     name: string;
     questions: Array<{ questionId: string; marks: number; order: number }>;
   }>;
   shuffleQuestions?: boolean;
   sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
+  // Advisory, and documented as such: an honest-majority signal the client
+  // reports about itself. Not evidence. SEB is the real device control.
   cameraDeclined?: boolean;
   deviceClass?: 'desktop' | 'mobile' | 'tablet';
+  /** Phase 2 — the browser session claiming this attempt (INV-5a). */
+  sessionId?: string;
 }
 
 // ── startExam ─────────────────────────────────────────────────────
@@ -5100,6 +5120,196 @@ function evaluateStudentAttempts(
   return { live, finished, limitReached: finished >= effectiveMax };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// SESSION OWNERSHIP + INTEGRITY LOG  (master plan Phase 2)
+//
+// Both fields used to be written directly by the student's browser under the
+// firestore.rules whitelist. Both are moved here for the same reason: a field
+// the subject of a measurement can rewrite is not a measurement.
+// ══════════════════════════════════════════════════════════════════
+
+interface RegisterSessionData { attemptId: string; sessionId: string }
+
+/**
+ * Claim an attempt for one browser session. (INV-5a / INV-5b, D-08.)
+ *
+ * TAKEOVER IS DELIBERATE, AND SO IS THE TRANSACTION.
+ *
+ * The joining device wins, exactly as before — "first device wins" would
+ * strand a student whose browser crashed behind a session they can no longer
+ * produce, which is a far more common event than a cheater with two laptops.
+ * What changes is that the swap is ATOMIC and the conflict is recorded
+ * server-side, where a student cannot suppress it.
+ *
+ * The previous client-side implementation was a getDoc followed by an
+ * updateDoc — two devices arriving together could both read "unclaimed" and
+ * both believe they were first, and no conflict was recorded at all.
+ */
+export const registerSession = onCall<RegisterSessionData>(
+  EXAM_HOT_PATH,
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const studentId = request.auth.token.studentId as string | undefined;
+    if ((request.auth.token.role as string | undefined) !== 'student' || !studentId) {
+      throw new HttpsError('permission-denied', 'Only students may claim a sitting.');
+    }
+    const { attemptId, sessionId } = request.data || ({} as RegisterSessionData);
+    if (!attemptId || !sessionId) {
+      throw new HttpsError('invalid-argument', 'attemptId and sessionId are required.');
+    }
+
+    const db = getFirestore();
+    const ref = db.collection('attempts').doc(attemptId);
+
+    return db.runTransaction(async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists) return { ok: true, conflict: false };
+      const d = snap.data() as { studentId?: string; activeSessionId?: string | null };
+      if (d.studentId !== studentId) {
+        throw new HttpsError('permission-denied', 'Not your attempt.');
+      }
+
+      const existing = d.activeSessionId;
+      const nowIso = new Date().toISOString();
+      const conflict = !!existing && existing !== sessionId;
+
+      txn.update(ref, {
+        activeSessionId: sessionId,
+        ...(conflict ? { sessionConflictAt: nowIso } : {}),
+        updatedAt: nowIso,
+      });
+
+      return {
+        ok: true,
+        conflict,
+        ...(conflict ? { existingSessionId: existing } : {}),
+      };
+    });
+  },
+);
+
+/** Counter field per violation type. Server twin of VIOLATION_COUNTER in
+ *  src/lib/submissionService.ts — KEEP IN SYNC. */
+const VIOLATION_COUNTER_S: Record<string, string> = {
+  tab_switch: 'tabSwitches',
+  focus_loss: 'focusLosses',
+  fullscreen_exit: 'fullscreenExits',
+  copy_attempt: 'copyAttempts',
+  paste_attempt: 'pasteAttempts',
+  right_click: 'rightClickAttempts',
+  multi_person: 'multiPersonEvents',
+  face_absent: 'faceAbsenceEvents',
+  devtools_open: 'devtoolsEvents',
+  reload_attempt: 'tabSwitches',
+  keyboard_block: 'keyboardBlockEvents',
+  extension_detected: 'extensionEvents',
+};
+
+/** Warning-type violations — the three that drive the termination threshold.
+ *  Mirrors WARNING_VIOLATION_TYPES in ExamShell. */
+const WARNING_VIOLATION_TYPES_S = new Set(['tab_switch', 'focus_loss', 'fullscreen_exit']);
+const MAX_INTEGRITY_WARNINGS_S = 3;
+
+interface LogViolationData {
+  attemptId: string;
+  type: string;
+  detail?: string;
+  warningNumber?: number;
+  /** Past the shell's event cap: keep counting, stop appending event objects. */
+  skipEventDetail?: boolean;
+  sessionId?: string;
+}
+
+/**
+ * Record an integrity violation. (D-09, master plan Phase 2.)
+ *
+ * WHY THIS IS A CALLABLE NOW
+ * `integrityLog` sat on the student rules whitelist. logViolation used
+ * increment(), but nothing stopped a plain updateDoc resetting the whole
+ * object to zeros — a student could erase their own violation record mid-exam,
+ * including the counters the termination threshold reads.
+ *
+ * Moving the write here makes the log APPEND-ONLY and server-incremented. The
+ * rules whitelist drops `integrityLog` in the same phase (deployed after the
+ * frontend, so no client is left writing a field it can no longer write).
+ *
+ * WHAT THIS STILL DOES NOT CLOSE, deliberately: a client that never CALLS this
+ * never logs anything. Browser-side proctoring cannot close that and pretending
+ * otherwise adds code without adding security — SEB is the control. What
+ * changes is that a violation, once reported, cannot be un-reported.
+ *
+ * `thresholdReached` is returned so the shell can act on a count it no longer
+ * owns. Termination itself still runs through gradeAttempt.
+ */
+export const logViolation = onCall<LogViolationData>(
+  EXAM_HOT_PATH,
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const studentId = request.auth.token.studentId as string | undefined;
+    if ((request.auth.token.role as string | undefined) !== 'student' || !studentId) {
+      throw new HttpsError('permission-denied', 'Only students report violations here.');
+    }
+    const { attemptId, type, detail, warningNumber, skipEventDetail, sessionId } =
+      request.data || ({} as LogViolationData);
+    if (!attemptId || !type) {
+      throw new HttpsError('invalid-argument', 'attemptId and type are required.');
+    }
+    const counter = VIOLATION_COUNTER_S[type];
+    if (!counter) {
+      throw new HttpsError('invalid-argument', `Unknown violation type: ${type}`);
+    }
+
+    const db = getFirestore();
+    const ref = db.collection('attempts').doc(attemptId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const att = snap.data() as {
+      studentId?: string;
+      status?: string;
+      activeSessionId?: string | null;
+      integrityLog?: Record<string, unknown>;
+    };
+    if (att.studentId !== studentId) {
+      throw new HttpsError('permission-denied', 'Not your attempt.');
+    }
+    // A finished attempt takes no further events; a frozen one still does,
+    // because a freeze is a paused sitting and events during it are exactly
+    // what a reviewer wants.
+    if (att.status !== 'in_progress' && att.status !== 'frozen') {
+      return { ok: true, ignored: true };
+    }
+    assertSession(att, sessionId, 'logViolation');
+
+    const nowIso = new Date().toISOString();
+    const updates: Record<string, unknown> = {
+      [`integrityLog.${counter}`]: FieldValue.increment(1),
+      'integrityLog.totalViolations': FieldValue.increment(1),
+      updatedAt: nowIso,
+    };
+    if (!skipEventDetail) {
+      updates['integrityLog.violations'] = FieldValue.arrayUnion({
+        type,
+        timestamp: nowIso,
+        ...(detail ? { detail: String(detail).slice(0, 500) } : {}),
+        ...(typeof warningNumber === 'number' ? { warningNumber } : {}),
+      });
+    }
+    await ref.update(updates);
+
+    // Recompute the warning count from the pre-write snapshot plus this event.
+    const log = (att.integrityLog ?? {}) as Record<string, number>;
+    const warnings =
+      (log.tabSwitches ?? 0) + (log.focusLosses ?? 0) + (log.fullscreenExits ?? 0)
+      + (WARNING_VIOLATION_TYPES_S.has(type) ? 1 : 0);
+
+    return {
+      ok: true,
+      warnings,
+      thresholdReached: warnings >= MAX_INTEGRITY_WARNINGS_S,
+    };
+  },
+);
+
 export const startExam = onCall<StartExamData>(
   // Phase 3: the secret must be declared here or SEB_SIGNING_SECRET.value()
   // is empty at runtime and assertSEB would fail closed on every call.
@@ -5114,10 +5324,25 @@ export const startExam = onCall<StartExamData>(
       throw new HttpsError('permission-denied', 'Only students may start an exam.');
     }
 
-    const { assessmentId, sections, shuffleQuestions, sectionStartOrder, cameraDeclined, sebToken } =
+    // ── Structure is NOT taken from the caller (D-07, doctrine D6) ──
+    // `sections`, `shuffleQuestions` and `sectionStartOrder` used to be read
+    // straight out of request.data and used to build the attempt. Because the
+    // section time limit was looked up as
+    //   a.sections?.find(s => s.id === firstSectionId)?.timeLimit
+    // a caller who supplied a section id that does not exist in the document
+    // got `undefined` back — computeAttemptLocks then produced no section
+    // bound, and submitSection's deadline check was skipped by the same failed
+    // lookup. A per-section timed exam became one untimed block. The paper was
+    // never at risk (getExamQuestions reads the document) and neither was the
+    // mark (grading reads the document too) — the exploit was purely on TIME,
+    // which for a timed exam is the whole contract.
+    //
+    // They are still ACCEPTED in the payload and ignored, so a cached client
+    // keeps working through the rollout and a rollback is clean.
+    const { assessmentId, cameraDeclined, sebToken, sessionId } =
       request.data || ({} as StartExamData);
-    if (!assessmentId || !Array.isArray(sections) || sections.length === 0) {
-      throw new HttpsError('invalid-argument', 'assessmentId and sections are required.');
+    if (!assessmentId) {
+      throw new HttpsError('invalid-argument', 'assessmentId is required.');
     }
 
     const db = getFirestore();
@@ -5163,6 +5388,10 @@ export const startExam = onCall<StartExamData>(
       sectionGraceSeconds?: number;
       overallTimeLimit?: number;
       overallGraceSeconds?: number;
+      // Phase 2 (D-07): exam STRUCTURE is read from here, never from the
+      // caller. See the note where effectiveSections is built below.
+      shuffleQuestions?: boolean;
+      sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
     };
 
     // ── Effective security config, re-derived SERVER-SIDE (Phase 0) ──
@@ -5349,9 +5578,22 @@ export const startExam = onCall<StartExamData>(
       }
     }
 
-    let ordered = sections;
+    // ── Server-derived exam structure (D-07, doctrine D6) ─────────
+    // normalizeSections is the SAME function grading uses, so the sections an
+    // attempt is built from and the sections it is marked against can never
+    // disagree. It also handles the three legacy shapes (resolved sections /
+    // flat question list distributed across named sections / no sections at
+    // all) identically to the grader.
+    const effectiveSections = normalizeSections(aSnap.data() as GradingAssessmentDoc);
+    if (effectiveSections.length === 0) {
+      throw new HttpsError('failed-precondition', 'This exam has no questions.');
+    }
+    const shuffleQuestions = a.shuffleQuestions === true;
+    const sectionStartOrder = a.sectionStartOrder ?? 'sequential';
+
+    let ordered = effectiveSections;
     if (sectionStartOrder === 'random' || sectionStartOrder === 'student_choice') {
-      ordered = [...sections];
+      ordered = [...effectiveSections];
       for (let i = ordered.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
@@ -5361,7 +5603,9 @@ export const startExam = onCall<StartExamData>(
 
     const questionOrder: Record<string, string[]> = {};
     for (const sec of ordered) {
-      const qids = [...sec.questions].sort((x, y) => x.order - y.order).map((q) => q.questionId);
+      const qids = [...sec.questions]
+        .sort((x, y) => (x.order ?? 0) - (y.order ?? 0))
+        .map((q) => q.questionId);
       if (shuffleQuestions) {
         for (let i = qids.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
@@ -5484,6 +5728,10 @@ export const startExam = onCall<StartExamData>(
       },
       cameraDeclined: cameraDeclined ?? false,
       deviceClass,
+      // Phase 2 (INV-5a): the session that opened this sitting owns it from
+      // the first instant, so there is no unclaimed window in which a second
+      // device could slip in ahead of the real one.
+      ...(sessionId ? { activeSessionId: sessionId } : {}),
       // Frozen security snapshot — the contract this student actually sits
       // under, independent of any later edit to the assessment (Phase 0).
       securityConfig: {
@@ -5565,6 +5813,8 @@ export const startExam = onCall<StartExamData>(
 interface StartSectionData {
   attemptId: string;
   sebToken?: string;
+  /** Phase 2 — the browser session driving this sitting (INV-5a). */
+  sessionId?: string;
   sectionId: string;
   reorderedSectionIds?: string[]; // student_choice only — new play order
 }
@@ -5764,6 +6014,92 @@ function attemptWindowClosed(
   return ms !== null && nowMs >= ms;
 }
 
+/**
+ * Reject a call coming from a browser session that no longer owns this
+ * attempt. (INV-5a, master plan Phase 2 / D-08.)
+ *
+ * WHAT THIS DOES AND DOES NOT CLOSE — read before relying on it.
+ *
+ * `activeSessionId` existed only as a writable field on the student rules
+ * whitelist. No rule and no callable ever compared it, so two browsers signed
+ * in as the same student could both drive one attempt indefinitely; the
+ * conflict overlay was client-side decoration.
+ *
+ * Enforcing it HERE makes every state transition single-session: a superseded
+ * device cannot start a section, submit one, advance a question, or finalise.
+ * In linear/adaptive that is complete, because answers only ever move through
+ * submitAnswerAndAdvance.
+ *
+ * In STANDARD delivery answers are written directly by the client under
+ * firestore.rules, and rules cannot enforce this — a second device can read
+ * the attempt (students may read their own) and echo back whatever
+ * `activeSessionId` it finds, so any rules-level check is trivially defeated.
+ * The residual gap is therefore "a superseded device can keep autosaving
+ * answers but can never advance or submit". Closing it fully needs answers to
+ * move through a callable in standard mode too, which is a Phase 3 decision.
+ *
+ * A caller that supplies NO sessionId is allowed through: during the rollout
+ * a cached client predates the field, and locking those students out of their
+ * own exam would be a far worse failure than the hole this closes. Flip
+ * REQUIRE_SESSION_ID once no such client remains.
+ */
+const REQUIRE_SESSION_ID = false;
+
+function assertSession(
+  attempt: { activeSessionId?: string | null },
+  supplied: string | undefined,
+  where: string,
+): void {
+  const active = attempt.activeSessionId;
+  if (!active) return;                       // nobody has claimed it yet
+  if (!supplied) {
+    if (REQUIRE_SESSION_ID) {
+      throw new HttpsError('failed-precondition',
+        'SESSION_REQUIRED: reload the exam to continue.');
+    }
+    console.warn(`[${where}] legacy client sent no sessionId`);
+    return;
+  }
+  if (supplied !== active) {
+    throw new HttpsError(
+      'failed-precondition',
+      'SESSION_SUPERSEDED: this exam was opened on another device.',
+    );
+  }
+}
+
+/**
+ * Refuse an exam action by a student blocked from this assessment.
+ * (D-21, master plan Phase 2.)
+ *
+ * `blockedStudents` was re-checked in getExamQuestions and startExam only, so
+ * blocking someone mid-sitting stopped a reload but not the sitting: they
+ * carried on answering, advancing and submitting normally. "Block" therefore
+ * meant two different things depending on whether the target happened to
+ * refresh.
+ *
+ * OPEN DECISION (plan item N5): this makes a block stop every TRANSITION —
+ * the student cannot advance a section, submit one, or advance a question —
+ * but it deliberately does NOT finalise their attempt. Ending someone's exam
+ * from an invigilator's click is a policy choice, not a bug fix, and it is
+ * still awaiting a decision. Until then the honest behaviour is a distinct,
+ * surfaceable error rather than a silent refusal (doctrine D7).
+ *
+ * Takes the already-loaded assessment data — every caller has it in hand, so
+ * this costs no extra read.
+ */
+function assertNotBlocked(
+  assessment: { blockedStudents?: string[] } | undefined,
+  studentId: string,
+): void {
+  if ((assessment?.blockedStudents ?? []).includes(studentId)) {
+    throw new HttpsError(
+      'permission-denied',
+      'BLOCKED_FROM_EXAM: an invigilator has blocked you from this exam.',
+    );
+  }
+}
+
 export const startSection = onCall<StartSectionData>(
   EXAM_HOT_PATH,
   async (request) => {
@@ -5798,10 +6134,12 @@ export const startSection = onCall<StartSectionData>(
         servedAt: string; locked: boolean;
       }>;
       securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
+      activeSessionId?: string | null;
     };
     if (attempt.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
+    assertSession(attempt, request.data?.sessionId, 'startSection');
     assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
@@ -5810,12 +6148,56 @@ export const startSection = onCall<StartSectionData>(
       throw new HttpsError('failed-precondition', 'Section already started.');
     }
 
+    // ── INV-1: exactly one section open at a time (D-22, Phase 2) ──
+    //
+    // This callable only ever checked whether the TARGET section had been
+    // started. It never checked whether the section the student is CURRENTLY
+    // in has been closed, so starting C while B was still open left two
+    // sections with a startedAt and no submittedAt — two clocks running, and
+    // in linear/adaptive a second UNLOCKED served question that
+    // submitAnswerAndAdvance can never reach (it resolves the current question
+    // positionally, as served[served.length - 1]), so that question became
+    // silently unanswerable.
+    //
+    // It was also a mandatory-break bypass. The break gate below reads
+    // `prevTiming?.submittedAt`, so a section that is simply never submitted
+    // makes the gate evaluate to nothing at all. Enforcing INV-1 closes that
+    // route at its source rather than patching the gate.
+    const openSectionId = Object.entries(attempt.sectionTimings ?? {})
+      .find(([, t]) => t?.startedAt && !t?.submittedAt)?.[0];
+    if (openSectionId && openSectionId !== sectionId) {
+      throw new HttpsError(
+        'failed-precondition',
+        'SECTION_STILL_OPEN: finish the section you are in before starting another.',
+      );
+    }
+
     // Validate reorder (student_choice) is a permutation of the frozen ids.
     let sectionIds = attempt.sectionIds;
     if (reorderedSectionIds) {
       const same = reorderedSectionIds.length === sectionIds.length
         && [...reorderedSectionIds].sort().join('|') === [...sectionIds].sort().join('|');
       if (!same) throw new HttpsError('invalid-argument', 'Invalid section reorder.');
+
+      // ── Played sections are pinned (D-22, second route) ─────────
+      // A permutation check alone let a caller move an UNPLAYED section to
+      // index 0. The break gate below is guarded on `idx > 0`, so landing at
+      // index 0 skipped it entirely — a mandatory break bypass that survived
+      // the INV-1 check above, because no section was open at the time.
+      //
+      // Sections that have already been started keep their index; only
+      // unplayed ones may move. That is exactly what "choose your next
+      // section" means, and it makes the play position of any new section
+      // necessarily greater than the number already played.
+      for (let i = 0; i < sectionIds.length; i++) {
+        const played = attempt.sectionTimings[sectionIds[i]]?.startedAt;
+        if (played && reorderedSectionIds[i] !== sectionIds[i]) {
+          throw new HttpsError(
+            'invalid-argument',
+            'Invalid section reorder: completed sections cannot be moved.',
+          );
+        }
+      }
       sectionIds = reorderedSectionIds;
     }
 
@@ -5858,7 +6240,10 @@ export const startSection = onCall<StartSectionData>(
       sectionGraceSeconds?: number;
       overallTimeLimit?: number;
       overallGraceSeconds?: number;
+      blockedStudents?: string[];
     };
+    // D-21: reuses the read this line already performs — no extra cost.
+    assertNotBlocked(lockA, studentId);
     const locks = computeAttemptLocks(
       attempt.startedAt,
       nowIso,
@@ -5925,6 +6310,8 @@ export const startSection = onCall<StartSectionData>(
 
 interface SubmitSectionData {
   attemptId: string;
+  /** Phase 2 — the browser session driving this sitting (INV-5a). */
+  sessionId?: string;
   sectionId: string;
   nextSectionId?: string | null;
   nextSectionIdx?: number;
@@ -5970,10 +6357,12 @@ export const submitSection = onCall<SubmitSectionData>(
         servedAt: string; locked: boolean;
       }>;
       securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
+      activeSessionId?: string | null;
     };
     if (attempt.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
+    assertSession(attempt, request.data?.sessionId, 'submitSection');
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'Attempt is not in progress.');
     }
@@ -5991,7 +6380,10 @@ export const submitSection = onCall<SubmitSectionData>(
       overallTimeLimit?: number;
       overallGraceSeconds?: number;
       sections?: Array<{ id: string; timeLimit?: number; breakAfter?: BreakCfg }>;
+      blockedStudents?: string[];
     };
+    // D-21: a block must stop the sitting advancing, not only a reload.
+    assertNotBlocked(a, studentId);
 
     // ── Server-side pause decision (positional breaks) ───────────────
     // Submitting the section at play index `playIdx` completes playIdx + 1

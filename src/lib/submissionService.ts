@@ -35,6 +35,22 @@ async function withSeb<T>(fn: (sebToken?: string) => Promise<T>): Promise<T> {
   }
 }
 
+// ── Active browser session (Phase 2, INV-5a) ──────────────────────
+// registerSession sets this; every exam callable below attaches it so the
+// server can refuse a device that no longer owns the sitting (D-08).
+//
+// Held module-side rather than threaded through ExamShell on purpose: the
+// shell already owns a sessionId and passes it to registerSession, so routing
+// it through every call site would mean touching a dozen signatures to carry
+// a value that never varies within a sitting. Same shape as the SEB token
+// manager above.
+let activeSessionId: string | null = null;
+
+/** The session id this tab claimed, if it has claimed one. */
+export function currentSessionId(): string | null {
+  return activeSessionId;
+}
+
 // ── Per-question grading data populated server-side by gradeAttempt ─
 // Students can never read questionAnswers directly; this map is the
 // channel through which the results page learns the correct answers
@@ -476,11 +492,18 @@ export async function startAttempt(params: {
 }): Promise<Attempt> {
   // Server-authoritative: the startExam Cloud Function owns schedule
   // enforcement (startDate/endDate), the attempt-limit check, and all
-  // timestamps. Identity + schedule + limits are re-derived server-side from
-  // auth claims + the assessment doc, so the client-supplied values here are
-  // advisory only. We still pass sections / shuffle / order so the server can
-  // freeze the same play order the shell expects. Throws
-  // ATTEMPT_LIMIT_EXCEEDED:<used>:<max> when the student is out of attempts.
+  // timestamps. Throws ATTEMPT_LIMIT_EXCEEDED:<used>:<max> when the student is
+  // out of attempts.
+  //
+  // Phase 2 (D-07): the server no longer READS sections / shuffleQuestions /
+  // sectionStartOrder from this payload — it derives all three from the
+  // assessment document, because a caller who supplied a section id absent
+  // from that document used to end up with no section deadline at all.
+  //
+  // They are still SENT, deliberately, for one release: a server rollback
+  // restores a build that requires them, and a start call that fails because
+  // the client stopped sending a field is a student who cannot sit their exam.
+  // Drop them once Phase 2 is confirmed stable.
   const call = httpsCallable<
     {
       assessmentId: string;
@@ -490,6 +513,7 @@ export async function startAttempt(params: {
       cameraDeclined?: boolean;
       deviceClass?: 'desktop' | 'mobile' | 'tablet';
       sebToken?: string;
+      sessionId?: string;
     },
     { ok: true; attempt: Attempt }
   >(functions, 'startExam');
@@ -522,6 +546,7 @@ export async function startAttempt(params: {
         cameraDeclined: params.cameraDeclined,
         deviceClass: detectDeviceClass(),
         sebToken: params.sebToken,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
       });
       return res.data.attempt;
     } catch (e) {
@@ -606,6 +631,7 @@ export async function submitSection(params: {
       nextSectionIdx: number;
       pauseBeforeNext?: boolean;
       sebToken?: string;
+      sessionId?: string;
     },
     { ok: true; timeUsedSeconds: number; question: Question | null }
   >(functions, 'submitSection');
@@ -617,6 +643,7 @@ export async function submitSection(params: {
     nextSectionIdx: params.nextSectionIdx,
     pauseBeforeNext: params.pauseBeforeNext,
     sebToken,
+    ...(activeSessionId ? { sessionId: activeSessionId } : {}),
   })).data);
   // Sequential delivery: when advancing straight into the next section (no
   // break), the server serves and returns that section's first question.
@@ -642,12 +669,17 @@ export async function pickSection(params: {
   const reordered = [...without.slice(0, newIdx), pickedSectionId, ...without.slice(newIdx)];
 
   const call = httpsCallable<
-    { attemptId: string; sectionId: string; reorderedSectionIds: string[]; sebToken?: string },
+    {
+      attemptId: string; sectionId: string; reorderedSectionIds: string[];
+      sebToken?: string; sessionId?: string;
+    },
     { ok: true; startedAt: string; sectionIds: string[]; question: Question | null }
   >(functions, 'startSection');
 
-  const data = await withSeb(async (sebToken) => (await
-    call({ attemptId, sectionId: pickedSectionId, reorderedSectionIds: reordered, sebToken })).data);
+  const data = await withSeb(async (sebToken) => (await call({
+    attemptId, sectionId: pickedSectionId, reorderedSectionIds: reordered, sebToken,
+    ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+  })).data);
   // In sequential delivery the server serves (and returns) the section's first
   // question; the client cannot fetch it any other way.
   return { sectionIds: data.sectionIds, question: data.question ?? null };
@@ -666,11 +698,13 @@ export async function endBreak(params: {
   // Server stamps the next section's startedAt and refuses if a mandatory
   // break hasn't elapsed. nextSectionIdx is re-derived server-side.
   const call = httpsCallable<
-    { attemptId: string; sectionId: string; sebToken?: string },
+    { attemptId: string; sectionId: string; sebToken?: string; sessionId?: string },
     { ok: true; startedAt: string; sectionIds: string[]; question: Question | null }
   >(functions, 'startSection');
-  const data = await withSeb(async (sebToken) => (await
-    call({ attemptId: params.attemptId, sectionId: params.nextSectionId, sebToken })).data);
+  const data = await withSeb(async (sebToken) => (await call({
+    attemptId: params.attemptId, sectionId: params.nextSectionId, sebToken,
+    ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+  })).data);
   // Sequential delivery: the next section's first question comes back here.
   return { question: data.question ?? null };
 }
@@ -794,10 +828,14 @@ export async function submitAnswerAndAdvance(params: {
   lateAnswer: boolean;
 }> {
   const call = httpsCallable<
-    typeof params & { sebToken?: string },
+    typeof params & { sebToken?: string; sessionId?: string },
     { ok: true; question: Question | null; sectionComplete: boolean; lateAnswer: boolean }
   >(functions, 'submitAnswerAndAdvance');
-  return withSeb(async (sebToken) => (await call({ ...params, sebToken })).data);
+  return withSeb(async (sebToken) => (await call({
+    ...params,
+    sebToken,
+    ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+  })).data);
 }
 
 // ── Auto-terminate ────────────────────────────────────────────────
@@ -850,37 +888,50 @@ export async function logViolation(
   detail?: string,
   warningNumber?: number,
   opts?: { skipEventDetail?: boolean }
-): Promise<void> {
-  const counterField = `integrityLog.${VIOLATION_COUNTER[type]}`;
+): Promise<{ warnings?: number; thresholdReached?: boolean }> {
+  // Phase 2 (D-09): the integrity log is no longer a client-writable field.
+  //
+  // It used to sit on the student rules whitelist, and although this function
+  // only ever incremented, nothing stopped a plain updateDoc resetting the
+  // whole object to zeros — a student could erase their own violation record
+  // mid-exam, counters included. The write now happens server-side, so the
+  // log is append-only and a reported violation cannot be un-reported.
+  //
+  // Detail cap (unchanged reasoning): the violations array grows via
+  // arrayUnion, so a hostile client spamming events could balloon the attempt
+  // doc toward Firestore's 1 MiB limit and break every later write, including
+  // submission. Past the shell's cap the server keeps counting and stops
+  // appending event objects.
+  const call = httpsCallable<
+    {
+      attemptId: string; type: ViolationType; detail?: string;
+      warningNumber?: number; skipEventDetail?: boolean; sessionId?: string;
+    },
+    { ok: true; ignored?: boolean; warnings?: number; thresholdReached?: boolean }
+  >(functions, 'logViolation');
 
-  // Detail cap: the violations array grows without bound via arrayUnion; a
-  // hostile client spamming violation events could balloon the attempt doc
-  // toward Firestore's 1 MiB limit and break every subsequent write
-  // (including submission). Past the shell's cap, keep incrementing the
-  // counters (termination logic depends on them) but stop appending event
-  // objects.
-  if (opts?.skipEventDetail) {
-    await updateDoc(doc(db, 'attempts', attemptId), {
-      [counterField]: increment(1),
-      'integrityLog.totalViolations': increment(1),
-      updatedAt: now(),
+  // Fail soft, same reasoning as registerSession above: during the deploy
+  // window this callable does not exist yet, and a thrown error from a
+  // violation report must never surface as an exam failure. A lost violation
+  // report is a lost detection signal; a thrown error mid-sitting is a lost
+  // exam. The call site in ExamShell also catches, so this is belt and braces.
+  try {
+    const res = await call({
+      attemptId,
+      type,
+      ...(detail ? { detail } : {}),
+      ...(warningNumber !== undefined ? { warningNumber } : {}),
+      ...(opts?.skipEventDetail ? { skipEventDetail: true } : {}),
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
     });
-    return;
+    return {
+      warnings: res.data.warnings,
+      thresholdReached: res.data.thresholdReached,
+    };
+  } catch (e) {
+    console.warn('[submissionService] logViolation failed', e);
+    return {};
   }
-
-  const event: ViolationEvent = {
-    type,
-    timestamp: now(),
-    ...(detail ? { detail } : {}),
-    ...(warningNumber !== undefined ? { warningNumber } : {}),
-  };
-
-  await updateDoc(doc(db, 'attempts', attemptId), {
-    'integrityLog.violations': arrayUnion(event),
-    [counterField]: increment(1),
-    'integrityLog.totalViolations': increment(1),
-    updatedAt: now(),
-  });
 }
 
 /** Above this many logged events, violation DETAILS stop being appended to
@@ -934,28 +985,57 @@ export async function registerSession(
   attemptId: string,
   sessionId: string
 ): Promise<{ conflict: boolean; existingSessionId?: string }> {
-  const snap = await getDoc(doc(db, 'attempts', attemptId));
-  if (!snap.exists()) return { conflict: false };
+  // Phase 2 (INV-5a / INV-5b, D-08): claiming a sitting is now an atomic
+  // server-side transaction.
+  //
+  // The previous implementation was a getDoc followed by an updateDoc from the
+  // browser. Two devices arriving together could both read "unclaimed" and
+  // both believe they were first, and no conflict was recorded at all — so the
+  // takeover overlay was decoration over a field nothing enforced.
+  //
+  // Takeover semantics are unchanged and deliberate: the joining device wins.
+  // "First device wins" would strand a student whose browser crashed behind a
+  // session they can no longer produce, which is far more common than a
+  // cheater with two laptops. What changes is that the swap is atomic, the
+  // conflict is recorded where the student cannot suppress it, and the
+  // superseded device can no longer advance or submit the exam.
+  activeSessionId = sessionId;
 
-  const data = snap.data() as Attempt;
-  const existing = data.activeSessionId;
+  const call = httpsCallable<
+    { attemptId: string; sessionId: string },
+    { ok: true; conflict: boolean; existingSessionId?: string }
+  >(functions, 'registerSession');
 
-  // No conflict — first registration or same session resuming
-  if (!existing || existing === sessionId) {
-    await updateDoc(doc(db, 'attempts', attemptId), {
-      activeSessionId: sessionId,
-      updatedAt: now(),
-    });
+  // ── FAIL SOFT. This must never stop a student sitting an exam. ──
+  //
+  // ExamShell awaits this inside the exam-load try block, whose catch sets
+  // shellStatus 'error'. A throw here therefore does not degrade session
+  // tracking — it locks the student out of the exam entirely.
+  //
+  // Two ways that happens in practice:
+  //   1. DEPLOY WINDOW. Vercel auto-deploys the frontend the moment the repo
+  //      is pushed, while Cloud Functions are deployed by hand from Cloud
+  //      Shell afterwards. Between the two, this callable does not exist and
+  //      returns functions/not-found. Every exam entry would fail.
+  //   2. Any transient network failure at load time.
+  //
+  // Degrading to "unclaimed" is the correct failure mode. The server treats a
+  // missing activeSessionId as "nobody has claimed this yet" and allows the
+  // call, which is exactly the pre-Phase-2 behaviour — so a failure here loses
+  // dual-device DETECTION for that sitting and nothing else. Session tracking
+  // is a detection mechanism, never a gate on entry: locking an honest student
+  // out of their exam to enforce it would be a far worse outcome than the
+  // thing it protects against.
+  try {
+    const res = await call({ attemptId, sessionId });
+    return {
+      conflict: res.data.conflict === true,
+      ...(res.data.existingSessionId ? { existingSessionId: res.data.existingSessionId } : {}),
+    };
+  } catch (e) {
+    console.warn('[submissionService] registerSession failed; continuing unclaimed', e);
     return { conflict: false };
   }
-
-  // Conflict: another session is active — log it, then take over
-  await updateDoc(doc(db, 'attempts', attemptId), {
-    activeSessionId: sessionId,
-    sessionConflictAt: now(),
-    updatedAt: now(),
-  });
-  return { conflict: true, existingSessionId: existing };
 }
 
 // ── Soft-delete an attempt ────────────────────────────────────────

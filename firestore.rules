@@ -660,20 +660,38 @@ service cloud.firestore {
 
     function studentAttemptUpdateFieldsAllowed() {
       // hasOnly() checks TOP-LEVEL keys of the patch. Dot-path writes like
-      // `answers.q_xyz` or `integrityLog.tabSwitches` count as changes to the
-      // top-level parent key, so this gates every legitimate direct write.
+      // `answers.q_xyz` count as changes to the top-level parent key, so this
+      // gates every legitimate direct write.
       //
       // NOTE: sectionTimings / sectionIds / currentSectionIdx are DELIBERATELY
       // excluded — all time transitions (exam start, section start/submit,
-      // break) now flow through the startExam / startSection / submitSection
+      // break) flow through the startExam / startSection / submitSection
       // Cloud Functions (admin SDK, which bypasses these rules). A student can
       // no longer write section timings directly, so the per-section clock
       // cannot be forged from the browser.
+      //
+      // ── Phase 2 (master plan D-08 / D-09) ───────────────────────
+      // THREE MORE FIELDS LEFT THIS LIST. Read this before adding any back.
+      //
+      // `integrityLog` — the log of the student's own violations. increment()
+      // in the client was never the protection it looked like: a plain
+      // updateDoc could reset the whole object to zeros, counters included, so
+      // a student could erase their own record mid-exam. It is now written
+      // exclusively by the logViolation callable, which is append-only and
+      // server-incremented. A reported violation can no longer be un-reported.
+      //
+      // `activeSessionId` / `sessionConflictAt` — dual-device detection. These
+      // were writable but compared by nothing, so the conflict overlay was
+      // decoration. registerSession is now a callable holding a transaction:
+      // the swap is atomic, the conflict is recorded where the student cannot
+      // suppress it, and every exam TRANSITION callable refuses a superseded
+      // session. Leaving them writable here would let a second device simply
+      // echo back the id it reads off the attempt and re-claim the sitting.
+      //
+      // What remains is `answers` — which is correct, and is what keeps
+      // standard-mode autosave fast — plus `updatedAt`.
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'answers',
-        'integrityLog',
-        'activeSessionId',
-        'sessionConflictAt',
         'updatedAt'
       ]);
     }

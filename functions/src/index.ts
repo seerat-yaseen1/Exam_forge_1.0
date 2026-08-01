@@ -1166,6 +1166,18 @@ function isDueForPurge(data: Record<string, unknown>, now: Date): boolean {
  */
 const STALE_FREEZE_HOURS = 6;
 
+/**
+ * How long an attempt may sit untouched before the sweep closes it even
+ * though the resolver says the student still has somewhere to go.
+ *
+ * Needed because of D-24 below: once the sweep stops closing everything past
+ * `answersLockedAfter`, an abandoned attempt on an exam with no overall limit
+ * and no window would otherwise stay open forever. Six hours is long enough
+ * that it can never fire on a supervised sitting or a break, short enough that
+ * an abandoned attempt resolves the same day.
+ */
+const STALE_ATTEMPT_HOURS = 6;
+
 export const scheduledCloseExpiredAttempts = onSchedule(
   {
     schedule: 'every 60 minutes',
@@ -1223,7 +1235,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       wasFrozen: boolean;
     };
 
-    const closing: Closing[] = expiredSnap.docs.map((doc) => ({
+    const candidates: Closing[] = expiredSnap.docs.map((doc) => ({
       doc,
       reason: 'deadline_expired_sweep' as const,
       grantFrozenSeconds: 0,
@@ -1243,7 +1255,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       const windowGone = attemptWindowClosed(d, nowMs);
       if (!frozenTooLong && !windowGone) continue;
 
-      closing.push({
+      candidates.push({
         doc,
         reason: frozenTooLong ? 'stale_freeze_sweep' : 'deadline_expired_sweep',
         // Granted in FULL. The authority never made a decision, and the
@@ -1256,8 +1268,8 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       });
     }
 
-    if (closing.length === 0) {
-      console.log('[closeExpiredAttempts] nothing to close');
+    if (candidates.length === 0) {
+      console.log('[closeExpiredAttempts] nothing to consider');
       return;
     }
 
@@ -1272,6 +1284,8 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       questionMap: Awaited<ReturnType<typeof loadQuestionAndAnswerMaps>>['questionMap'];
       answerMap: Awaited<ReturnType<typeof loadQuestionAndAnswerMaps>>['answerMap'];
       exposeKeysToStudent: boolean;
+      /** Same doc in the resolver's shape — built once, reused per attempt. */
+      coreAssessment: CoreAssessment;
     };
     const papers = new Map<string, Paper | null>();
 
@@ -1292,6 +1306,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
           questionMap,
           answerMap,
           exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
+          coreAssessment: toCoreAssessment(assessment as unknown as Record<string, unknown>),
         };
         papers.set(assessmentId, paper);
         return paper;
@@ -1324,17 +1339,74 @@ export const scheduledCloseExpiredAttempts = onSchedule(
     // latter is repairable with regradeAttempts.
     const writes: Array<{ ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> }> = [];
 
-    for (const item of closing) {
+    let skipped = 0;
+
+    for (const item of candidates) {
       const att = item.doc.data() as {
         assessmentId?: string;
         answers?: Record<string, AttemptAnswerDoc & { answeredAt?: string }>;
         gradingConfig?: AssessmentGradingConfigS;
+        updatedAt?: string;
       };
+
+      const paperEarly = att.assessmentId ? await loadPaper(att.assessmentId) : null;
+
+      // ── D-24: the sweep must not END what should merely ADVANCE ────
+      //
+      // This closed anything whose `answersLockedAfter` had passed. That field
+      // is min(section, overall), so it fired for a student who had simply run
+      // out of SECTION time and should have moved to the next section — which
+      // is exactly the bug Phase 0 fixed on the client ("section expiry ends
+      // the whole sitting"), still alive here on the server.
+      //
+      // The sharpest case is a BREAK. The break path never recomputes the
+      // lock, so a student waiting out a twenty-minute break still carries the
+      // previous section's deadline, already passed. An hourly sweep landing
+      // in that window auto-submitted their exam while they sat waiting to
+      // continue.
+      //
+      // The resolver decides now, so the swept path and the live path reach
+      // the same conclusion from the same function — which is the whole point
+      // of the resolver existing. A verdict of anything other than 'ended'
+      // means the student still has somewhere to go, and the sweep leaves them
+      // alone.
+      //
+      // The staleness fallback below is what stops that leaking: an attempt
+      // nobody has touched for STALE_ATTEMPT_HOURS is closed regardless,
+      // because an exam with no overall limit and no window would otherwise
+      // never resolve.
+      let closeReason: string = item.reason;
+      if (paperEarly && !item.wasFrozen) {
+        try {
+          const core = toCoreAttempt(att as unknown as Record<string, unknown>);
+          const verdict = resolveTiming(core, paperEarly.coreAssessment, nowMs);
+          if (verdict.kind !== 'ended') {
+            const touched = att.updatedAt ? Date.parse(att.updatedAt) : NaN;
+            const stale = !Number.isFinite(touched)
+              || touched <= nowMs - STALE_ATTEMPT_HOURS * 3_600_000;
+            if (!stale) {
+              skipped++;
+              console.log(`[closeExpiredAttempts] leaving ${item.doc.id} open — ` +
+                `verdict=${verdict.kind} (student still has somewhere to go)`);
+              continue;
+            }
+            closeReason = 'abandoned_sweep';
+          } else {
+            // Carry the resolver's reason so the record says WHY, not just
+            // that a deadline somewhere had passed.
+            closeReason = `sweep_${verdict.reason}`;
+          }
+        } catch (e) {
+          // A resolver fault must never leave an attempt stuck open. Fall back
+          // to the previous behaviour, which errs toward closing.
+          console.warn('[closeExpiredAttempts] verdict failed; closing anyway', item.doc.id, e);
+        }
+      }
 
       const data: Record<string, unknown> = {
         status: 'auto_submitted',
         submittedAt: nowIso,
-        autoSubmitReason: item.reason,
+        autoSubmitReason: closeReason,
         updatedAt: nowIso,
       };
 
@@ -1348,7 +1420,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
         }
       }
 
-      const paper = att.assessmentId ? await loadPaper(att.assessmentId) : null;
+      const paper = paperEarly;
       if (paper) {
         try {
           const { scores, gradedAnswers } = scoreAttemptAnswers({
@@ -1389,8 +1461,8 @@ export const scheduledCloseExpiredAttempts = onSchedule(
     }
 
     console.log(
-      `[closeExpiredAttempts] closed ${closed} (graded ${graded}, ungraded ${ungraded});`
-      + ` expired=${expiredSnap.size} frozenScanned=${frozenSnap.size}`,
+      `[closeExpiredAttempts] closed ${closed} (graded ${graded}, ungraded ${ungraded}),`
+      + ` left open ${skipped}; expired=${expiredSnap.size} frozenScanned=${frozenSnap.size}`,
     );
   },
 );
@@ -5329,6 +5401,83 @@ export const logViolation = onCall<LogViolationData>(
       warnings,
       thresholdReached: warnings >= MAX_INTEGRITY_WARNINGS_S,
     };
+  },
+);
+
+interface GetExamVerdictData {
+  attemptId: string;
+  sessionId?: string;
+  sebToken?: string;
+}
+
+/**
+ * Where does this student stand right now?  (Master plan Phase 3c.)
+ *
+ * The one endpoint every caller asks instead of deciding for itself — doctrine
+ * D1 (the server owns every clock) and D4 (display is local, decisions are
+ * remote). The shell's countdown becomes a picture of a decision already made
+ * here, rather than a second implementation that drifts from this one.
+ *
+ * ADDITIVE. Nothing calls it yet; Phase 3d points the shell at it. It ships
+ * now, separately, so it can be deployed and watched before anything depends
+ * on it — the same reason 3a shipped inert.
+ *
+ * WHY IT CARRIES EXAM_HOT_PATH FROM BIRTH (D-19)
+ * Once the shell asks for a verdict at every countdown zero, a cohort that
+ * started together will hit section end together and arrive here in one burst
+ * — the same synchronised shape that makes gradeAttempt a scale risk. A
+ * capacity setting retrofitted after the first bad exam day is a capacity
+ * setting learned the expensive way. The client-side jitter that spreads the
+ * burst belongs to 3d and must land with it.
+ *
+ * DEPLOY NOTE: this is a NEW callable, and on this project the CLI has twice
+ * created one without the Cloud Run `allUsers` / `roles/run.invoker` binding —
+ * which fails silently, rejecting every call before any code runs. Verify with
+ * `gcloud run services get-iam-policy getexamverdict --region=us-central1`
+ * before believing a quiet log.
+ */
+export const getExamVerdict = onCall<GetExamVerdictData>(
+  EXAM_HOT_PATH,
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const role = request.auth.token.role as string | undefined;
+    const studentId = request.auth.token.studentId as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+
+    const { attemptId, sessionId, sebToken } = request.data || ({} as GetExamVerdictData);
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    const db = getFirestore();
+    const snap = await db.collection('attempts').doc(attemptId).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const att = snap.data() as Record<string, any>;
+
+    // A student may ask about their own sitting; staff may ask about one in
+    // their tenant. Same scoping the roster already relies on.
+    const isOwner = role === 'student' && att.studentId === studentId;
+    const isStaff = role === 'web_owner'
+      || ((role === 'institute' || role === 'faculty') && att.instituteId === instituteId);
+    if (!isOwner && !isStaff) {
+      throw new HttpsError('permission-denied', 'Not your attempt.');
+    }
+
+    if (isOwner) {
+      assertSession(att, sessionId, 'getExamVerdict');
+      assertSEB(sebToken, request.auth.uid, att.securityConfig?.requireSEB, att.assessmentId);
+    }
+
+    const aSnap = await db.collection('assessments').doc(att.assessmentId).get();
+    if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+
+    const core = toCoreAttempt(att);
+    const coreAsmt = toCoreAssessment(aSnap.data() as Record<string, unknown>);
+    const serverNow = Date.now();
+    const verdict = resolveTiming(core, coreAsmt, serverNow);
+
+    // serverNow rides along so the client can measure its own skew against the
+    // same instant the verdict was computed at, rather than trusting a local
+    // clock it has no reason to trust (the existing getServerTime contract).
+    return { ok: true, serverNow, verdict };
   },
 );
 

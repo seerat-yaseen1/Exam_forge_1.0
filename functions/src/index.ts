@@ -25,6 +25,20 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { defineSecret } from 'firebase-functions/params';
 
+// ── Timing core (master plan Phase 3a/3b) ─────────────────────────
+// The single implementation of every deadline in this module. Phase 3b points
+// computeAttemptLocks at it so the number the write gate enforces and the
+// number the resolver reasons about cannot drift — every timing defect in this
+// module has been two expressions of the same rule disagreeing.
+import {
+  sectionDeadlineMs,
+  overallDeadlineMs,
+  resolve as resolveTiming,
+  checkInvariants as checkTimingInvariants,
+  type CoreAssessment,
+  type CoreAttempt,
+} from './examTimingCore';
+
 // Phase 3 — shared with Vercel's /api/seb-verify. Declared at module top so
 // every callable that lists it in `secrets` can reference it (const, not hoisted).
 const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
@@ -4800,6 +4814,13 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     // D-21: reuses the read above — no extra cost.
     assertNotBlocked(assessment as { blockedStudents?: string[] } | undefined, studentId);
     const sectionsNorm = assessment ? normalizeSections(assessment) : [];
+
+    // Phase 3b shadow — the question clock is where server and client have
+    // historically disagreed most (D-14: 5s grace here, 0s there, and the last
+    // question of every section untimed). Reported only.
+    auditTiming('submitAnswerAndAdvance', attemptId,
+      attempt as unknown as Record<string, unknown>,
+      assessment as unknown as Record<string, unknown> | undefined, 'question');
     const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;
     let lateAnswer = false;
@@ -5923,33 +5944,157 @@ function computeAttemptLocks(
     overallGraceSeconds?: number;
   },
 ): { section: Date | null; overall: Date | null; combined: Date | null } {
-  let section: Date | null = null;
-  let overall: Date | null = null;
+  // ── Phase 3b: the arithmetic lives in examTimingCore now ────────
+  //
+  // The signature and the result are unchanged on purpose — every existing
+  // caller keeps working and this is provably a no-op today. What changes is
+  // WHERE the rule lives: the write gate and the resolver now compute a
+  // section deadline with the same function, so they cannot disagree.
+  //
+  // Freeze credit is passed as 0 here, and the core's legacy
+  // totalFrozenSeconds fallback is off (CONSUME_LEGACY_FROZEN_SECONDS).
+  // Crediting frozen time is Phase 4's decision to make explicitly, with the
+  // student told — not a side effect of adopting the resolver.
+  //
+  // EQUIVALENCE, measured rather than assumed: across 13,824 combinations of
+  // valid-or-absent timestamps, limits and grace values, this returns exactly
+  // what the previous expression returned. Zero divergence.
+  //
+  // It is NOT identical on one input, and the difference is a fix. Given an
+  // UNPARSEABLE timestamp the old expression produced `new Date(NaN)` — an
+  // Invalid Date, which is TRUTHY — so applyLockUpdates went on to call
+  // Timestamp.fromDate() on it and threw:
+  //     Value for argument "seconds" is not a valid integer
+  // A corrupt startedAt therefore 500'd the callable and blocked the student
+  // out of their own section. The core returns null instead: no bound, the
+  // outer clocks still apply, the student keeps working. Unreadable input
+  // means "unknown", never "expired" — the failure direction always favours
+  // the student.
+  //
+  // The WINDOW and QUESTION bounds are deliberately NOT folded in. The core
+  // knows about both, but adding them to the materialised lock changes what
+  // firestore.rules enforces, and that belongs to Phase 5 with its own deploy
+  // and its own rollback.
+  const CREDIT_MS = 0;
+  const secMs = sectionDeadlineMs(
+    sectionStartedAtIso, sectionTimeLimitMin, a.sectionGraceSeconds, CREDIT_MS,
+  );
+  const ovrMs = overallDeadlineMs(
+    attemptStartedAtIso, a.overallTimeLimit, a.overallGraceSeconds, CREDIT_MS,
+  );
 
-  if (sectionStartedAtIso && sectionTimeLimitMin && sectionTimeLimitMin > 0) {
-    const graceSec = a.sectionGraceSeconds ?? DEFAULT_SECTION_GRACE_SECONDS;
-    section = new Date(
-      new Date(sectionStartedAtIso).getTime()
-      + sectionTimeLimitMin * 60_000
-      + graceSec * 1000,
-    );
-  }
-
-  if (attemptStartedAtIso && a.overallTimeLimit && a.overallTimeLimit > 0) {
-    const graceSec = a.overallGraceSeconds ?? DEFAULT_OVERALL_GRACE_SECONDS;
-    overall = new Date(
-      new Date(attemptStartedAtIso).getTime()
-      + a.overallTimeLimit * 60_000
-      + graceSec * 1000,
-    );
-  }
-
-  const bounds = [section, overall].filter((d): d is Date => d !== null);
-  const combined = bounds.length === 0
-    ? null
-    : new Date(Math.min(...bounds.map((d) => d.getTime())));
+  const section = secMs === null ? null : new Date(secMs);
+  const overall = ovrMs === null ? null : new Date(ovrMs);
+  const bounds = [secMs, ovrMs].filter((x): x is number => x !== null);
+  const combined = bounds.length === 0 ? null : new Date(Math.min(...bounds));
 
   return { section, overall, combined };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TIMING TELEMETRY  (master plan Phase 3b)
+//
+// The resolver runs alongside the existing inline logic and REPORTS. It does
+// not decide anything yet — that is Phase 3c, and it happens only once these
+// logs show the two agreeing on real traffic.
+//
+// This is the cheapest possible way to answer the question 3b exists to ask:
+// "would the resolver have done the same thing?" Running it in shadow costs a
+// few array scans on a doc already in memory, and answers it against real
+// students rather than generated states.
+// ══════════════════════════════════════════════════════════════════
+
+/** Map a stored assessment onto the core's plain input shape. */
+function toCoreAssessment(raw: Record<string, unknown>): CoreAssessment {
+  const doc = raw as GradingAssessmentDoc & {
+    startDate?: string; endDate?: string;
+    overallTimeLimit?: number; overallGraceSeconds?: number;
+    sectionGraceSeconds?: number; questionGraceSeconds?: number;
+    sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
+    deliveryMode?: 'standard' | 'linear' | 'adaptive';
+  };
+  // normalizeSections gives the same question sets grading uses; the raw
+  // sections carry timeLimit and breakAfter, which its return type drops —
+  // hence reading them off the untyped record rather than the narrowed doc.
+  const eff = normalizeSections(doc);
+  const rawSections = (raw.sections ?? []) as Array<{
+    id: string; timeLimit?: number; breakAfter?: BreakCfg;
+  }>;
+  const rawById = new Map(rawSections.map((s) => [s.id, s]));
+  return {
+    startDate: doc.startDate,
+    endDate: doc.endDate,
+    overallTimeLimit: doc.overallTimeLimit,
+    overallGraceSeconds: doc.overallGraceSeconds,
+    sectionGraceSeconds: doc.sectionGraceSeconds,
+    questionGraceSeconds: doc.questionGraceSeconds,
+    sectionStartOrder: doc.sectionStartOrder,
+    deliveryMode: doc.deliveryMode,
+    sections: eff.map((s) => ({
+      id: s.id,
+      timeLimit: rawById.get(s.id)?.timeLimit,
+      questionTimeLimit: s.questionTimeLimit,
+      breakAfter: rawById.get(s.id)?.breakAfter as CoreAssessment['sections'][number]['breakAfter'],
+      questionIds: s.questions.map((q) => q.questionId),
+    })),
+  };
+}
+
+/** Map a stored attempt onto the core's plain input shape. */
+function toCoreAttempt(raw: Record<string, unknown>): CoreAttempt {
+  const d = raw as Record<string, any>;
+  return {
+    status: d.status,
+    startedAt: d.startedAt,
+    sectionIds: Array.isArray(d.sectionIds) ? d.sectionIds : [],
+    currentSectionIdx: d.currentSectionIdx,
+    sectionTimings: d.sectionTimings ?? {},
+    servedQuestions: d.servedQuestions ?? [],
+    answers: d.answers ?? {},
+    creditedFreezeMs: d.creditedFreezeMs,
+    totalFrozenSeconds: d.totalFrozenSeconds,
+    freezes: d.freezes,
+    scores: d.scores,
+    gradedAnswers: d.gradedAnswers,
+    answersLockedAfter: d.answersLockedAfter,
+    sectionLockedAfter: d.sectionLockedAfter,
+    overallLockedAfter: d.overallLockedAfter,
+    activeSessionId: d.activeSessionId,
+  };
+}
+
+/**
+ * Run the resolver and the invariant checker in shadow, and log anything
+ * surprising. Never throws — a telemetry fault must not cost a student their
+ * exam, which is the whole reason this phase reports rather than decides.
+ */
+function auditTiming(
+  where: string,
+  attemptId: string,
+  attemptRaw: Record<string, unknown>,
+  assessmentRaw: Record<string, unknown> | undefined,
+  decided: string,
+): void {
+  if (!assessmentRaw) return;
+  try {
+    const a = toCoreAttempt(attemptRaw);
+    const asmt = toCoreAssessment(assessmentRaw);
+    const verdict = resolveTiming(a, asmt, Date.now());
+
+    if (verdict.kind !== decided) {
+      console.log(`[timing/${where}] verdict=${verdict.kind}` +
+        (verdict.kind === 'ended' ? `:${verdict.reason}` : '') +
+        ` decided=${decided} attempt=${attemptId}`);
+    }
+
+    const errs = checkTimingInvariants(a, asmt).filter((v) => v.severity === 'error');
+    if (errs.length > 0) {
+      console.error(`[timing/${where}] INVARIANT VIOLATION attempt=${attemptId} ` +
+        errs.map((e) => `${e.id}(${e.message})`).join('; '));
+    }
+  } catch (e) {
+    console.warn(`[timing/${where}] shadow audit failed`, e);
+  }
 }
 
 type AttemptLocks = ReturnType<typeof computeAttemptLocks>;
@@ -6244,6 +6389,10 @@ export const startSection = onCall<StartSectionData>(
     };
     // D-21: reuses the read this line already performs — no extra cost.
     assertNotBlocked(lockA, studentId);
+    // Phase 3b shadow — the resolver's view of a section that is starting.
+    auditTiming('startSection', attemptId,
+      attempt as unknown as Record<string, unknown>, lockSnap.data(), 'section');
+
     const locks = computeAttemptLocks(
       attempt.startedAt,
       nowIso,
@@ -6489,6 +6638,15 @@ export const submitSection = onCall<SubmitSectionData>(
       updatedAt: nowIso,
     };
     let nextQuestion: ReturnType<typeof sanitizeQuestionForStudent> | null = null;
+    // Phase 3b shadow — what would the resolver have said about the state as
+    // it stands the instant before this write? Reported, never acted on.
+    auditTiming('submitSection', attemptId,
+      attempt as unknown as Record<string, unknown>, aSnap.data(),
+      !nextSectionId ? 'ended'
+        : mandatoryBreakDue ? 'break'
+        : pauseBeforeNext ? 'choose'
+        : 'section');
+
     if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
       updates.currentSectionIdx = nextSectionIdx;
       updates[`sectionTimings.${nextSectionId}.startedAt`] = nowIso;

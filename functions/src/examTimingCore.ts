@@ -207,7 +207,71 @@ export function isTerminal(status: string | undefined): boolean {
  */
 export const FREEZE_CREDIT_EXTENDS_WINDOW = false;
 
+/**
+ * Does a legacy `totalFrozenSeconds` count as CREDITED time?  ← false until
+ * Phase 4, deliberately.
+ *
+ * Phase 1 made verifyAndResume increment totalFrozenSeconds so that freezes
+ * occurring before the ledger exists are measurable later. That field is a
+ * MEASUREMENT, not a decision. Consuming it here would hand every previously
+ * frozen student extra time silently — generous, but still a deadline moving
+ * for a reason nobody authorised and nobody told them about, which is the
+ * broken promise R4 exists to prevent, just in the pleasant direction.
+ *
+ * Phase 4 introduces the ledger, the invigilator's explicit grant, and the
+ * student-facing notice. It flips this constant as the last step, at which
+ * point the credit is a decision rather than an accident.
+ *
+ * Consequence for Phase 3b: with this false and no attempt yet carrying
+ * `creditedFreezeMs` or `freezes`, credit is always 0 — so the resolver's
+ * arithmetic is bit-identical to the computeAttemptLocks it replaces.
+ */
+export const CONSUME_LEGACY_FROZEN_SECONDS = false;
+
 // ── Helpers ────────────────────────────────────────────────────────
+
+/**
+ * A section's own deadline. THE single implementation of this arithmetic.
+ *
+ * index.ts's computeAttemptLocks delegates here, so the number the write gate
+ * enforces and the number the resolver reasons about cannot drift apart. They
+ * were separate expressions until Phase 3b, which is the shape every timing
+ * defect in this module has taken.
+ *
+ * Returns null — meaning UNBOUNDED — when the section is untimed or the anchor
+ * is unreadable. Never epoch 0: "expired in 1970" would end an exam on a parse
+ * failure.
+ */
+export function sectionDeadlineMs(
+  sectionStartedAt: TimeInput,
+  sectionTimeLimitMin: number | undefined,
+  graceSeconds: number | undefined,
+  creditMs = 0,
+): number | null {
+  const start = toMs(sectionStartedAt);
+  if (start === null) return null;
+  if (!sectionTimeLimitMin || sectionTimeLimitMin <= 0) return null;
+  return start
+    + sectionTimeLimitMin * 60_000
+    + (graceSeconds ?? DEFAULT_SECTION_GRACE_SECONDS) * 1000
+    + creditMs;
+}
+
+/** The overall deadline, anchored on the attempt's own start. */
+export function overallDeadlineMs(
+  attemptStartedAt: TimeInput,
+  overallTimeLimitMin: number | undefined,
+  graceSeconds: number | undefined,
+  creditMs = 0,
+): number | null {
+  const start = toMs(attemptStartedAt);
+  if (start === null) return null;
+  if (!overallTimeLimitMin || overallTimeLimitMin <= 0) return null;
+  return start
+    + overallTimeLimitMin * 60_000
+    + (graceSeconds ?? DEFAULT_OVERALL_GRACE_SECONDS) * 1000
+    + creditMs;
+}
 
 function minNonNull(...xs: Array<number | null>): number | null {
   const vals = xs.filter((x): x is number => x !== null);
@@ -222,9 +286,12 @@ export function creditedFreezeMs(a: CoreAttempt): number {
   if (Array.isArray(a.freezes) && a.freezes.length > 0) {
     return a.freezes.reduce((sum, f) => sum + Math.max(0, f.grantedMs ?? 0), 0);
   }
-  // Legacy field, pre-Phase-4. Recorded but never consumed by the old code —
-  // which is D-03: the display credited it and the write gate did not.
-  if (typeof a.totalFrozenSeconds === 'number' && Number.isFinite(a.totalFrozenSeconds)) {
+  // Legacy field, pre-Phase-4. Recorded but never consumed — which IS D-03:
+  // the display credited it and the write gate did not. Consuming it is a
+  // Phase 4 decision, not a side effect of adopting the resolver.
+  if (CONSUME_LEGACY_FROZEN_SECONDS
+      && typeof a.totalFrozenSeconds === 'number'
+      && Number.isFinite(a.totalFrozenSeconds)) {
     return Math.max(0, a.totalFrozenSeconds) * 1000;
   }
   return 0;
@@ -302,28 +369,20 @@ export function computeDeadlines(
     ? null
     : windowRaw + (FREEZE_CREDIT_EXTENDS_WINDOW ? credit : 0);
 
-  const attemptStart = toMs(a.startedAt);
-  const overallMin = asmt.overallTimeLimit ?? 0;
-  const overallEndsAt = (attemptStart !== null && overallMin > 0)
-    ? attemptStart
-      + overallMin * 60_000
-      + (asmt.overallGraceSeconds ?? DEFAULT_OVERALL_GRACE_SECONDS) * 1000
-      + credit
-    : null;
+  const overallEndsAt = overallDeadlineMs(
+    a.startedAt, asmt.overallTimeLimit, asmt.overallGraceSeconds, credit,
+  );
 
   // Section bound — only for a section that has actually started.
   const openId = openSectionId(a);
   let sectionEndsAt: number | null = null;
   if (openId) {
-    const sec = sectionById(asmt, openId);
-    const startedAt = toMs(a.sectionTimings?.[openId]?.startedAt);
-    const limit = sec?.timeLimit ?? 0;
-    if (startedAt !== null && limit > 0) {
-      sectionEndsAt = startedAt
-        + limit * 60_000
-        + (asmt.sectionGraceSeconds ?? DEFAULT_SECTION_GRACE_SECONDS) * 1000
-        + credit;
-    }
+    sectionEndsAt = sectionDeadlineMs(
+      a.sectionTimings?.[openId]?.startedAt,
+      sectionById(asmt, openId)?.timeLimit,
+      asmt.sectionGraceSeconds,
+      credit,
+    );
   }
 
   // Question bound — sequential delivery only, and only while one is served.

@@ -1989,12 +1989,37 @@ export function ExamShell() {
       // reject it with 'Section was never started', wedging the exam.
       console.error('[ExamShell] endBreak failed', e);
       const msg = (e as { message?: string })?.message ?? '';
-      if (msg.includes('Mandatory break') || msg.includes('failed-precondition')) {
-        return; // stay on the break screen; the countdown will retry
+
+      // ── Phase 0.3 (2026-07-31) ────────────────────────────────
+      // 'Section already started' is NOT a failure — it means a previous
+      // click already started this section server-side and the client never
+      // got to record it (a crash, a lost response, a double click). The
+      // section IS running; the only correct move is to fall through and
+      // enter it. Treating it as a refusal left the student on a dead break
+      // screen forever, because the condition can never clear: the section
+      // stays started, so every retry hits the same refusal. Reported live as
+      // "stuck at Continue to Section B".
+      const alreadyStarted = msg.includes('Section already started');
+
+      // A genuinely un-elapsed mandatory break is the ONE case where staying
+      // put is right — the countdown is still running and will retry.
+      if (!alreadyStarted && msg.includes('Mandatory break')) {
+        return;
       }
-      setErrorMsg('Could not start the next section. Check your connection and try again.');
-      setShellStatus('error');
-      return;
+
+      if (!alreadyStarted) {
+        // Previously this also swallowed any 'failed-precondition', which hid
+        // 'Attempt is not in progress' and every future refusal behind the
+        // same silent no-op. Anything unrecognised now surfaces instead of
+        // stranding the student without a message.
+        setErrorMsg(
+          msg.includes('not in progress')
+            ? 'This attempt is no longer active. Reload to see your result.'
+            : 'Could not start the next section. Check your connection and try again.',
+        );
+        setShellStatus('error');
+        return;
+      }
     }
     const startISO = new Date().toISOString();
     setAttempt((prev) =>

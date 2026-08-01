@@ -118,6 +118,17 @@ function attemptStartedMs(a: Attempt): number {
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
 
+/**
+ * Can this attempt's responses be reviewed? Only a finished sitting has a
+ * settled answer set; an in-progress one is still moving.
+ *
+ * `terminated` counts — a voided sitting is often the one a reviewer most
+ * wants to read.
+ */
+function isReviewable(a: Attempt | null | undefined): boolean {
+  return !!a && (a.status === 'submitted' || a.status === 'auto_submitted' || a.status === 'terminated');
+}
+
 function deriveRosterStatus(attempt: Attempt | null): RosterStatus {
   if (!attempt) return 'not_started';
   if (attempt.frozenAt) return 'frozen';
@@ -1328,9 +1339,37 @@ function AttemptDrawer({
   onOverrideSaved: () => void;
   onRequestDelete: (attemptId: string, attemptNumber: number) => void;
 }) {
-  const { student, attempt, rosterStatus, isBlocked } = row;
+  const { student, attempt, bestAttempt, rosterStatus, isBlocked } = row;
   const canFreeze   = (rosterStatus === 'in_progress') && !!attempt;
   const canUnfreeze = rosterStatus === 'frozen' && !!attempt;
+
+  // ── Which attempt's responses to show ─────────────────────────
+  //
+  // ResponseViewer used to be hardwired to `attempt` (the latest), so a
+  // student's best sitting was unreachable from the drawer — and worse, the
+  // whole RESPONSES section was gated on the LATEST attempt's status. A
+  // student part-way through a retake therefore showed no responses at all,
+  // even though a completed earlier sitting was sitting right there. That is
+  // precisely when an invigilator wants to look at the previous one.
+  //
+  // Tabs appear only when the two are genuinely different attempts. With a
+  // single sitting — or when the latest IS the best — Latest and Best would
+  // render identical content, so a chooser would be noise.
+  const canSwitchResponses =
+    !!attempt && !!bestAttempt && bestAttempt.id !== attempt.id;
+
+  const [responseView, setResponseView] = useState<ScoreView>('latest');
+
+  // Default to whichever is actually reviewable. Latest wins when both are,
+  // because the drawer's first job is "how did they just do".
+  useEffect(() => {
+    setResponseView(
+      isReviewable(attempt) ? 'latest' : (isReviewable(bestAttempt) ? 'best' : 'latest')
+    );
+  }, [attempt?.id, bestAttempt?.id]); // eslint-disable-line
+
+  const shownAttempt =
+    responseView === 'best' && bestAttempt ? bestAttempt : attempt;
 
   return (
     <motion.div
@@ -1530,16 +1569,64 @@ function AttemptDrawer({
               </div>
             )}
 
-            {/* ── RESPONSES section — only for completed attempts ── */}
-            {canReview
-              && (attempt.status === 'submitted' || attempt.status === 'auto_submitted' || attempt.status === 'terminated') && (
+            {/* ── RESPONSES — gated on the SHOWN attempt, not the latest ── */}
+            {canReview && isReviewable(shownAttempt) && (
               <div>
-                <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>RESPONSES</p>
-                <ResponseViewer attempt={attempt} assessment={assessment} />
+                <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+                  <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>RESPONSES</p>
+
+                  {/* Latest | Best — only when they are different sittings. */}
+                  {canSwitchResponses && (
+                    <div className="flex items-center gap-1 ml-auto">
+                      {(['latest', 'best'] as const).map((rv) => {
+                        const target = rv === 'best' ? bestAttempt! : attempt;
+                        const pct = target?.scores?.percentage;
+                        const active = responseView === rv;
+                        return (
+                          <button key={rv} onClick={() => setResponseView(rv)}
+                            className="text-xs px-2 py-0.5"
+                            style={{
+                              borderRadius: 2, cursor: 'pointer',
+                              background: active ? '#F0EFEA' : 'transparent',
+                              color: active ? '#0C0C0B' : '#9A9891',
+                              border: `1px solid ${active ? '#D8D6CF' : 'transparent'}`,
+                              fontVariantNumeric: 'tabular-nums',
+                            }}>
+                            {rv === 'latest' ? 'Latest' : 'Best'}
+                            {typeof pct === 'number' && ` · ${pct}%`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Say plainly which sitting is on screen. Without this the
+                    reviewer has no way to tell an older attempt from the
+                    current one, and a mark read off the wrong sitting is
+                    worse than no mark. */}
+                {canSwitchResponses && (
+                  <p className="text-xs mb-2" style={{ color: '#9A9891' }}>
+                    {responseView === 'best' ? 'Best attempt' : 'Most recent attempt'}
+                    {shownAttempt?.startedAt && ` · started ${formatRelative(shownAttempt.startedAt)}`}
+                    {shownAttempt?.status === 'terminated' && (
+                      <span style={{ color: '#9B2828' }}> · voided</span>
+                    )}
+                  </p>
+                )}
+
+                {/* Latest is still running: the reviewer is looking at an
+                    earlier sitting, and should know that. */}
+                {!isReviewable(attempt) && responseView === 'best' && (
+                  <p className="text-xs mb-2" style={{ color: '#92680A' }}>
+                    Their current sitting is still in progress — this is an earlier attempt.
+                  </p>
+                )}
+
+                <ResponseViewer attempt={shownAttempt!} assessment={assessment} />
               </div>
             )}
-            {!canReview
-              && (attempt.status === 'submitted' || attempt.status === 'auto_submitted' || attempt.status === 'terminated') && (
+            {!canReview && isReviewable(shownAttempt) && (
               <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
                 Question review is not enabled for your role on this exam — the
                 exam owner controls this in the assessment's visibility settings.

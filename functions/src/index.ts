@@ -1138,48 +1138,246 @@ function isDueForPurge(data: Record<string, unknown>, now: Date): boolean {
  * closed out within the hour; a student still at the keyboard is stopped at
  * the exact second by the rule.
  */
+/**
+ * How long a frozen attempt may sit unresolved before the sweep closes it.
+ *
+ * Doctrine D8: an automatic freeze (extension check) is entered without a
+ * human, so it must be exitable without one. An invigilator queue nobody is
+ * watching must never become an indefinite hold on a student's exam.
+ *
+ * Six hours is deliberately generous — long enough that it never fires during
+ * a supervised sitting, short enough that a forgotten freeze resolves the same
+ * day. Closing GRANTS the full frozen interval, so a student is never punished
+ * for an unattended queue.
+ */
+const STALE_FREEZE_HOURS = 6;
+
 export const scheduledCloseExpiredAttempts = onSchedule(
-  { schedule: 'every 60 minutes', timeZone: 'Etc/UTC', region: 'us-central1' },
+  {
+    schedule: 'every 60 minutes',
+    timeZone: 'Etc/UTC',
+    region: 'us-central1',
+    // Grading is real work now (see below), so the 60s Gen2 default is no
+    // longer enough headroom for a large batch. Memory is raised for the same
+    // reason: gradedAnswers for a few hundred long papers is not small.
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
   async () => {
     const db = getFirestore();
     const now = Timestamp.now();
+    const nowMs = now.toMillis();
+    const nowIso = new Date(nowMs).toISOString();
 
-    // Only attempts that carry a lock AND whose lock has passed. Firestore
-    // range queries skip documents missing the field entirely, which is
-    // exactly right — a legacy or genuinely untimed attempt has no deadline to
-    // be past.
-    const expired = await db.collection('attempts')
+    // ── (A) in_progress attempts past their lock ──────────────────
+    // Firestore range queries skip documents missing the field entirely, which
+    // is exactly right — a legacy or genuinely untimed attempt has no deadline
+    // to be past. Uses the existing (status, answersLockedAfter) index.
+    const expiredSnap = await db.collection('attempts')
       .where('status', '==', 'in_progress')
       .where('answersLockedAfter', '<', now)
       .limit(500)
       .get();
 
-    if (expired.empty) {
+    // ── (B) frozen attempts (D-02, master plan Phase 1) ───────────
+    // A frozen attempt was invisible to this sweep, because the query above
+    // filters on in_progress. Combined with firestore.rules (which require
+    // in_progress on both sides of a student write) and gradeAttempt's
+    // finalised guard, status:'frozen' was a state with an entrance and no
+    // exit: blocked from answering, clock draining, unable to submit, unable
+    // to be closed.
+    //
+    // A SEPARATE equality-only query rather than `status in [...]` on the
+    // query above: a single-field filter needs no composite index, so this
+    // ships with the functions deploy and cannot fail on a missing index in
+    // production. Frozen attempts are a small set by nature.
+    //
+    // Two reasons to close a frozen attempt, both evaluated in memory:
+    //   1. its answer window has already passed — the trap case;
+    //   2. it has been frozen longer than STALE_FREEZE_HOURS — D8's automatic
+    //      exit, regardless of whether any clock has run out.
+    const frozenSnap = await db.collection('attempts')
+      .where('status', '==', 'frozen')
+      .limit(300)
+      .get();
+
+    type Closing = {
+      doc: FirebaseFirestore.QueryDocumentSnapshot;
+      reason: 'deadline_expired_sweep' | 'stale_freeze_sweep';
+      /** Frozen seconds to credit on close (stale freezes are granted in full). */
+      grantFrozenSeconds: number;
+      wasFrozen: boolean;
+    };
+
+    const closing: Closing[] = expiredSnap.docs.map((doc) => ({
+      doc,
+      reason: 'deadline_expired_sweep' as const,
+      grantFrozenSeconds: 0,
+      wasFrozen: false,
+    }));
+
+    const staleBeforeMs = nowMs - STALE_FREEZE_HOURS * 3_600_000;
+    for (const doc of frozenSnap.docs) {
+      const d = doc.data() as {
+        answersLockedAfter?: unknown;
+        freezeState?: { since?: string } | null;
+        frozenAt?: string | null;
+      };
+      const sinceIso = d.freezeState?.since ?? d.frozenAt ?? null;
+      const sinceMs = sinceIso ? Date.parse(sinceIso) : NaN;
+      const frozenTooLong = Number.isFinite(sinceMs) && sinceMs <= staleBeforeMs;
+      const windowGone = attemptWindowClosed(d, nowMs);
+      if (!frozenTooLong && !windowGone) continue;
+
+      closing.push({
+        doc,
+        reason: frozenTooLong ? 'stale_freeze_sweep' : 'deadline_expired_sweep',
+        // Granted in FULL. The authority never made a decision, and the
+        // student must not absorb the cost of that. Phase 4 replaces this
+        // with a real ledger entry; the number is measured the same way.
+        grantFrozenSeconds: Number.isFinite(sinceMs)
+          ? Math.max(0, Math.floor((nowMs - sinceMs) / 1000))
+          : 0,
+        wasFrozen: true,
+      });
+    }
+
+    if (closing.length === 0) {
       console.log('[closeExpiredAttempts] nothing to close');
       return;
     }
 
-    const nowIso = new Date().toISOString();
-    let closed = 0;
+    // ── Per-assessment cache ──────────────────────────────────────
+    // Expired attempts cluster hard by assessment — a whole cohort abandoning
+    // one exam is the common case — so the paper is loaded once, not once per
+    // student. Without this a 500-attempt sweep would re-read every question
+    // and answer document 500 times.
+    type Paper = {
+      assessment: GradingAssessmentDoc;
+      sections: ReturnType<typeof normalizeSections>;
+      questionMap: Awaited<ReturnType<typeof loadQuestionAndAnswerMaps>>['questionMap'];
+      answerMap: Awaited<ReturnType<typeof loadQuestionAndAnswerMaps>>['answerMap'];
+      exposeKeysToStudent: boolean;
+    };
+    const papers = new Map<string, Paper | null>();
 
-    // Chunked to stay under the 500-write batch ceiling. The query limit is
-    // already 500 so one batch suffices today, but the split keeps it correct
-    // if that limit is ever raised.
-    for (let i = 0; i < expired.docs.length; i += 400) {
+    async function loadPaper(assessmentId: string): Promise<Paper | null> {
+      if (papers.has(assessmentId)) return papers.get(assessmentId) ?? null;
+      try {
+        const aSnap = await db.collection('assessments').doc(assessmentId).get();
+        if (!aSnap.exists) { papers.set(assessmentId, null); return null; }
+        const assessment = aSnap.data() as GradingAssessmentDoc;
+        const sections = normalizeSections(assessment);
+        const qIds = Array.from(new Set(
+          sections.flatMap((s) => s.questions.map((q) => q.questionId)),
+        ));
+        const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
+        const paper: Paper = {
+          assessment,
+          sections,
+          questionMap,
+          answerMap,
+          exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
+        };
+        papers.set(assessmentId, paper);
+        return paper;
+      } catch (e) {
+        console.error('[closeExpiredAttempts] paper load failed', assessmentId, e);
+        papers.set(assessmentId, null);
+        return null;
+      }
+    }
+
+    let closed = 0;
+    let graded = 0;
+    let ungraded = 0;
+
+    // ── Close, GRADING each one (D-04, master plan Phase 1) ───────
+    // The sweep used to set status:'auto_submitted' and stop — no scores, no
+    // gradedAnswers. The roster then rendered the attempt as complete with no
+    // mark, and it stayed that way until somebody noticed and ran a manual
+    // regrade. A student whose laptop died was left with a finished, unscored
+    // exam. Invariant INV-10: a terminal attempt has both scores and
+    // gradedAnswers.
+    //
+    // Grading uses the SAME primitives as gradeAttempt — normalizeSections,
+    // loadQuestionAndAnswerMaps, scoreAttemptAnswers — rather than a private
+    // reimplementation, so the sweep and the live path cannot reach different
+    // marks for the same answers.
+    //
+    // A grading failure never blocks the close. An attempt stuck in_progress
+    // forever is strictly worse than one closed without a score, and the
+    // latter is repairable with regradeAttempts.
+    const writes: Array<{ ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> }> = [];
+
+    for (const item of closing) {
+      const att = item.doc.data() as {
+        assessmentId?: string;
+        answers?: Record<string, AttemptAnswerDoc & { answeredAt?: string }>;
+        gradingConfig?: AssessmentGradingConfigS;
+      };
+
+      const data: Record<string, unknown> = {
+        status: 'auto_submitted',
+        submittedAt: nowIso,
+        autoSubmitReason: item.reason,
+        updatedAt: nowIso,
+      };
+
+      if (item.wasFrozen) {
+        // Detective flag, matching gradeAttempt's behaviour for the same case.
+        data['integrityLog.finalizedWhileFrozen'] = true;
+        data.freezeState = { frozen: false, clearedBy: 'sweep', since: nowIso };
+        data.resumeRequiresVerification = false;
+        if (item.grantFrozenSeconds > 0) {
+          data.totalFrozenSeconds = FieldValue.increment(item.grantFrozenSeconds);
+        }
+      }
+
+      const paper = att.assessmentId ? await loadPaper(att.assessmentId) : null;
+      if (paper) {
+        try {
+          const { scores, gradedAnswers } = scoreAttemptAnswers({
+            sections: paper.sections,
+            questionMap: paper.questionMap,
+            answerMap: paper.answerMap,
+            answers: att.answers,
+            passingScore: paper.assessment.passingScore,
+            exposeKeysToStudent: paper.exposeKeysToStudent,
+            // Frozen policy first, live assessment as the legacy fallback —
+            // identical precedence to gradeAttempt.
+            gradingConfig: att.gradingConfig ?? paper.assessment.gradingConfig,
+          });
+          data.scores = scores;
+          data.gradedAnswers = gradedAnswers;
+          graded++;
+        } catch (e) {
+          console.error('[closeExpiredAttempts] grading failed', item.doc.id, e);
+          data.gradeError = 'sweep_grading_failed';
+          ungraded++;
+        }
+      } else {
+        data.gradeError = 'assessment_unavailable';
+        ungraded++;
+      }
+
+      writes.push({ ref: item.doc.ref, data });
+    }
+
+    // Chunked to stay under the 500-write batch ceiling.
+    for (let i = 0; i < writes.length; i += 400) {
       const batch = db.batch();
-      for (const doc of expired.docs.slice(i, i + 400)) {
-        batch.update(doc.ref, {
-          status: 'auto_submitted',
-          submittedAt: nowIso,
-          autoSubmitReason: 'deadline_expired_sweep',
-          updatedAt: nowIso,
-        });
+      for (const w of writes.slice(i, i + 400)) {
+        batch.update(w.ref, w.data);
         closed++;
       }
       await batch.commit();
     }
 
-    console.log(`[closeExpiredAttempts] closed ${closed} expired attempt(s)`);
+    console.log(
+      `[closeExpiredAttempts] closed ${closed} (graded ${graded}, ungraded ${ungraded});`
+      + ` expired=${expiredSnap.size} frozenScanned=${frozenSnap.size}`,
+    );
   },
 );
 
@@ -3386,6 +3584,10 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       freezeState?: { frozen?: boolean } | null;
       securityConfig?: { tier?: string; requireSEB?: boolean } | null;
       gradingConfig?: AssessmentGradingConfigS;   // frozen at startExam
+      // Read for the trapped-frozen escape hatch below. Loose shape: a
+      // Firestore Timestamp over the wire, an ISO string on legacy attempts,
+      // absent on attempts that predate the field.
+      answersLockedAfter?: unknown;
     };
 
     // AuthZ — student owner OR grader in same institute OR web owner
@@ -3413,7 +3615,28 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     // the shell's terminate call lands after an auto-submit already graded
     // the attempt — that race is now an idempotent no-op instead of a
     // status rewrite. Graders keep manual regrade rights.)
-    if (attempt.status !== 'in_progress' && !isGrader) {
+    // ── Escape hatch for a trapped frozen attempt (D-02, Phase 1) ──
+    //
+    // status:'frozen' had an entrance and no exit. firestore.rules require
+    // status=='in_progress' on both sides of a student update, so a frozen
+    // student cannot save an answer; the hourly sweep queried in_progress
+    // only, so it never saw them; and this guard refused their finalise. A
+    // student whose antivirus tripped the extension check was blocked from
+    // answering, watched their clock drain, and could neither submit nor be
+    // closed — stuck until a human noticed.
+    //
+    // Gated on the deadline having ALREADY passed, which is what keeps this
+    // from becoming an escape from invigilation: while there is still time on
+    // the clock a frozen student must wait for the freeze to be cleared, and
+    // only once their window is provably over may they close their own
+    // sitting. Whatever they answered before the freeze stands.
+    //
+    // Doctrine D8: every automatic state a student can be put into must have
+    // an automatic exit, on a bounded timer, in the student's favour.
+    const isTrappedFrozen =
+      attempt.status === 'frozen' && attemptWindowClosed(attempt);
+
+    if (attempt.status !== 'in_progress' && !isGrader && !isTrappedFrozen) {
       if (reason === 'terminated') {
         return { ok: true, alreadyFinalized: true, status: attempt.status };
       }
@@ -4410,6 +4633,11 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
       assessmentId: string;
       lastExtensionCheck?: { passed?: boolean } | null;
       securityConfig?: { autoResume?: boolean; requireSEB?: boolean } | null;
+      // Phase 1: where this freeze started, so its duration can be measured.
+      // Extension freezes stamp freezeState.since; invigilator freezes stamp
+      // frozenAt. Both are read — see the accumulation note below.
+      freezeState?: { frozen?: boolean; since?: string } | null;
+      frozenAt?: string | null;
     };
 
     const isStudentOwner = callerRole === 'student' && callerStudentId === a.studentId;
@@ -4439,13 +4667,44 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
     }
 
     const nowIso = new Date().toISOString();
+
+    // ── Measure the freeze (D-02 / D-03, Phase 1) ─────────────────
+    // An extension freeze accumulated NOTHING: totalFrozenSeconds was never
+    // touched on this path, so even after Phase 4 makes freeze a real pause
+    // there would be no measured interval to credit. Recording it now means
+    // freezes that happen between this deploy and Phase 4 are creditable
+    // later rather than lost.
+    //
+    // FieldValue.increment, not read-then-write. The invigilator path
+    // (unfreezeAttempt) computes `current + additional` from a total supplied
+    // by the CLIENT, so stale roster state or two invigilators acting on one
+    // attempt makes accumulated credit go DOWN. This path must not inherit
+    // that defect — increment is atomic and cannot regress. (Fixing the
+    // invigilator path is Phase 4, where freeze becomes a callable.)
+    //
+    // Nothing consumes totalFrozenSeconds in a deadline yet. That is Phase 4,
+    // deliberately: crediting time is an authority DECISION, and inventing a
+    // silent default here would be the "broken promise" the timing spec warns
+    // about, just in the generous direction.
+    const frozenSinceIso = a.freezeState?.since ?? a.frozenAt ?? null;
+    let frozenForSeconds = 0;
+    if (frozenSinceIso) {
+      const sinceMs = Date.parse(frozenSinceIso);
+      if (Number.isFinite(sinceMs)) {
+        frozenForSeconds = Math.max(0, Math.floor((Date.now() - sinceMs) / 1000));
+      }
+    }
+
     await ref.update({
       status: 'in_progress',
       freezeState: { frozen: false, clearedBy: isInvigilator ? 'invigilator' : 'auto', since: nowIso },
       resumeRequiresVerification: false,
+      ...(frozenForSeconds > 0
+        ? { totalFrozenSeconds: FieldValue.increment(frozenForSeconds) }
+        : {}),
       updatedAt: nowIso,
     });
-    return { ok: true, resumed: true };
+    return { ok: true, resumed: true, frozenForSeconds };
   },
 );
 
@@ -5033,6 +5292,25 @@ export const startExam = onCall<StartExamData>(
     const preSnap = await attemptsQuery.get();
     const pre = evaluateStudentAttempts(preSnap.docs, effectiveMax);
     if (pre.live) return { ok: true, attempt: pre.live.data() };
+
+    // ── Manually CLOSED assessment (D-11, master plan Phase 1) ────
+    // Only 'draft' was checked here, so an exam a Web Owner closed by hand
+    // stayed enterable whenever its endDate was still future or unset — the
+    // briefing page was the only thing stopping it, and the briefing page is
+    // not a security control.
+    //
+    // Placed AFTER the live-attempt return, deliberately. A student already
+    // mid-sitting when staff close the exam must still be able to resume and
+    // submit; closing an exam is an admissions decision, not a reason to
+    // destroy work in progress. This blocks NEW sittings only.
+    //
+    // (endDate is checked earlier and does still block resume. That is the
+    // authored hard wall from the timing spec, and changing it belongs to the
+    // window work in Phase 5, not here.)
+    if (a.status === 'closed') {
+      throw new HttpsError('failed-precondition', 'This exam has closed.');
+    }
+
     if (pre.limitReached) {
       throw new HttpsError(
         'resource-exhausted',
@@ -5424,6 +5702,68 @@ function computeAttemptLocks(
   return { section, overall, combined };
 }
 
+type AttemptLocks = ReturnType<typeof computeAttemptLocks>;
+
+/**
+ * Write all three lock fields onto an update payload. (Master plan D-01,
+ * Phase 1 — 2026-08-01.)
+ *
+ * WHY THIS EXISTS AS A HELPER RATHER THAN THREE INLINE LINES
+ * The three fields are one fact expressed three ways: `combined` is the
+ * minimum of the other two, and firestore.rules gates on `combined` while the
+ * client reads the split pair to tell WHICH clock ran out. Writing any of them
+ * without the others produces an attempt whose stored lock disagrees with
+ * itself — and the failure mode is silent, because the rules keep working
+ * against a stale minimum while the client renders a fresh section timer.
+ *
+ * Every site that changes a lock input therefore calls this, never assigns the
+ * fields directly. Doctrine D5: the materialised lock is a CACHE, and every
+ * event that changes an input must recompute it.
+ */
+function applyLockUpdates(
+  updates: Record<string, unknown>,
+  locks: AttemptLocks,
+): void {
+  // Null (not undefined, not omitted) when a bound does not exist: the rules
+  // read a missing/null lock as "no time constraint", which is what keeps
+  // untimed exams working. Omitting the key would leave the PREVIOUS section's
+  // value in place, which is the D-01 bug in miniature.
+  updates.answersLockedAfter = locks.combined ? Timestamp.fromDate(locks.combined) : null;
+  updates.sectionLockedAfter = locks.section ? Timestamp.fromDate(locks.section) : null;
+  updates.overallLockedAfter = locks.overall ? Timestamp.fromDate(locks.overall) : null;
+}
+
+/**
+ * Read a stored lock as epoch millis, whatever shape it arrived in.
+ *
+ * Locks are written as Firestore Timestamps, but attempts predating the field
+ * carry nothing and some legacy paths wrote ISO strings. Callers treat null as
+ * "no bound", never as "expired" — a missing deadline is missing information,
+ * not permission to close someone's exam.
+ */
+function lockInstantMs(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'string') {
+    const t = Date.parse(raw);
+    return Number.isNaN(t) ? null : t;
+  }
+  const maybe = raw as { toMillis?: () => number };
+  if (typeof maybe?.toMillis === 'function') {
+    const ms = maybe.toMillis();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+}
+
+/** Has this attempt's answer-write window closed? Null lock = never. */
+function attemptWindowClosed(
+  attempt: { answersLockedAfter?: unknown },
+  nowMs: number = Date.now(),
+): boolean {
+  const ms = lockInstantMs(attempt.answersLockedAfter);
+  return ms !== null && nowMs >= ms;
+}
+
 export const startSection = onCall<StartSectionData>(
   EXAM_HOT_PATH,
   async (request) => {
@@ -5732,9 +6072,18 @@ export const submitSection = onCall<SubmitSectionData>(
           updatedAt: new Date().toISOString(),
         };
         if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
+          const lateNextStartIso = new Date().toISOString();
           lateUpdates.currentSectionIdx = nextSectionIdx;
-          lateUpdates[`sectionTimings.${nextSectionId}.startedAt`] = new Date().toISOString();
+          lateUpdates[`sectionTimings.${nextSectionId}.startedAt`] = lateNextStartIso;
           lateUpdates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
+          // D-01: recompute the write lock for the section being ENTERED.
+          // Same reasoning as the on-time branch below — see the note there.
+          applyLockUpdates(lateUpdates, computeAttemptLocks(
+            attempt.startedAt,
+            lateNextStartIso,
+            a.sections?.find((s) => s.id === nextSectionId)?.timeLimit,
+            a,
+          ));
         }
         await attemptRef.update(lateUpdates);
         throw new HttpsError('deadline-exceeded', 'SECTION_DEADLINE_EXCEEDED');
@@ -5752,6 +6101,42 @@ export const submitSection = onCall<SubmitSectionData>(
       updates.currentSectionIdx = nextSectionIdx;
       updates[`sectionTimings.${nextSectionId}.startedAt`] = nowIso;
       updates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
+
+      // ── Recompute the answer-write lock (D-01, master plan Phase 1) ──
+      //
+      // THIS IS THE FIX FOR THE WORST BUG IN THE MODULE. Read this before
+      // touching the branch.
+      //
+      // Only startExam and startSection used to write the lock fields. This
+      // branch advances the student into the next section WITHOUT going
+      // through startSection — `pauseBeforeNext` is false for sequential and
+      // random order with no break, which is the ordinary case — so the
+      // attempt carried the PREVIOUS section's deadline for the rest of the
+      // sitting. Once that instant passed, firestore.rules
+      // (answerWriteWindowOpen) denied every answer write, and the client
+      // swallowed the denial: the 1.5s autosave catches to console, and the
+      // final flush treats permission-denied as "the deadline doing its job".
+      // Students lost everything they typed from section 2 onward, silently.
+      //
+      // The client cannot repair this by calling startSection afterwards —
+      // that callable throws 'Section already started' against the startedAt
+      // written three lines above.
+      //
+      // Anchored on nowIso (the instant this section actually begins), NOT on
+      // the previous section's start, and the section limit is read from the
+      // ASSESSMENT DOC via `a`, never from the caller's payload.
+      //
+      // Note the lock legitimately moves EARLIER here when a long section is
+      // followed by a short one (60m section submitted at minute 2, next
+      // section 10m -> lock goes 60:30 to 12:30). That is correct: the
+      // combined lock is a minimum over a CHANGING active section, so it has
+      // no monotonicity property. Only the per-section and overall bounds do.
+      applyLockUpdates(updates, computeAttemptLocks(
+        attempt.startedAt,
+        nowIso,
+        a.sections?.find((s) => s.id === nextSectionId)?.timeLimit,
+        a,
+      ));
 
       // ── Serve the next section's first question (Phase 2.5) ──────
       // This is the no-break advance path: the client goes straight from one

@@ -981,6 +981,61 @@ export async function unfreezeAttempt(
 // Called when ExamShell loads. Writes a unique sessionId to the attempt.
 // Returns { conflict: true } if a DIFFERENT sessionId was already there.
 
+/** Shared default — server twin is DEFAULT_QUESTION_GRACE_SECONDS. */
+export const DEFAULT_QUESTION_GRACE_SECONDS = 5;
+
+/** Verdict shape returned by the getExamVerdict callable (Phase 3c/3d). */
+export type ExamVerdict =
+  | { kind: 'not_started' }
+  | { kind: 'ended'; reason: string }
+  | { kind: 'break'; sectionId: string; nextSectionId: string; endsAt: number; mandatory: boolean }
+  | { kind: 'choose'; remainingSectionIds: string[] }
+  | { kind: 'section'; sectionId: string; started: boolean }
+  | { kind: 'question'; sectionId: string; questionId: string; served: boolean };
+
+/**
+ * Ask the server where this student stands. (Master plan D1/D4.)
+ *
+ * The client detects the tick; the SERVER decides what it means. Until now the
+ * shell reached its own verdict from its own copy of the rules, which is how
+ * the client and server came to disagree about question grace (5s vs 0s) and
+ * about what a section running out should do.
+ *
+ * JITTER (D-19). A cohort that started together hits section end together, so
+ * every countdown reaching zero at the same instant would arrive here as one
+ * synchronised burst — the same shape that makes gradeAttempt a scale risk.
+ * A few hundred milliseconds of spread costs the student nothing (the verdict
+ * is computed from server time, not arrival time) and turns a spike into a
+ * slope. Deliberately NOT applied when the caller is already blocked waiting,
+ * which is why the delay is opt-out.
+ */
+export async function getExamVerdict(
+  attemptId: string,
+  opts?: { jitter?: boolean }
+): Promise<{ serverNow: number; verdict: ExamVerdict } | null> {
+  if (opts?.jitter !== false) {
+    await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 400)));
+  }
+  const call = httpsCallable<
+    { attemptId: string; sessionId?: string; sebToken?: string },
+    { ok: true; serverNow: number; verdict: ExamVerdict }
+  >(functions, 'getExamVerdict');
+  try {
+    const res = await withSeb(async (sebToken) => (await call({
+      attemptId,
+      sebToken,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    })).data);
+    return { serverNow: res.serverNow, verdict: res.verdict };
+  } catch (e) {
+    // Fail soft, same reasoning as registerSession: a verdict we cannot fetch
+    // must never strand a student mid-exam. The caller falls back to its local
+    // reading, which is what it used exclusively until this phase.
+    console.warn('[submissionService] getExamVerdict failed', e);
+    return null;
+  }
+}
+
 export async function registerSession(
   attemptId: string,
   sessionId: string

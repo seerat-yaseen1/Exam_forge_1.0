@@ -40,6 +40,8 @@ import {
   getServerSkew,
   subscribeToAttempt,
   registerSession,
+  getExamVerdict,
+  DEFAULT_QUESTION_GRACE_SECONDS,
   sendHeartbeat,
   reportExtensionCheck,
   verifyAndResume,
@@ -1721,12 +1723,28 @@ export function ExamShell() {
 
   const [qSecondsLeft, setQSecondsLeft] = useState<number | null>(null);
 
+  // Grace is part of the deadline (R1), and it is the SAME number the server
+  // uses. D-14: the server allowed qLimit + 5s while this allowed qLimit + 0,
+  // so the client auto-advanced five seconds before the server would even flag
+  // the answer late — the student lost five seconds of every question to a
+  // disagreement between two copies of one rule.
+  const questionGraceSeconds =
+    assessment?.questionGraceSeconds ?? DEFAULT_QUESTION_GRACE_SECONDS;
+
   useEffect(() => {
-    if (!questionTimeLimit || !currentServedAt || isLastQuestion) {
+    // `isLastQuestion` was in this guard, so the final question of EVERY
+    // section was untimed — the one place a student could sit indefinitely.
+    // It is now treated exactly like any other: the clock runs, and on expiry
+    // handleLinearNext advances, which for the last question completes the
+    // section. That is what the timing spec asks for and what the resolver
+    // already does server-side.
+    if (!questionTimeLimit || !currentServedAt) {
       setQSecondsLeft(null);
       return;
     }
-    const deadline = Date.parse(currentServedAt) + questionTimeLimit * 1000;
+    const deadline = Date.parse(currentServedAt)
+      + questionTimeLimit * 1000
+      + questionGraceSeconds * 1000;
     let fired = false;
     const tick = () => {
       const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
@@ -1740,7 +1758,7 @@ export function ExamShell() {
     tick();
     const iv = setInterval(tick, 500);
     return () => clearInterval(iv);
-  }, [questionTimeLimit, currentServedAt, isLastQuestion, handleLinearNext]);
+  }, [questionTimeLimit, currentServedAt, questionGraceSeconds, handleLinearNext]);
 
   // Flush pending answers the instant a freeze lands, so nothing sitting in the
   // 1.5 s debounce window is lost if the paused tab is later closed.
@@ -2467,11 +2485,46 @@ export function ExamShell() {
       currentSection ? attempt?.sectionTimings?.[currentSection.id]?.startedAt : undefined,
     );
     if (!expired) return;
-    if (expired === 'section') {
-      doSectionSubmit('time_expired');
-      return;
-    }
-    handleFinalSubmit('time_expired');
+
+    // ── The server decides what expiry MEANS (D1 / D4, Phase 3d) ────
+    //
+    // The tick above is local — a countdown has to be, or it stutters. The
+    // CONSEQUENCE is not: the shell used to read its own copy of the rules and
+    // act, which is how it came to disagree with the server about question
+    // grace and about what a section running out should do.
+    //
+    // Now the local reading only decides WHEN to ask. getExamVerdict answers
+    // from the same resolver the server enforces with, so the student's screen
+    // and the write gate cannot reach different conclusions.
+    //
+    // Fails soft on purpose: a verdict we cannot fetch falls back to the local
+    // reading, which is what ran exclusively until this phase. An unreachable
+    // endpoint must never strand a student on a dead countdown.
+    let cancelled = false;
+    (async () => {
+      const res = await getExamVerdict(attempt.id);
+      if (cancelled) return;
+
+      if (!res) {
+        if (expired === 'section') doSectionSubmit('time_expired');
+        else handleFinalSubmit('time_expired');
+        return;
+      }
+
+      const v = res.verdict;
+      if (v.kind === 'ended') {
+        handleFinalSubmit('time_expired');
+        return;
+      }
+      // Anything else means the student still has somewhere to go. Advancing
+      // the section is the move for every one of them — the break, choose and
+      // next-section paths all begin with the current section being submitted.
+      if (expired === 'section' || v.kind === 'break' || v.kind === 'choose'
+          || v.kind === 'section' || v.kind === 'question') {
+        doSectionSubmit('time_expired');
+      }
+    })();
+    return () => { cancelled = true; };
   }, [shellStatus, attempt, handleFinalSubmit, doSectionSubmit, currentSection]);
 
   // ══════════════════════════════════════════════════════════════════

@@ -498,6 +498,15 @@ export type Assessment = {
   // before the server rejects a late submit. undefined = default (30 s).
   // Enforced server-side in the submitSection Cloud Function.
   sectionGraceSeconds?: number;
+  /**
+   * Seconds of grace on the per-question clock (sequential delivery).
+   *
+   * D-14: the server allowed `qLimit + 5` while the client allowed
+   * `qLimit + 0`, so the client auto-advanced five seconds before the server
+   * would even flag the answer as late. One number now, read by both sides.
+   * Undefined falls back to the shared default of 5.
+   */
+  questionGraceSeconds?: number;
 
   // ── Security tier (Phase 0) ───────────────────────────────────────
   // Editable freely UNTIL the first attempt starts; frozen thereafter

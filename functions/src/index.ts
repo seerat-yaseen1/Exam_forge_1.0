@@ -4961,6 +4961,188 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
 );
 
 // ══════════════════════════════════════════════════════════════════
+// PHASE 4.2 — SAVE WITHOUT ADVANCING  (sequential delivery)
+//
+// WHY THIS EXISTS
+// In linear/adaptive the ONLY route an answer has to the server is
+// submitAnswerAndAdvance, and firestore.rules reject a direct client write.
+// That function does not merely save — it LOCKS the answered question and
+// SERVES the next one. So there has been no way to persist the selection in
+// front of a student without also moving them past it.
+//
+// Three things need exactly that:
+//
+//   1. FREEZE (FREEZE_AND_ROADMAP A2 step 1). The first thing that must happen
+//      when an invigilator pauses a sitting is "their answer is saved".
+//      Advancing a student you have just paused would be a worse bug than the
+//      one being fixed — ExamShell said so in as many words, which is why
+//      flushAnswers() returned early for sequential modes and the current
+//      selection was simply lost on freeze.
+//   2. ANSWER DURABILITY (Part B / D-31). The retry-and-sweep layer needs a
+//      commit that is safe to call repeatedly.
+//   3. Ordinary crash resilience: a browser that dies between being served a
+//      question and advancing past it currently loses the selection entirely.
+//
+// WHAT IT DELIBERATELY DOES NOT DO
+//   • does not set `locked` on the served entry
+//   • does not append a new served question
+//   • does not touch sectionTimings, currentSectionIdx, or any lock field
+//
+// It writes exactly two keys: `answers.{questionId}` and `updatedAt`, both as
+// dot-paths, so it cannot disturb neighbouring state even if a future edit is
+// careless. Calling it twice is harmless — the second write overwrites the
+// first with the same shape.
+//
+// LATE ANSWERS
+// Recorded and flagged, never rejected — byte-for-byte the policy
+// submitAnswerAndAdvance already applies, including the same `qLimit + 5`
+// latency grace, so the two cannot disagree about what "late" means. A lag
+// spike must not cost a student their work.
+//
+// NOT FOR STANDARD DELIVERY. Standard-mode answers are a direct, rules-gated
+// client write, which the master plan's trust-boundary table blesses
+// explicitly. Routing a whole cohort's 1.5s autosaves through a callable
+// instead would be a large capacity change for no security gain.
+// ══════════════════════════════════════════════════════════════════
+
+interface SaveAnswerNoAdvanceData {
+  attemptId: string;
+  sebToken?: string;
+  /** Phase 2 — the browser session driving this sitting (INV-5a). */
+  sessionId?: string;
+  questionId: string;
+  /**
+   * The student's current selection.
+   *
+   * `null` is a NO-OP here, not a recorded non-answer. This differs from
+   * submitAnswerAndAdvance on purpose: there, null means "the per-question
+   * timer expired and they are moving on regardless", which is a real event
+   * worth recording as unanswered. Here it means "nothing is selected yet",
+   * and writing a blank would put a fake `answeredAt` on a question the
+   * student has not answered.
+   */
+  answer: { type: string; value: unknown } | null;
+}
+
+export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
+  // Born with capacity settings (D-19). Every sequential-mode student will hit
+  // this on a debounce plus a periodic durability sweep, so it carries
+  // strictly MORE traffic than submitAnswerAndAdvance, which it sits beside.
+  // Retrofitting capacity onto a hot-path callable after the fact is the
+  // mistake D-19 records; this one does not repeat it. EXAM_HOT_PATH also
+  // carries SEB_SIGNING_SECRET, without which assertSEB fails closed.
+  EXAM_HOT_PATH,
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const role      = request.auth.token.role      as string | undefined;
+    const studentId = request.auth.token.studentId as string | undefined;
+    if (role !== 'student' || !studentId) {
+      throw new HttpsError('permission-denied', 'Only students may answer.');
+    }
+    const { attemptId, questionId, answer, sebToken } =
+      request.data || ({} as SaveAnswerNoAdvanceData);
+    if (!attemptId || !questionId) {
+      throw new HttpsError('invalid-argument', 'attemptId and questionId are required.');
+    }
+
+    const db = getFirestore();
+    const attemptRef = db.collection('attempts').doc(attemptId);
+    const attemptSnap = await attemptRef.get();
+    if (!attemptSnap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const attempt = attemptSnap.data() as {
+      studentId: string;
+      status: string;
+      assessmentId: string;
+      servedQuestions?: Array<{
+        questionId: string; sectionId: string; difficulty: string;
+        servedAt: string; locked: boolean;
+      }>;
+      securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
+      activeSessionId?: string | null;
+    };
+
+    if (attempt.studentId !== studentId) {
+      throw new HttpsError('permission-denied', 'Not your attempt.');
+    }
+    assertSession(attempt, request.data?.sessionId, 'saveAnswerNoAdvance');
+
+    // ── `frozen` is accepted, and that is the entire point ──────────
+    //
+    // The two freeze mechanisms differ in shape: freezeAttempt opens a ledger
+    // entry and leaves `status` at 'in_progress', while reportExtensionCheck
+    // writes status:'frozen'. More importantly, the client learns of a freeze
+    // through its Firestore subscription — so by the time it flushes, the
+    // freeze has ALREADY landed. Refusing a frozen attempt would fail this
+    // call at precisely the moment it exists to succeed.
+    //
+    // Terminal attempts are still refused: nothing may be written to a sitting
+    // that has been graded (INV-6).
+    if (attempt.status !== 'in_progress' && attempt.status !== 'frozen') {
+      throw new HttpsError('failed-precondition', 'Attempt is not live.');
+    }
+    assertSEB(sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
+
+    const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
+    if (dMode !== 'linear' && dMode !== 'adaptive') {
+      throw new HttpsError('failed-precondition',
+        'This exam uses standard delivery; answers are saved directly.');
+    }
+
+    // Same gate as submitAnswerAndAdvance: the question must be the current
+    // served, unlocked one. A locked question is finished and must never be
+    // rewritten; an unserved question is one the client should not know about.
+    const served = attempt.servedQuestions ?? [];
+    const current = served.length > 0 ? served[served.length - 1] : undefined;
+    if (!current || current.questionId !== questionId || current.locked === true) {
+      throw new HttpsError('failed-precondition',
+        'QUESTION_LOCKED: you cannot answer this question.');
+    }
+
+    // Nothing selected. Not an error: the durability sweep is allowed to call
+    // this speculatively, and a student clearing their choice is legitimate.
+    // Reported honestly as `saved: false` rather than a fake success (D7).
+    if (!answer || typeof answer.type !== 'string') {
+      return { ok: true, saved: false, savedAt: null, lateAnswer: false };
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    const assessment = aSnap.exists ? (aSnap.data() as GradingAssessmentDoc) : undefined;
+    // D-21: reuses the read above — no extra cost. Kept identical to
+    // submitAnswerAndAdvance deliberately; whether a blocked student may still
+    // SAVE work they had already done is N5's to decide, and this function
+    // must not quietly answer it differently from its sibling.
+    assertNotBlocked(assessment as { blockedStudents?: string[] } | undefined, studentId);
+    const sectionsNorm = assessment ? normalizeSections(assessment) : [];
+    const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
+    const qLimit = secDef?.questionTimeLimit;
+    let lateAnswer = false;
+    if (typeof qLimit === 'number' && qLimit > 0) {
+      const elapsedSec = (Date.parse(nowIso) - Date.parse(current.servedAt)) / 1000;
+      if (elapsedSec > qLimit + 5) lateAnswer = true; // 5s grace for latency
+    }
+
+    // Firestore rejects `undefined`, so a missing value is normalised to null.
+    await attemptRef.update({
+      [`answers.${questionId}`]: {
+        type: answer.type,
+        value: answer.value === undefined ? null : answer.value,
+        sectionId: current.sectionId,
+        answeredAt: nowIso,
+        ...(lateAnswer ? { lateAnswer: true } : {}),
+      },
+      updatedAt: nowIso,
+    });
+
+    // savedAt is echoed back so the client's durability layer (Phase 4.1) can
+    // mark this exact selection confirmed rather than assuming the request it
+    // sent was the one that landed.
+    return { ok: true, saved: true, savedAt: nowIso, lateAnswer };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
 // PHASE 3 — SEB DIAGNOSTIC (Stage 1; temporary, webOwner-only)
 //
 // Enforcement is NOT written yet, on purpose. Two things cannot be settled

@@ -838,6 +838,54 @@ export async function submitAnswerAndAdvance(params: {
   })).data);
 }
 
+// ── Phase 4.2: commit a sequential answer WITHOUT advancing ───────
+/**
+ * Persist the current question's answer and nothing else.
+ *
+ * The sibling of submitAnswerAndAdvance, and the distinction is the whole
+ * point: that one saves, LOCKS the question and SERVES the next one. This one
+ * only saves. No lock, no serve, no timing write.
+ *
+ * Why it had to exist: in linear/adaptive an answer's only route to the server
+ * was submitAnswerAndAdvance, because firestore.rules reject a direct client
+ * write. So the selection sitting in front of a student could not be persisted
+ * without also moving them past it — which meant that when an invigilator
+ * paused a sitting, the honest options were "lose their answer" or "advance
+ * the student you just paused". ExamShell chose the first, deliberately, and
+ * documented why. This removes the choice.
+ *
+ * Callers: the freeze flush, the Phase 4.1 durability layer, and anywhere else
+ * that needs work committed without changing where the student is.
+ *
+ * Accepted while the attempt is `in_progress` OR `frozen` — the client only
+ * learns of a freeze after it has landed, so refusing a frozen attempt would
+ * fail exactly when this matters most.
+ *
+ * `answer: null` is a no-op that returns `saved: false`. It is not an error
+ * and it is not reported as a success either.
+ */
+export async function saveAnswerNoAdvance(params: {
+  attemptId: string;
+  questionId: string;
+  answer: { type: string; value: unknown } | null;
+}): Promise<{
+  ok: true;
+  saved: boolean;
+  /** Server timestamp of the write, or null when nothing was saved. */
+  savedAt: string | null;
+  lateAnswer: boolean;
+}> {
+  const call = httpsCallable<
+    typeof params & { sebToken?: string; sessionId?: string },
+    { ok: true; saved: boolean; savedAt: string | null; lateAnswer: boolean }
+  >(functions, 'saveAnswerNoAdvance');
+  return withSeb(async (sebToken) => (await call({
+    ...params,
+    sebToken,
+    ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+  })).data);
+}
+
 // ── Auto-terminate ────────────────────────────────────────────────
 // Force-submits with 'terminated' status after max violations reached.
 

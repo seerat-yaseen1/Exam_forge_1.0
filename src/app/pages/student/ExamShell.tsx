@@ -46,6 +46,7 @@ import {
   reportExtensionCheck,
   verifyAndResume,
   submitAnswerAndAdvance,
+  saveAnswerNoAdvance,
   type Attempt,
   type AttemptAnswer,
   type AnswerValue,
@@ -460,15 +461,39 @@ function FreezePausedOverlay({ reason }: { reason?: string }) {
           <Flag size={22} strokeWidth={1.5} style={{ color: '#F5DFA0' }} />
         </div>
         <div className="flex flex-col gap-2">
+          {/*
+            COPY IS LOAD-BEARING — read before editing.
+
+            This previously read "Your timer is stopped and no time is being
+            lost", which was false in both directions.
+
+            False today: the DISPLAY pauses (SectionTimer freezes its reference
+            instant on frozenAtISO) but the server-side deadline does not —
+            CONSUME_LEGACY_FROZEN_SECONDS is false and the resolver gives an
+            open freeze no credit. That is D-03 in its original shape, display
+            crediting what the write gate does not, stated to the student in
+            words.
+
+            Still false after 4.3: once freeze really does stop the clocks,
+            how much of the pause comes back is the invigilator's DECISION
+            (FREEZE_AND_ROADMAP A4), and zero is a valid answer. A promise the
+            system cannot keep is exactly the quiet wrongness this project is
+            about, so the copy promises only what is actually guaranteed: the
+            exam is paused, and a person decides what happens next.
+
+            Wording follows A1: "paused by invigilator", never "finished" or
+            "submitted" — a student reads either as final, and it is not.
+          */}
           <p className="text-xs" style={{ color: '#F5DFA0', letterSpacing: '0.12em' }}>
-            EXAM PAUSED
+            ASSESSMENT PAUSED
           </p>
           <p className="text-sm" style={{ color: '#FFFFFF', lineHeight: 1.6 }}>
-            An invigilator has paused your exam.
+            Your assessment has been paused by an invigilator.
           </p>
           <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
-            Your timer is stopped and no time is being lost. Please wait — the exam
-            will resume automatically when the invigilator lifts the pause.
+            Your answers so far have been saved. Please stay on this screen and
+            wait — an invigilator will decide when your assessment resumes and
+            how the paused time is handled. You will be told what was decided.
           </p>
           {reason && (
             <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
@@ -1733,29 +1758,79 @@ export function ExamShell() {
 
     const att = attemptRef.current;
     if (!att) return;
-    // ── D-25: the CURRENT sequential answer is not committed yet ────
+
+    // ── D-25 / Phase 4.2: the CURRENT sequential answer ─────────────
     //
-    // In linear/adaptive, answers reach the server only through
-    // submitAnswerAndAdvance — a direct write is rejected by rules. This
-    // function used to return here, which is correct for every question the
-    // student has already advanced past and WRONG for the one in front of
-    // them: their selection lived only in localAnswers and was discarded the
-    // moment the section or overall clock expired.
+    // In linear/adaptive, answers reach the server only through a callable —
+    // a direct client write is rejected by rules. This function used to RETURN
+    // here, which was correct for every question the student had already
+    // advanced past and WRONG for the one in front of them: their selection
+    // lived only in localAnswers and was discarded the moment the section or
+    // overall clock expired, or a paused tab was closed.
     //
-    // Very reachable — any student still working when time ran out. Same class
-    // of loss as D-01, on a different path, and invisible in exactly the same
-    // way: the UI showed the option selected right up to the submit.
+    // It could not simply call flushSequentialCurrent(), and the old comment
+    // here explained why: that helper uses submitAnswerAndAdvance, which does
+    // not merely save — it LOCKS the question and SERVES the next one.
+    // flushAnswers also runs the instant a FREEZE lands, and moving a student
+    // you have just paused past their question would be a worse bug than the
+    // one being fixed. So the honest options were "lose the answer" or
+    // "advance the frozen student", and it chose the first.
     //
-    // Standard delivery already flushed everything; sequential only needs the
-    // one uncommitted question, because the rest are on the server already.
-    // NOT flushSequentialCurrent() here, deliberately. flushAnswers also runs
-    // when a FREEZE lands, and submitAnswerAndAdvance does not merely save —
-    // it ADVANCES. Pausing a student and moving them past their question would
-    // be a worse bug than the one being fixed. The sequential flush is called
-    // explicitly from the two submit paths instead, where advancing is moot
-    // because the section is ending anyway.
+    // Phase 4.2 removes the dilemma instead of picking a side.
+    // saveAnswerNoAdvance persists the selection and does nothing else, so the
+    // freeze path can finally satisfy FREEZE_AND_ROADMAP A2 step 1 ("their
+    // answer is saved") without advancing anyone.
+    //
+    // NO DOUBLE WRITE on the submit paths. Both of them call
+    // flushSequentialCurrent() first, which locks the question; the
+    // `entry.locked` guard below then makes this a no-op. The two are
+    // complementary, not redundant.
+    //
+    // Still bounded by a timeout: losing one answer is bad, hanging a submit
+    // or a freeze is worse.
     const dMode = att.securityConfig?.deliveryMode;
-    if (dMode === 'linear' || dMode === 'adaptive') return;
+    if (dMode === 'linear' || dMode === 'adaptive') {
+      const qid = currentQIdRef.current;
+      if (!qid || linearAdvancingRef.current) return;
+
+      const entry = (att.servedQuestions ?? []).find((sq) => sq.questionId === qid);
+      if (!entry || entry.locked === true) return;      // already committed
+
+      const ans = localAnswersRef.current[qid];
+      if (!ans || isAnswerEmpty(ans)) return;           // nothing selected
+
+      // CONTAINED, unlike the standard-mode branch below — and the asymmetry
+      // is deliberate.
+      //
+      // flushAnswers runs inside doSectionSubmit and the final submit, whose
+      // catch blocks the submit and shows an error on anything that is not a
+      // closed answer window. That is right for standard mode, where this call
+      // is the ONLY thing carrying the answers. It is wrong here: both submit
+      // paths already ran flushSequentialCurrent, so reaching this line means
+      // that one had already failed, and a second 6s timeout on top would
+      // strand a student whose SECTION CLOCK JUST EXPIRED behind an error
+      // screen. Failing to submit is worse than losing one answer — the same
+      // trade flushSequentialCurrent makes, for the same reason.
+      //
+      // This is not a licence to fail silently (D7). Making an unconfirmed
+      // answer VISIBLE and RETRYABLE is Phase 4.1's whole job, and it needs
+      // the tracking layer to do it properly. Doing half of it here, by
+      // blocking submits, would be worse than waiting.
+      try {
+        await Promise.race([
+          saveAnswerNoAdvance({
+            attemptId: att.id,
+            questionId: qid,
+            answer: { type: ans.type, value: ans.value as unknown },
+          }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
+        ]);
+      } catch (e) {
+        console.error('[ExamShell] sequential answer flush (no-advance) failed', e);
+      }
+      return;
+    }
+
     await saveAnswers(att.id, localAnswersRef.current);
   }, []);
 

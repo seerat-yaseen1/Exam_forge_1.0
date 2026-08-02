@@ -251,7 +251,29 @@ export const FREEZE_CREDIT_EXTENDS_WINDOW = false;
  * `creditedFreezeMs` or `freezes`, credit is always 0 — so the resolver's
  * arithmetic is bit-identical to the computeAttemptLocks it replaces.
  */
-export const CONSUME_LEGACY_FROZEN_SECONDS = false;
+export const CONSUME_LEGACY_FROZEN_SECONDS = true;   // flipped in Phase 4.3
+
+/*
+ * FLIPPED, and here is the reasoning, because the block above argues the other
+ * way and was right at the time.
+ *
+ * The objection was that consuming totalFrozenSeconds would hand previously
+ * frozen students extra time "for a reason nobody authorised and nobody told
+ * them about". That objection assumed the field was a raw MEASUREMENT of
+ * elapsed pause. It no longer is: unfreezeAttempt writes
+ * `totalFrozenSeconds = creditedFreezeMs / 1000`, so on every Phase 4 attempt
+ * it mirrors GRANTED time — an invigilator's explicit decision, recorded in
+ * the ledger with an actor and a timestamp. Exactly what the block asked for.
+ *
+ * BLAST RADIUS IS BOUNDED AND SMALL. Look at the order in creditedFreezeMs:
+ * this fallback is reached only when an attempt has neither `creditedFreezeMs`
+ * nor a `freezes` array — that is, one frozen before the ledger existed. Those
+ * attempts drain within a single sitting, and for them the flip does not
+ * invent time: it honours the credit their own screen already showed them
+ * while the write gate refused it. That contradiction is D-03. Leaving the
+ * flag false would preserve it for exactly the students who already
+ * experienced it.
+ */
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -338,6 +360,49 @@ export function creditForAnchor(a: CoreAttempt, anchor: TimeInput): number {
     if (startedMs === null) return sum;
     return startedMs >= anchorMs ? sum + Math.max(0, f.grantedMs ?? 0) : sum;
   }, 0);
+}
+
+/**
+ * The instant an OPEN freeze began, or null when the attempt is running.
+ *
+ * "Open" means a ledger entry with no `endedAt`. Such an entry has no
+ * `grantedMs` yet — the grant is the invigilator's decision at unfreeze — so
+ * creditForAnchor contributes exactly 0 for it. That is correct for CREDIT and
+ * useless for PAUSING: it is why, before Phase 4.3, a frozen student's
+ * deadlines went on running server-side while their screen showed a stopped
+ * clock. D-03, one layer down.
+ */
+export function openFreezeStartedMs(a: CoreAttempt): number | null {
+  if (!Array.isArray(a.freezes)) return null;
+  for (const f of a.freezes) {
+    if (f.endedAt) continue;
+    const ms = toMs(f.startedAt);
+    if (ms !== null) return ms;
+  }
+  return null;
+}
+
+/**
+ * The instant the resolver should reason from (Phase 4.3).
+ *
+ * While a freeze is open, time stops at the moment it began. Every clock the
+ * student is racing is compared against this rather than the wall clock, so a
+ * pause is a pause rather than a promise.
+ *
+ * min(nowMs, openStart) — never later than real time. A freeze whose
+ * `startedAt` is in the future (clock skew, a bad write) must not push
+ * deadlines outward; the worst it can do is nothing.
+ *
+ * An unreadable `startedAt` yields null and therefore real time. Credit must
+ * be justified, not assumed — the same rule creditForAnchor applies.
+ *
+ * NOT used for the availability window, deliberately. A10 decided that a
+ * window closing while a student is frozen still finalises the attempt: the
+ * window is the institution's outer wall, not one of the student's clocks.
+ */
+export function effectiveNowMs(a: CoreAttempt, nowMs: number): number {
+  const open = openFreezeStartedMs(a);
+  return open === null ? nowMs : Math.min(nowMs, open);
 }
 
 export function creditedFreezeMs(a: CoreAttempt): number {
@@ -515,6 +580,24 @@ export function resolve(
 ): Verdict {
   const deadlines = computeDeadlines(a, asmt);
 
+  // ── Phase 4.3: an OPEN freeze stops the student's clocks ────────
+  //
+  // Every comparison below that races the STUDENT against a deadline uses
+  // evalNow. While a freeze is open that instant is pinned at the moment the
+  // freeze began, so section, question, overall and break clocks all hold
+  // where they were.
+  //
+  // Before this, freeze paused the DISPLAY and nothing else: the shell froze
+  // its countdown while the server went on advancing toward the same
+  // deadlines, so a student released after ten minutes found their section
+  // already over. That is D-03 — the display crediting what the gate does not.
+  //
+  // The AVAILABILITY WINDOW below deliberately keeps using nowMs. A10 decided
+  // that a window closing during a freeze still finalises the attempt: it is
+  // the institution's outer wall, not one of the student's clocks, and
+  // FREEZE_CREDIT_EXTENDS_WINDOW says the same thing about credit.
+  const evalNow = effectiveNowMs(a, nowMs);
+
   // 1. Terminal attempts are terminal. Nothing below can change that.
   if (isTerminal(a.status)) {
     return { kind: 'ended', reason: 'already_final', deadlines };
@@ -535,7 +618,7 @@ export function resolve(
   }
 
   // 3. Overall clock.
-  if (deadlines.overallEndsAt !== null && nowMs >= deadlines.overallEndsAt) {
+  if (deadlines.overallEndsAt !== null && evalNow >= deadlines.overallEndsAt) {
     return { kind: 'ended', reason: 'overall_expired', deadlines };
   }
 
@@ -544,7 +627,7 @@ export function resolve(
   // On a break: the student is between sections, and the break has its own
   // clock anchored on the PREVIOUS section's submit instant.
   if (!openId) {
-    const brk = pendingBreak(a, asmt, nowMs);
+    const brk = pendingBreak(a, asmt, evalNow);
     if (brk) return { ...brk, deadlines };
   }
 
@@ -552,16 +635,16 @@ export function resolve(
   const sectionExpired =
     openId !== null
     && deadlines.sectionEndsAt !== null
-    && nowMs >= deadlines.sectionEndsAt;
+    && evalNow >= deadlines.sectionEndsAt;
 
   if (sectionExpired) {
-    return afterSection(a, asmt, openId!, nowMs, deadlines);
+    return afterSection(a, asmt, openId!, evalNow, deadlines);
   }
 
   // 5. Question clock (sequential delivery only).
   if (isSequential(asmt) && openId) {
     const qExpired =
-      deadlines.questionEndsAt !== null && nowMs >= deadlines.questionEndsAt;
+      deadlines.questionEndsAt !== null && evalNow >= deadlines.questionEndsAt;
     if (qExpired) {
       const sec = sectionById(asmt, openId);
       const cur = currentServed(a);
@@ -572,7 +655,7 @@ export function resolve(
       // section running out. The old client simply switched the clock off
       // there — `if (... || isLastQuestion) { setQSecondsLeft(null); return; }`
       // — so the final question of every section was untimed.
-      if (isLastInSection) return afterSection(a, asmt, openId, nowMs, deadlines);
+      if (isLastInSection) return afterSection(a, asmt, openId, evalNow, deadlines);
 
       const nextQid = sec!.questionIds[idx + 1];
       return {

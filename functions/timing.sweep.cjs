@@ -488,6 +488,83 @@ regression('freeze credit applies only to clocks that were running', () => {
     'a pause inside the section IS credited to it');
 });
 
+// ── Phase 4.3 · an OPEN freeze stops the student's clocks ─────────
+//
+// Every freeze this file generated before now was CLOSED. So the whole open-
+// freeze path — the one 4.3 adds — was unexercised, and a green sweep said
+// nothing about it. These four cover it.
+
+regression('4.3 · an open freeze holds the section clock', () => {
+  const asmt = {
+    sections: [{ id: 'A', timeLimit: 5, questionIds: ['a1'] }],
+    sectionGraceSeconds: 0, overallGraceSeconds: 0, deliveryMode: 'standard',
+  };
+  const base = {
+    status: 'in_progress', sectionIds: ['A'], startedAt: iso(T0),
+    sectionTimings: { A: { startedAt: iso(T0) } },
+    servedQuestions: [], answers: {},
+  };
+  // Frozen one minute in; the section would otherwise die at T0+5m.
+  const frozen = { ...base, freezes: [{ id: 'f1', startedAt: iso(T0 + min(1)) }] };
+
+  // An hour of wall clock later, the student is still mid-section.
+  const v = C.resolve(frozen, asmt, T0 + min(60));
+  assert.notStrictEqual(v.kind, 'ended',
+    'a frozen student must not expire while the pause is still open');
+
+  // Same attempt without the freeze IS over — proving the pause did the work.
+  const v2 = C.resolve(base, asmt, T0 + min(60));
+  assert.strictEqual(v2.kind, 'ended',
+    'control: unfrozen, the same clock has run out');
+});
+
+regression('4.3 · an open freeze does NOT hold the availability window (A10)', () => {
+  const asmt = {
+    sections: [{ id: 'A', timeLimit: 5, questionIds: ['a1'] }],
+    endDate: iso(T0 + min(30)),
+    sectionGraceSeconds: 0, overallGraceSeconds: 0, deliveryMode: 'standard',
+  };
+  const frozen = {
+    status: 'in_progress', sectionIds: ['A'], startedAt: iso(T0),
+    sectionTimings: { A: { startedAt: iso(T0) } },
+    servedQuestions: [], answers: {},
+    freezes: [{ id: 'f1', startedAt: iso(T0 + min(1)) }],
+  };
+  const v = C.resolve(frozen, asmt, T0 + min(31));
+  assert.strictEqual(v.kind, 'ended', 'the window still closes');
+  assert.strictEqual(v.reason, 'window_closed',
+    'and for the window reason — the outer wall is not one of the student\'s clocks');
+});
+
+regression('4.3 · a freeze starting in the future cannot push deadlines out', () => {
+  const asmt = {
+    sections: [{ id: 'A', timeLimit: 5, questionIds: ['a1'] }],
+    sectionGraceSeconds: 0, overallGraceSeconds: 0, deliveryMode: 'standard',
+  };
+  // Clock skew or a bad write: startedAt is AHEAD of now.
+  const skewed = {
+    status: 'in_progress', sectionIds: ['A'], startedAt: iso(T0),
+    sectionTimings: { A: { startedAt: iso(T0) } },
+    servedQuestions: [], answers: {},
+    freezes: [{ id: 'f1', startedAt: iso(T0 + min(600)) }],
+  };
+  assert.strictEqual(C.effectiveNowMs(skewed, T0 + min(60)), T0 + min(60),
+    'min(now, freezeStart) — a future freeze is worth nothing, never negative time');
+  assert.strictEqual(C.resolve(skewed, asmt, T0 + min(60)).kind, 'ended',
+    'so the section still expires normally');
+});
+
+regression('4.3 · an unreadable freeze start falls back to real time', () => {
+  const a = {
+    status: 'in_progress', sectionIds: [], sectionTimings: {},
+    freezes: [{ id: 'f1', startedAt: 'not-a-date' }],
+  };
+  assert.strictEqual(C.openFreezeStartedMs(a), null,
+    'unparseable means unknown');
+  assert.strictEqual(C.effectiveNowMs(a, T0 + min(5)), T0 + min(5),
+    'and unknown means real time — a pause must be provable, not assumed');
+});
+
 regression('INV-6 · nothing leaves a terminal state', () => {
   const before = { status: 'submitted', sectionIds: [], sectionTimings: {} };
   const after = { status: 'in_progress', sectionIds: [], sectionTimings: {} };

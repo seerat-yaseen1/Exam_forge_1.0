@@ -33,6 +33,8 @@ import { defineSecret } from 'firebase-functions/params';
 import {
   sectionDeadlineMs,
   overallDeadlineMs,
+  creditForAnchor,
+  openSectionId,
   resolve as resolveTiming,
   checkInvariants as checkTimingInvariants,
   type CoreAssessment,
@@ -5795,8 +5797,25 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
       const att = snap.data() as {
         instituteId?: string; frozenAt?: string | null;
         freezes?: FreezeLedgerEntry[]; totalFrozenSeconds?: number;
+        // Phase 4.3 — needed to re-materialise the lock once credit is granted.
+        assessmentId?: string; startedAt?: string;
+        sectionTimings?: Record<string, { startedAt?: string; submittedAt?: string }>;
       };
       const actor = assertInvigilator(request, att);
+
+      // Read before write — Firestore transactions require it, and the update
+      // below is the only write. `{}` when the assessment is missing: an
+      // untimed result is the safe direction, never a thrown unfreeze. An
+      // invigilator must always be able to release a student.
+      const lockSnap = att.assessmentId
+        ? await txn.get(db.collection('assessments').doc(att.assessmentId))
+        : null;
+      const lockA = (lockSnap?.data() ?? {}) as {
+        sections?: Array<{ id: string; timeLimit?: number }>;
+        sectionGraceSeconds?: number;
+        overallTimeLimit?: number;
+        overallGraceSeconds?: number;
+      };
 
       const ledger = [...(att.freezes ?? [])];
       const idx = ledger.findIndex((f) => !f.endedAt);
@@ -5833,7 +5852,38 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
       const creditedFreezeMs = ledger.reduce(
         (sum, f) => sum + Math.max(0, f.grantedMs ?? 0), 0);
 
-      txn.update(ref, {
+      // ── Phase 4.3: GIVE THE TIME BACK ───────────────────────────
+      //
+      // Doctrine D5: the materialised lock is a CACHE, and every event that
+      // changes an input must recompute it. Granting credit changes an input.
+      //
+      // Without this the whole feature is decorative. The ledger recorded the
+      // grant, creditedFreezeMs rose, getExamVerdict credited it — and
+      // answersLockedAfter, the field firestore.rules actually enforces, kept
+      // its pre-freeze value. The student would be released to a section that
+      // had already ended, holding a receipt for time nothing would honour.
+      //
+      // Recomputed from the ledger AFTER the entry is closed, so the credit
+      // the invigilator just granted is included. `openSectionIso` is the
+      // section the student is actually in — the same bound startSection and
+      // submitSection materialise, so all three agree.
+      const creditedAttempt = {
+        ...(toCoreAttempt(att as unknown as Record<string, unknown>)),
+        freezes: ledger,
+        creditedFreezeMs,
+      } as CoreAttempt;
+      // openSectionId is the core's own rule, including the '' startedAt
+      // sentinel. Re-deriving "which section is open" by hand here is exactly
+      // how two expressions of one rule start disagreeing.
+      const openId = openSectionId(creditedAttempt);
+      const openSectionIso = openId
+        ? att.sectionTimings?.[openId]?.startedAt
+        : undefined;
+      const openSectionLimit = openId
+        ? lockA.sections?.find((sec) => sec.id === openId)?.timeLimit
+        : undefined;
+
+      const updates: Record<string, unknown> = {
         freezes: ledger,
         creditedFreezeMs,
         // Legacy field kept in step for one release. Deliberately mirrors
@@ -5843,7 +5893,15 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
         frozenBy: FieldValue.delete(),
         frozenReason: FieldValue.delete(),
         updatedAt: nowIso,
-      });
+      };
+      applyLockUpdates(updates, computeAttemptLocks(
+        att.startedAt as string | undefined,
+        openSectionIso,
+        openSectionLimit,
+        lockA,
+        creditedAttempt,
+      ));
+      txn.update(ref, updates);
 
       return { elapsedMs, grantedMs: granted, creditedFreezeMs, actor };
     });
@@ -6524,6 +6582,17 @@ function computeAttemptLocks(
     overallTimeLimit?: number;
     overallGraceSeconds?: number;
   },
+  /**
+   * The attempt, for freeze credit (Phase 4.3). Optional so every pre-existing
+   * call site keeps compiling; omitting it means zero credit, which is exactly
+   * what this function did before.
+   *
+   * PER CLOCK, never a single total — that was D-28. A ten-minute pause during
+   * section 1 must not be added to a fifteen-second question in section 3.
+   * creditForAnchor gives each bound only the pauses that began after its own
+   * anchor.
+   */
+  creditFrom?: CoreAttempt,
 ): { section: Date | null; overall: Date | null; combined: Date | null } {
   // ── Phase 3b: the arithmetic lives in examTimingCore now ────────
   //
@@ -6556,12 +6625,25 @@ function computeAttemptLocks(
   // knows about both, but adding them to the materialised lock changes what
   // firestore.rules enforces, and that belongs to Phase 5 with its own deploy
   // and its own rollback.
-  const CREDIT_MS = 0;
+  // ── Phase 4.3: freeze credit reaches the WRITE GATE ─────────────
+  //
+  // This was hardcoded to 0, with a note saying crediting frozen time was
+  // "Phase 4's decision to make explicitly". This is that step.
+  //
+  // It matters because answersLockedAfter is what firestore.rules enforces.
+  // The resolver has credited per-clock since D-28, so without this the two
+  // disagreed: getExamVerdict would say a student had four minutes left while
+  // the rules refused their writes. Same rule, two answers — the shape every
+  // timing defect in this system has taken.
+  //
+  // Zero when no attempt is supplied, so untouched callers are unchanged.
+  const sectionCredit = creditFrom ? creditForAnchor(creditFrom, sectionStartedAtIso) : 0;
+  const overallCredit = creditFrom ? creditForAnchor(creditFrom, attemptStartedAtIso) : 0;
   const secMs = sectionDeadlineMs(
-    sectionStartedAtIso, sectionTimeLimitMin, a.sectionGraceSeconds, CREDIT_MS,
+    sectionStartedAtIso, sectionTimeLimitMin, a.sectionGraceSeconds, sectionCredit,
   );
   const ovrMs = overallDeadlineMs(
-    attemptStartedAtIso, a.overallTimeLimit, a.overallGraceSeconds, CREDIT_MS,
+    attemptStartedAtIso, a.overallTimeLimit, a.overallGraceSeconds, overallCredit,
   );
 
   const section = secMs === null ? null : new Date(secMs);

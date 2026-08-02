@@ -1845,7 +1845,13 @@ type AuditActionS =
   | 'requestSubmitted'
   | 'requestApproved'
   | 'requestRejected'
-  | 'erasure';
+  | 'erasure'
+  // Phase 4: a freeze takes time away from a student and a grant gives it
+  // back. Both are authority decisions about someone's exam, so both leave a
+  // record — the same standard already applied to deletion.
+  | 'attemptFrozen'
+  | 'attemptUnfrozen'
+  | 'attemptRewritten';
 
 type SuccessionS = {
   fromOwnerType: 'webOwner' | 'institute' | 'faculty';
@@ -5436,6 +5442,246 @@ interface GetExamVerdictData {
  * `gcloud run services get-iam-policy getexamverdict --region=us-central1`
  * before believing a quiet log.
  */
+// ══════════════════════════════════════════════════════════════════
+// FREEZE AS A LEDGER  (master plan Phase 4, step 1)
+//
+// Freeze used to be a direct client write of four loose fields, and the time
+// it took was never given back — computeAttemptLocks ignored
+// totalFrozenSeconds entirely (D-03). The display credited the pause and the
+// write gate did not, so a student paused for ten minutes saw ten extra
+// minutes and had none. Worse, unfreezeAttempt computed `current + additional`
+// from a total supplied BY THE CLIENT, so stale roster state or two
+// invigilators acting at once made accumulated credit go DOWN (INV-4a).
+//
+// The ledger replaces guesswork with a record. Each freeze is an entry with a
+// MEASURED elapsedMs and a DECIDED grantedMs, and creditedFreezeMs is their
+// sum — one number, consumed uniformly by every deadline.
+//
+// STEP 1 IS ADDITIVE ON PURPOSE. These callables write the ledger AND keep
+// totalFrozenSeconds in step, so nothing that reads the old field breaks. No
+// deadline moves yet: examTimingCore's CONSUME_LEGACY_FROZEN_SECONDS is still
+// false and no attempt carries creditedFreezeMs until an unfreeze runs here.
+// Credit only starts flowing when that constant is flipped, which is the LAST
+// step of this phase — after the invigilator can actually make the decision
+// and the student is told about it. A deadline that moves for a reason nobody
+// authorised is a broken promise even when it moves in the student's favour.
+// ══════════════════════════════════════════════════════════════════
+
+interface FreezeAttemptData {
+  attemptId: string;
+  reason?: string;
+}
+
+type FreezeLedgerEntry = {
+  id: string;
+  startedAt: string;
+  endedAt?: string | null;
+  reason: 'invigilator' | 'extension_check' | 'system';
+  frozenBy?: string | null;
+  /** Measured wall-clock duration of the freeze. */
+  elapsedMs?: number | null;
+  /** Decided credit, 0..elapsedMs. The only figure deadlines consume. */
+  grantedMs?: number | null;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  note?: string | null;
+};
+
+/** Staff who may pause a sitting: webOwner, or the attempt's own tenant. */
+function assertInvigilator(
+  request: { auth?: { token: Record<string, unknown>; uid: string } | null },
+  attempt: { instituteId?: string },
+): { uid: string; role: string } {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+  const role = request.auth.token.role as string | undefined;
+  const instituteId = request.auth.token.instituteId as string | undefined;
+  const ok = role === 'web_owner'
+    || ((role === 'institute' || role === 'faculty') && attempt.instituteId === instituteId);
+  if (!ok) throw new HttpsError('permission-denied', 'Not permitted to invigilate this attempt.');
+  return { uid: request.auth.uid, role: role as string };
+}
+
+/**
+ * Pause a sitting. (Phase 4.)
+ *
+ * Opens a ledger entry. It is CLOSED by unfreezeAttempt, which is where the
+ * credit decision happens — a freeze on its own grants nothing, because
+ * nobody has decided anything yet.
+ */
+export const freezeAttempt = onCall<FreezeAttemptData>(
+  { region: 'us-central1' },
+  async (request) => {
+    const { attemptId, reason } = request.data || ({} as FreezeAttemptData);
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    const db = getFirestore();
+    const ref = db.collection('attempts').doc(attemptId);
+
+    const result = await db.runTransaction(async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+      const att = snap.data() as {
+        instituteId?: string; status?: string; frozenAt?: string | null;
+        freezes?: FreezeLedgerEntry[];
+      };
+      const actor = assertInvigilator(request, att);
+
+      if (att.status !== 'in_progress' && att.status !== 'frozen') {
+        throw new HttpsError('failed-precondition', 'Attempt is not live.');
+      }
+      // Already paused: return the open entry rather than opening a second
+      // one. Two overlapping entries would break INV-4c and double-count.
+      const open = (att.freezes ?? []).find((f) => !f.endedAt);
+      if (open || att.frozenAt) {
+        return { alreadyFrozen: true, entryId: open?.id ?? null };
+      }
+
+      const nowIso = new Date().toISOString();
+      const entry: FreezeLedgerEntry = {
+        id: `fz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        startedAt: nowIso,
+        reason: 'invigilator',
+        frozenBy: actor.uid,
+      };
+
+      txn.update(ref, {
+        freezes: FieldValue.arrayUnion(entry),
+        // Legacy fields kept in step for one release — SectionTimer pauses on
+        // frozenAt, and the roster reads frozenBy/frozenReason.
+        frozenAt: nowIso,
+        frozenBy: actor.uid,
+        ...(reason ? { frozenReason: String(reason).slice(0, 300) } : {}),
+        updatedAt: nowIso,
+      });
+      return { alreadyFrozen: false, entryId: entry.id, actor };
+    });
+
+    if (!result.alreadyFrozen && result.actor) {
+      await writeAuditRow(db, {
+        action: 'attemptFrozen',
+        entityType: 'attempt',
+        entityId: attemptId,
+        actorUid: result.actor.uid,
+        actorRole: result.actor.role,
+        reason: reason ?? null,
+      });
+    }
+    return { ok: true, ...result };
+  },
+);
+
+interface UnfreezeAttemptData {
+  attemptId: string;
+  /**
+   * Milliseconds of credit to grant, 0..elapsed. REQUIRED — there is no
+   * default, because "how much of this pause was the student's fault" is a
+   * judgement the system cannot make for the invigilator. The UI pre-fills the
+   * full elapsed time; accepting zero is deliberate and must be explicit.
+   */
+  grantedMs: number;
+  note?: string;
+}
+
+/**
+ * Resume a sitting, deciding how much of the pause to give back. (Phase 4.)
+ *
+ * WHY THE TOTAL IS COMPUTED HERE AND NOT PASSED IN
+ * The old client call took `currentTotalFrozenSeconds` as an argument and
+ * wrote `current + additional`. Stale roster state — or two invigilators on
+ * the same attempt — therefore made accumulated credit DECREASE, which is
+ * INV-4a. Inside this transaction the total is derived from the ledger, so it
+ * cannot regress no matter who calls it or how stale their screen is.
+ */
+export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
+  { region: 'us-central1' },
+  async (request) => {
+    const { attemptId, grantedMs, note } = request.data || ({} as UnfreezeAttemptData);
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+    if (typeof grantedMs !== 'number' || !Number.isFinite(grantedMs) || grantedMs < 0) {
+      throw new HttpsError('invalid-argument', 'grantedMs must be a number >= 0.');
+    }
+
+    const db = getFirestore();
+    const ref = db.collection('attempts').doc(attemptId);
+
+    const result = await db.runTransaction(async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+      const att = snap.data() as {
+        instituteId?: string; frozenAt?: string | null;
+        freezes?: FreezeLedgerEntry[]; totalFrozenSeconds?: number;
+      };
+      const actor = assertInvigilator(request, att);
+
+      const ledger = [...(att.freezes ?? [])];
+      const idx = ledger.findIndex((f) => !f.endedAt);
+      const startedAtIso = idx >= 0 ? ledger[idx].startedAt : att.frozenAt;
+      if (!startedAtIso) {
+        throw new HttpsError('failed-precondition', 'Attempt is not frozen.');
+      }
+
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const startMs = Date.parse(startedAtIso);
+      const elapsedMs = Number.isFinite(startMs) ? Math.max(0, nowMs - startMs) : 0;
+      // Cannot grant more than actually elapsed (INV-4c). Over-granting would
+      // let an invigilator hand out arbitrary time through a field meant to
+      // record one.
+      const granted = Math.min(Math.round(grantedMs), elapsedMs);
+
+      const closed: FreezeLedgerEntry = {
+        ...(idx >= 0 ? ledger[idx] : {
+          id: `fz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          startedAt: startedAtIso, reason: 'invigilator' as const,
+        }),
+        endedAt: nowIso,
+        elapsedMs,
+        grantedMs: granted,
+        decidedBy: actor.uid,
+        decidedAt: nowIso,
+        ...(note ? { note: String(note).slice(0, 500) } : {}),
+      };
+      if (idx >= 0) ledger[idx] = closed; else ledger.push(closed);
+
+      // Derived from the ledger, never incremented from a caller-supplied
+      // total. This is what makes INV-4a hold by construction.
+      const creditedFreezeMs = ledger.reduce(
+        (sum, f) => sum + Math.max(0, f.grantedMs ?? 0), 0);
+
+      txn.update(ref, {
+        freezes: ledger,
+        creditedFreezeMs,
+        // Legacy field kept in step for one release. Deliberately mirrors
+        // GRANTED time, not elapsed — it is about to become the credit figure.
+        totalFrozenSeconds: Math.round(creditedFreezeMs / 1000),
+        frozenAt: FieldValue.delete(),
+        frozenBy: FieldValue.delete(),
+        frozenReason: FieldValue.delete(),
+        updatedAt: nowIso,
+      });
+
+      return { elapsedMs, grantedMs: granted, creditedFreezeMs, actor };
+    });
+
+    await writeAuditRow(db, {
+      action: 'attemptUnfrozen',
+      entityType: 'attempt',
+      entityId: attemptId,
+      actorUid: result.actor.uid,
+      actorRole: result.actor.role,
+      reason: note ?? null,
+      impact: { elapsedMs: result.elapsedMs, grantedMs: result.grantedMs },
+    });
+
+    return {
+      ok: true,
+      elapsedMs: result.elapsedMs,
+      grantedMs: result.grantedMs,
+      creditedFreezeMs: result.creditedFreezeMs,
+    };
+  },
+);
+
 export const getExamVerdict = onCall<GetExamVerdictData>(
   EXAM_HOT_PATH,
   async (request) => {

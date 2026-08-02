@@ -432,6 +432,34 @@ function isAnswerEmpty(ans: AttemptAnswer | undefined): boolean {
   return !(ans.value as string);
 }
 
+/**
+ * A stable identity for an answer's CONTENT (Phase 4.1, D-31).
+ *
+ * Durability turns on one question: does the server hold what the student is
+ * looking at? Comparing the answer objects cannot tell us — `answeredAt` is
+ * stamped fresh on every keystroke, so two identical selections never look
+ * equal. Comparing only type and value does.
+ *
+ * Object values (match questions) have their keys sorted first. Two
+ * semantically identical maps built in different orders would otherwise
+ * fingerprint differently and show as permanently unsaved, and the sweep would
+ * re-send them forever. Arrays are left alone: for a multi-select the order is
+ * the student's, not ours to normalise.
+ *
+ * Empty answers fingerprint as '' and are never counted as unsaved. A student
+ * who has not answered has nothing at risk.
+ */
+function answerFingerprint(ans: AttemptAnswer | undefined): string {
+  if (!ans || isAnswerEmpty(ans)) return '';
+  const v = ans.value;
+  const norm =
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.keys(v as Record<string, string>).sort()
+          .map((k) => [k, (v as Record<string, string>)[k]])
+      : v;
+  return JSON.stringify([ans.type, norm]);
+}
+
 // ══════════════════════════════════════════════════════════════════
 // FREEZE PAUSED OVERLAY  (blocking — exam is halted, clock is paused)
 // ══════════════════════════════════════════════════════════════════
@@ -1061,6 +1089,57 @@ export function ExamShell() {
   const frozenOffsetRef = useRef(0);
   useEffect(() => { frozenOffsetRef.current = totalFrozenSeconds; }, [totalFrozenSeconds]);
 
+  // ── Phase 4.1: what the SERVER holds ────────────────────────────
+  //
+  // questionId -> answerFingerprint of the value the server has confirmed.
+  // The whole of answer durability is the gap between this and localAnswers:
+  // anything present locally and absent here is at risk, and that gap is what
+  // the sweep closes and the indicator reports.
+  //
+  // D-31 was that nothing tracked this at all. Standard mode fired a debounced
+  // write and moved on; a failure logged to console and the student's screen
+  // went on showing an answer the server had never received.
+  const [confirmedAnswers, setConfirmedAnswers] = useState<Record<string, string>>({});
+  /**
+   * Set when a submit went ahead with answers still unconfirmed (B3).
+   *
+   * Held separately from errorMsg on purpose: errorMsg means "this did not
+   * happen", and here it did. The submit succeeded and the student needs to
+   * know something was lost with it, not be told the opposite.
+   */
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  // Read inside the submit callback, which closes over [] — state would be
+  // stale there, and this is set moments earlier in the same call.
+  const saveWarningRef = useRef<string | null>(null);
+  useEffect(() => { saveWarningRef.current = saveWarning; }, [saveWarning]);
+  const confirmedRef = useRef<Record<string, string>>({});
+  useEffect(() => { confirmedRef.current = confirmedAnswers; }, [confirmedAnswers]);
+
+  /**
+   * Fold a set of server-held answers into the confirmed map.
+   *
+   * Called from three places, and the redundancy is the point:
+   *   • the attempt snapshot — AUTHORITATIVE, this is literally the stored doc
+   *   • initial load — same, for the first paint
+   *   • a successful write — optimistic, so the indicator settles immediately
+   *     instead of flickering "unsaved" until the snapshot returns
+   *
+   * Merge, never replace. A snapshot that has not yet caught up with a write
+   * we just made must not un-confirm it.
+   */
+  const confirmFromServer = useCallback((serverAnswers: Record<string, AttemptAnswer> | undefined) => {
+    if (!serverAnswers) return;
+    setConfirmedAnswers((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [qid, ans] of Object.entries(serverAnswers)) {
+        const fp = answerFingerprint(ans);
+        if (fp && next[qid] !== fp) { next[qid] = fp; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
   // Synchronous submit lock. shellStatus updates asynchronously, so two triggers
   // firing in the same tick (e.g. timer expiry + click, or window_closed + manual
   // submit on the last section) can both pass the status check. This ref latches
@@ -1378,6 +1457,9 @@ export function ExamShell() {
         setAssessment(a);
         setEffectiveSections(effSections);
         setAttempt(att);
+        // Phase 4.1: seed confirmations from what the server already holds, so
+        // a resumed sitting does not open reporting every prior answer unsaved.
+        confirmFromServer(att.answers);
         setQuestionMap(qMap);
         setMarksMap(mMap);
         setLocalAnswers({ ...att.answers });
@@ -1538,6 +1620,11 @@ export function ExamShell() {
       // Freeze — invigilator pause: the exam halts and the clock stops.
       // totalFrozenSeconds (credited paused time) always tracks the live doc so
       // the timer resumes fairly the moment the invigilator unfreezes.
+      // Phase 4.1: the stored doc IS the definition of "saved". Reconciling
+      // here means the indicator self-heals no matter WHY client and server
+      // diverged — a failed write, a dropped acknowledgement, or a bug we have
+      // not found. It never needs to know the cause.
+      confirmFromServer(live.answers);
       setTotalFrozenSeconds(live.totalFrozenSeconds ?? 0);
       if (live.frozenAt) {
         setIsFrozen(true);
@@ -1690,7 +1777,7 @@ export function ExamShell() {
     : currentQIdx >= currentSectionQIds.length - 1;
   isLastQuestionRef.current = isLastQuestion;
 
-  // ── Count unanswered in current section ────────────────────────
+  // ── Count unanswered in current section ─────────────────────────
 
   const unansweredInSection = useMemo(() => {
     return currentSectionQIds.filter((qId) => isAnswerEmpty(localAnswers[qId])).length;
@@ -1759,13 +1846,64 @@ export function ExamShell() {
     const timer = setTimeout(async () => {
       try {
         await saveAnswer(attemptRef.current!.id, questionId, answer);
+        // Phase 4.1: optimistic confirmation. The snapshot will assert the same
+        // thing shortly, but waiting for it would flash "1 unsaved" after every
+        // successful keystroke.
+        setConfirmedAnswers((prev) => ({ ...prev, [questionId]: answerFingerprint(answer) }));
       } catch (e) {
-        console.error('[ExamShell] saveAnswer failed', e);
+        // Deliberately NOT retried here (B2). The 20-30s sweep re-sends
+        // anything still unconfirmed, and it self-heals regardless of WHY
+        // client and server diverged — a failed write, a lost acknowledgement,
+        // or a bug not yet found. A per-write retry only fixes the first of
+        // those, and adds a second retry policy to keep in step with this one.
+        //
+        // What changed from D-31 is not the logging, it is that the failure is
+        // now VISIBLE: the fingerprint stays unconfirmed, so the indicator
+        // reports it and the sweep will act on it.
+        console.error('[ExamShell] saveAnswer failed (left unconfirmed for sweep)', e);
       }
       answerTimersRef.current.delete(questionId);
     }, 1500);
     answerTimersRef.current.set(questionId, timer);
   }, [questionMap, currentSection]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // PHASE 4.1 — ANSWER DURABILITY  (D-31)
+  //
+  // Three layers, one mechanism (B2):
+  //
+  //   per change   1.5s debounce, in handleAnswer above  — primary
+  //   sweep        every 25s, ONLY when something is unconfirmed — backstop
+  //   page hide    tab closing — last push
+  //
+  // Freeze is a fourth trigger on the same machinery, not a separate feature
+  // (B5); flushAnswers is already wired into the freeze effect.
+  //
+  // Deliberately NOT offline persistence (B4). It would survive a browser
+  // restart, but it also parks the question paper and the student's answers in
+  // storage on their own machine. On a high-stakes exam that is a leak
+  // surface, and retry-and-flush gets most of the benefit without it.
+  // ══════════════════════════════════════════════════════════════════
+
+  /**
+   * Answers the student can see that the server has not confirmed.
+   *
+   * Empty answers never count: nothing selected is nothing at risk. In
+   * sequential delivery this is 0 or 1, because everything before the open
+   * question is locked server-side and therefore confirmed by definition.
+   */
+  const unsavedCount = useMemo(() => {
+    let n = 0;
+    for (const [qid, ans] of Object.entries(localAnswers)) {
+      const fp = answerFingerprint(ans);
+      if (!fp) continue;
+      if (confirmedAnswers[qid] !== fp) n += 1;
+    }
+    return n;
+  }, [localAnswers, confirmedAnswers]);
+
+  const unsavedCountRef = useRef(0);
+  useEffect(() => { unsavedCountRef.current = unsavedCount; }, [unsavedCount]);
 
   // Flush all pending answer saves immediately — as ONE write. The previous
   // version fired one updateDoc per answered question in parallel against the
@@ -1873,22 +2011,92 @@ export function ExamShell() {
       // the tracking layer to do it properly. Doing half of it here, by
       // blocking submits, would be worse than waiting.
       try {
-        await Promise.race([
+        const res = await Promise.race([
           saveAnswerNoAdvance({
             attemptId: att.id,
             questionId: qid,
             answer: { type: ans.type, value: ans.value as unknown },
           }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
         ]);
+        // Only on `saved: true`. A no-op response means the server wrote
+        // nothing, and calling that confirmed would be exactly the lie D-31
+        // was (Phase 4.1).
+        if (res && res.saved) {
+          setConfirmedAnswers((prev) => ({ ...prev, [qid]: answerFingerprint(ans) }));
+        }
       } catch (e) {
         console.error('[ExamShell] sequential answer flush (no-advance) failed', e);
       }
       return;
     }
 
-    await saveAnswers(att.id, localAnswersRef.current);
+    // Standard delivery: one write carrying every answer, then confirm the
+    // lot. Deliberately sends ALL of them rather than only the unconfirmed —
+    // it is a single updateDoc either way, and on a submit path the safest
+    // payload is the complete one. The SWEEP is where being selective matters,
+    // and it is selective by only running at all when something is unconfirmed
+    // (B2).
+    const snapshot = { ...localAnswersRef.current };
+    await saveAnswers(att.id, snapshot);
+    setConfirmedAnswers((prev) => {
+      const next = { ...prev };
+      for (const [qid, ans] of Object.entries(snapshot)) {
+        const fp = answerFingerprint(ans);
+        if (fp) next[qid] = fp;
+      }
+      return next;
+    });
   }, []);
+
+  // ── Layer 2: the conditional sweep ──────────────────────────────
+  //
+  // CONDITIONAL IS THE WHOLE DESIGN (B2). Firing regardless would re-send
+  // answers that already landed — pure cost, multiplied by the cohort. Firing
+  // only on a gap makes it free in the normal case and a genuine net when it
+  // is not.
+  //
+  // 25s, not minutes: no answer should sit unconfirmed for longer than about
+  // half a minute. And the per-change save stays primary — a sweep alone would
+  // mean routinely holding answers in the browser for 25 seconds, which is
+  // worse than what shipped.
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (unsavedCountRef.current === 0) return;           // free when all is well
+      if (shellStatusRef.current !== 'ready') return;      // mid-submit or on a break
+      if (submittingRef.current) return;
+      if (isFrozenRef.current) return;                     // the freeze flush owns this
+      void flushAnswers().catch((e) => {
+        console.error('[ExamShell] durability sweep failed', e);
+      });
+    }, 25_000);
+    return () => clearInterval(iv);
+  }, [flushAnswers]);
+
+  // ── Layer 3: the page is going away ─────────────────────────────
+  //
+  // BEST EFFORT, and honestly so. A Firestore write cannot be guaranteed to
+  // leave the tab during teardown — sendBeacon is the only thing that can, and
+  // it cannot speak the Firestore protocol. Not awaited, because nothing will
+  // await it.
+  //
+  // pagehide AND visibilitychange: pagehide is the reliable one on desktop,
+  // while an app switch on mobile often only ever fires visibilitychange. The
+  // flush is idempotent, so firing on both costs nothing.
+  useEffect(() => {
+    const push = () => {
+      if (unsavedCountRef.current === 0) return;
+      void flushAnswers().catch(() => {});
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') push(); };
+    window.addEventListener('pagehide', push);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', push);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [flushAnswers]);
+
 
   // ── Sequential delivery: merge a server-served question (Phase 2.5) ──
   // Puts the content in questionMap AND optimistically records it in
@@ -2156,14 +2364,28 @@ export function ExamShell() {
       // Window closed -> keep going. The submit itself runs through
       // submitSection (Admin SDK, rules do not apply), so the section can
       // still be closed out properly even though this last write was refused.
+      // ── B3: NEVER BLOCK SUBMISSION ON UNSAVED ANSWERS ───────────
+      //
+      // This used to abort the section submit and show an error screen. The
+      // intent was protective — do not grade a stale snapshot — but the effect
+      // was worse than the problem: a student whose section clock had just run
+      // out was stranded behind an error, unable to move on, while the server
+      // went on refusing their writes anyway.
+      //
+      // Try hard, warn clearly, submit anyway. "Try hard" is now real rather
+      // than aspirational: by this point the answer has been through a 1.5s
+      // debounced write, a 25s sweep, a page-hide flush and this final flush.
+      // If it still has not landed, one more error screen will not land it.
+      //
+      // The warning is NOT swallowed — saveWarning surfaces after the submit,
+      // and unsavedCount stays visible in the top bar throughout.
+      submittingRef.current = true;
       if (!isAnswerWindowClosed(e)) {
-        console.error('[ExamShell] flush before section submit failed', e);
-        submittingRef.current = false;
-        setErrorMsg('Could not save your answers. Check your connection and try again.');
-        setShellStatus('error');
-        return;
+        console.error('[ExamShell] flush before section submit failed — submitting anyway (B3)', e);
+        setSaveWarning('Some answers could not be sent before this section closed. Your section has been submitted; please tell your invigilator.');
+      } else {
+        console.warn('[ExamShell] answer window closed before section submit — submitting anyway');
       }
-      console.warn('[ExamShell] answer window closed before section submit — submitting anyway');
     }
 
     const sectionId = currentSection.id;
@@ -2556,14 +2778,22 @@ export function ExamShell() {
     } catch (e) {
       // Same reasoning as the section flush: a closed window must not block
       // finalising. gradeAttempt is a callable and is unaffected by the rule.
+      // B3, same rule as the section path above: a failed flush must not stop
+      // a student finalising. Refusing to submit does not rescue the answer —
+      // it only adds "and the exam never submitted" to "an answer was lost".
+      //
+      // gradeAttempt failing is a DIFFERENT matter and still blocks, correctly:
+      // that one means the sitting genuinely did not finalise, which is
+      // recoverable by retrying. See its own catch below.
+      submittingRef.current = true;
       if (!isAnswerWindowClosed(e)) {
-        console.error('[ExamShell] flush before final submit failed', e);
-        submittingRef.current = false;
-        setErrorMsg('Your answers could not be saved, so the exam was not submitted. Check your connection and press Retry submission.');
-        setShellStatus('submit_failed');
-        return;
+        console.error('[ExamShell] flush before final submit failed — submitting anyway (B3)', e);
+        const w = 'Some answers could not be sent before submission. Your exam has been submitted; please tell your invigilator.';
+        saveWarningRef.current = w;   // same tick as navigate — the effect has not run yet
+        setSaveWarning(w);
+      } else {
+        console.warn('[ExamShell] answer window closed before final submit — submitting anyway');
       }
-      console.warn('[ExamShell] answer window closed before final submit — submitting anyway');
     }
 
     try {
@@ -2610,7 +2840,15 @@ export function ExamShell() {
     }
 
     setShellStatus('submitted');
-    navigate(`/student/exam/${assessmentId}/results`, { replace: true });
+    // B3: carry the unsent-answer warning ACROSS the navigation. Set on this
+    // page it would render for a few milliseconds and then be destroyed with
+    // the shell — a warning nobody can see is the same silence D-31 was.
+    // Router state survives the hop and dies on refresh, which is right: it
+    // describes this submission, not the attempt.
+    navigate(`/student/exam/${assessmentId}/results`, {
+      replace: true,
+      ...(saveWarningRef.current ? { state: { saveWarning: saveWarningRef.current } } : {}),
+    });
   }, [questionMap, assessmentId, navigate, flushAnswers]);
 
   // ══════════════════════════════════════════════════════════════════
@@ -3133,6 +3371,58 @@ export function ExamShell() {
             ))}
           </div>
         </div>
+
+        {/*
+          ── Phase 4.1 (B3): a quiet, honest save indicator ────────────
+          Students trust autosave blindly today, so give them something true
+          to trust. Green "All answers saved" is the normal state and stays
+          unobtrusive; amber names a number, because "some" invites panic and a
+          count invites patience — the sweep will clear it within 25 seconds.
+
+          Deliberately not a spinner or a toast. It should be checkable at a
+          glance and ignorable the rest of the time.
+
+          Hidden when nothing has been answered yet: reporting "all saved" over
+          an empty paper is noise, and it teaches the student to stop reading
+          the one indicator we want them to believe.
+        */}
+        {/*
+          B3: a submit that went ahead with answers unconfirmed. Sits in front
+          of the save indicator because it supersedes it — once this is
+          showing, "all answers saved" would be false and misleading.
+
+          Persistent, with no dismiss control. A student who taps it away and
+          then cannot recall what it said has lost the only notice they were
+          given, and this is the one message an invigilator needs to see.
+        */}
+        {saveWarning && (
+          <div
+            className="flex items-center gap-1.5 flex-shrink-0 px-2 py-1"
+            style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}
+          >
+            <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#9B2828' }} />
+            <span className="text-xs" style={{ color: '#9B2828' }}>Some answers unsent</span>
+          </div>
+        )}
+
+        {!saveWarning && Object.values(localAnswers).some((a) => !isAnswerEmpty(a)) && (
+          <div
+            className="flex items-center gap-1.5 flex-shrink-0"
+            title={unsavedCount > 0
+              ? 'Still sending some answers to the server. You can keep working — this usually clears within a few seconds.'
+              : 'Every answer you have given is stored on the server.'}
+          >
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: unsavedCount > 0 ? '#B7791F' : '#1E7B3C',
+            }} />
+            <span className="text-xs" style={{ color: unsavedCount > 0 ? '#B7791F' : '#6B6B66' }}>
+              {unsavedCount > 0
+                ? `${unsavedCount} unsaved`
+                : 'All answers saved'}
+            </span>
+          </div>
+        )}
 
         {/* Section timer */}
         {currentSection.timeLimit && sectionStartedAt && (

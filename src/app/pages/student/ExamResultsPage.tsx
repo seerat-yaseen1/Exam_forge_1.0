@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, Shield,
@@ -298,6 +298,10 @@ function ReviewQuestion({
 export function ExamResultsPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
+  // B3: set by ExamShell when a submit proceeded with unconfirmed answers.
+  // Router state, so it dies on refresh — it describes this submission, not
+  // the attempt, and re-showing it later would be misleading.
+  const saveWarning = (useLocation().state as { saveWarning?: string } | null)?.saveWarning ?? null;
   const { session } = useStudentAuth();
 
   const [loading, setLoading]       = useState(true);
@@ -388,6 +392,26 @@ export function ExamResultsPage() {
         <span style={{ color: '#E3E1DB' }}>›</span>
         <p className="text-xs" style={{ color: '#9A9891' }}>Results</p>
       </div>
+
+      {/*
+        Phase 4.1 / B3 — carried here from ExamShell through router state.
+
+        The submit went ahead with answers still unconfirmed, which is the
+        correct behaviour (never block submission), but the student must not
+        find that out from a mark. Shown once, on the screen they land on,
+        because the shell that raised it has already been destroyed.
+
+        Deliberately not styled as an error: nothing failed to submit. It is a
+        specific, actionable notice — tell an invigilator, now, while the
+        sitting can still be reconstructed.
+      */}
+      {saveWarning && (
+        <div className="flex items-start gap-2.5 px-4 py-3 mb-6"
+          style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+          <AlertTriangle size={14} strokeWidth={1.5} style={{ color: '#9B2828', marginTop: 1 }} />
+          <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.6 }}>{saveWarning}</p>
+        </div>
+      )}
 
       {/* ── Phase 3 (Stage 3): SEB quit link ──────────────────────────
           For SEB exams the student is still locked inside Safe Exam Browser

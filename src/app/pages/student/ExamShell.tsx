@@ -1332,10 +1332,39 @@ export function ExamShell() {
         const nextTiming = nextSec ? att.sectionTimings[nextSec.id] : undefined;
         if (curSec && nextSec && curTiming?.submittedAt && !nextTiming?.startedAt) {
           const completedCount = att.currentSectionIdx + 1;
-          const brk = breakAfterCompletion(a.sections, att.sectionIds, completedCount);
-          const endsAt = brk
-            ? new Date(curTiming.submittedAt).getTime() + brk.durationMinutes * 60 * 1000
-            : 0;
+          const localBrk = breakAfterCompletion(a.sections, att.sectionIds, completedCount);
+
+          // ── Phase 3e: the SERVER decides whether a break is running ──
+          //
+          // breakAfterCompletion is a labelled client MIRROR of the function
+          // in functions/src/index.ts, and on this path it was the only thing
+          // deciding whether to show a break screen — the D-14 shape, where
+          // one rule exists in two places and nothing forces them to agree.
+          //
+          // The verdict endpoint answers from the same resolver the server
+          // enforces with, so it wins when reachable. The mirror stays as the
+          // FALLBACK rather than being deleted: a resume that cannot reach the
+          // endpoint must still put the student somewhere sensible, and a
+          // student stranded on a blank screen is a worse outcome than a
+          // duplicated rule that the server independently re-checks anyway.
+          //
+          // jitter off deliberately — this is a blocking load, not a
+          // synchronised countdown burst, so spreading it only adds latency.
+          const vres = await getExamVerdict(att.id, { jitter: false });
+          const svrBreak = vres && vres.verdict.kind === 'break' ? vres.verdict : null;
+
+          if (vres && !svrBreak && localBrk) {
+            console.warn('[ExamShell] break mirror disagrees with server verdict',
+              { local: localBrk, verdict: vres.verdict.kind });
+          }
+
+          // Server reachable -> trust it. Unreachable -> fall back to the mirror.
+          const brk = vres ? (svrBreak ? localBrk : null) : localBrk;
+          const endsAt = svrBreak
+            ? svrBreak.endsAt
+            : brk
+              ? new Date(curTiming.submittedAt).getTime() + brk.durationMinutes * 60 * 1000
+              : 0;
           if (brk) {
             // Shared builder (Phase 0.1) — same function the in-session
             // transition uses, so a break cannot read as live on one path and

@@ -489,6 +489,28 @@ export async function startAttempt(params: {
   onStaggerWait?: (delayMs: number) => void;
   /** Called before each backoff, so the UI can say it is still trying. */
   onRetry?: (attemptNo: number, backoffMs: number) => void;
+  /**
+   * This browser's session id (D-33).
+   *
+   * startExam has always been able to stamp activeSessionId at creation —
+   * `...(sessionId ? { activeSessionId: sessionId } : {})` — but the client had
+   * no way to supply one. The only value it sent was the module-level
+   * `activeSessionId`, which registerSession sets, and registerSession ran
+   * AFTER startExam. Circular: the field was never populated at creation, so
+   * every fresh sitting needed a second round trip to claim the session.
+   *
+   * Two things follow from passing it here:
+   *
+   *   1. The claim rides along, so registerSession leaves the fresh-start
+   *      critical path entirely — one whole Cloud Run cold start removed from
+   *      the window that is CHARGED TO THE STUDENT, because their section and
+   *      first-question clocks are already running by then.
+   *   2. The Phase 2 (INV-5a) comment on startExam claims "there is no
+   *      unclaimed window in which a second device could slip in ahead of the
+   *      real one". That was aspirational — the window existed precisely
+   *      because this value never arrived. Now it doesn't.
+   */
+  sessionId?: string;
 }): Promise<Attempt> {
   // Server-authoritative: the startExam Cloud Function owns schedule
   // enforcement (startDate/endDate), the attempt-limit check, and all
@@ -518,9 +540,30 @@ export async function startAttempt(params: {
     { ok: true; attempt: Attempt }
   >(functions, 'startExam');
 
+  // Adopt this browser's session BEFORE the request is built, so the
+  // `...(activeSessionId ? { sessionId } : {})` spread below actually carries
+  // it. Set even if startExam then fails: the id identifies this browser, not
+  // any particular attempt, and a later call sending it is correct regardless.
+  if (params.sessionId) activeSessionId = params.sessionId;
+
   // Spread the arrival before the request is made. onStaggerWait lets the
   // caller show "Preparing your exam…" so the wait reads as loading rather
   // than as an unexplained pause.
+  //
+  // DELIBERATELY BEFORE startExam, and that placement is what makes the
+  // stagger free for the student. Every clock — section, question and overall
+  // — is anchored to the `nowIso` inside startExam's transaction, so a student
+  // held back 18s here simply starts 18s later with their full budget intact.
+  // Waiting costs them nothing.
+  //
+  // The one exception is the assessment's absolute availability window, which
+  // is wall-clock and does not move: a staggered student has up to
+  // STAGGER_MAX_WINDOW_MS less room before it closes. Bounded at 20s and
+  // unavoidable if arrivals are to be spread at all.
+  //
+  // What DOES cost the student is everything AFTER startExam returns, because
+  // by then the clocks are running (D-33) — which is why the callers of this
+  // function work to keep that stretch as close to zero as possible.
   const delay = staggerDelayMs(params.cohortSize);
   if (delay > 0) {
     params.onStaggerWait?.(delay);

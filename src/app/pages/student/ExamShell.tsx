@@ -1275,6 +1275,10 @@ export function ExamShell() {
             cohortSize: a.allocatedCount,
             onStaggerWait: () => setStartPhase('queued'),
             onRetry: () => setStartPhase('retrying'),
+            // D-33: claimed at creation, so registerSession drops out of the
+            // fresh-start path below and one cold start stops being charged to
+            // the student's already-running clocks.
+            sessionId: localSessionId.current,
           });
           setStartPhase(null);
         }
@@ -1296,7 +1300,48 @@ export function ExamShell() {
         const allQIds = [...new Set(
           effSections.flatMap((s) => s.questions.map((q) => q.questionId))
         )];
-        const paper = await getExamQuestionsForStudent(a.id, 'exam');
+        // ── D-33: everything from here is CHARGED TO THE STUDENT ────
+        //
+        // startExam stamps startedAt, the first section's startedAt and the
+        // first question's servedAt from one `nowIso` inside its transaction.
+        // The moment it returns, the section clock, the overall clock and the
+        // 30-second question clock are all running — while the student is
+        // still looking at "Preparing your exam…".
+        //
+        // This stretch used to be TWO sequential callables. In Functions Gen2
+        // each one is its own Cloud Run service with its own bundle, and
+        // EXAM_HOT_PATH deliberately sets minInstances: 0, so on a quiet
+        // project both start cold: roughly 8s each, ~16s of a 35s first
+        // question gone before it appears. Under a real cohort it is worse,
+        // not better — the burst is exactly what makes handlers slow.
+        //
+        // Two changes, no clock semantics touched:
+        //
+        //   1. registerSession is SKIPPED on a fresh start. startExam already
+        //      stamped activeSessionId with the id we passed it, so a second
+        //      call would re-claim a session we already own. It still runs on
+        //      RESUME, where the attempt carries a previous device's id and
+        //      this browser genuinely has to take over.
+        //   2. Whatever remains runs alongside getExamQuestions rather than
+        //      after it. They share no data — registerSession needs only
+        //      att.id, which exists the instant startExam returns.
+        //
+        // Ordering is safe today: getExamQuestions sends no sessionId at all,
+        // so it cannot race the claim. It is safe TOMORROW too, which was not
+        // true before — with the claim now made inside startExam, flipping
+        // REQUIRE_SESSION_ID to true no longer breaks this path.
+        const needsSessionClaim = att.activeSessionId !== localSessionId.current;
+
+        const [paper] = await Promise.all([
+          getExamQuestionsForStudent(a.id, 'exam'),
+          // Fails soft internally — a session claim must never stop a student
+          // sitting an exam — so its rejection cannot poison the Promise.all
+          // and lose the paper alongside it.
+          needsSessionClaim
+            ? registerSession(att.id, localSessionId.current)
+            : Promise.resolve(),
+        ]);
+
         const qMap = new Map<string, Question>();
         const wanted = new Set(allQIds);
         paper.forEach((q) => { if (wanted.has(q.id)) qMap.set(q.id, q); });
@@ -1307,11 +1352,10 @@ export function ExamShell() {
           s.questions.forEach((aq) => mMap.set(aq.questionId, aq.marks));
         });
 
-        // Register this browser session. We always claim ownership here —
-        // if a prior session existed it's now displaced, and the snapshot
-        // listener on the older device will detect the mismatch and lock.
-        // Doing it this way means the takeover device proceeds normally.
-        await registerSession(att.id, localSessionId.current);
+        // The session claim happened above — inside startExam on a fresh
+        // start, or alongside getExamQuestions on a resume. Takeover semantics
+        // are unchanged: the joining device wins, the snapshot listener on the
+        // older device sees the mismatch and locks.
 
         // Sync initial freeze state (including accumulated paused time so the
         // timer resumes fairly, and the current freeze instant so it stays paused)

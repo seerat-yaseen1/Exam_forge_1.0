@@ -447,6 +447,47 @@ regression('a break is recognised from the STORED shape (no enabled flag)', () =
   assert.strictEqual(C.resolve(a, noBreak, T0 + min(2)).kind, 'section');
 });
 
+regression('freeze credit applies only to clocks that were running', () => {
+  // Seerat's case: a pause during section 1 must not lengthen a 15-second
+  // question served in section 3. Uniform credit gave it 10m 15s.
+  const asmt = { sectionGraceSeconds: 0, questionGraceSeconds: 0,
+    deliveryMode: 'linear', overallTimeLimit: 60, overallGraceSeconds: 0,
+    sections: [
+      { id: 'A', timeLimit: 2, questionIds: ['a1'] },
+      { id: 'B', timeLimit: 2, questionTimeLimit: 15, questionIds: ['b1'] }] };
+  const a = {
+    status: 'in_progress', startedAt: iso(T0), sectionIds: ['A', 'B'],
+    sectionTimings: {
+      A: { startedAt: iso(T0), submittedAt: iso(T0 + min(1)) },
+      B: { startedAt: iso(T0 + min(20)) } },
+    servedQuestions: [{ questionId: 'b1', sectionId: 'B',
+      servedAt: iso(T0 + min(20)), locked: false }],
+    // A ten-minute pause that happened during SECTION A only.
+    freezes: [{ id: 'f1', startedAt: iso(T0 + min(0.5)), endedAt: iso(T0 + min(10.5)),
+                elapsedMs: min(10), grantedMs: min(10) }],
+    creditedFreezeMs: min(10),
+  };
+  const d = C.computeDeadlines(a, asmt);
+
+  // Overall is anchored BEFORE the freeze, so it is credited.
+  assert.strictEqual(d.overallEndsAt, T0 + min(60) + min(10),
+    'the overall clock was running during the pause and must be credited');
+
+  // Section B and its question began AFTER the freeze ended — no credit.
+  assert.strictEqual(d.sectionEndsAt, T0 + min(20) + min(2),
+    'a section that began after the pause must NOT be credited');
+  assert.strictEqual(d.questionEndsAt, T0 + min(20) + 15_000,
+    'a 15s question must stay a 15s question');
+
+  // A freeze DURING section B must credit section B.
+  const during = { ...a, freezes: [...a.freezes,
+    { id: 'f2', startedAt: iso(T0 + min(20.5)), endedAt: iso(T0 + min(21.5)),
+      elapsedMs: min(1), grantedMs: min(1) }] };
+  const d2 = C.computeDeadlines(during, asmt);
+  assert.strictEqual(d2.sectionEndsAt, T0 + min(20) + min(2) + min(1),
+    'a pause inside the section IS credited to it');
+});
+
 regression('INV-6 · nothing leaves a terminal state', () => {
   const before = { status: 'submitted', sectionIds: [], sectionTimings: {} };
   const after = { status: 'in_progress', sectionIds: [], sectionTimings: {} };

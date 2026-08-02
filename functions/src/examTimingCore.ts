@@ -304,6 +304,42 @@ function minNonNull(...xs: Array<number | null>): number | null {
 }
 
 /** Total credited freeze, in ms, from whichever field the attempt carries. */
+/**
+ * Freeze credit that applies to a clock anchored at `anchorMs`.
+ *
+ * THE UNIFORM VERSION OF THIS WAS WRONG, and obviously so once stated aloud:
+ * a ten-minute pause during section 1 was added to EVERY deadline, including a
+ * section that began twenty minutes later and a fifteen-second question served
+ * inside it. That question ended up with ten minutes and fifteen seconds.
+ *
+ * A pause only costs a clock time if that clock was RUNNING when it happened.
+ * The overall clock is anchored at attempt start, so every freeze counts
+ * against it. A section is anchored when it starts; a question when it is
+ * served. Freezes that began before those instants are irrelevant to them.
+ *
+ * Granting the full elapsed pause then restores each clock to exactly the
+ * remaining time it had — no more, which is the ceiling an invigilator should
+ * never be able to exceed.
+ *
+ * Falls back to the flat total when the ledger is absent (pre-Phase-4
+ * attempts), which is the old behaviour and the best available answer without
+ * per-freeze timestamps.
+ */
+export function creditForAnchor(a: CoreAttempt, anchor: TimeInput): number {
+  const anchorMs = toMs(anchor);
+  if (!Array.isArray(a.freezes) || a.freezes.length === 0) {
+    return creditedFreezeMs(a);
+  }
+  if (anchorMs === null) return 0;
+  return a.freezes.reduce((sum, f) => {
+    const startedMs = toMs(f.startedAt);
+    // Unreadable start: cannot prove the freeze overlapped this clock, so it
+    // does not count. Credit must be justified, not assumed.
+    if (startedMs === null) return sum;
+    return startedMs >= anchorMs ? sum + Math.max(0, f.grantedMs ?? 0) : sum;
+  }, 0);
+}
+
 export function creditedFreezeMs(a: CoreAttempt): number {
   if (typeof a.creditedFreezeMs === 'number' && Number.isFinite(a.creditedFreezeMs)) {
     return Math.max(0, a.creditedFreezeMs);
@@ -397,26 +433,28 @@ export function computeDeadlines(
   a: CoreAttempt,
   asmt: CoreAssessment,
 ): Deadlines {
-  const credit = creditedFreezeMs(a);
+  // Each clock gets credit for the pauses IT experienced — see creditForAnchor.
+  const overallCredit = creditForAnchor(a, a.startedAt);
 
   const windowRaw = toMs(asmt.endDate);
   const windowEndsAt = windowRaw === null
     ? null
-    : windowRaw + (FREEZE_CREDIT_EXTENDS_WINDOW ? credit : 0);
+    : windowRaw + (FREEZE_CREDIT_EXTENDS_WINDOW ? overallCredit : 0);
 
   const overallEndsAt = overallDeadlineMs(
-    a.startedAt, asmt.overallTimeLimit, asmt.overallGraceSeconds, credit,
+    a.startedAt, asmt.overallTimeLimit, asmt.overallGraceSeconds, overallCredit,
   );
 
   // Section bound — only for a section that has actually started.
   const openId = openSectionId(a);
   let sectionEndsAt: number | null = null;
   if (openId) {
+    const secStart = a.sectionTimings?.[openId]?.startedAt;
     sectionEndsAt = sectionDeadlineMs(
-      a.sectionTimings?.[openId]?.startedAt,
+      secStart,
       sectionById(asmt, openId)?.timeLimit,
       asmt.sectionGraceSeconds,
-      credit,
+      creditForAnchor(a, secStart),
     );
   }
 
@@ -432,7 +470,7 @@ export function computeDeadlines(
         questionEndsAt = servedAt
           + qLimit * 1000
           + (asmt.questionGraceSeconds ?? DEFAULT_QUESTION_GRACE_SECONDS) * 1000
-          + credit;
+          + creditForAnchor(a, cur.servedAt);
       }
     }
   }

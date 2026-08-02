@@ -1048,6 +1048,14 @@ export function ExamShell() {
   const [hasConflict, setHasConflict]               = useState(false);
   const isFrozenRef = useRef(false);
   useEffect(() => { isFrozenRef.current = isFrozen; }, [isFrozen]);
+  // D-32: the per-question tick needs freeze state too. Held in refs, like
+  // every other guard in this file, so an invigilator pausing or releasing
+  // does not tear down and rebuild the countdown interval underneath the
+  // student.
+  const frozenAtRef = useRef<string | null>(null);
+  useEffect(() => { frozenAtRef.current = frozenAtISO; }, [frozenAtISO]);
+  const frozenOffsetRef = useRef(0);
+  useEffect(() => { frozenOffsetRef.current = totalFrozenSeconds; }, [totalFrozenSeconds]);
 
   // Synchronous submit lock. shellStatus updates asynchronously, so two triggers
   // firing in the same tick (e.g. timer expiry + click, or window_closed + manual
@@ -1962,18 +1970,61 @@ export function ExamShell() {
       setQSecondsLeft(null);
       return;
     }
-    const deadline = Date.parse(currentServedAt)
-      + questionTimeLimit * 1000
-      + questionGraceSeconds * 1000;
+    // ── D-32: this clock has to respect a freeze, in BOTH halves ────
+    //
+    // It was the one expiry path with no freeze guard. Its three siblings —
+    // handleSectionTimerExpire, handleOverallTimerExpire and the expiredClock
+    // sweep — all check isFrozenRef; this one checked only shellStatus, and
+    // freeze does not touch shellStatus (there is no 'frozen' member of the
+    // ShellStatus union; isFrozen is a separate flag that drives the overlay).
+    //
+    // So while a paused student sat behind a blocking overlay, unable to
+    // answer anything (handleAnswer rejects input while frozen), this tick
+    // kept firing, calling handleLinearNext() — which LOCKS the question and
+    // serves the next one. On the last question of a section it then called
+    // doSectionSubmit('time_expired') directly, walking straight past
+    // handleSectionTimerExpire's guard. Observed on a real sitting: 16 of 20
+    // questions served after the freeze, two whole sections started AND
+    // submitted, one answer recorded. The pause meant to protect a student
+    // consumed their paper instead.
+    //
+    // GUARDING ALONE IS NOT ENOUGH. The deadline used to be a fixed instant
+    // (servedAt + limit + grace), so it elapses during the pause and `left`
+    // is already <= 0 the moment the student is released — the guard lifts and
+    // the question expires instantly. The pause must come OUT of the clock,
+    // which is the same thing SectionTimer already does: pin the elapsed
+    // reference at the freeze instant, then credit accumulated paused time.
+    //
+    // Mirrored deliberately rather than reinvented. totalFrozenSeconds is
+    // GRANTED time, not elapsed — unfreezeAttempt derives it from the ledger's
+    // sum of grantedMs — so this credits exactly what the invigilator decided,
+    // and the question clock agrees with the section clock instead of becoming
+    // a second opinion. A grant of zero therefore does expire the question on
+    // release; that is the decision being applied, not a bug, though telling
+    // the student it happened belongs to the notice work in step 3.
+    //
+    // nowFn, not Date.now: the section and overall clocks are skew-corrected
+    // and this one was not. Same rule, two implementations, which is the shape
+    // D-14 already cost five seconds a question.
+    const servedMs  = Date.parse(currentServedAt);
+    const budgetSec = questionTimeLimit + questionGraceSeconds;
     let fired = false;
     const tick = () => {
-      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      const refNow = (isFrozenRef.current && frozenAtRef.current)
+        ? Date.parse(frozenAtRef.current)
+        : nowFn();
+      const elapsedSec = (refNow - servedMs) / 1000 - frozenOffsetRef.current;
+      const left = Math.max(0, Math.ceil(budgetSec - elapsedSec));
       setQSecondsLeft(left);
       if (left <= 0 && !fired) {
         // Once per question, and only while the exam is actually running. On a
         // break or mid-submit, shellStatus is not 'ready' and there is nothing
         // to expire.
         if (shellStatusRef.current !== 'ready') return;
+        // Paused by an invigilator: do not advance, do not submit. Returning
+        // WITHOUT setting `fired` is deliberate — the question must still be
+        // able to expire normally once the student is released.
+        if (isFrozenRef.current) return;
         if (questionExpiryHandledRef.current === currentQIdRef.current) return;
         questionExpiryHandledRef.current = currentQIdRef.current;
         fired = true;
@@ -1996,7 +2047,7 @@ export function ExamShell() {
     tick();
     const iv = setInterval(tick, 500);
     return () => clearInterval(iv);
-  }, [questionTimeLimit, currentServedAt, questionGraceSeconds, handleLinearNext]);
+  }, [questionTimeLimit, currentServedAt, questionGraceSeconds, handleLinearNext, nowFn]);
 
   // Flush pending answers the instant a freeze lands, so nothing sitting in the
   // 1.5 s debounce window is lost if the paused tab is later closed.

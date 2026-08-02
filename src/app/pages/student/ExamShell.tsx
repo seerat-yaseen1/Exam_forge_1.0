@@ -1050,6 +1050,21 @@ export function ExamShell() {
   /** Whether the student is on the final question, readable from the timer
    *  effect without re-arming it on every change (D-26). */
   const isLastQuestionRef = useRef(false);
+  /**
+   * Served-question id whose clock expiry has already been acted on.
+   *
+   * The question-timer effect re-arms whenever the attempt document changes —
+   * and submitting an answer changes it. Its local `fired` flag resets, the
+   * deadline is still in the past, so it fired again: save, submit, save,
+   * submit. Visible as the shell flickering between "Submitting this
+   * section..." and the break screen, with the break appearing frozen because
+   * every re-submit re-stamped submittedAt, which is the break's anchor.
+   *
+   * A ref, not state: it must survive re-renders without causing one.
+   */
+  const questionExpiryHandledRef = useRef<string | null>(null);
+  /** shellStatus readable from the timer effect without re-arming it. */
+  const shellStatusRef = useRef<string>('loading');
   const [linearAdvancing, setLinearAdvancing]             = useState(false);
   const [linearError, setLinearError]                     = useState<string | undefined>();
 
@@ -1807,6 +1822,8 @@ export function ExamShell() {
     currentQIdRef.current = currentQId ?? null;
   }, [currentQId]);
 
+  useEffect(() => { shellStatusRef.current = shellStatus; }, [shellStatus]);
+
   // ── Per-question timer (Phase 2.5 Stage 3) ─────────────────────
   // Authority toggle: currentSection.questionTimeLimit (seconds). Undefined =
   // off. The clock starts from the server's servedAt for the current served
@@ -1849,6 +1866,12 @@ export function ExamShell() {
       const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       setQSecondsLeft(left);
       if (left <= 0 && !fired) {
+        // Once per question, and only while the exam is actually running. On a
+        // break or mid-submit, shellStatus is not 'ready' and there is nothing
+        // to expire.
+        if (shellStatusRef.current !== 'ready') return;
+        if (questionExpiryHandledRef.current === currentQIdRef.current) return;
+        questionExpiryHandledRef.current = currentQIdRef.current;
         fired = true;
         // D-26: on the LAST question, save AND close the section.
         //
@@ -1890,6 +1913,12 @@ export function ExamShell() {
     const a   = assessmentRef.current;
     if (!att || !a || !currentSection) return;
     if (submittingRef.current) return; // another submit path is already running
+    // Backstop against a re-entrant submit. submitSection re-stamps
+    // submittedAt, and that timestamp is the BREAK's anchor — so submitting a
+    // section that is already closed pushes the break end forward and the
+    // student watches a break clock that never moves. Belt and braces
+    // alongside the one-shot guard on the question timer.
+    if (att.sectionTimings?.[currentSection.id]?.submittedAt) return;
     submittingRef.current = true;
 
     // D-25: commit the one uncommitted sequential answer before anything

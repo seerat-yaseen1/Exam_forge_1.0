@@ -34,6 +34,7 @@ import {
   sectionDeadlineMs,
   overallDeadlineMs,
   creditForAnchor,
+  computeFreezeCredits,
   openSectionId,
   resolve as resolveTiming,
   checkInvariants as checkTimingInvariants,
@@ -5901,6 +5902,9 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
         lockA,
         creditedAttempt,
       ));
+      // D-35: the numbers the student's screen counts down with, refreshed in
+      // the same write as the deadlines they mirror.
+      applyCreditUpdates(updates, creditedAttempt);
       txn.update(ref, updates);
 
       return { elapsedMs, grantedMs: granted, creditedFreezeMs, actor };
@@ -6372,6 +6376,9 @@ export const startExam = onCall<StartExamData>(
       sectionIds,
       sectionTimings,
       // Combined = min(section, overall); still exactly what the rules gate on.
+      // D-35: present from birth so the client never sees the field missing.
+      // Always zero here — a new attempt has no ledger to credit from.
+      freezeCredits: { overallMs: 0, sectionMs: 0, questionMs: 0, breakMs: 0 },
       answersLockedAfter: initialLocks.combined ? Timestamp.fromDate(initialLocks.combined) : null,
       // Split bounds (Phase 0) — the resume path needs to know WHICH clock
       // tripped, which the minimum alone cannot say.
@@ -6832,6 +6839,25 @@ type AttemptLocks = ReturnType<typeof computeAttemptLocks>;
  * fields directly. Doctrine D5: the materialised lock is a CACHE, and every
  * event that changes an input must recompute it.
  */
+/**
+ * Materialise per-clock freeze credit onto the attempt (D-35).
+ *
+ * The companion to applyLockUpdates, and called from the same places for the
+ * same reason: these are a CACHE of the freeze ledger, and every event that
+ * changes the ledger must recompute them (doctrine D5).
+ *
+ * The client reads these four numbers instead of dividing one flat total
+ * across every clock. It performs no credit arithmetic of its own, so it
+ * cannot disagree with the write gate about how much time a pause was worth.
+ */
+function applyCreditUpdates(
+  updates: Record<string, unknown>,
+  a: CoreAttempt,
+  anchors?: Parameters<typeof computeFreezeCredits>[1],
+): void {
+  updates.freezeCredits = computeFreezeCredits(a, anchors);
+}
+
 function applyLockUpdates(
   updates: Record<string, unknown>,
   locks: AttemptLocks,
@@ -7120,6 +7146,7 @@ export const startSection = onCall<StartSectionData>(
       nowIso,
       lockA.sections?.find((s) => s.id === sectionId)?.timeLimit,
       lockA,
+      toCoreAttempt(attempt as unknown as Record<string, unknown>),
     );
 
     const updates: Record<string, unknown> = {
@@ -7129,6 +7156,12 @@ export const startSection = onCall<StartSectionData>(
       // Null when the exam has no timed bound at all — the rule treats a
       // missing/null lock as "no time constraint", which is also what keeps
       // untimed exams working.
+      // D-35: credit for the section being entered — 0 by arithmetic, since no
+      // freeze can have begun after an anchor of `now`.
+      freezeCredits: computeFreezeCredits(
+        toCoreAttempt(attempt as unknown as Record<string, unknown>),
+        { sectionStartedAt: nowIso, questionServedAt: nowIso, breakAnchor: nowIso },
+      ),
       answersLockedAfter: locks.combined ? Timestamp.fromDate(locks.combined) : null,
       // Split bounds (Phase 0). Recomputed on every section entry: the section
       // bound moves with the new section, the overall bound does not move at
@@ -7340,12 +7373,21 @@ export const submitSection = onCall<SubmitSectionData>(
           lateUpdates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
           // D-01: recompute the write lock for the section being ENTERED.
           // Same reasoning as the on-time branch below — see the note there.
+          const lateCore = toCoreAttempt(attempt as unknown as Record<string, unknown>);
           applyLockUpdates(lateUpdates, computeAttemptLocks(
             attempt.startedAt,
             lateNextStartIso,
             a.sections?.find((s) => s.id === nextSectionId)?.timeLimit,
             a,
+            lateCore,
           ));
+          // D-35: anchors for the section being ENTERED, so its credit is 0
+          // rather than the departing section's.
+          applyCreditUpdates(lateUpdates, lateCore, {
+            sectionStartedAt: lateNextStartIso,
+            questionServedAt: lateNextStartIso,
+            breakAnchor: lateNextStartIso,
+          });
         }
         await attemptRef.update(lateUpdates);
         throw new HttpsError('deadline-exceeded', 'SECTION_DEADLINE_EXCEEDED');
@@ -7413,12 +7455,19 @@ export const submitSection = onCall<SubmitSectionData>(
       // section 10m -> lock goes 60:30 to 12:30). That is correct: the
       // combined lock is a minimum over a CHANGING active section, so it has
       // no monotonicity property. Only the per-section and overall bounds do.
+      const advCore = toCoreAttempt(attempt as unknown as Record<string, unknown>);
       applyLockUpdates(updates, computeAttemptLocks(
         attempt.startedAt,
         nowIso,
         a.sections?.find((s) => s.id === nextSectionId)?.timeLimit,
         a,
+        advCore,
       ));
+      applyCreditUpdates(updates, advCore, {
+        sectionStartedAt: nowIso,
+        questionServedAt: nowIso,
+        breakAnchor: nowIso,
+      });
 
       // ── Serve the next section's first question (Phase 2.5) ──────
       // This is the no-break advance path: the client goes straight from one

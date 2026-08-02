@@ -461,7 +461,7 @@ export function remainingSectionIds(a: CoreAttempt): string[] {
 }
 
 /** The last section the student submitted, by submit time. */
-function lastSubmitted(a: CoreAttempt): { id: string; at: number } | null {
+export function lastSubmitted(a: CoreAttempt): { id: string; at: number } | null {
   let best: { id: string; at: number } | null = null;
   for (const id of a.sectionIds) {
     const at = toMs(a.sectionTimings?.[id]?.submittedAt);
@@ -764,7 +764,17 @@ function pendingBreak(
   const brk = sectionById(asmt, last.id)?.breakAfter;
   if (!hasBreak(brk)) return null;
 
-  const endsAt = last.at + brk.durationMinutes * 60_000;
+  // ── D-29: a break is a clock, and it gets credited too ──────────
+  //
+  // This was `last.at + duration`, full stop — the only deadline in the module
+  // with no credit term. Freeze a student during a ten-minute break and the
+  // break was simply gone when they were released: paused time taken from the
+  // one part of a sitting that exists to be rest.
+  //
+  // Anchored on the section submit instant, which is when the break began, so
+  // only pauses that started after it count — the same per-clock rule D-28
+  // established for every other deadline.
+  const endsAt = last.at + brk.durationMinutes * 60_000 + creditForAnchor(a, last.at);
   if (nowMs >= endsAt) return null;
 
   return {
@@ -984,4 +994,74 @@ export function checkTransition(before: CoreAttempt, after: CoreAttempt): Violat
   }
 
   return v;
+}
+
+// ── Materialised freeze credit, per clock (Phase 4.3b / D-35) ─────
+
+export type FreezeCredits = {
+  overallMs: number;
+  sectionMs: number;
+  questionMs: number;
+  breakMs: number;
+};
+
+/**
+ * Every clock's credit, computed together from the ledger.
+ *
+ * WHY MATERIALISE RATHER THAN LET THE CLIENT COMPUTE
+ * The client had `totalFrozenSeconds` — one flat number for the whole attempt
+ * — and subtracted it from the section clock, the overall clock and the
+ * question clock alike. That is precisely D-28, which was fixed on the server
+ * and never on the client, so the two agreed only when the pause happened
+ * inside the clock currently running. A freeze in section 1 handed the student
+ * a visibly generous section 2 that the server had never granted; they worked
+ * into time that did not exist and the expiry sweep cut the section off.
+ *
+ * Porting creditForAnchor to the client would have made a twelfth declared
+ * twin — of the exact rule that already broke once. Materialising four numbers
+ * instead means the client does no credit arithmetic at all, and the figures
+ * it draws are the ones the write gate enforces.
+ *
+ * Recomputed wherever the locks are, for the same reason (doctrine D5): these
+ * are a CACHE of a ledger that changes.
+ */
+export function computeFreezeCredits(
+  a: CoreAttempt,
+  /**
+   * Anchors for clocks that are about to change, when this runs in the same
+   * write that changes them.
+   *
+   * A section advance materialises credit for the section being ENTERED, not
+   * the one being left — and reading the stored attempt would give the latter,
+   * because the write has not landed yet. Passing the new anchor is what keeps
+   * this honest.
+   *
+   * It also needs no special case: a clock anchored at `now` has no freeze
+   * that began after it, so creditForAnchor returns 0 on its own. Correct by
+   * arithmetic rather than by remembering to zero a field.
+   */
+  anchors?: {
+    sectionStartedAt?: TimeInput;
+    questionServedAt?: TimeInput;
+    breakAnchor?: TimeInput;
+  },
+): FreezeCredits {
+  const openId = openSectionId(a);
+  const storedSec = openId ? a.sectionTimings?.[openId]?.startedAt : undefined;
+  const cur = currentServed(a);
+  const last = lastSubmitted(a);
+
+  const secAnchor = anchors?.sectionStartedAt ?? storedSec;
+  const qAnchor   = anchors?.questionServedAt ?? cur?.servedAt;
+  const brkAnchor = anchors?.breakAnchor ?? (last ? last.at : undefined);
+
+  return {
+    overallMs: creditForAnchor(a, a.startedAt),
+    // 0 when the clock does not exist right now — between sections there is no
+    // open section, and outside sequential delivery there is no question. Zero
+    // is right: a clock that is not running cannot have been paused.
+    sectionMs: secAnchor === undefined ? 0 : creditForAnchor(a, secAnchor),
+    questionMs: qAnchor === undefined ? 0 : creditForAnchor(a, qAnchor),
+    breakMs: brkAnchor === undefined ? 0 : creditForAnchor(a, brkAnchor),
+  };
 }

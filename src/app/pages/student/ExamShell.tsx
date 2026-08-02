@@ -322,9 +322,16 @@ function buildBreakState(args: {
   nextSectionIdx?: number;
   nextSectionName?: string;
   nowMs?: number;
+  /** Server-materialised freeze credit for this break (D-29 / D-35). */
+  breakCreditMs?: number;
 }): BreakState {
   const now = args.nowMs ?? Date.now();
-  const endsAt = new Date(args.submittedAtIso).getTime() + args.durationMinutes * 60 * 1000;
+  // D-29: the break gets its freeze credit like every other clock. Server twin
+  // is pendingBreak in examTimingCore, which adds creditForAnchor(a, last.at)
+  // to the same expression — these two must move together.
+  const endsAt = new Date(args.submittedAtIso).getTime()
+    + args.durationMinutes * 60 * 1000
+    + (args.breakCreditMs ?? 0);
   const live = Number.isFinite(endsAt) && endsAt > now;
 
   // `mandatory` is reported honestly, including for an elapsed break. It only
@@ -836,9 +843,12 @@ function SubmitConfirmModal({
 function BreakScreen({
   state,
   onContinue,
+  frozenAtISO,
 }: {
   state: BreakState;
   onContinue: () => void;
+  /** Instant an invigilator paused, or null when running (D-36). */
+  frozenAtISO?: string | null;
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -846,7 +856,26 @@ function BreakScreen({
     return () => clearInterval(id);
   }, []);
 
-  const remainingMs = Math.max(0, state.endsAt - now);
+  // ── D-36: a break is a clock too, and freeze must stop it ───────
+  //
+  // This ran on raw Date.now() with no freeze awareness of any kind. Freeze a
+  // student on a break and the countdown carried on underneath the overlay —
+  // then hit zero and AUTO-FIRED onContinue, which calls endBreak and
+  // startSection. A paused student was advanced into the next section without
+  // touching anything.
+  //
+  // That is D-32 in a second place. Phase 4.2b audited the four expiry paths
+  // inside ExamShell and guarded the one that was missing; this component owns
+  // its own independent timer and was never looked at. Same lesson, wider than
+  // it was taken: find every clock, not every clock in one file.
+  //
+  // Pinning `now` at the freeze instant freezes the display AND, because the
+  // auto-continue fires off `expired`, stops the advance as well — one change
+  // closing both halves.
+  const frozenMs = frozenAtISO ? Date.parse(frozenAtISO) : NaN;
+  const refNow = Number.isFinite(frozenMs) ? Math.min(now, frozenMs) : now;
+
+  const remainingMs = Math.max(0, state.endsAt - refNow);
   const remainingSec = Math.ceil(remainingMs / 1000);
   const mm = Math.floor(remainingSec / 60);
   const ss = remainingSec % 60;
@@ -1077,6 +1106,24 @@ export function ExamShell() {
     useState<'loading' | 'ready' | 'unavailable' | 'denied' | 'error'>('loading');
   const [frozenAtISO, setFrozenAtISO]               = useState<string | null>(null);
   const [totalFrozenSeconds, setTotalFrozenSeconds] = useState(0);
+  /**
+   * Per-clock freeze credit, straight from the server (D-35).
+   *
+   * totalFrozenSeconds above is a FLAT total for the whole attempt, and it was
+   * subtracted from the section clock, the overall clock and the question
+   * clock alike. The server has credited per-clock since D-28 — only pauses
+   * that began after a clock's own anchor count — so the two agreed only when
+   * the pause happened inside the clock currently running. Freeze in section 1
+   * and section 2 showed ten minutes nobody had granted.
+   *
+   * Nothing is computed here. These are the numbers the write gate uses.
+   * totalFrozenSeconds is kept only as the fallback for attempts that started
+   * before this shipped.
+   */
+  const [freezeCredits, setFreezeCredits] = useState<{
+    overallMs: number; sectionMs: number; questionMs: number; breakMs: number;
+  }>({ overallMs: 0, sectionMs: 0, questionMs: 0, breakMs: 0 });
+  const creditSeconds = (ms: number) => Math.round(ms / 1000);
   const [hasConflict, setHasConflict]               = useState(false);
   const isFrozenRef = useRef(false);
   useEffect(() => { isFrozenRef.current = isFrozen; }, [isFrozen]);
@@ -1086,8 +1133,13 @@ export function ExamShell() {
   // student.
   const frozenAtRef = useRef<string | null>(null);
   useEffect(() => { frozenAtRef.current = frozenAtISO; }, [frozenAtISO]);
+  // D-35: the QUESTION clock's own credit, not the attempt-wide total. In 4.2b
+  // this mirrored the section timer's flat offset — faithfully reproducing a
+  // bug rather than questioning it.
   const frozenOffsetRef = useRef(0);
-  useEffect(() => { frozenOffsetRef.current = totalFrozenSeconds; }, [totalFrozenSeconds]);
+  useEffect(() => {
+    frozenOffsetRef.current = creditSeconds(freezeCredits.questionMs);
+  }, [freezeCredits.questionMs]);
 
   // ── Phase 4.1: what the SERVER holds ────────────────────────────
   //
@@ -1443,6 +1495,8 @@ export function ExamShell() {
         // Sync initial freeze state (including accumulated paused time so the
         // timer resumes fairly, and the current freeze instant so it stays paused)
         setTotalFrozenSeconds(att.totalFrozenSeconds ?? 0);
+        setFreezeCredits(att.freezeCredits
+          ?? { overallMs: 0, sectionMs: 0, questionMs: 0, breakMs: 0 });
         if (att.frozenAt) {
           setIsFrozen(true);
           setFrozenReason(att.frozenReason);
@@ -1548,6 +1602,7 @@ export function ExamShell() {
               nextSectionId: nextSec.id,
               nextSectionIdx: att.currentSectionIdx + 1,
               nextSectionName: nextSec.name,
+              breakCreditMs: att.freezeCredits?.breakMs ?? 0,
             }));
             setShellStatus('on_break');
             return;
@@ -1626,6 +1681,8 @@ export function ExamShell() {
       // not found. It never needs to know the cause.
       confirmFromServer(live.answers);
       setTotalFrozenSeconds(live.totalFrozenSeconds ?? 0);
+      setFreezeCredits(live.freezeCredits
+        ?? { overallMs: 0, sectionMs: 0, questionMs: 0, breakMs: 0 });
       if (live.frozenAt) {
         setIsFrozen(true);
         setFrozenReason(live.frozenReason);
@@ -2485,6 +2542,7 @@ export function ExamShell() {
         nextSectionId: nextSection.id,
         nextSectionIdx: nextIdx,
         nextSectionName: nextSection.name,
+        breakCreditMs: attemptRef.current?.freezeCredits?.breakMs ?? 0,
       }));
       setAttempt((prev) =>
         prev
@@ -2561,6 +2619,11 @@ export function ExamShell() {
     const att = attemptRef.current;
     const bs = breakState;
     if (!att || !bs) return;
+    // D-36: never leave a break while paused. BreakScreen's countdown is now
+    // frozen too, so this should be unreachable from the auto-continue — but
+    // this is the function that actually MOVES a student, and the cost of a
+    // second guard here is one comparison.
+    if (isFrozenRef.current) return;
     // Request fullscreen FIRST so the click gesture is still live; if rejected,
     // the overlay will gate interaction until the student returns to fullscreen.
     await enforceFullscreenOrPrompt();
@@ -3255,7 +3318,13 @@ export function ExamShell() {
   }
 
   if (shellStatus === 'on_break' && breakState) {
-    return <BreakScreen state={breakState} onContinue={handleEndBreak} />;
+    return (
+      <BreakScreen
+        state={breakState}
+        onContinue={handleEndBreak}
+        frozenAtISO={isFrozen ? frozenAtISO : null}
+      />
+    );
   }
 
   if (shellStatus === 'choosing_section') {
@@ -3431,7 +3500,7 @@ export function ExamShell() {
               timeLimitMinutes={currentSection.timeLimit}
               startedAtISO={sectionStartedAt}
               onExpire={handleSectionTimerExpire}
-              frozenOffsetSeconds={totalFrozenSeconds}
+              frozenOffsetSeconds={creditSeconds(freezeCredits.sectionMs)}
               frozenAtISO={isFrozen ? frozenAtISO : null}
               nowFn={nowFn}
             />
@@ -3448,7 +3517,7 @@ export function ExamShell() {
               timeLimitMinutes={overallLimitMinutes}
               startedAtISO={overallAnchorISO!}
               onExpire={handleOverallTimerExpire}
-              frozenOffsetSeconds={totalFrozenSeconds}
+              frozenOffsetSeconds={creditSeconds(freezeCredits.overallMs)}
               frozenAtISO={isFrozen ? frozenAtISO : null}
               nowFn={nowFn}
             />

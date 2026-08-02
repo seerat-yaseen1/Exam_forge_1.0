@@ -565,6 +565,81 @@ regression('4.3 · an unreadable freeze start falls back to real time', () => {
     'and unknown means real time — a pause must be provable, not assumed');
 });
 
+regression('D-29 · a break is credited for pauses that began during it', () => {
+  const asmt = {
+    sections: [
+      { id: 'A', timeLimit: 5, questionIds: ['a1'], breakAfter: { durationMinutes: 10, mandatory: true } },
+      { id: 'B', timeLimit: 5, questionIds: ['b1'] },
+    ],
+    sectionGraceSeconds: 0, overallGraceSeconds: 0, deliveryMode: 'standard',
+  };
+  // Section A submitted at T0+5. Break runs T0+5 .. T0+15.
+  const base = {
+    status: 'in_progress', sectionIds: ['A', 'B'], startedAt: iso(T0),
+    sectionTimings: { A: { startedAt: iso(T0), submittedAt: iso(T0 + min(5)) } },
+    servedQuestions: [], answers: {}, currentSectionIdx: 0,
+  };
+  const plain = C.resolve(base, asmt, T0 + min(6));
+  assert.strictEqual(plain.kind, 'break', 'control: on a break');
+
+  // A four-minute pause DURING the break, granted in full.
+  const paused = { ...base, freezes: [{ id: 'f1',
+    startedAt: iso(T0 + min(6)), endedAt: iso(T0 + min(10)),
+    elapsedMs: min(4), grantedMs: min(4) }], creditedFreezeMs: min(4) };
+  const after = C.resolve(paused, asmt, T0 + min(14));
+  assert.strictEqual(after.kind, 'break',
+    'the break must still be running — four of its minutes were paused');
+
+  // Uncredited, the same instant is past the break's end.
+  assert.notStrictEqual(C.resolve(base, asmt, T0 + min(16)).kind, 'break',
+    'control: without credit the break is over by T0+16');
+});
+
+regression('D-35 · per-clock credit is materialised, not a flat total', () => {
+  const asmt = {
+    sections: [{ id: 'A', timeLimit: 5, questionIds: ['a1'] },
+               { id: 'B', timeLimit: 5, questionIds: ['b1'] }],
+    sectionGraceSeconds: 0, overallGraceSeconds: 0, deliveryMode: 'linear',
+  };
+  // Ten minutes paused during section A. Student is now in section B.
+  const a = {
+    status: 'in_progress', sectionIds: ['A', 'B'], startedAt: iso(T0),
+    sectionTimings: {
+      A: { startedAt: iso(T0), submittedAt: iso(T0 + min(1)) },
+      B: { startedAt: iso(T0 + min(20)) },
+    },
+    servedQuestions: [{ questionId: 'b1', sectionId: 'B',
+      servedAt: iso(T0 + min(20)), locked: false }],
+    answers: {},
+    freezes: [{ id: 'f1', startedAt: iso(T0 + min(0.5)), endedAt: iso(T0 + min(10.5)),
+                elapsedMs: min(10), grantedMs: min(10) }],
+    creditedFreezeMs: min(10),
+  };
+  const c = C.computeFreezeCredits(a);
+  assert.strictEqual(c.overallMs, min(10),
+    'the overall clock was running during the pause');
+  assert.strictEqual(c.sectionMs, 0,
+    'section B began AFTER the pause — the flat total would wrongly give it 10m');
+  assert.strictEqual(c.questionMs, 0, 'and so did its question');
+});
+
+regression('D-35 · a forward anchor yields zero credit by arithmetic', () => {
+  const a = {
+    status: 'in_progress', sectionIds: ['A'], startedAt: iso(T0),
+    sectionTimings: { A: { startedAt: iso(T0) } }, servedQuestions: [], answers: {},
+    freezes: [{ id: 'f1', startedAt: iso(T0 + min(1)), endedAt: iso(T0 + min(3)),
+                elapsedMs: min(2), grantedMs: min(2) }],
+    creditedFreezeMs: min(2),
+  };
+  assert.strictEqual(C.computeFreezeCredits(a).sectionMs, min(2),
+    'stored anchor: the pause happened inside this section');
+  const entering = C.computeFreezeCredits(a, { sectionStartedAt: iso(T0 + min(9)) });
+  assert.strictEqual(entering.sectionMs, 0,
+    'a section entered now cannot have been paused — no special case needed');
+  assert.strictEqual(entering.overallMs, min(2),
+    'and the overall clock keeps its credit');
+});
+
 regression('INV-6 · nothing leaves a terminal state', () => {
   const before = { status: 'submitted', sectionIds: [], sectionTimings: {} };
   const after = { status: 'in_progress', sectionIds: [], sectionTimings: {} };

@@ -327,6 +327,29 @@ export type Attempt = {
    */
   sectionLockedAfter?: AttemptLock;
   overallLockedAfter?: AttemptLock;
+  /**
+   * Per-clock freeze credit in ms, materialised by the server (D-35).
+   *
+   * Replaces dividing `totalFrozenSeconds` — one flat total for the whole
+   * attempt — across every clock. That was D-28's twin: fixed on the server in
+   * Phase 4.0 and left standing here, so a pause during section 1 handed the
+   * student a visibly generous section 2 the server had never granted. They
+   * worked into time that did not exist, and the expiry sweep cut the section
+   * off underneath them.
+   *
+   * Read, never computed. These are the same figures the write gate uses, so
+   * the countdown on screen and the deadline in firestore.rules cannot
+   * disagree about what a pause was worth.
+   *
+   * Absent on attempts that started before this shipped — callers fall back to
+   * 0, which is the pre-freeze behaviour and drains within a sitting.
+   */
+  freezeCredits?: {
+    overallMs: number;
+    sectionMs: number;
+    questionMs: number;
+    breakMs: number;
+  };
   id: string;
   assessmentId: string;
   assessmentTitle: string;

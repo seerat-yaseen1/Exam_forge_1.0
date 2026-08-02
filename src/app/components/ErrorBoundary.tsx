@@ -47,13 +47,15 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   error: Error | null;
+  /** Component stack from componentDidCatch — names the component that threw. */
+  componentStack: string | null;
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { error: null };
+  state: ErrorBoundaryState = { error: null, componentStack: null };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { error };
+    return { error, componentStack: null };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
@@ -63,17 +65,43 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     // component that threw, which the error alone usually does not.
     const label = this.props.label ?? this.props.variant ?? 'app';
     console.error(`[ErrorBoundary:${label}] render error`, error, info.componentStack);
+    // Also held in state, so the fallback can SHOW it. A crash that only
+    // exists in a console nobody has open is a crash nobody can fix — and on
+    // a locked-down exam machine, or inside SEB, there may be no console to
+    // open at all.
+    this.setState({ componentStack: info.componentStack ?? null });
   }
 
   private reload = (): void => {
     window.location.reload();
   };
 
+  private copyDetails = (): void => {
+    const { error, componentStack } = this.state;
+    const label = this.props.label ?? this.props.variant ?? 'app';
+    const text = [
+      `[${label}] ${error?.name ?? 'Error'}: ${error?.message ?? '(no message)'}`,
+      '',
+      'STACK:',
+      error?.stack ?? '(none)',
+      '',
+      'COMPONENT STACK:',
+      componentStack ?? '(not captured)',
+      '',
+      `URL: ${window.location.pathname}`,
+      `UA: ${navigator.userAgent}`,
+    ].join('\n');
+    // Clipboard can be unavailable on an insecure origin or blocked by policy;
+    // the details are visible on screen regardless, so failure is not fatal.
+    void navigator.clipboard?.writeText(text).catch(() => {});
+  };
+
   render(): ReactNode {
-    const { error } = this.state;
+    const { error, componentStack } = this.state;
     if (!error) return this.props.children;
 
     const isExam = this.props.variant === 'exam';
+    const label = this.props.label ?? this.props.variant ?? 'app';
 
     return (
       <div
@@ -120,6 +148,57 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             Back to sign in
           </a>
         )}
+
+        {/*
+          ── Technical detail, on screen ──────────────────────────────
+          A crash that exists only in a console nobody has open is a crash
+          nobody can fix. On a locked-down exam machine — and inside SEB in
+          particular — there may be no console to open at all, so the only
+          report anyone can produce is a photograph of this screen. Make that
+          photograph worth something.
+
+          Not an escape hatch: <details> and a copy button add no navigation,
+          so the exam-mode rule in the file header still holds.
+
+          Collapsed by default and muted, so a student mid-exam sees the plain
+          instruction first and a stack trace only if they go looking. If this
+          proves noisy in front of real candidates, gate it on a query flag
+          rather than deleting it — the information is what makes these
+          reportable.
+        */}
+        <details className="mt-8" style={{ maxWidth: 560, width: '100%' }}>
+          <summary
+            className="text-xs text-center"
+            style={{ color: '#B0AEA8', cursor: 'pointer', listStyle: 'none' }}
+          >
+            Technical details
+          </summary>
+          <pre
+            className="text-xs mt-3 p-3 overflow-auto"
+            style={{
+              background: '#F0EFEB', border: '1px solid #E3E1DB', borderRadius: 2,
+              color: '#4A4A45', maxHeight: 260, whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word', fontSize: 11, lineHeight: 1.5,
+            }}
+          >
+{`[${label}] ${error.name}: ${error.message}
+
+${error.stack ?? '(no stack)'}
+
+COMPONENT STACK:${componentStack ?? ' (not captured)'}`}
+          </pre>
+          <button
+            type="button"
+            onClick={this.copyDetails}
+            className="text-xs mt-2 px-3 py-1.5"
+            style={{
+              background: '#FFFFFF', color: '#4A4A45',
+              border: '1px solid #DDDBD5', borderRadius: 2,
+            }}
+          >
+            Copy details
+          </button>
+        </details>
       </div>
     );
   }

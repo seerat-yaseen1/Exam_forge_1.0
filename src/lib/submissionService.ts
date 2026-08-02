@@ -943,16 +943,23 @@ export const MAX_LOGGED_VIOLATION_EVENTS = 300;
 
 export async function freezeAttempt(
   attemptId: string,
-  frozenBy: string,
+  _frozenBy: string,
   frozenReason?: string
 ): Promise<void> {
-  const updates: Record<string, any> = {
-    frozenAt: now(),
-    frozenBy,
-    updatedAt: now(),
-  };
-  if (frozenReason) updates.frozenReason = frozenReason;
-  await updateDoc(doc(db, 'attempts', attemptId), updates);
+  // Phase 4: a freeze opens a LEDGER ENTRY, server-side.
+  //
+  // This used to be a direct updateDoc of four loose fields, and the time it
+  // took was never given back — the display credited the pause and the write
+  // gate did not (D-03). A freeze now records when it started; how much of it
+  // the student gets back is decided at unfreeze, by a human, on the record.
+  //
+  // frozenBy is ignored: the server takes the actor from the caller's auth
+  // token rather than trusting a name supplied by the browser.
+  const call = httpsCallable<
+    { attemptId: string; reason?: string },
+    { ok: true; alreadyFrozen: boolean; entryId: string | null }
+  >(functions, 'freezeAttempt');
+  await call({ attemptId, ...(frozenReason ? { reason: frozenReason } : {}) });
 }
 
 // ── Unfreeze attempt ──────────────────────────────────────────────
@@ -960,21 +967,31 @@ export async function freezeAttempt(
 
 export async function unfreezeAttempt(
   attemptId: string,
-  currentTotalFrozenSeconds: number,
-  frozenAtISO: string
-): Promise<void> {
-  const additionalFrozenSeconds = Math.floor(
-    (Date.now() - new Date(frozenAtISO).getTime()) / 1000
-  );
-  const newTotal = currentTotalFrozenSeconds + additionalFrozenSeconds;
-
-  await updateDoc(doc(db, 'attempts', attemptId), {
-    frozenAt: null,
-    frozenBy: null,
-    frozenReason: null,
-    totalFrozenSeconds: newTotal,
-    updatedAt: now(),
-  });
+  grantedMs: number,
+  note?: string
+): Promise<{ elapsedMs: number; grantedMs: number; creditedFreezeMs: number }> {
+  // Phase 4: resuming requires an explicit decision about the paused time.
+  //
+  // The old signature took the running total FROM THE CALLER
+  // (`currentTotalFrozenSeconds`) and the server wrote `current + additional`.
+  // A stale roster — or two invigilators on one attempt — therefore made
+  // accumulated credit go DOWN, which is INV-4a. The total is now derived from
+  // the ledger inside a transaction and cannot regress, whoever calls it.
+  //
+  // grantedMs is required and has no default: how much of a pause was the
+  // student's own doing is a judgement, and the system silently choosing one
+  // is how "the timer said one thing and the marking said another" happened in
+  // the first place. Zero is a valid answer; it just has to be given.
+  const call = httpsCallable<
+    { attemptId: string; grantedMs: number; note?: string },
+    { ok: true; elapsedMs: number; grantedMs: number; creditedFreezeMs: number }
+  >(functions, 'unfreezeAttempt');
+  const res = await call({ attemptId, grantedMs, ...(note ? { note } : {}) });
+  return {
+    elapsedMs: res.data.elapsedMs,
+    grantedMs: res.data.grantedMs,
+    creditedFreezeMs: res.data.creditedFreezeMs,
+  };
 }
 
 // ── Register session ──────────────────────────────────────────────

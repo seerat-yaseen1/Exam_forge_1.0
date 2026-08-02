@@ -299,7 +299,7 @@ function UnfreezeConfirmModal({
   studentName: string;
   attempt: Attempt;
   loading: boolean;
-  onConfirm: () => void;
+  onConfirm: (grantedMs: number, note?: string) => void;
   onCancel: () => void;
 }) {
   const [frozenSecs, setFrozenSecs] = useState(() =>
@@ -320,6 +320,27 @@ function UnfreezeConfirmModal({
     const rem = s % 60;
     return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
   }
+
+  // ── The credit decision (Phase 4) ──────────────────────────────
+  //
+  // Pre-filled with the FULL elapsed time, because that is the fair default
+  // and the invigilator should have to act deliberately to give less. Any
+  // value from zero upward is accepted — a student who wandered off and a
+  // student whose machine died are not the same case, and the system cannot
+  // tell them apart. What it can do is make the difference a recorded human
+  // decision instead of a silent one.
+  //
+  // Held in seconds for the input and converted at submit; the ledger works in
+  // milliseconds and the server clamps to elapsed regardless (INV-4c).
+  const [grantSecs, setGrantSecs] = useState<string>('');
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    // Track elapsed until the invigilator edits it — after that it is theirs.
+    setGrantSecs((prev) => (prev === '' || prev === String(frozenSecs - 1) ? String(frozenSecs) : prev));
+  }, [frozenSecs]);
+
+  const grantNum = Math.max(0, Math.min(parseInt(grantSecs || '0', 10) || 0, frozenSecs));
+  const givingLess = grantNum < frozenSecs;
 
   const thisFreeze  = secsToLabel(frozenSecs);
   const totalAfter  = secsToLabel((attempt.totalFrozenSeconds ?? 0) + frozenSecs);
@@ -382,12 +403,52 @@ function UnfreezeConfirmModal({
               <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.5 }}>{attempt.frozenReason}</p>
             </div>
           )}
+
+          {/* ── Time to give back ────────────────────────────────── */}
+          <div className="px-3 py-3"
+            style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            <p className="text-xs mb-2" style={{ color: '#0C0C0B' }}>
+              Time to give back
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={0} max={frozenSecs} value={grantSecs}
+                onChange={(e) => setGrantSecs(e.target.value)}
+                disabled={loading}
+                className="text-xs px-2 py-1.5 w-24"
+                style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: '#0C0C0B' }}
+              />
+              <span className="text-xs" style={{ color: '#9A9891' }}>
+                seconds of {thisFreeze}
+              </span>
+              {givingLess && (
+                <button
+                  onClick={() => setGrantSecs(String(frozenSecs))}
+                  className="text-xs px-2 py-1"
+                  style={{ color: '#1D4ED8', cursor: 'pointer', background: 'transparent' }}
+                >
+                  give all
+                </button>
+              )}
+            </div>
+            <p className="text-xs mt-2" style={{ color: givingLess ? '#92680A' : '#9A9891', lineHeight: 1.5 }}>
+              {givingLess
+                ? `${secsToLabel(frozenSecs - grantNum)} of this pause will NOT be returned. The student is told either way.`
+                : 'The full pause is returned to their clocks.'}
+            </p>
+            <input
+              type="text" value={note} onChange={(e) => setNote(e.target.value)}
+              disabled={loading} placeholder="Note (optional) — recorded in the audit trail"
+              className="text-xs px-2 py-1.5 w-full mt-2"
+              style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: '#0C0C0B' }}
+            />
+          </div>
         </div>
 
         {/* Footer */}
         <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button
-            onClick={onConfirm}
+            onClick={() => onConfirm(grantNum * 1000, note.trim() || undefined)}
             disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
@@ -399,7 +460,9 @@ function UnfreezeConfirmModal({
           >
             {loading
               ? <><Loader2 size={10} className="animate-spin" /> Unfreezing…</>
-              : <><PlayCircle size={10} strokeWidth={1.5} /> Unfreeze session</>}
+              : <><PlayCircle size={10} strokeWidth={1.5} />
+                  {grantNum > 0 ? `Resume, giving back ${secsToLabel(grantNum)}` : 'Resume, giving back nothing'}
+                </>}
           </button>
           <button
             onClick={onCancel}
@@ -2273,10 +2336,12 @@ export function AssessmentRosterCore({
   }, [invigId]);
 
   // ── Execute unfreeze (called from modal confirm) ───────────────
-  const executeUnfreeze = useCallback(async (attempt: Attempt) => {
+  const executeUnfreeze = useCallback(async (
+    attempt: Attempt, grantedMs: number, note?: string
+  ) => {
     setPendingUnfreeze(null);
     setFreezeLoadingId(attempt.id);
-    try { await unfreezeAttempt(attempt.id, attempt.totalFrozenSeconds ?? 0, attempt.frozenAt!); }
+    try { await unfreezeAttempt(attempt.id, grantedMs, note); }
     catch (e) { console.error('[Roster] unfreeze failed', e); }
     finally { setFreezeLoadingId(null); }
   }, []);
@@ -2616,7 +2681,8 @@ export function AssessmentRosterCore({
             studentName={pendingUnfreeze.studentName}
             attempt={pendingUnfreeze.attempt}
             loading={freezeLoadingId === pendingUnfreeze.attempt.id}
-            onConfirm={() => executeUnfreeze(pendingUnfreeze.attempt)}
+            onConfirm={(grantedMs, note) =>
+              executeUnfreeze(pendingUnfreeze.attempt, grantedMs, note)}
             onCancel={() => setPendingUnfreeze(null)}
           />
         )}

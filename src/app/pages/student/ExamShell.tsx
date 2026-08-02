@@ -47,6 +47,8 @@ import {
   verifyAndResume,
   submitAnswerAndAdvance,
   saveAnswerNoAdvance,
+  lockToMillis,
+  type AttemptLock,
   type Attempt,
   type AttemptAnswer,
   type AnswerValue,
@@ -274,16 +276,16 @@ function breakAfterCompletion(
  * button that silently fails is not an answer — the attempt should finalise
  * itself the moment we know the window is shut.
  *
- * Tolerates Timestamp, ISO string, or absent, because the value arrives from
- * Firestore in the first shape and from an optimistic local copy in the others.
+ * Tolerates every shape a lock can arrive in — Firestore Timestamp, callable
+ * JSON, ISO string, or absent — via lockToMillis (D-34). The conversion lives
+ * in submissionService so this file and the Attempt type cannot drift apart
+ * about what a lock looks like.
  */
-type AttemptLock = { toMillis: () => number } | string | null | undefined;
 
-/** Has this specific bound passed? Null/absent = no bound, never closed. */
-function lockPassed(raw: AttemptLock, nowMs: number): boolean {
-  if (raw === null || raw === undefined) return false;   // untimed, or legacy
-  const ms = typeof raw === 'string' ? new Date(raw).getTime() : raw.toMillis();
-  return Number.isFinite(ms) && nowMs >= ms;
+/** Has this specific bound passed? Null/absent/unparseable = no bound. */
+function lockPassed(raw: AttemptLock | undefined, nowMs: number): boolean {
+  const ms = lockToMillis(raw);
+  return ms !== null && nowMs >= ms;
 }
 
 /**
@@ -399,13 +401,15 @@ function expiredClock(
   if (lockPassed(attempt.overallLockedAfter, nowMs)) return 'overall';
 
   if (lockPassed(attempt.sectionLockedAfter, nowMs)) {
-    const raw = attempt.sectionLockedAfter;
-    const lockMs = typeof raw === 'string' ? new Date(raw).getTime() : raw!.toMillis();
+    // Same helper as lockPassed above — this used to repeat the conversion
+    // inline, which meant two places had to learn about the callable wire
+    // shape and only one ever did (D-34).
+    const lockMs = lockToMillis(attempt.sectionLockedAfter);
     const startedMs = currentSectionStartedAtIso
       ? new Date(currentSectionStartedAtIso).getTime()
       : NaN;
     // Stale: this lock predates the section it would be closing.
-    const stale = Number.isFinite(startedMs) && startedMs >= lockMs;
+    const stale = lockMs !== null && Number.isFinite(startedMs) && startedMs >= lockMs;
     if (!stale) return 'section';
   }
 

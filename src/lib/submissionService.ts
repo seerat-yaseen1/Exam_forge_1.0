@@ -220,6 +220,83 @@ export type IntegrityLog = {
   finalizedWhileFrozen?: boolean;
 };
 
+// ── Materialised lock bounds ──────────────────────────────────────
+
+/**
+ * A lock bound, in every shape it can actually reach the client in (D-34).
+ *
+ * There are THREE sources, and the third is the one that bit us:
+ *
+ *   1. Firestore SDK read (getDoc / onSnapshot) — a real Timestamp INSTANCE,
+ *      with .toMillis().
+ *   2. An optimistic local copy — an ISO string.
+ *   3. A CALLABLE RESPONSE. startExam returns the attempt it just built, and
+ *      onCall serialises to JSON. Timestamp does not survive that: it arrives
+ *      as a plain `{_seconds, _nanoseconds}` object with NO METHODS.
+ *
+ * The type declared only the first two, so every fresh sitting threw
+ * `raw.toMillis is not a function` the moment expiredClock ran against the
+ * attempt startExam had just returned. Reloading "fixed" it because the resume
+ * path reads from Firestore, restoring shape 1 — which is why it looked
+ * intermittent rather than deterministic, and why it cost a whole extra
+ * startup cycle every time.
+ *
+ * Declared ONCE, here, and consumed only through lockToMillis. Two call sites
+ * in ExamShell used to convert inline and had to be kept in lockstep by hand;
+ * a single helper is what stops this recurring.
+ */
+export type AttemptLock =
+  | { toMillis: () => number }                    // Firestore SDK instance
+  | { _seconds: number; _nanoseconds?: number }   // callable JSON (admin SDK)
+  | { seconds: number; nanoseconds?: number }     // callable JSON (alt casing)
+  | string                                        // ISO — optimistic local copy
+  | number                                        // epoch ms
+  | Date
+  | null;
+
+/**
+ * Any lock shape → epoch milliseconds, or null when there is no usable bound.
+ *
+ * UNRECOGNISED SHAPES RETURN NULL, AND THE DIRECTION IS DELIBERATE. Null means
+ * "no bound", so the client believes the window is still OPEN. If that is
+ * wrong, the student keeps working and the server rejects the write — visible
+ * and recoverable. The opposite default would auto-submit a student who still
+ * had time left, on nothing more than a shape we failed to parse. Fail towards
+ * letting them keep writing; firestore.rules is the real gate.
+ */
+export function lockToMillis(raw: AttemptLock | undefined): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  if (typeof raw === 'string') {
+    const ms = Date.parse(raw);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (raw instanceof Date) {
+    const ms = raw.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof (raw as { toMillis?: unknown }).toMillis === 'function') {
+    const ms = (raw as { toMillis: () => number }).toMillis();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  // Callable wire shape. Both casings are accepted because the underscored
+  // form is an admin-SDK internal field name, not a documented contract, and
+  // is not something to depend on surviving an SDK upgrade.
+  const o = raw as {
+    _seconds?: number; seconds?: number;
+    _nanoseconds?: number; nanoseconds?: number;
+  };
+  const secs = typeof o._seconds === 'number' ? o._seconds
+             : typeof o.seconds === 'number' ? o.seconds
+             : null;
+  if (secs === null) return null;
+  const nanos = typeof o._nanoseconds === 'number' ? o._nanoseconds
+              : typeof o.nanoseconds === 'number' ? o.nanoseconds
+              : 0;
+  const ms = secs * 1000 + Math.floor(nanos / 1e6);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 // ── Main attempt document ─────────────────────────────────────────
 
 export type Attempt = {
@@ -234,7 +311,7 @@ export type Attempt = {
    * means no time bound: an untimed exam, or an attempt that predates the
    * field. A Firestore Timestamp over the wire, hence the loose shape.
    */
-  answersLockedAfter?: { toMillis: () => number } | string | null;
+  answersLockedAfter?: AttemptLock;
   /**
    * The two bounds that `answersLockedAfter` is the minimum of (Phase 0 of the
    * timer plan, 2026-07-31).
@@ -248,8 +325,8 @@ export type Attempt = {
    * Absent on attempts that started before this shipped — the client falls
    * back to the previous behaviour for those, which drains within one sitting.
    */
-  sectionLockedAfter?: { toMillis: () => number } | string | null;
-  overallLockedAfter?: { toMillis: () => number } | string | null;
+  sectionLockedAfter?: AttemptLock;
+  overallLockedAfter?: AttemptLock;
   id: string;
   assessmentId: string;
   assessmentTitle: string;

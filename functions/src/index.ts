@@ -5495,7 +5495,10 @@ function assertInvigilator(
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
   const role = request.auth.token.role as string | undefined;
   const instituteId = request.auth.token.instituteId as string | undefined;
-  const ok = role === 'web_owner'
+  // 'webOwner', camelCase — the claim firestore.rules documents at the top of
+  // the file and AuthContext issues. Writing 'web_owner' here silently
+  // rejected every Web Owner, so freezing appeared to do nothing at all.
+  const ok = role === 'webOwner'
     || ((role === 'institute' || role === 'faculty') && attempt.instituteId === instituteId);
   if (!ok) throw new HttpsError('permission-denied', 'Not permitted to invigilate this attempt.');
   return { uid: request.auth.uid, role: role as string };
@@ -5701,7 +5704,7 @@ export const getExamVerdict = onCall<GetExamVerdictData>(
     // A student may ask about their own sitting; staff may ask about one in
     // their tenant. Same scoping the roster already relies on.
     const isOwner = role === 'student' && att.studentId === studentId;
-    const isStaff = role === 'web_owner'
+    const isStaff = role === 'webOwner'
       || ((role === 'institute' || role === 'faculty') && att.instituteId === instituteId);
     if (!isOwner && !isStaff) {
       throw new HttpsError('permission-denied', 'Not your attempt.');

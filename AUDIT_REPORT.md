@@ -94,7 +94,13 @@ setInstituteQuestionRightsCeiling → src/lib/firebaseService.ts:1426
 
 **Phase:** 4 / 5
 
-`CLAUDE.md` — the primary AI navigation aid — contains claims contradicted by the source:
+> **Superseded 2026-08-03 (C-6).** `CLAUDE.md` does not exist anywhere in this
+> repository, so this finding has no target and its fix direction cannot be
+> carried out. It is left in place as a record of what the file said when it
+> existed. If a navigation aid is reintroduced, the claims below are the ones
+> to check it against.
+
+`CLAUDE.md` — the primary AI navigation aid — contained claims contradicted by the source:
 
 - ❌ **"No Firebase Auth — passwords compared in browser JS"** (§8). The code uses real `signInWithEmailAndPassword` + custom claims in **all four** auth contexts.
 - ❌ Lists a **nonexistent** `emailService.ts`.
@@ -163,7 +169,7 @@ Any assistant trusting the map reasons about the wrong auth model and misses the
 
 1. **H1** — blocks the time-enforcement deploy (the exact feature under change).
 2. **H2** — tenant privilege escalation; add the institutes field whitelist + re-clamp question-rights server-side.
-3. **M1** — rewrite `CLAUDE.md` §3 / §8 (cheap, high-leverage for every future change).
+3. ~~**M1** — rewrite `CLAUDE.md` §3 / §8~~ — **not actionable**: no such file exists (C-6).
 4. **M2 + L2 / L3 / L5** — repo hygiene sweep.
 5. **L1 / L4** — consistency polish.
 

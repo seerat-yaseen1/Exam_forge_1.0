@@ -4,6 +4,23 @@
 > **Scope:** the whole assessment lifecycle — creation with each setting on and off, admission, delivery, timers, freeze, penalties, escape, submission, grading, attempts.
 > **Method:** every finding below is **executable**. A new suite, `functions/test/audit.probe.cjs`, drives the **compiled production callables** (`functions/lib/index.js`) against an in-memory Firestore and a virtual clock. Nothing in it re-implements a deadline, a lock or a mark — every number asserted on was written by a real handler.
 > **Result:** 22 probes, **77 checks green, 16 red across 10 distinct defects.** The three pre-existing suites are all green and stayed green.
+>
+> ## ✅ STATUS: ALL TEN DEFECTS FIXED (2026-08-03)
+>
+> Every finding below has been resolved, each in its own commit, with the probe that proved it now passing. **93/93 probe checks green**, and the three pre-existing suites unchanged and green throughout (13,446 states / 84,062 assertions; 64 freeze checks; 85 e2e checks).
+>
+> | Finding | Commit | Probe |
+> |---|---|---|
+> | A-01 penalties dropped by `toCoreAttempt` | `89c75ed` | P-01 ✅ |
+> | A-02 `submitSection` re-arms the write lock | `b162c66` | P-02, P-03 ✅ |
+> | A-03 sequential delivery has no section/overall clock | `af5c7e8` | P-04 ✅ |
+> | A-05 / A-06 live edits reach a sitting student | `8c6b6b4` | P-21, P-22 ✅ |
+> | A-04 penalty caps overshoot in aggregate | `50143da` | P-12 ✅ |
+> | A-08 partial multi-select penalised as fully wrong | `b2ddd62` | P-06 ✅ |
+> | A-07 window does not bound answer writes | `d18f0c7` | P-05 ✅ |
+> | A-09 / A-10 + contradictions C-1…C-6 | see below | P-07 ✅ |
+>
+> The sections below are left as written, in the past tense of the investigation, because the evidence is the point — each says what was wrong, how it was measured, and what the fix was. A "Fixed" note closes each one.
 
 ---
 
@@ -88,7 +105,7 @@ Everywhere else they are gone. `penaltyForClock()` reads `a.penalties`, finds `u
 
 An invigilator's recorded decision, with an actor and a timestamp, is undone by the student pressing "next section". No invariant catches it: `INV-3a` forbids the bound moving *earlier* without a ledger row, and this moves it *later*.
 
-**Fix direction.** Add `penalties: d.penalties` to `toCoreAttempt`. One line. It is the same class of fix as `applyLockUpdates` — the mapper is the single place that decides what the resolver can see, and a field missing there is invisible everywhere at once.
+**FIXED** (`89c75ed`). `penalties` is mapped in `toCoreAttempt`, kept adjacent to `freezes` because credit and deduction are two halves of one ledger and must travel together. P-01 green.
 
 ---
 
@@ -122,7 +139,7 @@ On an exam with **no overall limit** — per-section timing only, a perfectly or
 
 **(c) Arbitrary keys and indices.** `nextSectionId: 'GHOST'` creates `sectionTimings.GHOST`; `nextSectionIdx: 9` is written to `currentSectionIdx` verbatim. Neither is refused.
 
-**Fix direction.** Reject any `nextSectionId` that is not in `attempt.sectionIds`, that equals `sectionId`, or whose timing already carries a `startedAt`; derive `currentSectionIdx` from `sectionIds.indexOf(nextSectionId)` rather than trusting the caller. `startSection` already enforces the equivalent rules (`:7941`, `:7960`); `submitSection`'s advance branch is the same transition without the guards.
+**FIXED** (`b162c66`). A next section equal to the one being submitted, absent from `sectionIds`, or already submitted is now rejected; `currentSectionIdx` is derived server-side. `nextSectionIdx` is still accepted and ignored so a cached client keeps working. A retry whose advance already landed is an idempotent no-op rather than an error — a dropped response must not strand a student. P-02 and P-03 green.
 
 ---
 
@@ -151,7 +168,7 @@ Both flag `lateAnswer: true` and both persist the answer, and `scoreAttemptAnswe
 
 This inverts the security model. Linear/adaptive is the **more** controlled mode — one question at a time, no going back, the client never holds the paper — and on time enforcement it is strictly the **weaker** one.
 
-**Fix direction.** Both callables already load the assessment and already build a `CoreAttempt`. Call `computeDeadlines` + `effectiveNowMs` and refuse (or hard-close) once `evalNow >= effectiveEndsAt`, exactly as `submitSection:8256` now does. The parts are all in hand; only the check is missing.
+**FIXED** (`af5c7e8`). Both callables now call one shared gate, `assertSequentialAnswerWindowOpen`, enforcing `min(section, overall)` — byte-for-byte the bound the rules enforce for standard mode. Freeze credit and penalties apply as everywhere else, and a missing bound still means unbounded. The client's `isAnswerWindowClosed` learned the new signal so a late flush reads as "your time was up", not as an unexplained failure. P-04 green.
 
 ---
 
@@ -179,7 +196,7 @@ Each cap is correct **in isolation**. But `PENALTY_REACHES` (`examTimingCore.ts:
 
 The student is instantly and irrecoverably out of time. `A4`'s stated promise is *"no arithmetic that can go negative"*; this is that arithmetic going negative through the door left open by `A5`.
 
-**Fix direction.** Cap the **outward-travelling total**, not each row independently: compute the section and question caps first, then cap the overall row at `remaining(overallEndsAt) − (sectionPenalty + questionPenalty)`. Add a floor so no materialised deadline is ever written earlier than `nowMs`.
+**FIXED** (`50143da`). Caps are cumulative, innermost clock first, so the total any clock absorbs is at most what it had left. No floor was added, deliberately: with the caps right the worst case is a deadline at exactly `now`, and flooring on top would mask a deadline gone into the past for some *other* reason. P-12 green.
 
 ---
 
@@ -207,7 +224,7 @@ And the builder re-draws rule-based sections **at random on every save with `sta
 
 Their correct answer to `q1` is discarded — `q1` is no longer in the paper — and `q9`, which they were never shown, is counted as an unattempted blank. This applies to already-**submitted** attempts too, via `regradeAttempts` (`:4110`).
 
-**Fix direction.** Add `sections` and `questions` to the post-`securityLockedAt` immutability list in the rules, or freeze the resolved paper onto the attempt at `startExam` (the attempt already carries `questionOrder` and `servedQuestions` — grading could iterate those instead of the live document, which is what `servedQuestions` was built for). The second is the stronger fix and matches the existing `gradingConfig` freeze at `:7312`.
+**FIXED** (`8c6b6b4`). `examSnapshot` freezes the played paper — sections, marks, order, per-section limits, breaks — onto the attempt at `startExam`, and `examContractFor` merges it over the live document everywhere grading and timing read. Legacy attempts fall through to the live doc, so nothing in flight changes on deploy. P-21 green.
 
 ---
 
@@ -226,7 +243,7 @@ Every student mid-sitting is finalised by the next sweep, on a clock they never 
 
 This directly contradicts the design note at `assessmentService.ts:755`, which explains the publish freeze as *"Once live, the security posture is what was advertised, and nobody can quietly soften it."* Timing is advertised to the student on the briefing page in exactly the same way, and is not protected.
 
-**Fix direction.** Freeze the timing contract onto the attempt at `startExam` alongside `securityConfig` and `gradingConfig`, and read it from there. Failing that, add the timing fields to the rules' immutability list.
+**FIXED** (`8c6b6b4`, same change as A-05). The snapshot carries `overallTimeLimit` and all three grace knobs as well as the paper. Deliberately *not* frozen: `startDate`/`endDate` (the window is the institution's wall, and closing or extending an exam must keep working), `passingScore` and the review audiences (grading knobs `regradeAttempts` re-applies), and `blockedStudents` (an invigilation decision taken now). P-22 green.
 
 ---
 
@@ -247,7 +264,7 @@ So between `endDate` and the student's own overall deadline, `answersLockedAfter
 
 Exposure is bounded by the sweep's 60-minute cadence, and requires a client that ignores the verdict. It is a real hole in a wall documented as hard, not a theoretical one.
 
-**Fix direction.** Fold `windowEndsAt` into `combined` in `computeAttemptLocks`. The resolver already computes it; this is the Phase 5 step the comment names.
+**FIXED** (`d18f0c7`). The window is folded into `combined` only — the split `section`/`overall` pair keeps its meaning of *which of the student's own clocks* ran out, and a window closure is neither. `INV-3` moved with it and now expects `min(section, overall, window)`; the 13,446-state sweep still passes. P-05 green.
 
 ---
 
@@ -273,7 +290,7 @@ For multi-select, `multiplier` is `max(0, (hits − wrongs) / |correct|)` (`:343
 
 A student who knew half the answer is scored the same as one who knew none, and worse than one who left it blank (`blankScore`, 0). The `match` engine (`:3455`) does *not* have this problem — `correct/total` is only 0 when nothing matched — so the two engines apply different rules under one policy.
 
-**Fix direction.** Distinguish "no correct content" from "cancelled out": penalise only when `hits === 0`. One condition, and it makes the code match the comment above it.
+**FIXED** (`b2ddd62`). The scorers return `anyCorrect` alongside the multiplier, and the rule is expressed once in `awardFor()` rather than duplicated per engine — the defect was two copies of one rule drifting from the sentence above them. A cancelling answer now scores 0; only an answer with nothing right takes the penalty. P-06 green.
 
 ---
 
@@ -285,11 +302,15 @@ A student who knew half the answer is scored the same as one who knew none, and 
 
 `lastSectionId` and `lastSectionTimeUsed` come from `request.data` and are written as dot-paths with no membership check. `lastSectionId: 'NOT_A_SECTION', lastSectionTimeUsed: 999999` produces a `sectionTimings.NOT_A_SECTION` row on the finalised attempt. Cosmetic — the attempt is terminal and nothing reads unknown keys — but it is unvalidated caller input shaping stored state, and it pollutes any later analytics over `sectionTimings`.
 
+**FIXED.** The id is checked against the attempt's own `sectionIds`, and the duration is floored at 0. A bad id is dropped and logged rather than throwing: this is the tail of a finalise that has already graded the paper, and failing a submission over a bookkeeping field would cost the student far more than the defect does. P-07 green.
+
 ### A-10 · `questionGraceSeconds` is a dead knob
 
 **Evidence:** `assessmentService.ts:509`; consumed at `index.ts:5197`, `5454`, `6244`, `7606`, `examTimingCore.ts:635`, `ExamShell.tsx:2272`
 
 D-14's fix was *"one number, consumed by BOTH sides… and it is configurable per assessment."* Six sites read it. **No authoring UI writes it** — `DetailsStep.tsx`'s save payload carries `sectionGraceSeconds` and `overallGraceSeconds` and not this one. Every exam therefore runs on the hardcoded 5-second default, and the configurability is notional.
+
+**FIXED.** A "Question grace period" field now sits beside the other two grace knobs in the builder, shown only for sequential delivery — standard mode has no per-question clock for it to extend, so a standard exam does not store a number nothing will read.
 
 ---
 
@@ -299,14 +320,14 @@ These are not bugs in the running code. They are places where somebody reading t
 
 | # | Where | What it says | What ships |
 |---|---|---|---|
-| **C-1** | `DetailsStep.tsx:1181` | Linear: *"One question at a time, no going back. **(Enforcement lands in a later phase.)**"* | Fully enforced today. `startExam:7198` serves one question; `submitAnswerAndAdvance:5158` refuses any locked or non-current question; `firestore.rules:629` blocks direct answer writes. An author choosing Linear believing it inert ships a genuinely one-way exam. |
-| **C-2** | `DetailsStep.tsx:1183` | Adaptive: *"difficulty adapts to performance"* | No adaptation exists. `submitAnswerAndAdvance:5229` picks `orderForSection.find(qid => !served.has(qid))` — plain order. Adaptive is linear with a different label. `index.ts:7186` admits it: *"adaptive: same as linear (ladder picks the next) — Phase 2.5 Stage 4."* |
-| **C-3** | `DetailsStep.tsx:33` | — | `sanitizeGradingConfig` **silently discards the entire negative-marking policy** when delivery mode is `adaptive`. An author who configures penalties and then switches mode loses the configuration with no warning. |
-| **C-4** | `index.ts:7446` | *"FREEZE IS DELIBERATELY NOT CREDITED… the server ignores freeze"* | Superseded 80 lines later by the Phase 4.3 block at `:7527` which credits **and** penalises. Both texts remain, the first argues against what the function now does. |
-| **C-5** | `index.ts:5319` | *"including the same `qLimit + 5` latency grace"* | The code uses configurable `questionGraceSeconds` (`:5453`). Stale by one refactor. |
-| **C-6** | `AUDIT_REPORT.md` M1 | Treats `CLAUDE.md` as *"the primary AI navigation aid"* and prescribes rewriting §3/§8 | **There is no `CLAUDE.md` anywhere in the repository.** The prior audit's highest-leverage recommendation targets a file that does not exist. |
+| **C-1** | `DetailsStep.tsx:1181` | Linear: *"One question at a time, no going back. **(Enforcement lands in a later phase.)**"* | Fully enforced today. `startExam:7198` serves one question; `submitAnswerAndAdvance:5158` refuses any locked or non-current question; `firestore.rules:629` blocks direct answer writes. An author choosing Linear believing it inert ships a genuinely one-way exam. **FIXED** — the copy now says it is enforced by the server. |
+| **C-2** | `DetailsStep.tsx:1183` | Adaptive: *"difficulty adapts to performance"* | No adaptation exists. `submitAnswerAndAdvance:5229` picks `orderForSection.find(qid => !served.has(qid))` — plain order. Adaptive is linear with a different label. `index.ts:7186` admits it: *"adaptive: same as linear (ladder picks the next) — Phase 2.5 Stage 4."* **FIXED** — the copy now states it is identical to Linear and that adaptation is not implemented. |
+| **C-3** | `DetailsStep.tsx:33` | — | `sanitizeGradingConfig` **silently discards the entire negative-marking policy** when delivery mode is `adaptive`. An author who configures penalties and then switches mode loses the configuration with no warning. **FIXED** — selecting Adaptive now shows a warning saying the policy will be discarded and pointing at Linear. |
+| **C-4** | `index.ts:7446` | *"FREEZE IS DELIBERATELY NOT CREDITED… the server ignores freeze"* | Superseded 80 lines later by the Phase 4.3 block at `:7527` which credits **and** penalises. Both texts remain, the first argues against what the function now does. **FIXED** — the superseded paragraph is removed rather than left standing beside the code that contradicts it. |
+| **C-5** | `index.ts:5319` | *"including the same `qLimit + 5` latency grace"* | The code uses configurable `questionGraceSeconds` (`:5453`). Stale by one refactor. **FIXED** — and the note now also distinguishes the question clock (flag, never reject) from the section/overall clocks (refuse, per A-03). |
+| **C-6** | `AUDIT_REPORT.md` M1 | Treats `CLAUDE.md` as *"the primary AI navigation aid"* and prescribes rewriting §3/§8 | **There is no `CLAUDE.md` anywhere in the repository.** The prior audit's highest-leverage recommendation targets a file that does not exist. **FIXED** — M1 is annotated as not actionable and struck from that report's action list, with its claims kept as a checklist should a navigation aid be reintroduced. |
 
-Also noted: `new-file.tsx` (0 bytes) is committed at the repository root.
+Also noted: `new-file.tsx` (0 bytes) is committed at the repository root. Left in place — deleting a file nobody asked about is not this audit's call to make.
 
 ---
 
@@ -334,17 +355,18 @@ Beyond the probes, these were read and confirmed sound: the SEB gate fails **clo
 
 ---
 
-## 8 · Recommended order of action
+## 8 · Order of action taken
 
-1. **A-01** — one line (`penalties: d.penalties` in `toCoreAttempt`). Highest ratio of correctness restored to code changed; a recorded human decision currently evaporates.
-2. **A-02** — validate `nextSectionId` in both `submitSection` branches. This is an open time-limit bypass reachable from the console.
-3. **A-03** — add the deadline gate to `submitAnswerAndAdvance` and `saveAnswerNoAdvance`. Until then, linear/adaptive is untimed at the answer layer.
-4. **A-05 / A-06** — freeze the paper and the timing contract onto the attempt (or extend the rules' immutability list). These need staff action to trigger, but the failure is silent and hits whole cohorts.
-5. **A-04** — cap the outward-travelling penalty total, and floor materialised deadlines at `now`.
-6. **A-08** — `hits === 0` instead of `multiplier === 0`; makes the code agree with its own comment.
-7. **A-07** — fold the window into `combined` (the Phase 5 step already named in the source).
-8. **C-1 / C-2 / C-3** — correct the delivery-mode copy, and either implement adaptive or stop offering it; warn before discarding a grading policy on mode change.
-9. **A-09 / A-10 / C-4 / C-5 / C-6** — hygiene.
+All ten defects were fixed in the order below — highest leverage first, each in its own commit, each verified by re-running all four suites before moving on.
+
+1. **A-01** `89c75ed` — one line. A recorded human decision had been evaporating on the next section advance.
+2. **A-02** `b162c66` — an open time-limit bypass reachable from the console.
+3. **A-03** `af5c7e8` — until this, linear/adaptive was untimed at the answer layer.
+4. **A-05 / A-06** `8c6b6b4` — staff-triggered, silent, and cohort-wide.
+5. **A-04** `50143da` — cumulative caps, innermost clock first.
+6. **A-08** `b2ddd62` — the code now agrees with its own comment.
+7. **A-07** `d18f0c7` — the Phase 5 step the source had already named.
+8. **A-09 / A-10 / C-1…C-6** — validation, the missing grace knob, and the copy that described a different system.
 
 ---
 

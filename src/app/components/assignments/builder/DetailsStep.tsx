@@ -129,6 +129,11 @@ export function DetailsStep({
   // ── Overall exam timer ─────────────────────────────────────────
   // overallGraceSeconds: its own knob (blank = 30s default).
   const [overallGraceSeconds, setOverallGraceSeconds] = useState(assessment?.overallGraceSeconds?.toString() ?? '');
+  // A-10: questionGraceSeconds had six readers on the server and the client and
+  // no authoring UI at all, so D-14's "one number, consumed by BOTH sides… and
+  // configurable per assessment" was only ever the hardcoded 5s default. Only
+  // meaningful in sequential delivery, where a per-question clock exists.
+  const [questionGraceSeconds, setQuestionGraceSeconds] = useState(assessment?.questionGraceSeconds?.toString() ?? '');
   // overallAuto: when on, the limit field is DRIVEN by the sections
   // (sum of section time + section grace + breaks + overall grace) and stays
   // in sync as they change. Default on for a NEW exam (so a teacher who never
@@ -519,6 +524,11 @@ export function DetailsStep({
         passingScore: passingScore ? parseInt(passingScore, 10) : undefined,
         maxAttempts: parsePositiveIntOrUndefined(maxAttempts),
         sectionGraceSeconds: sectionGraceSeconds ? parseInt(sectionGraceSeconds, 10) : undefined,
+        // A-10: only stored for the modes that HAVE a question clock, so a
+        // standard-delivery exam does not carry a number nothing will read.
+        questionGraceSeconds: deliveryMode !== 'standard' && questionGraceSeconds
+          ? parseInt(questionGraceSeconds, 10)
+          : undefined,
         shuffleQuestions,
         sectionStartOrder,
         // Audience arrays are authoritative; legacy booleans mirror the
@@ -841,6 +851,23 @@ export function DetailsStep({
                   {overallGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
                 </div>
               </Field>
+
+              {/* A-10: the per-question grace, which had no authoring UI at all
+                  despite six readers across the server and the shell. Shown
+                  only for sequential delivery — standard mode has no
+                  per-question clock for it to extend. */}
+              {deliveryMode !== 'standard' && (
+                <Field label="Question grace period" hint="(seconds past each question's timer; blank = 5s default)">
+                  <div className="flex items-center gap-2 px-3 py-2"
+                    style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                    <Timer size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                    <input type="number" value={questionGraceSeconds} onChange={(e) => setQuestionGraceSeconds(e.target.value)}
+                      placeholder="e.g., 5" min="0" className="flex-1 outline-none"
+                      style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
+                    {questionGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
+                  </div>
+                </Field>
+              )}
 
               {/* NEGATIVE MARKING (Standard + Linear only) ─────────────── */}
               {deliveryMode !== 'adaptive' && (
@@ -1177,13 +1204,30 @@ export function DetailsStep({
                     );
                   })}
                 </div>
+                {/* C-1 / C-2: this copy claimed enforcement was still to come
+                    for both sequential modes. Linear has been fully enforced
+                    server-side for some time — the server serves one question
+                    at a time, refuses any locked or non-current question, and
+                    the rules block direct answer writes — so an author reading
+                    "later phase" could ship a genuinely one-way exam believing
+                    it inert. Adaptive is the opposite error: it is enforced
+                    exactly like linear, and the difficulty ladder does NOT
+                    exist yet (the next question is simply the next in order).
+                    Both now say what actually happens. */}
                 <p className="text-xs" style={{ color: '#9A9891' }}>
                   {deliveryMode === 'linear'
-                    ? 'One question at a time, no going back. (Enforcement lands in a later phase.)'
+                    ? 'One question at a time, no going back — enforced by the server. Answers are committed as the student advances.'
                     : deliveryMode === 'adaptive'
-                      ? 'One at a time; difficulty adapts to performance. (Enforcement lands in a later phase.)'
+                      ? 'One question at a time, no going back — identical to Linear today. Difficulty adaptation is not implemented yet.'
                       : 'All questions visible; students navigate freely.'}
                 </p>
+                {deliveryMode === 'adaptive' && (
+                  <p className="text-xs" style={{ color: '#B4643C' }}>
+                    Negative marking is not applied in Adaptive delivery — any penalty
+                    settings below are discarded when you save. Choose Linear if you
+                    need one-at-a-time delivery with negative marking.
+                  </p>
+                )}
               </div>
 
               {/* Section start order */}

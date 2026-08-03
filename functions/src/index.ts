@@ -3892,6 +3892,9 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       freezes?: FreezeLedgerEntry[];
       securityConfig?: { tier?: string; requireSEB?: boolean } | null;
       gradingConfig?: AssessmentGradingConfigS;   // frozen at startExam
+      // A-09: the played section set, used to reject a caller-named
+      // `lastSectionId` that is not part of this attempt.
+      sectionIds?: string[];
       // Read for the trapped-frozen escape hatch below. Loose shape: a
       // Firestore Timestamp over the wire, an ISO string on legacy attempts,
       // absent on attempts that predate the field.
@@ -4051,9 +4054,29 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       updates['integrityLog.autoTerminated'] = true;
       if (terminateReason) updates['integrityLog.terminatedReason'] = terminateReason;
     }
+    // ── Closing timings for the section the student was in (A-09) ──
+    //
+    // `lastSectionId` is caller-supplied and was written as a dot-path with no
+    // membership check, so `lastSectionId: 'NOT_A_SECTION'` produced a
+    // sectionTimings row for a section that does not exist. Cosmetic — the
+    // attempt is terminal and nothing reads unknown keys — but it is
+    // unvalidated caller input shaping stored state, and it pollutes any later
+    // analytics over sectionTimings.
+    //
+    // Ignored rather than rejected: this is the tail of a finalise that has
+    // already graded the paper, and throwing here would fail a submission over
+    // a bookkeeping field. A bad id is dropped and logged; the attempt still
+    // closes, which is the outcome that matters to the student.
     if (lastSectionId && typeof lastSectionTimeUsed === 'number') {
-      updates[`sectionTimings.${lastSectionId}.submittedAt`]     = nowIso;
-      updates[`sectionTimings.${lastSectionId}.timeUsedSeconds`] = lastSectionTimeUsed;
+      const known = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
+      if (known.includes(lastSectionId)) {
+        updates[`sectionTimings.${lastSectionId}.submittedAt`]     = nowIso;
+        updates[`sectionTimings.${lastSectionId}.timeUsedSeconds`] =
+          Math.max(0, Math.floor(lastSectionTimeUsed));
+      } else {
+        console.warn('[gradeAttempt] ignoring lastSectionId outside the attempt',
+          attemptId, lastSectionId);
+      }
     }
 
     // ── Freeze flag (Phase 1c) ────────────────────────────────────
@@ -5482,10 +5505,16 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
 // first with the same shape.
 //
 // LATE ANSWERS
-// Recorded and flagged, never rejected — byte-for-byte the policy
-// submitAnswerAndAdvance already applies, including the same `qLimit + 5`
-// latency grace, so the two cannot disagree about what "late" means. A lag
-// spike must not cost a student their work.
+// A late answer against the QUESTION clock is recorded and flagged, never
+// rejected — byte-for-byte the policy submitAnswerAndAdvance applies, using the
+// assessment's own questionGraceSeconds (F13/D-14 replaced the hardcoded
+// `qLimit + 5` this comment used to name), so the two cannot disagree about
+// what "late" means. A lag spike must not cost a student their work.
+//
+// The SECTION and OVERALL clocks are different, and since A-03 both callables
+// refuse an answer past them through one shared gate. That is not a latency
+// question — it is the deadline itself, and standard delivery has always
+// enforced it through firestore.rules.
 //
 // NOT FOR STANDARD DELIVERY. Standard-mode answers are a direct, rules-gated
 // client write, which the master plan's trust-boundary table blesses
@@ -7672,13 +7701,12 @@ function breakAfterCompletion(
  * limit contributes no overall bound; with neither there is nothing to lock
  * and this returns null, which the rule reads as "no time constraint".
  *
- * FREEZE IS DELIBERATELY NOT CREDITED, matching submitSection's documented
- * posture exactly (see the note above its overall-deadline check): the server
- * ignores freeze, grace absorbs the slack, and freeze is credited only in the
- * client display. Doing anything else here would make the rule disagree with
- * the callable that grades the attempt — and it also means an invigilator
- * unfreezing does NOT have to recompute this field, so staff cannot lengthen
- * a student's writable window by toggling freeze.
+ * FREEZE WAS DELIBERATELY NOT CREDITED HERE — and no longer: Phase 4.3 credits
+ * this gate, and Phase 4.5 subtracts recorded penalties from it. The paragraph
+ * that used to sit here argued the other way and was right at the time; it is
+ * removed rather than left standing, because a comment that contradicts the
+ * function under it is worse than no comment (C-4). The reasoning for the
+ * change is in the Phase 4.3 block further down, next to the code that does it.
  *
  * ── Phase 0 (timer plan, 2026-07-31) ──────────────────────────────
  * Renamed from computeAnswersLockedAfter, and now returns the two bounds

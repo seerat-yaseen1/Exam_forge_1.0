@@ -4220,11 +4220,31 @@ export const regradeAttempts = onCall<RegradeAttemptsData>(
     if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
     const assessment = aSnap.data() as GradingAssessmentDoc;
 
-    const sections = normalizeSections(assessment);
-    const qIds = Array.from(new Set(
-      sections.flatMap((s) => s.questions.map((q) => q.questionId))
-    ));
-    const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
+    // ── B-02: each attempt is regraded against the paper IT sat ─────
+    //
+    // Sections were resolved ONCE from the live document and applied to every
+    // attempt. That is the A-05 defect surviving in the regrade path: the fix
+    // reached gradeAttempt, gradeProvisional and the sweep, and the commit that
+    // made it even named regradeAttempts as part of the problem — but this
+    // function was left reading live. A regrade after any paper edit therefore
+    // re-scored finished sittings against questions their students never saw,
+    // silently, across a whole cohort at once.
+    //
+    // The live paper still seeds the question/answer maps: those are keyed by
+    // question id, and loading them once is the cost this shape exists to
+    // avoid. Ids that only a frozen paper names are topped up on demand below,
+    // so the common case (no edit since publish) reads nothing extra.
+    const liveSections = normalizeSections(assessment);
+    const questionMap = new Map<string, QuestionDoc>();
+    const answerMap = new Map<string, QuestionAnswerDoc>();
+    {
+      const qIds = Array.from(new Set(
+        liveSections.flatMap((s) => s.questions.map((q) => q.questionId))
+      ));
+      const loaded = await loadQuestionAndAnswerMaps(db, qIds);
+      for (const [k, v] of loaded.questionMap) questionMap.set(k, v);
+      for (const [k, v] of loaded.answerMap) answerMap.set(k, v);
+    }
 
     const invalidated = new Set(invalidatedQuestionIds ?? []);
 
@@ -4251,9 +4271,26 @@ export const regradeAttempts = onCall<RegradeAttemptsData>(
         isDeleted?: boolean;
         answers?: Record<string, AttemptAnswerDoc>;
         gradingConfig?: AssessmentGradingConfigS;   // frozen policy for this attempt
+        examSnapshot?: { sections?: unknown };      // B-02: frozen paper
       };
       if (!att.status || !FINISHED.has(att.status)) continue;
       if (att.isDeleted) continue;
+
+      // B-02: this attempt's own paper, falling through to the live document
+      // when it predates examSnapshot.
+      const attemptPaper = examContractFor(
+        att as unknown as Record<string, unknown>,
+        assessment as unknown as Record<string, unknown>,
+      ) as GradingAssessmentDoc;
+      const sections = normalizeSections(attemptPaper);
+      const missing = Array.from(new Set(
+        sections.flatMap((sec) => sec.questions.map((q) => q.questionId))
+      )).filter((qid) => !questionMap.has(qid));
+      if (missing.length > 0) {
+        const extra = await loadQuestionAndAnswerMaps(db, missing);
+        for (const [k, v] of extra.questionMap) questionMap.set(k, v);
+        for (const [k, v] of extra.answerMap) answerMap.set(k, v);
+      }
 
       const { scores, gradedAnswers } = scoreAttemptAnswers({
         sections,
@@ -4365,10 +4402,44 @@ export const getAnswerKeysForReview = onCall<GetAnswerKeysData>(
       }
     }
 
-    // Intersect requested ids with the paper — never leak keys beyond it.
+    // ── Intersect requested ids with the paper — never leak keys beyond it ──
+    //
+    // B-03: "the paper" is the set this exam has ever put in front of a
+    // student, not the set the live document happens to name today. Once the
+    // paper is frozen per attempt (A-05), a question removed from the live doc
+    // is still sitting in finished attempts — and intersecting against the live
+    // set alone made those unmarkable, because the human marking a text answer
+    // could not obtain its key.
+    //
+    // The union stays tightly bounded, which is what the intersection is for:
+    // it is exactly the live paper plus what real attempts were served, so this
+    // still cannot be used to dump the bank at large. One extra query on a
+    // staff review endpoint — the same query regradeAttempts already runs — is
+    // the cost.
     const paperIds = new Set(
       normalizeSections(assessment).flatMap((s) => s.questions.map((q) => q.questionId))
     );
+    try {
+      const satSnap = await db.collection('attempts')
+        .where('assessmentId', '==', assessmentId)
+        .limit(500)
+        .get();
+      for (const d of satSnap.docs) {
+        const snapSections = (d.get('examSnapshot') as { sections?: Array<{
+          questions?: Array<{ questionId?: string }>;
+        }> } | undefined)?.sections;
+        if (!Array.isArray(snapSections)) continue;
+        for (const sec of snapSections) {
+          for (const q of sec.questions ?? []) {
+            if (typeof q.questionId === 'string') paperIds.add(q.questionId);
+          }
+        }
+      }
+    } catch (e) {
+      // A widening step must never break the endpoint. Falling back to the
+      // live paper alone is exactly the previous behaviour.
+      console.warn('[getAnswerKeysForReview] sat-paper widening skipped', assessmentId, e);
+    }
     const wanted = (questionIds && questionIds.length > 0)
       ? questionIds.filter((id) => paperIds.has(id))
       : Array.from(paperIds);
@@ -4534,6 +4605,8 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
         securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
         servedQuestions?: Array<{ questionId: string }>;
         createdAt?: string;
+        // B-01: the frozen paper, so standard delivery serves what it grades.
+        examSnapshot?: { sections?: unknown };
       })
       .sort((x, y) => (y.createdAt ?? '').localeCompare(x.createdAt ?? ''))[0];
 
@@ -4617,10 +4690,28 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
     const isSequentialDelivery =
       attemptDeliveryMode === 'linear' || attemptDeliveryMode === 'adaptive';
 
+    // ── B-01: serve the paper THIS attempt sat ──────────────────────
+    //
+    // Sequential delivery was always right — it lists servedQuestions, which is
+    // the attempt's own record. Standard delivery listed the LIVE document, and
+    // once the paper was frozen onto the attempt for grading (A-05) the two
+    // could disagree: a staff re-save swaps a question, and the student is then
+    // SERVED one that will never be marked while never seeing the one that will
+    // be marked blank. Freezing the grader without freezing the server did not
+    // remove that inconsistency, it moved it somewhere worse.
+    //
+    // examContractFor falls through to the live document for attempts with no
+    // snapshot, so legacy sittings are unchanged.
+    const paperForAttempt = liveAttempt
+      ? (examContractFor(
+          liveAttempt as unknown as Record<string, unknown>,
+          assessment as unknown as Record<string, unknown>,
+        ) as GradingAssessmentDoc)
+      : assessment;
     const qIds = isSequentialDelivery
       ? Array.from(new Set((liveAttempt?.servedQuestions ?? []).map((s) => s.questionId)))
       : Array.from(new Set(
-          normalizeSections(assessment).flatMap((s) => s.questions.map((q) => q.questionId))
+          normalizeSections(paperForAttempt).flatMap((s) => s.questions.map((q) => q.questionId))
         ));
 
     const chunkedGetAll = async (ids: string[]) => {
@@ -5360,7 +5451,18 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
       assessment as unknown as Record<string, unknown> | undefined,
       Date.parse(nowIso),
     );
-    const sectionsNorm = assessment ? normalizeSections(assessment) : [];
+    // B-04: questionTimeLimit lives on the section, and this read it from the
+    // LIVE document — so cutting the per-question clock mid-sitting
+    // retroactively made answers late for a student already looking at the
+    // question. The clock a student races is part of the contract they started
+    // under (A-06); this is the one reader of it that was missed.
+    const contractForQ = assessment
+      ? examContractFor(
+          attempt as unknown as Record<string, unknown>,
+          assessment as unknown as Record<string, unknown>,
+        ) as GradingAssessmentDoc
+      : undefined;
+    const sectionsNorm = contractForQ ? normalizeSections(contractForQ) : [];
 
     // Phase 3b shadow — the question clock is where server and client have
     // historically disagreed most (D-14: 5s grace here, 0s there, and the last
@@ -5384,7 +5486,7 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     // to spend, and flagging their answer late for spending it re-imposes the
     // pause as a penalty nobody decided.
     const lateGraceSec =
-      (assessment as { questionGraceSeconds?: number } | undefined)?.questionGraceSeconds
+      (contractForQ as { questionGraceSeconds?: number } | undefined)?.questionGraceSeconds
       ?? DEFAULT_QUESTION_GRACE_SECONDS;
     let lateAnswer = false;
     if (typeof qLimit === 'number' && qLimit > 0) {
@@ -5640,7 +5742,14 @@ export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
       assessment as unknown as Record<string, unknown> | undefined,
       Date.parse(nowIso),
     );
-    const sectionsNorm = assessment ? normalizeSections(assessment) : [];
+    // B-04: same frozen question clock its sibling uses — see the note there.
+    const contractForQ = assessment
+      ? examContractFor(
+          attempt as unknown as Record<string, unknown>,
+          assessment as unknown as Record<string, unknown>,
+        ) as GradingAssessmentDoc
+      : undefined;
+    const sectionsNorm = contractForQ ? normalizeSections(contractForQ) : [];
     const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;
     // ── What "late" means, from one source (F13 / D-14) ────────────
@@ -5656,7 +5765,7 @@ export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
     // to spend, and flagging their answer late for spending it re-imposes the
     // pause as a penalty nobody decided.
     const lateGraceSec =
-      (assessment as { questionGraceSeconds?: number } | undefined)?.questionGraceSeconds
+      (contractForQ as { questionGraceSeconds?: number } | undefined)?.questionGraceSeconds
       ?? DEFAULT_QUESTION_GRACE_SECONDS;
     let lateAnswer = false;
     if (typeof qLimit === 'number' && qLimit > 0) {

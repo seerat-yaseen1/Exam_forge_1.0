@@ -1,0 +1,171 @@
+# 🚀 Deploying the exam-integrity fixes
+
+> **What changed:** rounds 2 and 3 of the exam audit fixed 14 defects, **all of them in Cloud Functions**.
+> **What you need to deploy:** **functions only.** Not rules, not indexes, not storage.
+> **Data migration required:** **none.**
+
+---
+
+## 1 · The short answer
+
+```bash
+cd functions
+npm install
+npm test          # all five suites must be green before you deploy
+
+cd ..
+firebase deploy --only functions --project YOUR_PROJECT_ID
+```
+
+That is the whole deployment. Everything below is the reasoning, and the things **not** to do.
+
+---
+
+## 2 · What does NOT need deploying, and how that was checked
+
+| Target | Deploy? | Evidence |
+|---|:---:|---|
+| **Cloud Functions** | ✅ **YES** | `functions/src/index.ts` changed in every fix |
+| `firestore.rules` | ❌ no | `git diff 62bf880..HEAD -- firestore.rules` → **empty** |
+| `firestore.indexes.json` | ❌ no | unchanged, and see §3 |
+| `storage.rules.tsx` | ❌ no | unchanged |
+| Hosting / frontend | ⚠️ separate | two client files changed — see §6 |
+
+Verify this yourself before deploying:
+
+```bash
+git diff --stat 62bf880..HEAD -- firestore.rules firestore.indexes.json storage.rules.tsx
+# empty output = nothing to deploy for these
+```
+
+---
+
+## 3 · Why no new Firestore index is needed
+
+The B-03 fix added exactly one new query, in `getAnswerKeysForReview`:
+
+```ts
+db.collection('attempts').where('assessmentId', '==', assessmentId).limit(500)
+```
+
+A **single-field equality** filter. Firestore creates single-field indexes automatically, so no composite index is required and `firestore.indexes.json` is untouched. Every other query in the changed code already existed — `regradeAttempts` has run `assessmentId ==` (and `assessmentId == && instituteId ==`) since before this work.
+
+Confirm there are no other new query shapes:
+
+```bash
+git diff 62bf880..HEAD -- functions/src/index.ts | grep '^+' | grep -o "\.where('[^']*', '[^']*'" | sort -u
+# → .where('assessmentId', '==      ← the only one
+```
+
+If a deploy ever *does* surface a missing-index error, Firebase prints a link that creates it. Don't pre-create indexes speculatively.
+
+---
+
+## 4 · Why there is no data migration
+
+The one new field is `examSnapshot` on `attempts`, written by `startExam` at attempt creation.
+
+**Existing attempts do not have it, and must not.** `examContractFor()` falls through to the live assessment document whenever the snapshot is absent — which is byte-for-byte the behaviour before this work. That path is held by probe **B-05** ("a legacy attempt with no snapshot still works"), which strips the field from a real attempt and checks that it still resolves and still grades correctly.
+
+So:
+
+- ❌ **Do not** backfill `examSnapshot` onto existing attempts. A reconstructed snapshot would be a guess about what a student was shown, and a wrong guess is worse than the honest fallback.
+- ✅ Attempts started **after** the deploy get the snapshot and the stronger guarantees.
+- ✅ Attempts **in flight** during the deploy keep working exactly as they do today.
+
+There is no ordering constraint and no downtime window. Deploy whenever.
+
+---
+
+## 5 · Deploy all functions together — do not cherry-pick
+
+```bash
+# ✅ correct
+firebase deploy --only functions --project YOUR_PROJECT_ID
+
+# ❌ do NOT do this
+firebase deploy --only functions:gradeAttempt --project YOUR_PROJECT_ID
+```
+
+All 48 exports live in one `index.ts` and share the helpers the fixes changed — `toCoreAttempt`, `examContractFor`, `computeAttemptLocks`, `assertSequentialAnswerWindowOpen`, `awardFor`. Deploying a subset leaves the rest running an older copy of those helpers, and the failure mode is precisely the class of bug this audit spent two rounds removing: **two paths computing the same fact and disagreeing.**
+
+`firebase.json` already runs `npm run build` as a `predeploy` step, so the TypeScript is compiled fresh on every deploy. You do not need to build by hand, and you do not need `functions/lib/` committed (it is now gitignored — see §7).
+
+---
+
+## 6 · The frontend is a separate deploy
+
+Two client files changed and they are **not** covered by `firebase deploy --only functions`:
+
+| File | Change |
+|---|---|
+| `src/app/pages/student/ExamShell.tsx` | recognises the new `ANSWER_WINDOW_CLOSED` signal |
+| `src/app/components/assignments/builder/DetailsStep.tsx` | question-grace field, corrected delivery-mode copy, adaptive warning |
+
+**Order matters, and it is safe in the natural direction.** Deploy **functions first**, then the frontend:
+
+- Functions-new + frontend-old → a late sequential answer is refused with `ANSWER_WINDOW_CLOSED`; the old shell reports it as a generic save failure. Ugly message, correct behaviour, nothing lost.
+- Functions-old + frontend-new → the builder offers a question-grace field the server would honour only after the functions deploy. Harmless but confusing.
+
+This repo deploys its frontend through Vercel (`vercel.json`), not Firebase Hosting, so that half follows your usual Vercel flow — no `firebase deploy --only hosting`.
+
+---
+
+## 7 · One repo-hygiene change to be aware of
+
+`functions/lib/` is now **gitignored and untracked**.
+
+It is generated output. Because the project's source of truth is the Figma Make file, every *"Update files from Figma Make"* push deleted it and every local build recreated it — an ~8,000-line add/delete churn on alternate commits that also buried real source diffs inside it.
+
+Nothing depends on it being committed: `firebase.json`'s `predeploy` builds it before every deploy, and the test suites build it locally. (This was also the first audit's **M2** recommendation.)
+
+**One thing to do on your side:** add a `.gitignore` to the Figma Make file with at least these lines, or the next Make push will delete it again and `node_modules/` can get committed by accident:
+
+```gitignore
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+functions/lib/
+functions/timing-core.cjs
+functions/.tmp-core/
+.env
+.env.local
+.DS_Store
+```
+
+---
+
+## 8 · Post-deploy verification
+
+```bash
+# 1. the functions are live and healthy
+firebase functions:log --project YOUR_PROJECT_ID --only startExam,submitSection,gradeAttempt
+
+# 2. nothing is reporting an invariant violation
+firebase functions:log --project YOUR_PROJECT_ID | grep "INVARIANT VIOLATION"
+#    → expect NO output. This is the Phase 3b shadow; it logs when the
+#      resolver and a callable disagree, which is the earliest warning
+#      that a timing rule has drifted.
+
+# 3. the expiry sweep is running and is leaving live students alone
+firebase functions:log --project YOUR_PROJECT_ID --only scheduledCloseExpiredAttempts
+#    → "left open N (student still has somewhere to go)" is HEALTHY, not a fault.
+```
+
+Then run one real sitting end to end on a **mock-tier** exam and check that:
+
+- the attempt document has an `examSnapshot` with your sections and marks;
+- `answersLockedAfter` is the earliest of section / overall / `endDate`;
+- submitting past the section clock closes the section **at its deadline**, not at the late arrival instant.
+
+---
+
+## 9 · Rollback
+
+```bash
+git revert <commit-sha>        # the fixes are one commit per defect
+cd functions && npm test       # confirm green at the reverted state
+cd .. && firebase deploy --only functions --project YOUR_PROJECT_ID
+```
+
+Rolling back is clean. `examSnapshot` becomes an ignored extra field on attempts written while the new code was live — nothing reads it under the old code, and nothing breaks. No data cleanup needed.

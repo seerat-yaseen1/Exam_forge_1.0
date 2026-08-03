@@ -46,6 +46,10 @@ import {
   effectiveNowMs,
   openFreezeStartedMs,
   openSectionId,
+  // A-07: the window bound is parsed with the SAME reader every other timestamp
+  // in the module uses, so an unreadable endDate yields null ("unbounded")
+  // rather than epoch 0 ("expired in 1970").
+  toMs as toTimingMs,
   type CorePenalty,
   resolve as resolveTiming,
   checkInvariants as checkTimingInvariants,
@@ -1296,13 +1300,11 @@ export const scheduledCloseExpiredAttempts = onSchedule(
     // student. Without this a 500-attempt sweep would re-read every question
     // and answer document 500 times.
     type Paper = {
+      /** The LIVE document. Per-attempt contracts are merged onto it below. */
       assessment: GradingAssessmentDoc;
-      sections: ReturnType<typeof normalizeSections>;
       questionMap: Awaited<ReturnType<typeof loadQuestionAndAnswerMaps>>['questionMap'];
       answerMap: Awaited<ReturnType<typeof loadQuestionAndAnswerMaps>>['answerMap'];
       exposeKeysToStudent: boolean;
-      /** Same doc in the resolver's shape — built once, reused per attempt. */
-      coreAssessment: CoreAssessment;
     };
     const papers = new Map<string, Paper | null>();
 
@@ -1319,11 +1321,9 @@ export const scheduledCloseExpiredAttempts = onSchedule(
         const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
         const paper: Paper = {
           assessment,
-          sections,
           questionMap,
           answerMap,
           exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
-          coreAssessment: toCoreAssessment(assessment as unknown as Record<string, unknown>),
         };
         papers.set(assessmentId, paper);
         return paper;
@@ -1332,6 +1332,35 @@ export const scheduledCloseExpiredAttempts = onSchedule(
         papers.set(assessmentId, null);
         return null;
       }
+    }
+
+    // ── Per-attempt contract (A-05 / A-06) ────────────────────────
+    //
+    // `sections` and the resolver's view were cached PER ASSESSMENT, which was
+    // right while every attempt of an exam was marked against one live paper.
+    // They are per attempt now: each carries the paper and the clocks it was
+    // actually given, so two students of the same exam can legitimately differ
+    // (a shuffle, or a staff edit between their start times).
+    //
+    // The question/answer MAPS stay cached per assessment — they are keyed by
+    // question id, and re-reading them 500 times is the cost this cache exists
+    // to avoid. A frozen paper can name an id the live document no longer
+    // lists, so anything missing is topped up once and folded into the same
+    // cache. On the common path (no edit since publish) nothing is missing and
+    // this reads nothing.
+    async function contractFor(paper: Paper, attemptRaw: Record<string, unknown>) {
+      const live = paper.assessment as unknown as Record<string, unknown>;
+      const contract = examContractFor(attemptRaw, live) ?? live;
+      const sections = normalizeSections(contract as GradingAssessmentDoc);
+      const missing = Array.from(new Set(
+        sections.flatMap((s) => s.questions.map((q) => q.questionId)),
+      )).filter((qid) => !paper.questionMap.has(qid));
+      if (missing.length > 0) {
+        const extra = await loadQuestionAndAnswerMaps(db, missing);
+        for (const [k, v] of extra.questionMap) paper.questionMap.set(k, v);
+        for (const [k, v] of extra.answerMap) paper.answerMap.set(k, v);
+      }
+      return { sections, coreAssessment: toCoreAssessment(contract) };
     }
 
     // ── The frozen branch, asking the RESOLVER (F9) ───────────────
@@ -1357,7 +1386,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       try {
         const verdict = resolveTiming(
           toCoreAttempt(doc.data() as Record<string, unknown>),
-          paper.coreAssessment,
+          (await contractFor(paper, doc.data() as Record<string, unknown>)).coreAssessment,
           nowMs,
         );
         // ANY 'ended', not only window_closed (widened 2026-08-03). While a
@@ -1453,7 +1482,11 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       if (paperEarly && !item.wasFrozen) {
         try {
           const core = toCoreAttempt(att as unknown as Record<string, unknown>);
-          const verdict = resolveTiming(core, paperEarly.coreAssessment, nowMs);
+          const verdict = resolveTiming(
+            core,
+            (await contractFor(paperEarly, att as unknown as Record<string, unknown>)).coreAssessment,
+            nowMs,
+          );
           if (verdict.kind !== 'ended') {
             // ── D-30, restored (F8) ─────────────────────────────────
             //
@@ -1542,8 +1575,11 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       const paper = paperEarly;
       if (paper) {
         try {
+          // A-05: mark against the paper THIS attempt sat.
+          const { sections: attemptSections } =
+            await contractFor(paper, att as unknown as Record<string, unknown>);
           const { scores, gradedAnswers } = scoreAttemptAnswers({
-            sections: paper.sections,
+            sections: attemptSections,
             questionMap: paper.questionMap,
             answerMap: paper.answerMap,
             answers: att.answers,
@@ -3391,6 +3427,37 @@ function resolveGradingPolicyS(
   };
 }
 
+/**
+ * Marks for one answered question, penalty included. THE single expression of
+ * "Option A" — the rule both engines are graded by.
+ *
+ *   any positive score        -> that score, untouched
+ *   nothing right at all      -> minus the configured penalty
+ *   right and wrong cancelling-> ZERO. Not a penalty. (A-08.)
+ *
+ * The third line is the fix. Both call sites used to read
+ * `multiplier > 0 ? multiplier * marks : -penalty`, directly under a comment
+ * promising "negative marking applies ONLY to a FULLY wrong answer… any
+ * correct/partial content keeps its positive award untouched". For multi-select
+ * that is not what `multiplier === 0` means: the multiplier is
+ * max(0, (hits − wrongs) / |correct|), so a student who picked one of two
+ * correct options and one wrong one lands on exactly 0 and took the full
+ * penalty — the identical mark given to a student who picked only wrong
+ * options, and worse than the zero given to one who left it blank.
+ *
+ * Expressed once now rather than duplicated per engine, because the divergence
+ * this fixes was two copies of one rule drifting from the sentence above them.
+ */
+function awardFor(
+  outcome: { multiplier: number; anyCorrect: boolean },
+  policy: ResolvedGradingPolicyS,
+  questionMarks: number,
+): number {
+  if (outcome.multiplier > 0) return outcome.multiplier * questionMarks;
+  if (outcome.anyCorrect) return 0;
+  return -penaltyFor(policy, questionMarks);
+}
+
 // Compute the penalty (a POSITIVE number to subtract) for a fully-wrong answer
 // under a resolved policy, given the question's own marks.
 function penaltyFor(policy: ResolvedGradingPolicyS, questionMarks: number): number {
@@ -3413,15 +3480,28 @@ interface AttemptAnswerDoc {
   value: string | string[] | Record<string, string>;
 }
 
+/**
+ * Scoring outcome for one answer.
+ *
+ * `anyCorrect` is separate from `multiplier > 0` and that separation is the
+ * whole point (A-08). A multi-select answer with one right and one wrong
+ * selection scores a multiplier of exactly 0 — indistinguishable, by that
+ * number alone, from an answer with nothing right at all. Negative marking is
+ * documented to apply ONLY to a fully wrong answer, so it needs to know which
+ * of the two it is looking at, and the multiplier cannot tell it.
+ */
+type ScoreOutcome = { multiplier: number; isCorrect: boolean; anyCorrect: boolean };
+
 function scoreMCQMultiplier(
   q: QuestionDoc,
   ans: QuestionAnswerDoc,
   value: AttemptAnswerDoc['value'],
-): { multiplier: number; isCorrect: boolean } {
+): ScoreOutcome {
   if (q.variant === 'single' || q.variant === 'truefalse' || q.variant === 'fillblank') {
     const selected = typeof value === 'string' ? value : '';
     const isCorrect = ans.correctIds.includes(selected);
-    return { multiplier: isCorrect ? 1 : 0, isCorrect };
+    // One selection: "any correct content" and "correct" are the same question.
+    return { multiplier: isCorrect ? 1 : 0, isCorrect, anyCorrect: isCorrect };
   }
   if (q.variant === 'multi') {
     const selected = Array.isArray(value) ? value : [];
@@ -3434,26 +3514,34 @@ function scoreMCQMultiplier(
     }
     const raw = correct.size > 0 ? (hits - wrongs) / correct.size : 0;
     const mult = Math.max(0, raw);
-    return { multiplier: mult, isCorrect: mult === 1 };
+    // A-08: hits, not the multiplier. A student who found one of two correct
+    // options and added one wrong one nets to zero — they knew something, and
+    // the penalty is reserved for knowing nothing.
+    return { multiplier: mult, isCorrect: mult === 1, anyCorrect: hits > 0 };
   }
-  return { multiplier: 0, isCorrect: false };
+  return { multiplier: 0, isCorrect: false, anyCorrect: false };
 }
 
 function scoreMatchMultiplier(
   ans: QuestionAnswerDoc,
   value: AttemptAnswerDoc['value'],
-): { multiplier: number; isCorrect: boolean } {
+): ScoreOutcome {
   if (typeof value !== 'object' || Array.isArray(value)) {
-    return { multiplier: 0, isCorrect: false };
+    return { multiplier: 0, isCorrect: false, anyCorrect: false };
   }
   const m = value as Record<string, string>;
-  if (ans.correctPairs.length === 0) return { multiplier: 0, isCorrect: false };
+  if (ans.correctPairs.length === 0) {
+    return { multiplier: 0, isCorrect: false, anyCorrect: false };
+  }
   let correct = 0;
   for (const pair of ans.correctPairs) {
     if (m[pair.leftId] === pair.rightId) correct++;
   }
   const mult = correct / ans.correctPairs.length;
-  return { multiplier: mult, isCorrect: mult === 1 };
+  // Match never had the multi-select problem — correct/total is zero only when
+  // nothing matched — but it states the rule the same way so the two engines
+  // cannot drift into applying one policy differently.
+  return { multiplier: mult, isCorrect: mult === 1, anyCorrect: correct > 0 };
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3700,23 +3788,19 @@ function scoreAttemptAnswers(params: {
       } else if (studentAnswer && q && ans) {
         answered++;
         if (q.engine === 'mcq') {
-          const { multiplier, isCorrect } = scoreMCQMultiplier(q, ans, studentAnswer.value);
-          // Option A: negative marking applies ONLY to a FULLY wrong answer
-          // (multiplier 0). Any correct/partial content keeps its positive
-          // award untouched — negative marking and partial credit stay
-          // cleanly separated (partial credit is its own future feature).
-          const award = multiplier > 0 ? multiplier * aq.marks : -penaltyFor(policy, aq.marks);
+          const outcome = scoreMCQMultiplier(q, ans, studentAnswer.value);
+          const award = awardFor(outcome, policy, aq.marks);
           sectionAwarded += award;
           totalAwarded   += award;
           exposed.marksAwarded = award;
-          exposed.isCorrect    = isCorrect;
+          exposed.isCorrect    = outcome.isCorrect;
         } else if (q.engine === 'match') {
-          const { multiplier, isCorrect } = scoreMatchMultiplier(ans, studentAnswer.value);
-          const award = multiplier > 0 ? multiplier * aq.marks : -penaltyFor(policy, aq.marks);
+          const outcome = scoreMatchMultiplier(ans, studentAnswer.value);
+          const award = awardFor(outcome, policy, aq.marks);
           sectionAwarded += award;
           totalAwarded   += award;
           exposed.marksAwarded = award;
-          exposed.isCorrect    = isCorrect;
+          exposed.isCorrect    = outcome.isCorrect;
         } else {
           // text engine — needs human grading
           requiresManualReview = true;
@@ -3808,6 +3892,9 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       freezes?: FreezeLedgerEntry[];
       securityConfig?: { tier?: string; requireSEB?: boolean } | null;
       gradingConfig?: AssessmentGradingConfigS;   // frozen at startExam
+      // A-09: the played section set, used to reject a caller-named
+      // `lastSectionId` that is not part of this attempt.
+      sectionIds?: string[];
       // Read for the trapped-frozen escape hatch below. Loose shape: a
       // Firestore Timestamp over the wire, an ISO string on legacy attempts,
       // absent on attempts that predate the field.
@@ -3865,7 +3952,13 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     // system runs on is what it buys.
     const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
-    const assessment = assessmentSnap.data() as GradingAssessmentDoc;
+    // A-05 / A-06: the paper and clocks THIS attempt was given, not whatever
+    // the assessment says now. Legacy attempts carry no snapshot and fall
+    // through to the live document, exactly as before.
+    const assessment = examContractFor(
+      attempt as unknown as Record<string, unknown>,
+      assessmentSnap.data() as Record<string, unknown>,
+    ) as GradingAssessmentDoc;
 
     // ── Is this sitting actually OVER? Ask the resolver ────────────
     //
@@ -3961,9 +4054,29 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       updates['integrityLog.autoTerminated'] = true;
       if (terminateReason) updates['integrityLog.terminatedReason'] = terminateReason;
     }
+    // ── Closing timings for the section the student was in (A-09) ──
+    //
+    // `lastSectionId` is caller-supplied and was written as a dot-path with no
+    // membership check, so `lastSectionId: 'NOT_A_SECTION'` produced a
+    // sectionTimings row for a section that does not exist. Cosmetic — the
+    // attempt is terminal and nothing reads unknown keys — but it is
+    // unvalidated caller input shaping stored state, and it pollutes any later
+    // analytics over sectionTimings.
+    //
+    // Ignored rather than rejected: this is the tail of a finalise that has
+    // already graded the paper, and throwing here would fail a submission over
+    // a bookkeeping field. A bad id is dropped and logged; the attempt still
+    // closes, which is the outcome that matters to the student.
     if (lastSectionId && typeof lastSectionTimeUsed === 'number') {
-      updates[`sectionTimings.${lastSectionId}.submittedAt`]     = nowIso;
-      updates[`sectionTimings.${lastSectionId}.timeUsedSeconds`] = lastSectionTimeUsed;
+      const known = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
+      if (known.includes(lastSectionId)) {
+        updates[`sectionTimings.${lastSectionId}.submittedAt`]     = nowIso;
+        updates[`sectionTimings.${lastSectionId}.timeUsedSeconds`] =
+          Math.max(0, Math.floor(lastSectionTimeUsed));
+      } else {
+        console.warn('[gradeAttempt] ignoring lastSectionId outside the attempt',
+          attemptId, lastSectionId);
+      }
     }
 
     // ── Freeze flag (Phase 1c) ────────────────────────────────────
@@ -5105,6 +5218,75 @@ interface SubmitAnswerAndAdvanceData {
   answer: { type: string; value: unknown } | null;
 }
 
+/**
+ * Refuse an answer whose section or overall clock has already run out. (A-03.)
+ *
+ * WHY THIS EXISTS AT ALL — the asymmetry it closes.
+ *
+ * In STANDARD delivery answers are a direct client write and firestore.rules
+ * refuse them past `answersLockedAfter` (answerWriteWindowOpen, :754). In
+ * LINEAR/ADAPTIVE the rules refuse the direct write outright
+ * (studentAnswerWriteAllowed, :629) — answers may travel ONLY through
+ * submitAnswerAndAdvance and saveAnswerNoAdvance, which run under the Admin SDK
+ * and therefore bypass rules entirely.
+ *
+ * Both callables checked auth, ownership, session, SEB, status, delivery mode
+ * and the served-question pointer, then computed `lateAnswer` against the
+ * QUESTION clock — and stored the answer regardless. Neither ever read the
+ * section or overall bound. So sequential delivery, which is the MORE
+ * controlled mode (one question at a time, no going back, the client never
+ * holds the paper), was the WEAKER one on time: measured accepting an answer 25
+ * minutes past the overall deadline while getExamVerdict already said 'ended'.
+ *
+ * The bound enforced here is deliberately min(section, overall) — byte-for-byte
+ * what `answersLockedAfter` holds and what the rules enforce for standard mode.
+ * Parity is the point; a sequential student should face the same wall as a
+ * standard one, no earlier and no later.
+ *
+ * Freeze is credited and paused exactly as everywhere else: computeDeadlines
+ * applies per-clock credit (D-28) and subtracts recorded penalties (A4), and
+ * effectiveNowMs holds time still while a freeze is open (4.3). A paused
+ * student therefore cannot be refused for time that was never theirs to spend.
+ *
+ * A MISSING BOUND IS NOT AN EXPIRED BOUND. An untimed exam, an unreadable
+ * anchor or an absent assessment all yield null, and null means "no
+ * constraint" — never "over". The failure direction favours the student, which
+ * is the rule the whole timing module is built on.
+ */
+function assertSequentialAnswerWindowOpen(
+  attempt: Record<string, unknown>,
+  assessmentRaw: Record<string, unknown> | undefined,
+  nowMs: number,
+): void {
+  if (!assessmentRaw) return;          // cannot prove a deadline; do not invent one
+  let endsAt: number | null;
+  let evalNow: number;
+  try {
+    const core = toCoreAttempt(attempt);
+    // A-06: the clocks this attempt was given, not the exam's current ones.
+    const contract = examContractFor(attempt, assessmentRaw) ?? assessmentRaw;
+    const dl = computeDeadlines(core, toCoreAssessment(contract));
+    endsAt = minNonNullMs(dl.sectionEndsAt, dl.overallEndsAt);
+    evalNow = effectiveNowMs(core, nowMs);
+  } catch (e) {
+    // A resolver fault must never cost a student their answer. Same posture as
+    // auditTiming and gradeAttempt's escape hatch: fail soft, let them write.
+    console.warn('[assertSequentialAnswerWindowOpen] deadline check failed; allowing', e);
+    return;
+  }
+  if (endsAt === null || evalNow <= endsAt) return;
+  throw new HttpsError(
+    'deadline-exceeded',
+    'ANSWER_WINDOW_CLOSED: your time for this section has ended.',
+  );
+}
+
+/** min() over the bounds that actually exist. Null when none do. */
+function minNonNullMs(...xs: Array<number | null>): number | null {
+  const vals = xs.filter((x): x is number => x !== null);
+  return vals.length === 0 ? null : Math.min(...vals);
+}
+
 export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
   EXAM_HOT_PATH,
   async (request) => {
@@ -5170,6 +5352,14 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     const assessment = aSnap.exists ? (aSnap.data() as GradingAssessmentDoc) : undefined;
     // D-21: reuses the read above — no extra cost.
     assertNotBlocked(assessment as { blockedStudents?: string[] } | undefined, studentId);
+    // A-03: the section and overall clocks reach this path at last. Placed
+    // before any write, so a refused answer leaves no trace and the served
+    // pointer does not move.
+    assertSequentialAnswerWindowOpen(
+      attempt as unknown as Record<string, unknown>,
+      assessment as unknown as Record<string, unknown> | undefined,
+      Date.parse(nowIso),
+    );
     const sectionsNorm = assessment ? normalizeSections(assessment) : [];
 
     // Phase 3b shadow — the question clock is where server and client have
@@ -5315,10 +5505,16 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
 // first with the same shape.
 //
 // LATE ANSWERS
-// Recorded and flagged, never rejected — byte-for-byte the policy
-// submitAnswerAndAdvance already applies, including the same `qLimit + 5`
-// latency grace, so the two cannot disagree about what "late" means. A lag
-// spike must not cost a student their work.
+// A late answer against the QUESTION clock is recorded and flagged, never
+// rejected — byte-for-byte the policy submitAnswerAndAdvance applies, using the
+// assessment's own questionGraceSeconds (F13/D-14 replaced the hardcoded
+// `qLimit + 5` this comment used to name), so the two cannot disagree about
+// what "late" means. A lag spike must not cost a student their work.
+//
+// The SECTION and OVERALL clocks are different, and since A-03 both callables
+// refuse an answer past them through one shared gate. That is not a latency
+// question — it is the deadline itself, and standard delivery has always
+// enforced it through firestore.rules.
 //
 // NOT FOR STANDARD DELIVERY. Standard-mode answers are a direct, rules-gated
 // client write, which the master plan's trust-boundary table blesses
@@ -5435,6 +5631,15 @@ export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
     // SAVE work they had already done is N5's to decide, and this function
     // must not quietly answer it differently from its sibling.
     assertNotBlocked(assessment as { blockedStudents?: string[] } | undefined, studentId);
+    // A-03: the same gate its sibling applies, from the same function, so the
+    // two cannot disagree about when a student's time is up. A durability
+    // flush that arrives after the deadline is refused here exactly as the
+    // rules would refuse a standard-mode autosave at the same instant.
+    assertSequentialAnswerWindowOpen(
+      attempt as unknown as Record<string, unknown>,
+      assessment as unknown as Record<string, unknown> | undefined,
+      Date.parse(nowIso),
+    );
     const sectionsNorm = assessment ? normalizeSections(assessment) : [];
     const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;
@@ -6268,8 +6473,11 @@ function openFreezeUpdates(
   let clocksAtFreeze: FreezeLedgerEntry['clocksAtFreeze'] = null;
   try {
     if (assessmentRaw) {
+      // A-06: snapshot against the contract this attempt is sitting under.
       clocksAtFreeze = snapshotClocks(
-        toCoreAttempt(att), toCoreAssessment(assessmentRaw), Date.parse(opts.nowIso));
+        toCoreAttempt(att),
+        toCoreAssessment(examContractFor(att, assessmentRaw) ?? assessmentRaw),
+        Date.parse(opts.nowIso));
     }
   } catch { clocksAtFreeze = null; }
 
@@ -6403,7 +6611,9 @@ function closeFreezeUpdates(
     creditedFreezeMs,
   } as CoreAttempt;
 
-  const coreAsmt = assessmentRaw ? toCoreAssessment(assessmentRaw) : ({ sections: [] } as CoreAssessment);
+  // A-06: every deadline this release recomputes is the attempt's own.
+  const contractRaw = assessmentRaw ? (examContractFor(att, assessmentRaw) ?? assessmentRaw) : null;
+  const coreAsmt = contractRaw ? toCoreAssessment(contractRaw) : ({ sections: [] } as CoreAssessment);
 
   // Penalties, capped against the POST-CREDIT clock (A4).
   const dl = computeDeadlines(creditedAttempt, coreAsmt);
@@ -6426,9 +6636,43 @@ function closeFreezeUpdates(
       decidedBy: opts.decidedBy ?? undefined,
     });
   };
-  addPenalty('question', clamp(wanted.questionMs, remaining(dl.questionEndsAt)));
-  addPenalty('section', clamp(wanted.sectionMs, remaining(dl.sectionEndsAt)));
-  addPenalty('overall', clamp(wanted.overallMs, remaining(dl.overallEndsAt)));
+  // ── The caps are CUMULATIVE, innermost first (A-04) ─────────────
+  //
+  // Each cap used to be measured against its own clock alone:
+  //
+  //   question -> remaining(question)
+  //   section  -> remaining(section)
+  //   overall  -> remaining(overall)
+  //
+  // Correct in isolation, and wrong together, because PENALTY_REACHES routes a
+  // deduction OUTWARD (examTimingCore:204): time taken from the question is
+  // also gone from the section and from the total. So the overall clock
+  // absorbed sectionPenalty + overallPenalty while only the second had ever
+  // been capped against it.
+  //
+  // Measured: a 60m exam with a 30m section, frozen at +5:00 and released at
+  // +8:00 with 3m granted and a large deduction asked on both clocks. Section
+  // capped at 25.5m, overall capped at 55.5m, both individually right — and
+  // the overall clock then absorbed 81m against 63.5m of runway, landing
+  // overallLockedAfter at t0 − 17:30. Seventeen minutes before the exam began.
+  // The student was instantly and irrecoverably out of time.
+  //
+  // A4 promises "no arithmetic that can go negative"; this is that arithmetic
+  // going negative through the door A5 left open. Each cap now subtracts what
+  // the inner clocks have already taken from it, so the TOTAL any clock
+  // absorbs is at most what that clock had left.
+  //
+  // NO FLOOR IS APPLIED TO THE RESULTING DEADLINE, deliberately. With the caps
+  // right, the worst case is a deadline landing exactly at `now` — "you have
+  // no time left", which is a legitimate thing for an invigilator to decide.
+  // Flooring on top would mask a deadline that had gone into the past for some
+  // OTHER reason, and hiding that is how a clock defect survives a release.
+  const qPenalty = clamp(wanted.questionMs, remaining(dl.questionEndsAt));
+  const sPenalty = clamp(wanted.sectionMs, remaining(dl.sectionEndsAt) - qPenalty);
+  const oPenalty = clamp(wanted.overallMs, remaining(dl.overallEndsAt) - qPenalty - sPenalty);
+  addPenalty('question', qPenalty);
+  addPenalty('section', sPenalty);
+  addPenalty('overall', oPenalty);
 
   const penalisedAttempt = {
     ...creditedAttempt,
@@ -6540,7 +6784,11 @@ export const gradeProvisional = onCall<GradeProvisionalData>(
 
     const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
-    const assessment = assessmentSnap.data() as GradingAssessmentDoc;
+    // A-05: a provisional mark is still a mark; grade the paper they sat.
+    const assessment = examContractFor(
+      attempt as unknown as Record<string, unknown>,
+      assessmentSnap.data() as Record<string, unknown>,
+    ) as GradingAssessmentDoc;
     const sections = normalizeSections(assessment);
     const qIds = Array.from(new Set(
       sections.flatMap((sec) => sec.questions.map((q) => q.questionId)),
@@ -6855,7 +7103,9 @@ export const getExamVerdict = onCall<GetExamVerdictData>(
     if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
 
     const core = toCoreAttempt(att);
-    const coreAsmt = toCoreAssessment(aSnap.data() as Record<string, unknown>);
+    // A-06: the student's screen renders the contract they started under.
+    const coreAsmt = toCoreAssessment(
+      examContractFor(att, aSnap.data() as Record<string, unknown>) as Record<string, unknown>);
     const serverNow = Date.now();
     const verdict = resolveTiming(core, coreAsmt, serverNow);
 
@@ -7310,6 +7560,14 @@ export const startExam = onCall<StartExamData>(
       // stored when the exam actually defines a policy (keeps legacy attempts
       // clean; absent === legacy scoring).
       ...(a.gradingConfig ? { gradingConfig: a.gradingConfig } : {}),
+      // ── Frozen paper + timing contract (A-05 / A-06) ──────────────
+      // The third snapshot on this document, and it exists for the same reason
+      // as the two above it: what a student is marked against, and the clocks
+      // they race, must be what they were given — not whatever the assessment
+      // says by the time anyone looks. `ordered` is this student's own play
+      // order, so a shuffle is captured too. See examContractFor for what is
+      // deliberately left reading live (the availability window).
+      examSnapshot: buildExamSnapshot(aSnap.data() as Record<string, unknown>, ordered),
       totalFrozenSeconds: 0,
       serverAnchored: true, // marks this attempt as using server-owned timestamps
       // Phase C — allocation provenance: which materialization admitted this
@@ -7443,13 +7701,12 @@ function breakAfterCompletion(
  * limit contributes no overall bound; with neither there is nothing to lock
  * and this returns null, which the rule reads as "no time constraint".
  *
- * FREEZE IS DELIBERATELY NOT CREDITED, matching submitSection's documented
- * posture exactly (see the note above its overall-deadline check): the server
- * ignores freeze, grace absorbs the slack, and freeze is credited only in the
- * client display. Doing anything else here would make the rule disagree with
- * the callable that grades the attempt — and it also means an invigilator
- * unfreezing does NOT have to recompute this field, so staff cannot lengthen
- * a student's writable window by toggling freeze.
+ * FREEZE WAS DELIBERATELY NOT CREDITED HERE — and no longer: Phase 4.3 credits
+ * this gate, and Phase 4.5 subtracts recorded penalties from it. The paragraph
+ * that used to sit here argued the other way and was right at the time; it is
+ * removed rather than left standing, because a comment that contradicts the
+ * function under it is worse than no comment (C-4). The reasoning for the
+ * change is in the Phase 4.3 block further down, next to the code that does it.
  *
  * ── Phase 0 (timer plan, 2026-07-31) ──────────────────────────────
  * Renamed from computeAnswersLockedAfter, and now returns the two bounds
@@ -7480,6 +7737,8 @@ function computeAttemptLocks(
     sectionGraceSeconds?: number;
     overallTimeLimit?: number;
     overallGraceSeconds?: number;
+    /** A-07: the availability window, folded into `combined` below. */
+    endDate?: string;
   },
   /**
    * The attempt, for freeze credit (Phase 4.3). Optional so every pre-existing
@@ -7559,9 +7818,37 @@ function computeAttemptLocks(
     attemptStartedAtIso, a.overallTimeLimit, a.overallGraceSeconds, overallCredit, overallPenalty,
   );
 
+  // ── The availability window is part of the write gate (A-07) ────
+  //
+  // The note further up used to say the WINDOW and QUESTION bounds were
+  // "deliberately NOT folded in… that belongs to Phase 5". This is that step,
+  // for the window. resolve() has always treated endDate as a hard outer wall
+  // (R2/A10) and startExam refuses entry past it — but `answersLockedAfter`,
+  // the field firestore.rules actually enforces, ignored it. So between the
+  // window closing and the student's own overall deadline, the rules still let
+  // answers through: measured at a lock reading +181m on an exam whose window
+  // shut at +20m, with getExamVerdict already returning window_closed. The only
+  // thing standing in the way was the hourly sweep.
+  //
+  // It goes into `combined` ONLY. The split `section` / `overall` fields exist
+  // so the client can tell WHICH clock ran out, and a window closure is neither
+  // of them — folding it into either would make the shell report the wrong
+  // reason and, worse, advance a student to the next section when the exam is
+  // over.
+  //
+  // No freeze credit, matching computeDeadlines exactly:
+  // FREEZE_CREDIT_EXTENDS_WINDOW is false, because the window belongs to the
+  // institution rather than to the student's clocks.
+  //
+  // The QUESTION bound is still deliberately excluded. It is anchored on a
+  // served instant that moves several times a minute in sequential delivery,
+  // and materialising it would mean rewriting the lock on every question —
+  // where the callable path now enforces it directly (A-03).
+  const windowMs = toTimingMs(a.endDate);
+
   const section = secMs === null ? null : new Date(secMs);
   const overall = ovrMs === null ? null : new Date(ovrMs);
-  const bounds = [secMs, ovrMs].filter((x): x is number => x !== null);
+  const bounds = [secMs, ovrMs, windowMs].filter((x): x is number => x !== null);
   const combined = bounds.length === 0 ? null : new Date(Math.min(...bounds));
 
   return { section, overall, combined };
@@ -7581,6 +7868,97 @@ function computeAttemptLocks(
 // ══════════════════════════════════════════════════════════════════
 
 /** Map a stored assessment onto the core's plain input shape. */
+/**
+ * The exam contract a given attempt is sitting under. (A-05 / A-06.)
+ *
+ * WHAT WENT WRONG. `securityLockedAt` freezes exactly seven fields —
+ * securityTier, deliveryMode, requireCamera, allowMobile,
+ * requireExtensionCheck, autoResume and the stamp itself (firestore.rules:571).
+ * `sections`, `questions` and every timing field are not among them, while
+ * grading marked against normalizeSections(THE LIVE DOC) and computeAttemptLocks
+ * read timeLimit / overallTimeLimit / the grace knobs from the LIVE DOC on every
+ * recompute.
+ *
+ * So an ordinary staff edit to a running exam reached students already sitting
+ * it. Two measured failures:
+ *
+ *   A-05  The builder re-draws rule-based sections AT RANDOM on every save with
+ *         status 'active' (DetailsStep -> resolveQuestionsForSections). A
+ *         student who had answered every question correctly scored 30/40: their
+ *         correct answer to a question the re-draw had removed was discarded,
+ *         and a question they were never shown was counted as a blank.
+ *   A-06  Editing overallTimeLimit from 120 to 20 moved a live student's
+ *         deadline 100 minutes earlier, retroactively, and flipped their
+ *         verdict to 'ended'.
+ *
+ * THE FIX IS TO FREEZE, NOT TO FORBID. Locking the fields in the rules would
+ * also block legitimate repairs to an exam nobody has started yet, and would
+ * not help the attempts already running. Freezing the contract onto the attempt
+ * is the pattern this codebase already uses twice — `securityConfig` and
+ * `gradingConfig` are both snapshotted at startExam for exactly this reason —
+ * so this extends it to the two things that were left reading live.
+ *
+ * WHAT IS DELIBERATELY NOT FROZEN: startDate and endDate. The availability
+ * window is the institution's outer wall, not one of the student's clocks (A10,
+ * and the reason resolve() races it against real time while every other
+ * deadline pauses). Staff closing an exam early or extending it is an
+ * admissions decision that must keep working, so the merge below lets those —
+ * and everything else the snapshot does not name, such as passingScore and the
+ * review audiences, which regradeAttempts exists to re-apply — come from the
+ * live document.
+ *
+ * LEGACY ATTEMPTS carry no snapshot and fall through to the live document,
+ * which is exactly today's behaviour. Nothing in flight changes on deploy.
+ */
+function examContractFor(
+  attempt: Record<string, unknown>,
+  liveAssessment: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const snap = (attempt as { examSnapshot?: { sections?: unknown } }).examSnapshot;
+  if (!snap || !Array.isArray(snap.sections)) return liveAssessment;
+  // Frozen paper + frozen timing OVER the live doc, so fields the snapshot
+  // deliberately omits still track the assessment.
+  return { ...(liveAssessment ?? {}), ...(snap as Record<string, unknown>) };
+}
+
+/**
+ * Build the frozen contract, at startExam, from the sections actually played.
+ *
+ * `ordered` is the per-student play order after any shuffle, so the snapshot
+ * records the paper THIS student was given — not the builder's list. Marks and
+ * order ride along because grading needs them; timeLimit, questionTimeLimit and
+ * breakAfter because the clocks do.
+ */
+function buildExamSnapshot(
+  a: Record<string, unknown>,
+  ordered: EffectiveSection[],
+): Record<string, unknown> {
+  const rawSections = (a.sections ?? []) as Array<{
+    id: string; timeLimit?: number; breakAfter?: BreakCfg;
+  }>;
+  const rawById = new Map(rawSections.map((s) => [s.id, s]));
+  return {
+    sections: ordered.map((s) => stripUndefined({
+      id: s.id,
+      name: s.name,
+      questions: s.questions.map((q) => stripUndefined({
+        questionId: q.questionId, marks: q.marks, order: q.order,
+      })),
+      timeLimit: rawById.get(s.id)?.timeLimit,
+      questionTimeLimit: s.questionTimeLimit,
+      breakAfter: rawById.get(s.id)?.breakAfter,
+    })),
+    ...stripUndefined({
+      overallTimeLimit: a.overallTimeLimit as number | undefined,
+      overallGraceSeconds: a.overallGraceSeconds as number | undefined,
+      sectionGraceSeconds: a.sectionGraceSeconds as number | undefined,
+      questionGraceSeconds: a.questionGraceSeconds as number | undefined,
+      sectionStartOrder: a.sectionStartOrder as string | undefined,
+      deliveryMode: a.deliveryMode as string | undefined,
+    }),
+  };
+}
+
 function toCoreAssessment(raw: Record<string, unknown>): CoreAssessment {
   const doc = raw as GradingAssessmentDoc & {
     startDate?: string; endDate?: string;
@@ -7616,7 +7994,32 @@ function toCoreAssessment(raw: Record<string, unknown>): CoreAssessment {
   };
 }
 
-/** Map a stored attempt onto the core's plain input shape. */
+/**
+ * Map a stored attempt onto the core's plain input shape.
+ *
+ * THIS MAPPER IS THE RESOLVER'S ENTIRE VIEW OF THE WORLD. A field missing here
+ * is not missing in one place — it is invisible in every place at once, because
+ * every caller that reasons about timing goes through it: getExamVerdict,
+ * submitSection's deadline gate, the expiry sweep, gradeAttempt's trapped-frozen
+ * check, and every computeAttemptLocks call site.
+ *
+ * A-01: `penalties` was absent, and the consequences were exactly that broad.
+ * penaltyForClock() reads `a.penalties`, found undefined, and returned 0 — so a
+ * deduction an invigilator had recorded, with an actor and an instant, was
+ * invisible to the student's own screen and was REFUNDED IN FULL the next time
+ * anything recomputed the locks. Ordinary progress undid it: submitSection's
+ * advance branch re-derives answersLockedAfter from this shape, so pressing
+ * "next section" restored the time somebody had deliberately taken away.
+ *
+ * It looked correct under test because closeFreezeUpdates is the one site that
+ * reattaches penalties by hand (see `penalisedAttempt` there) — so the freeze
+ * suite's "penalties reach the write gate" check passed on the instant of
+ * unfreeze and nothing exercised the instant after.
+ *
+ * No invariant caught it either, and that is worth stating: INV-3a forbids the
+ * overall bound moving EARLIER without a ledger row behind it. A refund moves it
+ * LATER, which is the direction the whole module is built to treat as safe.
+ */
 function toCoreAttempt(raw: Record<string, unknown>): CoreAttempt {
   const d = raw as Record<string, any>;
   return {
@@ -7630,6 +8033,10 @@ function toCoreAttempt(raw: Record<string, unknown>): CoreAttempt {
     creditedFreezeMs: d.creditedFreezeMs,
     totalFrozenSeconds: d.totalFrozenSeconds,
     freezes: d.freezes,
+    // A-01. Kept adjacent to `freezes` on purpose: credit and deduction are the
+    // two halves of one ledger, and they must travel together or the arithmetic
+    // is one-sided in the student's favour.
+    penalties: Array.isArray(d.penalties) ? d.penalties : undefined,
     scores: d.scores,
     gradedAnswers: d.gradedAnswers,
     answersLockedAfter: d.answersLockedAfter,
@@ -7706,7 +8113,7 @@ function auditTiming(
   try {
     const a0 = toCoreAttempt(attemptRaw);
     const a = project ? project(a0) : a0;
-    const asmt = toCoreAssessment(assessmentRaw);
+    const asmt = toCoreAssessment(examContractFor(attemptRaw, assessmentRaw) ?? assessmentRaw);
     const verdict = resolveTiming(a, asmt, Date.now());
 
     if (!decided.includes(verdict.kind)) {
@@ -8008,9 +8415,11 @@ export const startSection = onCall<StartSectionData>(
       const prevTiming = attempt.sectionTimings[prevId];
       if (prevTiming?.submittedAt) {
         const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
-        const a = aSnap.data() as {
-          sections?: Array<{ id: string; breakAfter?: BreakCfg }>;
-        } | undefined;
+        // A-06: break schedule comes from the frozen contract too — a break
+        // added or removed mid-sitting must not reach a student already in it.
+        const a = examContractFor(
+          attempt as unknown as Record<string, unknown>, aSnap.data(),
+        ) as { sections?: Array<{ id: string; breakAfter?: BreakCfg }> } | undefined;
         const brk = breakAfterCompletion(a?.sections, attempt.sectionIds, idx);
         if (brk && brk.mandatory) {
           // ── A break is a clock, and it is credited too (F6 / D-29) ──
@@ -8045,7 +8454,14 @@ export const startSection = onCall<StartSectionData>(
     // shape. One extra document read per section start is a fair price for the
     // rule that stops a student answering after their time is gone.
     const lockSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
-    const lockA = (lockSnap.data() ?? {}) as {
+    // A-06: timing comes from the contract this attempt is sitting under, so a
+    // live edit to timeLimit / overallTimeLimit / grace cannot move the
+    // deadline of a student already inside the exam. blockedStudents is
+    // deliberately live — a block is an invigilation decision taken NOW, and
+    // the snapshot does not carry it, so it arrives through the merge.
+    const lockA = (examContractFor(
+      attempt as unknown as Record<string, unknown>, lockSnap.data(),
+    ) ?? {}) as {
       sections?: Array<{ id: string; timeLimit?: number }>;
       sectionGraceSeconds?: number;
       overallTimeLimit?: number;
@@ -8139,6 +8555,13 @@ interface SubmitSectionData {
   sessionId?: string;
   sectionId: string;
   nextSectionId?: string | null;
+  /**
+   * IGNORED as of A-02. Still ACCEPTED so a cached client keeps working and a
+   * rollback is clean, but nothing reads it: the play index is derived from
+   * `sectionIds.indexOf(nextSectionId)` server-side. A caller-supplied index
+   * was written straight to `currentSectionIdx`, which is state nobody
+   * authored. Remove the field once no client sends it.
+   */
   nextSectionIdx?: number;
   pauseBeforeNext?: boolean;
   sebToken?: string;
@@ -8158,7 +8581,8 @@ export const submitSection = onCall<SubmitSectionData>(
     if (role !== 'student' || !studentId) {
       throw new HttpsError('permission-denied', 'Only students may submit a section.');
     }
-    const { attemptId, sectionId, nextSectionId, nextSectionIdx, pauseBeforeNext } =
+    // nextSectionIdx is deliberately NOT destructured — see the interface.
+    const { attemptId, sectionId, nextSectionId, pauseBeforeNext } =
       request.data || ({} as SubmitSectionData);
     if (!attemptId || !sectionId) {
       throw new HttpsError('invalid-argument', 'attemptId and sectionId are required.');
@@ -8200,7 +8624,13 @@ export const submitSection = onCall<SubmitSectionData>(
 
     const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
-    const a = aSnap.data() as {
+    // A-06: one contract, used by the break schedule, both deadline gates and
+    // every lock recompute below. blockedStudents rides in live through the
+    // merge — see examContractFor.
+    const contractRaw = examContractFor(
+      attempt as unknown as Record<string, unknown>, aSnap.data(),
+    ) as Record<string, unknown>;
+    const a = contractRaw as {
       sectionGraceSeconds?: number;
       overallTimeLimit?: number;
       overallGraceSeconds?: number;
@@ -8223,6 +8653,60 @@ export const submitSection = onCall<SubmitSectionData>(
       ? breakAfterCompletion(a.sections, attempt.sectionIds, playIdx + 1)
       : null;
     const mandatoryBreakDue = !!(breakDue && breakDue.mandatory);
+
+    // ── Which section, if any, this call may advance INTO (A-02) ─────
+    //
+    // `nextSectionId` and `nextSectionIdx` arrive from request.data and were
+    // used verbatim: written as a dot-path key onto sectionTimings, assigned
+    // straight to currentSectionIdx, and — the part that mattered — used to
+    // re-anchor answersLockedAfter, which is the field firestore.rules gates
+    // every answer write on.
+    //
+    // Naming the section being submitted was therefore a TIME EXPLOIT. The one
+    // update both closed SA and re-opened it, and the lock was recomputed as
+    // `now + SA's full time limit`. Measured at +30:30 → +56:00 on a single
+    // call, repeatable, and unbounded on the very ordinary configuration of
+    // per-section limits with no overall cap. It also rewrote the section's own
+    // startedAt, which is INV-9 ("a section's start instant never moves").
+    //
+    // Everything below is a rule startSection has always enforced (:7941 for
+    // "already started", :7960 for INV-1). This branch is the same transition
+    // and simply never acquired them.
+    //
+    // ONE CASE IS NOT AN ATTACK AND MUST NOT THROW: a retry after a lost
+    // response. The client re-sends the same submit, the next section is by
+    // then legitimately started, and the desired end state is exactly what is
+    // already stored. That is an idempotent no-op — the advance WRITES are
+    // skipped, so nothing is re-anchored, and the call still succeeds and still
+    // returns the served question. Turning a dropped response into a hard error
+    // would strand a student for a network blip.
+    const requestedNext = typeof nextSectionId === 'string' && nextSectionId
+      ? nextSectionId : null;
+    const playedIds = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
+    let advanceTo: string | null = null;
+    let advanceIdx = -1;
+    let advanceAlreadyStarted = false;
+    if (requestedNext) {
+      if (requestedNext === sectionId) {
+        throw new HttpsError('invalid-argument',
+          'SECTION_ADVANCE_INVALID: a section cannot advance into itself.');
+      }
+      advanceIdx = playedIds.indexOf(requestedNext);
+      if (advanceIdx < 0) {
+        throw new HttpsError('invalid-argument',
+          'SECTION_ADVANCE_INVALID: that section is not part of this attempt.');
+      }
+      if (attempt.sectionTimings?.[requestedNext]?.submittedAt) {
+        throw new HttpsError('invalid-argument',
+          'SECTION_ADVANCE_INVALID: that section is already finished.');
+      }
+      advanceAlreadyStarted = !!attempt.sectionTimings?.[requestedNext]?.startedAt;
+      advanceTo = requestedNext;
+    }
+    // currentSectionIdx is DERIVED, never taken from the caller. It is only a
+    // convenience mirror of the play order — the timings are the record — but a
+    // caller-set index is still state nobody authored.
+    const advanceIdxSafe = advanceIdx;
 
     const startedMs = new Date(timing.startedAt).getTime();
     const serverNow = Date.now();
@@ -8252,7 +8736,7 @@ export const submitSection = onCall<SubmitSectionData>(
     // a freeze is open (4.3). This gate and the resolver cannot disagree,
     // because they are the same function.
     const gateCore = toCoreAttempt(attempt as unknown as Record<string, unknown>);
-    const gateAsmt = toCoreAssessment(aSnap.data() as Record<string, unknown>);
+    const gateAsmt = toCoreAssessment(contractRaw);
     const gateDl = computeDeadlines(gateCore, gateAsmt);
     const evalNow = effectiveNowMs(gateCore, serverNow);
 
@@ -8308,18 +8792,18 @@ export const submitSection = onCall<SubmitSectionData>(
           [`sectionTimings.${sectionId}.timeUsedSeconds`]: cappedUsed,
           updatedAt: new Date().toISOString(),
         };
-        if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
+        if (advanceTo && !advanceAlreadyStarted && !pauseBeforeNext && !mandatoryBreakDue) {
           const lateNextStartIso = new Date().toISOString();
-          lateUpdates.currentSectionIdx = nextSectionIdx;
-          lateUpdates[`sectionTimings.${nextSectionId}.startedAt`] = lateNextStartIso;
-          lateUpdates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
+          lateUpdates.currentSectionIdx = advanceIdxSafe;
+          lateUpdates[`sectionTimings.${advanceTo}.startedAt`] = lateNextStartIso;
+          lateUpdates[`sectionTimings.${advanceTo}.timeUsedSeconds`] = 0;
           // D-01: recompute the write lock for the section being ENTERED.
           // Same reasoning as the on-time branch below — see the note there.
           const lateCore = toCoreAttempt(attempt as unknown as Record<string, unknown>);
           applyLockUpdates(lateUpdates, computeAttemptLocks(
             attempt.startedAt,
             lateNextStartIso,
-            a.sections?.find((s) => s.id === nextSectionId)?.timeLimit,
+            a.sections?.find((s) => s.id === advanceTo)?.timeLimit,
             a,
             lateCore,
           ));
@@ -8347,7 +8831,7 @@ export const submitSection = onCall<SubmitSectionData>(
     // it stands the instant before this write? Reported, never acted on.
     auditTiming('submitSection', attemptId,
       attempt as unknown as Record<string, unknown>, aSnap.data(),
-      !nextSectionId ? ['ended']
+      !advanceTo ? ['ended']
         : mandatoryBreakDue ? ['break']
         // pauseBeforeNext is the client saying "stop here" — which it does for
         // a break OR for student-choice. Either verdict agrees.
@@ -8363,10 +8847,14 @@ export const submitSection = onCall<SubmitSectionData>(
         },
       }));
 
-    if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
-      updates.currentSectionIdx = nextSectionIdx;
-      updates[`sectionTimings.${nextSectionId}.startedAt`] = nowIso;
-      updates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
+    if (advanceTo && !pauseBeforeNext && !mandatoryBreakDue) {
+      // A-02: skipped on a retry whose advance already landed, so a lost
+      // response cannot re-anchor a lock or move a section's start instant.
+      if (!advanceAlreadyStarted) {
+        updates.currentSectionIdx = advanceIdxSafe;
+        updates[`sectionTimings.${advanceTo}.startedAt`] = nowIso;
+        updates[`sectionTimings.${advanceTo}.timeUsedSeconds`] = 0;
+      }
 
       // ── Recompute the answer-write lock (D-01, master plan Phase 1) ──
       //
@@ -8401,7 +8889,7 @@ export const submitSection = onCall<SubmitSectionData>(
       applyLockUpdates(updates, computeAttemptLocks(
         attempt.startedAt,
         nowIso,
-        a.sections?.find((s) => s.id === nextSectionId)?.timeLimit,
+        a.sections?.find((s) => s.id === advanceTo)?.timeLimit,
         a,
         advCore,
       ));
@@ -8419,8 +8907,8 @@ export const submitSection = onCall<SubmitSectionData>(
       const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
       if (dMode === 'linear' || dMode === 'adaptive') {
         const served = attempt.servedQuestions ?? [];
-        const existingHere = served.find((s) => s.sectionId === nextSectionId);
-        const firstQid = existingHere?.questionId ?? attempt.questionOrder?.[nextSectionId]?.[0];
+        const existingHere = served.find((s) => s.sectionId === advanceTo);
+        const firstQid = existingHere?.questionId ?? attempt.questionOrder?.[advanceTo]?.[0];
         if (firstQid) {
           const qSnap = await db.collection('questions').doc(firstQid).get();
           if (qSnap.exists) {
@@ -8449,7 +8937,7 @@ export const submitSection = onCall<SubmitSectionData>(
               // reader to tolerate it.
               updates.servedQuestions = appendServedQuestion(served, {
                 questionId: firstQid,
-                sectionId: nextSectionId,
+                sectionId: advanceTo,
                 difficulty: (qData.difficulty as string) ?? 'medium',
                 servedAt: nowIso,
                 locked: false,

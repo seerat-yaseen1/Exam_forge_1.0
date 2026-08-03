@@ -426,9 +426,26 @@ function expiredClock(
   return hasSplit ? null : 'unknown';
 }
 
+/**
+ * Is this failure "the deadline doing its job" rather than something wrong?
+ *
+ * Two shapes, one meaning. STANDARD delivery writes answers directly and the
+ * rules deny them past answersLockedAfter, which surfaces as permission-denied.
+ * SEQUENTIAL delivery writes through submitAnswerAndAdvance /
+ * saveAnswerNoAdvance, which since A-03 refuse a late answer explicitly — those
+ * arrive as deadline-exceeded carrying ANSWER_WINDOW_CLOSED.
+ *
+ * Both have to read the same here. The callers use this to decide between "your
+ * time was up, submit cleanly" and "something failed, warn the student and tell
+ * the invigilator". Before A-03 the sequential path could not produce this
+ * condition at all, so a late flush would have been reported to the student as
+ * an unexplained save failure — alarming, and wrong.
+ */
 function isAnswerWindowClosed(e: unknown): boolean {
   const code = String((e as { code?: string })?.code ?? '');
-  return code === 'permission-denied' || code.endsWith('/permission-denied');
+  if (code === 'permission-denied' || code.endsWith('/permission-denied')) return true;
+  const msg = String((e as { message?: string })?.message ?? '');
+  return msg.includes('ANSWER_WINDOW_CLOSED');
 }
 
 function isAnswerEmpty(ans: AttemptAnswer | undefined): boolean {

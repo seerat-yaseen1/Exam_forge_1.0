@@ -981,6 +981,65 @@ export async function submitAnswerAndAdvance(params: {
   })).data);
 }
 
+// ── Phase 4.4: provisional grading of a paused attempt (A9) ───────
+
+/**
+ * A staff-only view of where a PAUSED student had got to.
+ *
+ * Deliberately not stored on the attempt. The student can read their own
+ * attempt, and A9 is explicit that a frozen student must not see a result that
+ * is not final — and that "a stale score sitting on a live attempt is exactly
+ * the quiet wrongness this whole project has been about". Its own collection
+ * makes both structural: students have no read access, and unfreezeAttempt
+ * deletes the row in the same transaction as the release, so the mark cannot
+ * outlive the pause.
+ *
+ * Not a submission. The attempt stays live, its status is untouched, and no
+ * further attempt is consumed.
+ */
+export type ProvisionalGrade = {
+  attemptId: string;
+  assessmentId: string;
+  instituteId: string | null;
+  studentId: string | null;
+  scores: AttemptScores;
+  /** Which pause this describes — a grade from an earlier freeze is stale. */
+  freezeId: string;
+  answeredCount: number;
+  gradedAt: string;
+  gradedBy: string;
+  gradedByRole: string;
+};
+
+/** Grade a paused attempt without ending it. Invigilator only. */
+export async function gradeProvisional(attemptId: string): Promise<{
+  ok: true; scores: AttemptScores; provisional: true; gradedAt: string;
+}> {
+  const call = httpsCallable<
+    { attemptId: string },
+    { ok: true; scores: AttemptScores; provisional: true; gradedAt: string }
+  >(functions, 'gradeProvisional');
+  return (await call({ attemptId })).data;
+}
+
+/**
+ * Read the provisional grade for one attempt, or null.
+ *
+ * Read directly rather than through a callable: the rules already scope it to
+ * the caller's tenant, and a roster showing many students would otherwise pay
+ * a callable round trip per row.
+ */
+export async function getProvisionalGrade(attemptId: string): Promise<ProvisionalGrade | null> {
+  try {
+    const snap = await getDoc(doc(db, 'provisionalGrades', attemptId));
+    return snap.exists() ? (snap.data() as ProvisionalGrade) : null;
+  } catch {
+    // A student hitting this is denied by rules, by design. Absence is the
+    // right answer for them, and it must not break whatever called it.
+    return null;
+  }
+}
+
 // ── Phase 4.2: commit a sequential answer WITHOUT advancing ───────
 /**
  * Persist the current question's answer and nothing else.

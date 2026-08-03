@@ -1167,7 +1167,11 @@ function isDueForPurge(data: Record<string, unknown>, now: Date): boolean {
  * day. Closing GRANTS the full frozen interval, so a student is never punished
  * for an unattended queue.
  */
-const STALE_FREEZE_HOURS = 6;
+// Retired in Phase 4.4 (D-30). A freeze no longer expires on a timer: it ends
+// when a human ends it, or when the availability window closes. Left as a
+// named tombstone rather than deleted silently, so anyone looking for the
+// six-hour behaviour finds out where it went.
+// const STALE_FREEZE_HOURS = 6;
 
 /**
  * How long an attempt may sit untouched before the sweep closes it even
@@ -1223,8 +1227,8 @@ export const scheduledCloseExpiredAttempts = onSchedule(
     //
     // Two reasons to close a frozen attempt, both evaluated in memory:
     //   1. its answer window has already passed — the trap case;
-    //   2. it has been frozen longer than STALE_FREEZE_HOURS — D8's automatic
-    //      exit, regardless of whether any clock has run out.
+    //   2. (retired, D-30) it had been frozen longer than six hours. A freeze
+    //      is owned by a human and does not time out — see the note below.
     const frozenSnap = await db.collection('attempts')
       .where('status', '==', 'frozen')
       .limit(300)
@@ -1232,7 +1236,8 @@ export const scheduledCloseExpiredAttempts = onSchedule(
 
     type Closing = {
       doc: FirebaseFirestore.QueryDocumentSnapshot;
-      reason: 'deadline_expired_sweep' | 'stale_freeze_sweep';
+      // 'stale_freeze_sweep' retired with D-30 — nothing produces it now.
+      reason: 'deadline_expired_sweep';
       /** Frozen seconds to credit on close (stale freezes are granted in full). */
       grantFrozenSeconds: number;
       wasFrozen: boolean;
@@ -1245,28 +1250,47 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       wasFrozen: false,
     }));
 
-    const staleBeforeMs = nowMs - STALE_FREEZE_HOURS * 3_600_000;
+    // ── D-30: the stale-freeze auto-close is GONE; the window close stays ──
+    //
+    // Half of this branch was removed and half deliberately kept, and the
+    // distinction matters.
+    //
+    // REMOVED — frozenTooLong. A freeze older than STALE_FREEZE_HOURS used to
+    // close itself and grant the whole pause. That was doctrine D8: an
+    // automatic state needs an automatic exit. But A2 settles that a freeze is
+    // NOT an ownerless automatic state — a named human paused this sitting and
+    // owes a decision on the paused time. Closing it on a timer, six hours
+    // later, with a grant nobody chose, is the system inventing an
+    // authority's decision for them. "Never unfrozen" is a legitimate ending
+    // (A10), not a failure to be swept up.
+    //
+    // KEPT — windowGone. A10 row 1 is closed: the availability window closing
+    // while a student is frozen DOES finalise the attempt, and it is "the only
+    // automatic ending, and what stops provisional running forever". Deleting
+    // this branch wholesale — which is what "remove the sweep's frozen-attempt
+    // handling" says if read literally — would remove the sole enforcement of
+    // a decision already made.
+    //
+    // The window is the institution's outer wall, not one of the student's
+    // clocks. Same reason resolve() evaluates it against real time while every
+    // other deadline pauses (4.3).
     for (const doc of frozenSnap.docs) {
       const d = doc.data() as {
         answersLockedAfter?: unknown;
         freezeState?: { since?: string } | null;
         frozenAt?: string | null;
       };
-      const sinceIso = d.freezeState?.since ?? d.frozenAt ?? null;
-      const sinceMs = sinceIso ? Date.parse(sinceIso) : NaN;
-      const frozenTooLong = Number.isFinite(sinceMs) && sinceMs <= staleBeforeMs;
-      const windowGone = attemptWindowClosed(d, nowMs);
-      if (!frozenTooLong && !windowGone) continue;
+      if (!attemptWindowClosed(d, nowMs)) continue;
 
       candidates.push({
         doc,
-        reason: frozenTooLong ? 'stale_freeze_sweep' : 'deadline_expired_sweep',
-        // Granted in FULL. The authority never made a decision, and the
-        // student must not absorb the cost of that. Phase 4 replaces this
-        // with a real ledger entry; the number is measured the same way.
-        grantFrozenSeconds: Number.isFinite(sinceMs)
-          ? Math.max(0, Math.floor((nowMs - sinceMs) / 1000))
-          : 0,
+        reason: 'deadline_expired_sweep',
+        // No grant on this path. FREEZE_CREDIT_EXTENDS_WINDOW is false, so
+        // credit cannot move the wall that is ending this attempt — handing
+        // out time here would be arithmetic that changes nothing, recorded as
+        // though it were a decision. The paused time stays unadjudicated,
+        // which is the truth: nobody adjudicated it.
+        grantFrozenSeconds: 0,
         wasFrozen: true,
       });
     }
@@ -1854,6 +1878,9 @@ type AuditActionS =
   // record — the same standard already applied to deletion.
   | 'attemptFrozen'
   | 'attemptUnfrozen'
+  // Phase 4.4: a provisional grade is a staff action on a live sitting, and
+  // it is visible to staff before the student's exam is over. Same standard.
+  | 'attemptGradedProvisional'
   | 'attemptRewritten';
 
 type SuccessionS = {
@@ -5696,6 +5723,122 @@ function assertInvigilator(
  * credit decision happens — a freeze on its own grants nothing, because
  * nobody has decided anything yet.
  */
+// ══════════════════════════════════════════════════════════════════
+// PHASE 4.4 — PROVISIONAL GRADING  (A9)
+//
+// An invigilator needs to see where a paused student had got to — to decide
+// about the pause, to answer a query, to include them in an export — without
+// ending their sitting.
+//
+// STORED OFF THE ATTEMPT, AND THAT IS THE WHOLE DESIGN.
+//
+// The obvious implementation writes `scores` onto the attempt. A9 rules it
+// out in as many words: "a stale score sitting on a live attempt is exactly
+// the quiet wrongness this whole project has been about." Two things go wrong
+// if you do it. The student reads their own attempt, so a score there is a
+// score they can see — and A9 says a frozen student must not see a result
+// that is not final. And the moment they answer one more question the stored
+// score is a lie that nothing forces anyone to notice.
+//
+// A sibling document in `provisionalGrades` fixes both by construction. The
+// attempt stays unscored and live; students have no read access in the rules;
+// and unfreezeAttempt deletes the row, so the grade cannot outlive the pause
+// that justified it. Invalidation is not a cleanup step someone must remember
+// — the score has nowhere to go stale.
+//
+// NOT a submission. Status is untouched, submittedAt is untouched, no attempt
+// is consumed (A9: unfreezing does not consume another — it is the same
+// sitting continuing).
+// ══════════════════════════════════════════════════════════════════
+
+interface GradeProvisionalData {
+  attemptId: string;
+}
+
+export const gradeProvisional = onCall<GradeProvisionalData>(
+  { region: 'us-central1' },
+  async (request) => {
+    const { attemptId } = request.data || ({} as GradeProvisionalData);
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    const db = getFirestore();
+    const attemptSnap = await db.collection('attempts').doc(attemptId).get();
+    if (!attemptSnap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const attempt = attemptSnap.data() as {
+      instituteId?: string; studentId?: string; assessmentId: string;
+      status?: string; answers?: Record<string, AttemptAnswerDoc>;
+      gradingConfig?: AssessmentGradingConfigS;
+      freezes?: FreezeLedgerEntry[];
+    };
+    const actor = assertInvigilator(request, attempt);
+
+    // Only while genuinely paused. A running attempt has no need of this, and
+    // a terminal one already has a real grade that this must never shadow.
+    const open = (attempt.freezes ?? []).find((f) => !f.endedAt);
+    if (!open) {
+      throw new HttpsError('failed-precondition',
+        'NOT_FROZEN: provisional grading applies only to a paused attempt.');
+    }
+
+    const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+    const assessment = assessmentSnap.data() as GradingAssessmentDoc;
+    const sections = normalizeSections(assessment);
+    const qIds = Array.from(new Set(
+      sections.flatMap((sec) => sec.questions.map((q) => q.questionId)),
+    ));
+    const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
+
+    const { scores, gradedAnswers } = scoreAttemptAnswers({
+      sections,
+      questionMap,
+      answerMap,
+      answers: attempt.answers,
+      passingScore: assessment.passingScore,
+      // NEVER to the student on this path, whatever the review audience says.
+      // This document is staff-only and the student cannot read it; passing
+      // true would put answer keys in a row that exists precisely because the
+      // sitting is not over.
+      exposeKeysToStudent: false,
+      // The policy frozen on the attempt at start, exactly as gradeAttempt
+      // uses — a provisional mark must be computed the same way as the real
+      // one or it is not a preview of anything.
+      gradingConfig: attempt.gradingConfig ?? assessment.gradingConfig,
+    });
+
+    const nowIso = new Date().toISOString();
+    await db.collection('provisionalGrades').doc(attemptId).set({
+      attemptId,
+      assessmentId: attempt.assessmentId,
+      instituteId: attempt.instituteId ?? null,
+      studentId: attempt.studentId ?? null,
+      scores,
+      gradedAnswers,
+      // Which pause this describes. If a later freeze is graded the row is
+      // replaced; the id makes it checkable that a grade belongs to the freeze
+      // currently open rather than an earlier one.
+      freezeId: open.id,
+      answeredCount: Object.keys(attempt.answers ?? {}).length,
+      gradedAt: nowIso,
+      gradedBy: actor.uid,
+      gradedByRole: actor.role,
+    });
+
+    await writeAuditRow(db, {
+      action: 'attemptGradedProvisional',
+      entityType: 'attempt',
+      entityId: attemptId,
+      entityLabel: attempt.studentId ?? null,
+      instituteId: attempt.instituteId ?? null,
+      actorUid: actor.uid,
+      actorRole: actor.role,
+      reason: `freeze ${open.id}`,
+    });
+
+    return { ok: true, scores, provisional: true as const, gradedAt: nowIso };
+  },
+);
+
 export const freezeAttempt = onCall<FreezeAttemptData>(
   { region: 'us-central1' },
   async (request) => {
@@ -5905,6 +6048,19 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
       // D-35: the numbers the student's screen counts down with, refreshed in
       // the same write as the deadlines they mirror.
       applyCreditUpdates(updates, creditedAttempt);
+
+      // ── A9: unfreeze invalidates the provisional grade ──────────
+      //
+      // "Unfreeze invalidates the grade. Stale scores are cleared
+      // automatically." The student is about to keep working, so any mark
+      // describing where they had got to is now describing a moment that has
+      // passed.
+      //
+      // In the same transaction as the release, not a follow-up write: a
+      // failure between the two would leave a stale grade on a running
+      // attempt, which is the exact state A9 forbids. Deleting a row that is
+      // not there is a no-op, so no existence check is needed.
+      txn.delete(db.collection('provisionalGrades').doc(attemptId));
       txn.update(ref, updates);
 
       return { elapsedMs, grantedMs: granted, creditedFreezeMs, actor };

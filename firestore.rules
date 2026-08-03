@@ -733,6 +733,30 @@ service cloud.firestore {
           || request.time < resource.data.answersLockedAfter;
     }
 
+    // ── Provisional grades (Phase 4.4 / A9) ──────────────────────
+    //
+    // A staff-only preview of where a PAUSED student had got to. It exists as
+    // its own collection rather than as fields on the attempt for one reason
+    // above all: the student can read their own attempt, and A9 says a frozen
+    // student must not see a result that is not final. Keeping the mark out of
+    // the attempt document makes that structural instead of a UI promise.
+    //
+    // NO STUDENT READ. Not narrowed by studentId, not readable "only their
+    // own" — students have no access to this collection at all. It also holds
+    // gradedAnswers, so a read would hand over answer keys mid-sitting.
+    //
+    // Writes are callable-only. gradeProvisional creates the row and
+    // unfreezeAttempt deletes it in the same transaction as the release, so
+    // the grade cannot outlive the pause that justified it. A client write
+    // would let a stale mark survive an unfreeze, which is the one thing A9
+    // names as the failure to avoid.
+    match /provisionalGrades/{attemptId} {
+      allow read:   if isWebOwner()
+                       || ((role() == 'institute' || role() == 'faculty')
+                           && request.auth.token.instituteId == resource.data.instituteId);
+      allow write:  if false;
+    }
+
     match /attempts/{id} {
       allow read: if isWebOwner()
                      || (role() == 'student'

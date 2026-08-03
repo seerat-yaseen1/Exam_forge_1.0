@@ -3739,6 +3739,67 @@ exports.verifyAndResume = (0, https_1.onCall)({ region: 'us-central1', secrets: 
         grantedMs: closed.grantedMs,
     };
 });
+/**
+ * Refuse an answer whose section or overall clock has already run out. (A-03.)
+ *
+ * WHY THIS EXISTS AT ALL — the asymmetry it closes.
+ *
+ * In STANDARD delivery answers are a direct client write and firestore.rules
+ * refuse them past `answersLockedAfter` (answerWriteWindowOpen, :754). In
+ * LINEAR/ADAPTIVE the rules refuse the direct write outright
+ * (studentAnswerWriteAllowed, :629) — answers may travel ONLY through
+ * submitAnswerAndAdvance and saveAnswerNoAdvance, which run under the Admin SDK
+ * and therefore bypass rules entirely.
+ *
+ * Both callables checked auth, ownership, session, SEB, status, delivery mode
+ * and the served-question pointer, then computed `lateAnswer` against the
+ * QUESTION clock — and stored the answer regardless. Neither ever read the
+ * section or overall bound. So sequential delivery, which is the MORE
+ * controlled mode (one question at a time, no going back, the client never
+ * holds the paper), was the WEAKER one on time: measured accepting an answer 25
+ * minutes past the overall deadline while getExamVerdict already said 'ended'.
+ *
+ * The bound enforced here is deliberately min(section, overall) — byte-for-byte
+ * what `answersLockedAfter` holds and what the rules enforce for standard mode.
+ * Parity is the point; a sequential student should face the same wall as a
+ * standard one, no earlier and no later.
+ *
+ * Freeze is credited and paused exactly as everywhere else: computeDeadlines
+ * applies per-clock credit (D-28) and subtracts recorded penalties (A4), and
+ * effectiveNowMs holds time still while a freeze is open (4.3). A paused
+ * student therefore cannot be refused for time that was never theirs to spend.
+ *
+ * A MISSING BOUND IS NOT AN EXPIRED BOUND. An untimed exam, an unreadable
+ * anchor or an absent assessment all yield null, and null means "no
+ * constraint" — never "over". The failure direction favours the student, which
+ * is the rule the whole timing module is built on.
+ */
+function assertSequentialAnswerWindowOpen(attempt, assessmentRaw, nowMs) {
+    if (!assessmentRaw)
+        return; // cannot prove a deadline; do not invent one
+    let endsAt;
+    let evalNow;
+    try {
+        const core = toCoreAttempt(attempt);
+        const dl = (0, examTimingCore_1.computeDeadlines)(core, toCoreAssessment(assessmentRaw));
+        endsAt = minNonNullMs(dl.sectionEndsAt, dl.overallEndsAt);
+        evalNow = (0, examTimingCore_1.effectiveNowMs)(core, nowMs);
+    }
+    catch (e) {
+        // A resolver fault must never cost a student their answer. Same posture as
+        // auditTiming and gradeAttempt's escape hatch: fail soft, let them write.
+        console.warn('[assertSequentialAnswerWindowOpen] deadline check failed; allowing', e);
+        return;
+    }
+    if (endsAt === null || evalNow <= endsAt)
+        return;
+    throw new https_1.HttpsError('deadline-exceeded', 'ANSWER_WINDOW_CLOSED: your time for this section has ended.');
+}
+/** min() over the bounds that actually exist. Null when none do. */
+function minNonNullMs(...xs) {
+    const vals = xs.filter((x) => x !== null);
+    return vals.length === 0 ? null : Math.min(...vals);
+}
 exports.submitAnswerAndAdvance = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Sign-in required.');
@@ -3786,6 +3847,10 @@ exports.submitAnswerAndAdvance = (0, https_1.onCall)(EXAM_HOT_PATH, async (reque
     const assessment = aSnap.exists ? aSnap.data() : undefined;
     // D-21: reuses the read above — no extra cost.
     assertNotBlocked(assessment, studentId);
+    // A-03: the section and overall clocks reach this path at last. Placed
+    // before any write, so a refused answer leaves no trace and the served
+    // pointer does not move.
+    assertSequentialAnswerWindowOpen(attempt, assessment, Date.parse(nowIso));
     const sectionsNorm = assessment ? normalizeSections(assessment) : [];
     // Phase 3b shadow — the question clock is where server and client have
     // historically disagreed most (D-14: 5s grace here, 0s there, and the last
@@ -3945,6 +4010,11 @@ EXAM_HOT_PATH, async (request) => {
     // SAVE work they had already done is N5's to decide, and this function
     // must not quietly answer it differently from its sibling.
     assertNotBlocked(assessment, studentId);
+    // A-03: the same gate its sibling applies, from the same function, so the
+    // two cannot disagree about when a student's time is up. A durability
+    // flush that arrives after the deadline is refused here exactly as the
+    // rules would refuse a standard-mode autosave at the same instant.
+    assertSequentialAnswerWindowOpen(attempt, assessment, Date.parse(nowIso));
     const sectionsNorm = assessment ? normalizeSections(assessment) : [];
     const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;

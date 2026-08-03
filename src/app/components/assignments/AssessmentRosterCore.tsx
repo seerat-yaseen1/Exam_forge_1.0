@@ -346,7 +346,18 @@ function UnfreezeConfirmModal({
   const givingLess = grantNum < frozenSecs;
 
   const thisFreeze  = secsToLabel(frozenSecs);
-  const totalAfter  = secsToLabel((attempt.totalFrozenSeconds ?? 0) + frozenSecs);
+  // Previously `totalFrozenSeconds + frozenSecs`, which added two different
+  // quantities and called the result a total. Since Phase 4.3
+  // totalFrozenSeconds is GRANTED time — unfreezeAttempt derives it from the
+  // ledger's sum of grantedMs — while frozenSecs is ELAPSED wall time for the
+  // pause still open. Past grants plus current elapsed is not a total of
+  // anything, and if an earlier freeze was partly granted the single figure
+  // understated the pausing and overstated the credit at once.
+  //
+  // Shown as what it is: credit already given, and this pause separately.
+  const alreadyCredited = attempt.totalFrozenSeconds ?? 0;
+  const creditedLabel   = secsToLabel(alreadyCredited);
+  const priorFreezes    = (attempt.freezes ?? []).filter((f) => f.endedAt).length;
 
   return (
     <motion.div
@@ -377,12 +388,42 @@ function UnfreezeConfirmModal({
 
         {/* Body */}
         <div className="px-5 py-5 space-y-4">
+          {/*
+            COPY TRACKS THE VALUE IN THE BOX — do not make this static again.
+
+            It previously read "the frozen time will not count against their
+            limit" unconditionally, which was a promise the invigilator could
+            falsify by typing a smaller number two fields below. The modal then
+            contradicted itself: this banner said no time was lost while the
+            line under the input said how much was.
+
+            Same failure as the student's pause overlay before Phase 4.2 — copy
+            asserting an outcome the system had not committed to. Whatever is
+            in the box is what will happen, so that is what this says.
+          */}
           <div className="px-3 py-3 flex items-start gap-2.5"
-            style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}>
-            <PlayCircle size={12} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#1E7B3C', lineHeight: 1.6 }}>
-              Resuming <strong>{studentName}</strong>'s session. Their timer continues from
-              where it was paused — the frozen time will <strong>not</strong> count against their limit.
+            style={{
+              background: givingLess ? '#FFFBF0' : '#F0F9F4',
+              border: `1px solid ${givingLess ? '#F5DFA0' : '#B8E6C8'}`,
+              borderRadius: 2,
+            }}>
+            <PlayCircle size={12} strokeWidth={1.5}
+              style={{ color: givingLess ? '#92680A' : '#1E7B3C', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: givingLess ? '#92680A' : '#1E7B3C', lineHeight: 1.6 }}>
+              {givingLess ? (
+                <>
+                  Resuming <strong>{studentName}</strong>'s session. Only{' '}
+                  <strong>{secsToLabel(grantNum)}</strong> of the {thisFreeze} pause is being
+                  returned — the remaining <strong>{secsToLabel(frozenSecs - grantNum)}</strong>{' '}
+                  will count against their limit.
+                </>
+              ) : (
+                <>
+                  Resuming <strong>{studentName}</strong>'s session. Their timer continues from
+                  where it was paused — the frozen time will <strong>not</strong> count
+                  against their limit.
+                </>
+              )}
             </p>
           </div>
 
@@ -394,8 +435,10 @@ function UnfreezeConfirmModal({
             </div>
             <div className="px-3 py-3"
               style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Total frozen (cumulative)</p>
-              <p className="text-xs" style={{ color: '#0C0C0B' }}>{totalAfter}</p>
+              <p className="text-xs mb-1" style={{ color: '#9A9891' }}>
+                Already credited{priorFreezes > 0 ? ` (${priorFreezes} earlier ${priorFreezes === 1 ? 'pause' : 'pauses'})` : ''}
+              </p>
+              <p className="text-xs" style={{ color: '#0C0C0B' }}>{creditedLabel}</p>
             </div>
           </div>
 

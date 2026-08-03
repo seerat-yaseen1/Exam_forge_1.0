@@ -344,6 +344,52 @@ export type Attempt = {
    * Absent on attempts that started before this shipped — callers fall back to
    * 0, which is the pre-freeze behaviour and drains within a sitting.
    */
+  /**
+   * The freeze ledger (Phase 4 / §8).
+   *
+   * One entry per pause, each judged on its own: no history, no running total.
+   * An entry with no `endedAt` is the pause currently open.
+   *
+   * Read-only on the client. Every write goes through freezeAttempt or
+   * unfreezeAttempt, which is what keeps grants attributable and makes INV-4a
+   * and INV-11 (credit and penalty are append-only) enforceable at all.
+   */
+  freezes?: Array<{
+    id: string;
+    startedAt: string;
+    endedAt?: string | null;
+    reason: 'invigilator' | 'extension_check' | 'system';
+    frozenBy?: string | null;
+    /** The freezer's role AT THE TIME — authority attaches per freeze (§3). */
+    frozenByRole?: 'webOwner' | 'institute' | 'faculty' | 'system' | null;
+    elapsedMs?: number | null;
+    /** Decided credit. The only figure deadlines consume. */
+    grantedMs?: number | null;
+    decidedBy?: string | null;
+    decidedAt?: string | null;
+    note?: string | null;
+    /**
+     * What each clock had left when the pause landed (§2).
+     * null = that clock was not running; 0 = it had run out. A10 turns on the
+     * difference — absent means the option is not offered, expired means it is
+     * offered with a cap of zero.
+     */
+    clocksAtFreeze?: {
+      questionMs: number | null;
+      sectionMs: number | null;
+      overallMs: number | null;
+    } | null;
+  }>;
+  /** Deductions taken at resume (Phase 4.5). Append-only — INV-11. */
+  penalties?: Array<{
+    id: string;
+    freezeId: string;
+    clock: 'question' | 'section' | 'overall';
+    amountMs: number;
+    decidedAt: string;
+    decidedBy?: string;
+    decidedByRole?: string;
+  }>;
   freezeCredits?: {
     overallMs: number;
     sectionMs: number;

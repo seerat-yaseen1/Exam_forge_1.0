@@ -5699,6 +5699,43 @@ type FreezeLedgerEntry = {
   decidedBy?: string | null;
   decidedAt?: string | null;
   note?: string | null;
+  /**
+   * The freezer's ROLE at the instant they froze (§3, §8).
+   *
+   * Authority attaches per freeze, and unfreezing requires the freezer or
+   * someone above them. Deriving that later from a profile lookup asks a
+   * question about the past using present data: a faculty member promoted to
+   * institute admin would appear to have frozen as an admin, and one who has
+   * left would have no role at all. `frozenBy` alone cannot answer "who is
+   * above this decision".
+   *
+   * Recorded now, while nothing depends on it, so 4.6 has a fact rather than
+   * an inference.
+   */
+  frozenByRole?: 'webOwner' | 'institute' | 'faculty' | 'system' | null;
+  /**
+   * What each clock had left at the instant of the pause (§2).
+   *
+   * Two things need this and neither has a source today. The student is owed
+   * "they see where they stood, frozen at that instant" — a screen that
+   * currently has nothing to render. And the resume modal needs the caps for
+   * A4's per-clock deductions.
+   *
+   * Stored rather than recomputed because both would otherwise derive it
+   * independently, from different code, at different moments — and would
+   * drift. It is also the only honest source: after the pause, "what the
+   * question had left" is a fact about the past, not something the present
+   * state can be asked.
+   *
+   * null for a clock that was not running (no question in standard delivery,
+   * no section between sections, no cap where none is configured). Distinct
+   * from 0, which means the clock had run out.
+   */
+  clocksAtFreeze?: {
+    questionMs: number | null;
+    sectionMs: number | null;
+    overallMs: number | null;
+  } | null;
 };
 
 /** Staff who may pause a sitting: webOwner, or the attempt's own tenant. */
@@ -5856,6 +5893,8 @@ export const freezeAttempt = onCall<FreezeAttemptData>(
       const att = snap.data() as {
         instituteId?: string; status?: string; frozenAt?: string | null;
         freezes?: FreezeLedgerEntry[];
+        // Phase 4.5 Stage 2 — needed to snapshot the clocks at this instant.
+        assessmentId?: string;
       };
       const actor = assertInvigilator(request, att);
 
@@ -5870,11 +5909,51 @@ export const freezeAttempt = onCall<FreezeAttemptData>(
       }
 
       const nowIso = new Date().toISOString();
+      // ── §2: capture where the student stood, at this instant ────
+      //
+      // Read inside the transaction and before the write, so the numbers are
+      // the ones that were true when the pause landed — not when someone next
+      // opens a modal. Recomputing later would be asking the present state a
+      // question about the past.
+      //
+      // Fails soft. A missing assessment yields nulls, never a thrown freeze:
+      // an invigilator must always be able to stop a sitting, and a snapshot
+      // is worth less than the pause itself.
+      let clocksAtFreeze: FreezeLedgerEntry['clocksAtFreeze'] = null;
+      try {
+        const aSnap = att.assessmentId
+          ? await txn.get(db.collection('assessments').doc(att.assessmentId))
+          : null;
+        if (aSnap?.exists) {
+          const core = toCoreAttempt(att as unknown as Record<string, unknown>);
+          const asmt = toCoreAssessment(aSnap.data() as Record<string, unknown>);
+          const d = computeDeadlines(core, asmt);
+          const nowMsF = Date.parse(nowIso);
+          // null means "this clock was not running" — no question in standard
+          // delivery, no section between sections, no cap configured. That is
+          // a different fact from 0, which means it had run out, and A10 turns
+          // on the difference: an absent clock is an option NOT OFFERED, an
+          // expired one is an option offered with a cap of zero.
+          const left = (x: number | null) => x === null ? null : Math.max(0, x - nowMsF);
+          clocksAtFreeze = {
+            questionMs: left(d.questionEndsAt),
+            sectionMs:  left(d.sectionEndsAt),
+            overallMs:  left(d.overallEndsAt),
+          };
+        }
+      } catch {
+        clocksAtFreeze = null;
+      }
+
       const entry: FreezeLedgerEntry = {
         id: `fz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         startedAt: nowIso,
         reason: 'invigilator',
         frozenBy: actor.uid,
+        // §3/§8: authority attaches per freeze, so the role is part of the
+        // record rather than something 4.6 has to infer later.
+        frozenByRole: actor.role as FreezeLedgerEntry['frozenByRole'],
+        clocksAtFreeze,
       };
 
       txn.update(ref, {

@@ -21,6 +21,27 @@
 > | A-09 / A-10 + contradictions C-1…C-6 | see below | P-07 ✅ |
 >
 > The sections below are left as written, in the past tense of the investigation, because the evidence is the point — each says what was wrong, how it was measured, and what the fix was. A "Fixed" note closes each one.
+>
+> ## 🔁 ROUND 3 (2026-08-03) — four more, all in round 2's own blind spot
+>
+> A third pass went at the code round 2 **added**, on the principle that a fix which is right where it was tested and wrong where it was not is the exact shape of the defects it replaced. It was.
+>
+> Round 2 froze the paper and timing onto the attempt and routed the **graders** through that contract. Four other readers of the same paper were left reading the live document:
+>
+> | # | Defect | Measured |
+> |---|---|---|
+> | **B-01** | `getExamQuestions` served the live paper in standard delivery | served `q9,q2,q3` to a student graded on `q1,q2,q3` |
+> | **B-02** | `regradeAttempts` regraded every attempt against the live paper | a finished 40/40 sitting re-scored to **30/40** |
+> | **B-03** | `getAnswerKeysForReview` intersected against the live paper | a question removed from a live exam became **unmarkable** |
+> | **B-04** | the per-question clock was read live | an answer at 60s flagged late after the limit was cut 300s→10s under the student |
+>
+> B-02 is the sharpest: round 2's own commit message named `regradeAttempts` as part of the problem and then did not fix it.
+>
+> **Two probes were corrected rather than reported** — the system was right and the probe was wrong. B-12 (de-allocating a student mid-sitting does not eject them) is documented design; `blockedStudents` is the live lever. B-13 (three parallel starts → three attempts) was the **fake Firestore's** transaction having no isolation — the harness, not the product.
+>
+> New suite `functions/test/audit.round3.cjs`, 15 probes / 52 checks. `npm test` now runs all five suites and is green: **13,446 timing states · 84,062 assertions · 64 freeze · 85 e2e · 93 round-2 · 52 round-3.**
+>
+> Deployment: see **[DEPLOY.md](./DEPLOY.md)** — functions only, no rules, no indexes, no migration.
 
 ---
 

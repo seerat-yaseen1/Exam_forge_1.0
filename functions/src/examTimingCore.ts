@@ -153,12 +153,98 @@ export interface CoreAttempt {
   creditedFreezeMs?: number;
   totalFrozenSeconds?: number;
   freezes?: CoreFreeze[];
+  penalties?: CorePenalty[];
   scores?: unknown;
   gradedAnswers?: unknown;
   answersLockedAfter?: TimeInput;
   sectionLockedAfter?: TimeInput;
   overallLockedAfter?: TimeInput;
   activeSessionId?: string | null;
+}
+
+// ── Penalties (Phase 4.5 / A4-A6) ──────────────────────────────────
+
+/** The clocks a penalty can be taken from. */
+export type PenaltyClock = 'question' | 'section' | 'overall';
+
+/**
+ * One deduction, decided by a named human at one unfreeze.
+ *
+ * SEPARATE FROM THE FREEZE LEDGER, DELIBERATELY. A deduction cannot be
+ * expressed as reduced `grantedMs`: a single unfreeze may take time from the
+ * question AND the section AND the total (A4), and one scalar cannot hold
+ * three decisions. Netting would also destroy INV-4a — credit would appear to
+ * fall — and would leave a student unable to be told who took what.
+ *
+ * Penalties are the FIRST thing in this module that moves a deadline
+ * backwards. Everything else is built to fail in the student's favour. That is
+ * why each one is a row with an actor and an instant, and why INV-3a and
+ * INV-3c now permit a backward move only as far as a row like this justifies:
+ * an unexplained one still fails.
+ */
+export type CorePenalty = {
+  id: string;
+  /** The freeze whose resume decision produced this. */
+  freezeId: string;
+  clock: PenaltyClock;
+  /** Always positive. The direction is carried by `clock`, not by a sign. */
+  amountMs: number;
+  decidedAt: TimeInput;
+  decidedBy?: string;
+};
+
+/**
+ * Which clocks a deduction lands on. A5: DEDUCTION TRAVELS OUTWARD.
+ *
+ * Take five seconds from the question and the section and the total each lose
+ * five seconds too — the time is gone from the sitting, not just from the
+ * innermost box. It never travels inward: shortening a section leaves the
+ * question in front of the student untouched (A5 row 4, the one to hold onto).
+ */
+const PENALTY_REACHES: Record<PenaltyClock, PenaltyClock[]> = {
+  // Read as: a penalty on THIS clock is felt by THESE clocks.
+  question: ['question', 'section', 'overall'],  // outward, all the way up
+  section:  ['section', 'overall'],
+  overall:  ['overall'],                          // nothing contains the total
+};
+
+/**
+ * Total deduction applying to one clock instance.
+ *
+ * Anchored exactly as credit is (A6: penalties attach to the CLOCK, not the
+ * student). Only penalties decided after this clock started count — so
+ * penalise section B and section C begins on its full limit, because C's
+ * anchor is later than the decision.
+ */
+export function penaltyForClock(
+  a: CoreAttempt,
+  clock: PenaltyClock,
+  anchor: TimeInput,
+): number {
+  if (!Array.isArray(a.penalties)) return 0;
+  const anchorMs = toMs(anchor);
+  if (anchorMs === null) return 0;
+  let total = 0;
+  for (const p of a.penalties) {
+    if (!PENALTY_REACHES[p.clock]?.includes(clock)) continue;
+    const at = toMs(p.decidedAt);
+    // An unreadable instant is not counted. A deduction must be provable —
+    // the same standard creditForAnchor applies, pointed the other way.
+    if (at === null || at < anchorMs) continue;
+    if (typeof p.amountMs !== 'number' || !Number.isFinite(p.amountMs)) continue;
+    total += Math.max(0, p.amountMs);
+  }
+  return total;
+}
+
+/** Every penalty on the attempt, for monotonicity checks. */
+export function totalPenaltyMs(a: CoreAttempt): number {
+  if (!Array.isArray(a.penalties)) return 0;
+  return a.penalties.reduce(
+    (sum, p) => sum + (typeof p.amountMs === 'number' && Number.isFinite(p.amountMs)
+      ? Math.max(0, p.amountMs) : 0),
+    0,
+  );
 }
 
 // ── Output ─────────────────────────────────────────────────────────
@@ -294,6 +380,8 @@ export function sectionDeadlineMs(
   sectionTimeLimitMin: number | undefined,
   graceSeconds: number | undefined,
   creditMs = 0,
+  /** Deduction taken from this section (A4). Positive; subtracted here. */
+  penaltyMs = 0,
 ): number | null {
   const start = toMs(sectionStartedAt);
   if (start === null) return null;
@@ -301,7 +389,8 @@ export function sectionDeadlineMs(
   return start
     + sectionTimeLimitMin * 60_000
     + (graceSeconds ?? DEFAULT_SECTION_GRACE_SECONDS) * 1000
-    + creditMs;
+    + creditMs
+    - Math.max(0, penaltyMs);
 }
 
 /** The overall deadline, anchored on the attempt's own start. */
@@ -310,6 +399,8 @@ export function overallDeadlineMs(
   overallTimeLimitMin: number | undefined,
   graceSeconds: number | undefined,
   creditMs = 0,
+  /** Deduction taken from the total, INCLUDING those that travelled outward. */
+  penaltyMs = 0,
 ): number | null {
   const start = toMs(attemptStartedAt);
   if (start === null) return null;
@@ -317,7 +408,8 @@ export function overallDeadlineMs(
   return start
     + overallTimeLimitMin * 60_000
     + (graceSeconds ?? DEFAULT_OVERALL_GRACE_SECONDS) * 1000
-    + creditMs;
+    + creditMs
+    - Math.max(0, penaltyMs);
 }
 
 function minNonNull(...xs: Array<number | null>): number | null {
@@ -506,8 +598,11 @@ export function computeDeadlines(
     ? null
     : windowRaw + (FREEZE_CREDIT_EXTENDS_WINDOW ? overallCredit : 0);
 
+  // A5: penalties reach outward, so the total absorbs deductions taken from
+  // the section and the question as well as its own.
   const overallEndsAt = overallDeadlineMs(
     a.startedAt, asmt.overallTimeLimit, asmt.overallGraceSeconds, overallCredit,
+    penaltyForClock(a, 'overall', a.startedAt),
   );
 
   // Section bound — only for a section that has actually started.
@@ -520,6 +615,9 @@ export function computeDeadlines(
       sectionById(asmt, openId)?.timeLimit,
       asmt.sectionGraceSeconds,
       creditForAnchor(a, secStart),
+      // Section deductions plus any taken from a question inside it. NOT
+      // deductions taken from the total — those never travel inward (A5).
+      penaltyForClock(a, 'section', secStart),
     );
   }
 
@@ -535,7 +633,11 @@ export function computeDeadlines(
         questionEndsAt = servedAt
           + qLimit * 1000
           + (asmt.questionGraceSeconds ?? DEFAULT_QUESTION_GRACE_SECONDS) * 1000
-          + creditForAnchor(a, cur.servedAt);
+          + creditForAnchor(a, cur.servedAt)
+          // Only deductions taken from the QUESTION itself. Shortening a
+          // section leaves the question in front of the student untouched —
+          // A5 row 4, and the one most likely to be got wrong.
+          - penaltyForClock(a, 'question', cur.servedAt);
       }
     }
   }
@@ -849,11 +951,19 @@ export function checkInvariants(a: CoreAttempt, asmt: CoreAssessment): Violation
     const limit = sectionById(asmt, openId)?.timeLimit ?? 0;
     if (startedAt !== null && limit > 0) {
       const expected = startedAt + limit * 60_000;
-      // Generous window: grace and freeze credit both legitimately move it.
-      if (sec < expected - 1000) {
+      // Generous window: grace and freeze credit both legitimately move it
+      // LATER. Phase 4.5 adds the one thing that legitimately moves it EARLIER
+      // — a recorded penalty — so the allowance is exactly that and no more.
+      //
+      // The property this protects is unchanged and is the reason for the
+      // narrow allowance: a section lock earlier than its own deadline with no
+      // ledger row behind it still fails, which is the D-01 signature (a lock
+      // anchored to a section the student already left).
+      const allowed = penaltyForClock(a, 'section', startedAt);
+      if (sec < expected - allowed - 1000) {
         v.push(err('INV-3c',
-          `sectionLockedAfter precedes the open section's own deadline — ` +
-          `anchored to an earlier section (D-01 signature)`));
+          `sectionLockedAfter precedes the open section's own deadline by more ` +
+          `than the recorded penalty — anchored to an earlier section (D-01 signature)`));
       }
     }
   }
@@ -956,10 +1066,21 @@ export function checkTransition(before: CoreAttempt, after: CoreAttempt): Violat
   // when a long section is followed by a short one (60m section submitted at
   // minute 2, next section 10m → 60:30 becomes 12:30). A monotonicity test on
   // the combined lock would fail on a correct system.
+  //
+  // Phase 4.5: a penalty on the total moves this bound earlier on purpose. The
+  // allowance is exactly the penalty RECORDED BETWEEN the two states, so a
+  // deduction is permitted only to the extent someone signed for it. Moving
+  // the bound earlier without a matching row still fails, which is the whole
+  // point of keeping the check rather than deleting it.
   const ovrB = toMs(before.overallLockedAfter);
   const ovrA = toMs(after.overallLockedAfter);
-  if (ovrB !== null && ovrA !== null && ovrA < ovrB - 1000) {
-    v.push(err('INV-3a', `overallLockedAfter moved earlier by ${ovrB - ovrA}ms`));
+  const newPenalty = Math.max(0,
+    penaltyForClock(after, 'overall', after.startedAt)
+    - penaltyForClock(before, 'overall', before.startedAt));
+  if (ovrB !== null && ovrA !== null && ovrA < ovrB - newPenalty - 1000) {
+    v.push(err('INV-3a',
+      `overallLockedAfter moved earlier by ${ovrB - ovrA}ms, ` +
+      `only ${newPenalty}ms of which is a recorded penalty`));
   }
 
   // ── INV-4a · credit never decreases ─────────────────────────────
@@ -967,6 +1088,19 @@ export function checkTransition(before: CoreAttempt, after: CoreAttempt): Violat
   const cA = creditedFreezeMs(after);
   if (cA < cB - 1) {
     v.push(err('INV-4a', `credited freeze fell from ${cB}ms to ${cA}ms`));
+  }
+
+  // ── INV-11 · penalties are append-only ──────────────────────────
+  //
+  // The mirror of INV-4a. Credit may never fall and penalty may never fall:
+  // both are records of decisions someone made about a student's exam, and a
+  // record that can quietly shrink is not a record. Reversing a penalty means
+  // adding a compensating CREDIT row, which is visible; silently editing the
+  // deduction away is not.
+  const pB = totalPenaltyMs(before);
+  const pA = totalPenaltyMs(after);
+  if (pA < pB - 1) {
+    v.push(err('INV-11', `recorded penalty fell from ${pB}ms to ${pA}ms`));
   }
 
   // ── INV-6 · nothing leaves a terminal state ─────────────────────

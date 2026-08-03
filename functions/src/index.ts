@@ -35,7 +35,9 @@ import {
   overallDeadlineMs,
   creditForAnchor,
   computeFreezeCredits,
+  computeDeadlines,
   openSectionId,
+  type CorePenalty,
   resolve as resolveTiming,
   checkInvariants as checkTimingInvariants,
   type CoreAssessment,
@@ -5911,6 +5913,24 @@ interface UnfreezeAttemptData {
    */
   grantedMs: number;
   note?: string;
+  /**
+   * Deductions taken as part of this resume decision (Phase 4.5 / A4).
+   *
+   * All three clocks in one action, because that is how the decision is made:
+   * "give back four minutes but take twenty seconds off the section" is one
+   * judgement, not two. Omitted or zero means no penalty — the default, and
+   * the only outcome that requires no justification.
+   *
+   * Each is capped server-side at what that clock has left AFTER the credit
+   * lands. A4 promises no arithmetic that can go negative, and measuring the
+   * cap before the credit would break that promise whenever the grant is
+   * partial.
+   */
+  penalties?: {
+    questionMs?: number;
+    sectionMs?: number;
+    overallMs?: number;
+  };
 }
 
 /**
@@ -5944,6 +5964,8 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
         // Phase 4.3 — needed to re-materialise the lock once credit is granted.
         assessmentId?: string; startedAt?: string;
         sectionTimings?: Record<string, { startedAt?: string; submittedAt?: string }>;
+        // Phase 4.5 — existing deductions, appended to never replaced (INV-11).
+        penalties?: CorePenalty[];
       };
       const actor = assertInvigilator(request, att);
 
@@ -6026,6 +6048,58 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
       const openSectionLimit = openId
         ? lockA.sections?.find((sec) => sec.id === openId)?.timeLimit
         : undefined;
+
+      // ── Phase 4.5 · penalties (A4) ──────────────────────────────
+      //
+      // CAPPED AGAINST THE POST-CREDIT CLOCK. `creditedAttempt` already holds
+      // the grant just made, so resolving it here yields exactly what each
+      // clock has left once the student is released — which is what A4 means
+      // by "capped at that clock's remaining time", and what makes "no
+      // arithmetic that can go negative" true even when the grant is partial.
+      //
+      // Capping is not validation, it is the model. A4: "Ending a unit is
+      // simply its maximum — there is no separate 'end the question' action."
+      // So a request for more than remains is not an error to reject; it is an
+      // instruction to end that unit, and clamping expresses it exactly.
+      const nowMsUnfreeze = Date.parse(nowIso);
+      const dl = computeDeadlines(creditedAttempt, lockA as unknown as CoreAssessment);
+      const remaining = (endsAt: number | null): number =>
+        endsAt === null ? 0 : Math.max(0, endsAt - nowMsUnfreeze);
+
+      const wanted = request.data?.penalties ?? {};
+      const clamp = (askedMs: unknown, capMs: number): number => {
+        const n = typeof askedMs === 'number' && Number.isFinite(askedMs) ? askedMs : 0;
+        return Math.max(0, Math.min(Math.round(n), capMs));
+      };
+      const penaltyRows: Array<{
+        id: string; freezeId: string; clock: 'question' | 'section' | 'overall';
+        amountMs: number; decidedAt: string; decidedBy: string; decidedByRole: string;
+      }> = [];
+      const addPenalty = (clock: 'question' | 'section' | 'overall', amountMs: number) => {
+        if (amountMs <= 0) return;   // no row for a decision not taken
+        penaltyRows.push({
+          id: `pen_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          freezeId: idx >= 0 ? ledger[idx].id : 'unknown',
+          clock,
+          amountMs,
+          decidedAt: nowIso,
+          decidedBy: actor.uid,
+          decidedByRole: actor.role,
+        });
+      };
+      // A clock that does not exist right now cannot be penalised — A10 says
+      // the option is "not offered, not a silent no-op". remaining() is 0 for
+      // an absent bound, so the clamp refuses it here too and the UI and the
+      // server agree rather than one quietly swallowing the other's request.
+      addPenalty('question', clamp(wanted.questionMs, remaining(dl.questionEndsAt)));
+      addPenalty('section',  clamp(wanted.sectionMs,  remaining(dl.sectionEndsAt)));
+      addPenalty('overall',  clamp(wanted.overallMs,  remaining(dl.overallEndsAt)));
+
+      const penaltyLedger = [...(att.penalties ?? []), ...penaltyRows];
+      const penalisedAttempt = {
+        ...creditedAttempt,
+        penalties: penaltyLedger,
+      } as CoreAttempt;
 
       const updates: Record<string, unknown> = {
         freezes: ledger,

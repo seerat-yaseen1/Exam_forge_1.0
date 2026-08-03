@@ -640,6 +640,138 @@ regression('D-35 · a forward anchor yields zero credit by arithmetic', () => {
     'and the overall clock keeps its credit');
 });
 
+// ── Phase 4.5 · penalties (A4-A6) ─────────────────────────────────
+//
+// The A5 table transcribed directly. It is the specification for the one
+// mechanism in this module that moves a deadline BACKWARDS, so it is worth
+// asserting literally rather than paraphrasing.
+//
+// Baseline: Total 5:00 · Section 0:50 · Question 0:05.
+
+function penaltyFixture(rows) {
+  // Evaluated AT T0, with the A5 baseline in force at that instant:
+  //   Total 5:00 left  -> attempt started at T0, 5-minute cap
+  //   Section 0:50 left -> section started 10s ago, 1-minute cap
+  //   Question 0:05 left -> served now, 5-second cap
+  return {
+    status: 'in_progress', sectionIds: ['A'], startedAt: iso(T0),
+    sectionTimings: { A: { startedAt: iso(T0 - 10_000) } },
+    servedQuestions: [{ questionId: 'a1', sectionId: 'A',
+      servedAt: iso(T0), locked: false }],
+    answers: {},
+    penalties: rows.map((r, i) => ({
+      id: `p${i}`, freezeId: 'f1', clock: r.clock, amountMs: r.amountMs,
+      decidedAt: iso(T0),
+    })),
+  };
+}
+const PASMT = {
+  sections: [{ id: 'A', timeLimit: 1, questionIds: ['a1'], questionTimeLimit: 5 }],
+  overallTimeLimit: 5, sectionGraceSeconds: 0, overallGraceSeconds: 0,
+  questionGraceSeconds: 0, deliveryMode: 'linear',
+};
+
+regression('A5 · the full table, all seven rows', () => {
+  const at = T0;
+  // Each clock's OWN remaining time, in seconds. A deduction changes this.
+  const own = (a, k) => {
+    const d = C.computeDeadlines(a, PASMT);
+    return d[k] === null ? null : Math.round((d[k] - at) / 1000);
+  };
+  // What actually ends the sitting: the earliest of every bound. A clock can
+  // be ended by its CONTAINER while its own deadline is untouched — that is
+  // the cascade, and A5 insists it is not a deduction on that clock.
+  const endedBy = (a) => {
+    const d = C.computeDeadlines(a, PASMT);
+    if (d.effectiveEndsAt === null || d.effectiveEndsAt > at) return null;
+    if (d.overallEndsAt !== null && d.overallEndsAt <= at) return 'overall';
+    if (d.sectionEndsAt !== null && d.sectionEndsAt <= at) return 'section';
+    if (d.questionEndsAt !== null && d.questionEndsAt <= at) return 'question';
+    return null;
+  };
+
+  // Row 1 — 5s from question (max): the question ends, the section does not.
+  const r1 = penaltyFixture([{ clock: 'question', amountMs: 5000 }]);
+  assert.strictEqual(endedBy(r1), 'question', 'row 1: the question ends');
+  assert.strictEqual(own(r1, 'sectionEndsAt'), 45, 'row 1: section 0:50 -> 0:45');
+  assert.strictEqual(own(r1, 'overallEndsAt'), 295, 'row 1: total 5:00 -> 4:55');
+
+  // Row 2 — 3s from question: all three lose 3s.
+  const r2 = penaltyFixture([{ clock: 'question', amountMs: 3000 }]);
+  assert.strictEqual(own(r2, 'questionEndsAt'), 2,   'row 2: question 0:05 -> 0:02');
+  assert.strictEqual(own(r2, 'sectionEndsAt'),  47,  'row 2: section 0:50 -> 0:47');
+  assert.strictEqual(own(r2, 'overallEndsAt'),  297, 'row 2: total 5:00 -> 4:57');
+
+  // Row 3 — 50s from section (max). The question's OWN clock is still 0:05;
+  // it ends only because its container did. "ends (parent)".
+  const r3 = penaltyFixture([{ clock: 'section', amountMs: 50_000 }]);
+  assert.strictEqual(endedBy(r3), 'section', 'row 3: the section ends');
+  assert.strictEqual(own(r3, 'questionEndsAt'), 5,
+    'row 3: the question still holds its own 0:05 — it ends as a PARENT cascade, not a deduction');
+  assert.strictEqual(own(r3, 'overallEndsAt'), 250, 'row 3: total 5:00 -> 4:10');
+
+  // Row 4 — 20s from section. The one to hold onto.
+  const r4 = penaltyFixture([{ clock: 'section', amountMs: 20_000 }]);
+  assert.strictEqual(own(r4, 'questionEndsAt'), 5,
+    'row 4: a section deduction NEVER travels inward');
+  assert.strictEqual(own(r4, 'sectionEndsAt'),  30,  'row 4: section 0:50 -> 0:30');
+  assert.strictEqual(own(r4, 'overallEndsAt'),  280, 'row 4: total 5:00 -> 4:40');
+
+  // Rows 5 and 6 — from the total. Neither inner clock moves.
+  // (The published table shows 0:30 and 0:39 in the Section column; confirmed
+  // typos — the section is untouched at 0:50 in both.)
+  const r5 = penaltyFixture([{ clock: 'overall', amountMs: 240_000 }]);
+  assert.strictEqual(own(r5, 'questionEndsAt'), 5,  'row 5: question untouched');
+  assert.strictEqual(own(r5, 'sectionEndsAt'),  50, 'row 5: section untouched at 0:50');
+  assert.strictEqual(own(r5, 'overallEndsAt'),  60, 'row 5: total 5:00 -> 1:00');
+
+  const r6 = penaltyFixture([{ clock: 'overall', amountMs: 285_000 }]);
+  assert.strictEqual(own(r6, 'questionEndsAt'), 5,  'row 6: question untouched');
+  assert.strictEqual(own(r6, 'sectionEndsAt'),  50, 'row 6: section untouched at 0:50');
+  assert.strictEqual(own(r6, 'overallEndsAt'),  15, 'row 6: total 0:15, ends 15s later');
+
+  // Row 7 — 5:00 from total (max). Section and question both end as parents;
+  // both still hold their own untouched deadlines.
+  const r7 = penaltyFixture([{ clock: 'overall', amountMs: 300_000 }]);
+  assert.strictEqual(endedBy(r7), 'overall', 'row 7: the total ends');
+  assert.strictEqual(own(r7, 'sectionEndsAt'),  50,
+    'row 7: the section still holds 0:50 — it ends as a parent cascade');
+  assert.strictEqual(own(r7, 'questionEndsAt'), 5,
+    'row 7: and the question still holds 0:05');
+});
+
+regression('A6 · a penalty attaches to the CLOCK, not the student', () => {
+  // Section A penalised; section B starts afterwards on its full limit.
+  const a = {
+    status: 'in_progress', sectionIds: ['A', 'B'], startedAt: iso(T0),
+    sectionTimings: {
+      A: { startedAt: iso(T0), submittedAt: iso(T0 + min(1)) },
+      B: { startedAt: iso(T0 + min(2)) },
+    },
+    servedQuestions: [], answers: {},
+    penalties: [{ id: 'p1', freezeId: 'f1', clock: 'section',
+      amountMs: min(10), decidedAt: iso(T0 + min(1)) }],
+  };
+  assert.strictEqual(C.penaltyForClock(a, 'section', iso(T0 + min(2))), 0,
+    'section B began after the decision and inherits nothing');
+  assert.strictEqual(C.penaltyForClock(a, 'section', iso(T0)), min(10),
+    'section A, which was running, carries it');
+  assert.strictEqual(C.penaltyForClock(a, 'overall', iso(T0)), min(10),
+    'and it still reached the total, which never stopped running');
+});
+
+regression('INV-11 · a recorded penalty cannot quietly shrink', () => {
+  const withP = { status: 'in_progress', sectionIds: [], sectionTimings: {},
+    penalties: [{ id: 'p1', freezeId: 'f1', clock: 'section',
+      amountMs: 30_000, decidedAt: iso(T0) }] };
+  const without = { status: 'in_progress', sectionIds: [], sectionTimings: {}, penalties: [] };
+  const vs = C.checkTransition(withP, without);
+  assert.ok(vs.some((x) => x.id === 'INV-11'),
+    'removing a deduction must be caught — reversal is a compensating credit, not an edit');
+  assert.strictEqual(C.checkTransition(without, withP).length, 0,
+    'adding one is ordinary');
+});
+
 regression('INV-6 · nothing leaves a terminal state', () => {
   const before = { status: 'submitted', sectionIds: [], sectionTimings: {} };
   const after = { status: 'in_progress', sectionIds: [], sectionTimings: {} };

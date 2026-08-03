@@ -2413,6 +2413,8 @@ export function AssessmentRosterCore({
   const [filterStatus, setFilterStatus] = useState<RosterStatus | 'all' | 'blocked'>('all');
   const [selectedRow, setSelectedRow]   = useState<RosterRow | null>(null);
   const [freezeLoadingId, setFreezeLoadingId] = useState<string | null>(null);
+  /** Why the last freeze/unfreeze was refused (§3). Cleared on the next try. */
+  const [freezeError, setFreezeError] = useState<string | null>(null);
   const [blockLoadingId,  setBlockLoadingId]  = useState<string | null>(null);
 
   // ── Confirmation modal state ───────────────────────────────────
@@ -2649,9 +2651,30 @@ export function AssessmentRosterCore({
   ) => {
     setPendingUnfreeze(null);
     setFreezeLoadingId(attempt.id);
-    try { await unfreezeAttempt(attempt.id, grantedMs, note, penalties); }
-    catch (e) { console.error('[Roster] unfreeze failed', e); }
-    finally { setFreezeLoadingId(null); }
+    setFreezeError(null);
+    try {
+      await unfreezeAttempt(attempt.id, grantedMs, note, penalties);
+    } catch (e) {
+      // ── Phase 4.6 (§3): SURFACE the reason, do not swallow it ────
+      //
+      // This logged to console and stopped. With the authority chain live,
+      // the most likely failure is now a legitimate refusal — "a colleague
+      // paused this, not you" — and an invigilator who clicks Resume and sees
+      // nothing happen has been told nothing at all.
+      //
+      // NOT gated behind a client-side permission check, deliberately. The
+      // rule lives once, on the server, where it is enforceable; duplicating
+      // it here to grey out a button would make a twelfth twin of a rule that
+      // decides who may act on a student's exam. A clear refusal is better
+      // than a rule maintained in two places.
+      const raw = e instanceof Error ? e.message : String(e);
+      console.error('[Roster] unfreeze failed', e);
+      setFreezeError(
+        raw.includes('FREEZE_AUTHORITY')
+          ? raw.replace(/^.*FREEZE_AUTHORITY:\s*/, '')
+          : 'Could not resume this session. Please try again.',
+      );
+    } finally { setFreezeLoadingId(null); }
   }, []);
 
   // ── Execute block ──────────────────────────────────────────────
@@ -2969,6 +2992,27 @@ export function AssessmentRosterCore({
           </>
         )}
       </AnimatePresence>
+
+      {/*
+        §3: a refused resume says why.
+        Sits at roster level, not in the modal, because the modal has already
+        closed by the time the server answers — the invigilator is looking at
+        the list again, and that is where the answer has to reach them.
+      */}
+      {freezeError && (
+        <div className="flex items-start gap-2.5 px-4 py-3 mx-1 mb-3"
+          style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+          <AlertCircle size={13} strokeWidth={1.5}
+            style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
+          <p className="text-xs flex-1" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+            {freezeError}
+          </p>
+          <button onClick={() => setFreezeError(null)}
+            className="text-xs px-2" style={{ color: '#9B2828', cursor: 'pointer', background: 'transparent' }}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Freeze confirmation modal ── */}
       <AnimatePresence>

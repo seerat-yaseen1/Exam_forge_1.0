@@ -638,6 +638,22 @@ regression('D-35 · a forward anchor yields zero credit by arithmetic', () => {
     'a section entered now cannot have been paused — no special case needed');
   assert.strictEqual(entering.overallMs, min(2),
     'and the overall clock keeps its credit');
+
+  // The same for a QUESTION, which is the anchor that moves most often and the
+  // one whose refresh was missed: a 40s pause on question 1 was paid out again
+  // on question 2, and on every question after it.
+  const withQ = {
+    ...a,
+    servedQuestions: [{ questionId: 'q1', sectionId: 'A',
+      servedAt: iso(T0 + min(0.5)), locked: false }],
+  };
+  assert.strictEqual(C.computeFreezeCredits(withQ).questionMs, min(2),
+    'the question that was actually paused carries the credit');
+  const nextQ = C.computeFreezeCredits(withQ, { questionServedAt: iso(T0 + min(9)) });
+  assert.strictEqual(nextQ.questionMs, 0,
+    'a question served now inherits nothing — the pause was not on this question');
+  assert.strictEqual(nextQ.overallMs, min(2),
+    'while the total, which never stopped running, keeps it');
 });
 
 // ── Phase 4.5 · penalties (A4-A6) ─────────────────────────────────

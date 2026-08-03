@@ -4981,6 +4981,31 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
     }
 
     updates.servedQuestions = nextServed;
+
+    // ── D-35 completion: serving a question RESETS its credit ───────
+    //
+    // freezeCredits.questionMs is anchored on the CURRENT question's servedAt,
+    // so it has to be recomputed every time that anchor moves. This site was
+    // missed: startExam, startSection and both submitSection branches all
+    // refresh it, and this one — the ordinary next-question advance, by far
+    // the most frequent of the four — did not.
+    //
+    // The effect was that a pause was paid out again on every subsequent
+    // question. Freeze 40s on question 1, grant it in full, and question 2
+    // opened showing 24s + 5s grace + that same 40s. The student saw a minute
+    // and four seconds on a twenty-four second question, and the server's own
+    // deadline agreed, because both read the same stale number.
+    //
+    // The new question was served AT nowIso, so no freeze can have begun after
+    // its anchor: creditForAnchor returns 0 by arithmetic, exactly as at a
+    // section advance. The outer clocks keep their credit, which is the whole
+    // point of crediting per clock.
+    applyCreditUpdates(
+      updates,
+      toCoreAttempt(attempt as unknown as Record<string, unknown>),
+      { questionServedAt: nowIso },
+    );
+
     await attemptRef.update(updates);
 
     return {
@@ -5756,6 +5781,78 @@ function assertInvigilator(
 }
 
 /**
+ * Who outranks whom (§3, §8).
+ *
+ * Deliberately a small ladder rather than a permission matrix: the rule is
+ * "the freezer, or anyone above them, never a peer", and a ladder is the only
+ * shape that says that in one comparison.
+ */
+const INVIGILATOR_RANK: Record<string, number> = {
+  faculty: 1,
+  institute: 2,
+  webOwner: 3,
+};
+
+/**
+ * May this actor clear THIS freeze? (§3, §8.)
+ *
+ * Authority attaches to the individual pause, not to the attempt. Faculty
+ * froze the first, a web owner the second: the second needs a web owner.
+ *
+ *   Frozen by         Cleared by
+ *   faculty           that faculty · their institute admin · web owner
+ *   institute admin   that institute admin · web owner
+ *   web owner         that web owner only
+ *   system / extension any invigilator
+ *
+ * NEVER A PEER. Two faculty at the same institute cannot undo each other's
+ * decisions — the whole reason authority is recorded is that a pause is a
+ * judgement about a student, and one colleague overruling another silently is
+ * the thing this prevents.
+ *
+ * Read from the STORED frozenByRole, never from a profile lookup, and the two
+ * edge cases in §10 are why:
+ *
+ *   "The freezer leaves or is deleted" — a lookup would return nothing and
+ *   strand the student. The stored rank still says who is above them.
+ *   "Freezer promoted" — they are the freezer AND above, and the uid match
+ *   below authorises them without needing to re-derive anything.
+ *
+ * LEGACY ENTRIES (no frozenByRole) fall back to the old flat rule: any
+ * invigilator on the tenant. Inventing a restriction retroactively could leave
+ * a student frozen with nobody authorised to release them, and a student
+ * stranded by our own data migration is a worse outcome than a peer clearing a
+ * pause from before the rule existed. Drains as old freezes resolve.
+ */
+function assertCanUnfreeze(
+  actor: { uid: string; role: string },
+  entry: FreezeLedgerEntry | undefined,
+): void {
+  if (!entry) return;                                   // nothing to judge
+
+  // §3: a system freeze has no human owner, so any invigilator may clear it.
+  if (entry.reason === 'extension_check' || entry.reason === 'system') return;
+
+  const frozenByRole = entry.frozenByRole;
+  if (!frozenByRole) return;                            // legacy — see above
+
+  // The freezer themselves, whatever they have since become.
+  if (entry.frozenBy && entry.frozenBy === actor.uid) return;
+
+  const mine = INVIGILATOR_RANK[actor.role] ?? 0;
+  const theirs = INVIGILATOR_RANK[frozenByRole] ?? 0;
+  // STRICTLY above. Equal rank is a peer, and a peer is not authority.
+  if (mine > theirs) return;
+
+  const who = frozenByRole === 'faculty' ? 'a faculty member'
+            : frozenByRole === 'institute' ? 'an institute admin'
+            : 'the web owner';
+  throw new HttpsError('permission-denied',
+    `FREEZE_AUTHORITY: this session was paused by ${who}. ` +
+    `It can be resumed by them, or by someone above them.`);
+}
+
+/**
  * Pause a sitting. (Phase 4.)
  *
  * Opens a ledger entry. It is CLOSED by unfreezeAttempt, which is where the
@@ -6064,6 +6161,10 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
 
       const ledger = [...(att.freezes ?? [])];
       const idx = ledger.findIndex((f) => !f.endedAt);
+      // §3/§8: checked against THIS entry, inside the transaction, before
+      // anything is written. Authority belongs to the pause, so it has to be
+      // read from the pause rather than from the attempt.
+      assertCanUnfreeze(actor, idx >= 0 ? ledger[idx] : undefined);
       const startedAtIso = idx >= 0 ? ledger[idx].startedAt : att.frozenAt;
       if (!startedAtIso) {
         throw new HttpsError('failed-precondition', 'Attempt is not frozen.');

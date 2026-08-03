@@ -924,10 +924,21 @@ export function checkInvariants(a: CoreAttempt, asmt: CoreAssessment): Violation
   }
 
   // ── INV-2 · at most one unlocked served question ────────────────
-  const unlocked = (a.servedQuestions ?? []).filter((s) => s.locked !== true);
-  if (unlocked.length > 1) {
-    v.push(err('INV-2', `${unlocked.length} unlocked served questions: ` +
-      unlocked.map((s) => s.questionId).join(', ')));
+  //
+  // SEQUENTIAL DELIVERY ONLY (scoped 2026-08-03). Standard mode writes the
+  // whole paper unlocked at startExam — "all unlocked = free nav" is the
+  // design, stated in as many words at the serve site. Checking it
+  // unconditionally meant the Phase 3b shadow reported INV-2 on every
+  // standard-mode sitting from its first instant: hundreds of false
+  // violations burying the one real one this check exists to catch, which is
+  // a stranded unlocked question in a delivery mode where locking IS the
+  // navigation rule.
+  if (isSequential(asmt)) {
+    const unlocked = (a.servedQuestions ?? []).filter((s) => s.locked !== true);
+    if (unlocked.length > 1) {
+      v.push(err('INV-2', `${unlocked.length} unlocked served questions: ` +
+        unlocked.map((s) => s.questionId).join(', ')));
+    }
   }
 
   // ── INV-3 (state form) · the lock cache agrees with itself ──────
@@ -1034,11 +1045,16 @@ export function checkInvariants(a: CoreAttempt, asmt: CoreAssessment): Violation
     // null-check, so the sentinel can only ever mean "not started".
     // Caught by the Phase 3b shadow on the first real sitting.
   }
-  for (const s of a.servedQuestions ?? []) {
-    const served = toMs(s.servedAt);
-    const secStart = toMs(a.sectionTimings?.[s.sectionId]?.startedAt);
-    if (served !== null && secStart !== null && served < secStart - 1000) {
-      v.push(err('INV-9', `question ${s.questionId} served before its section started`));
+  // Sequential only, for the same reason as INV-2: standard mode serves the
+  // ENTIRE paper at attempt start, so every question in a later section is
+  // "served" long before that section starts — by design, not by defect.
+  if (isSequential(asmt)) {
+    for (const s of a.servedQuestions ?? []) {
+      const served = toMs(s.servedAt);
+      const secStart = toMs(a.sectionTimings?.[s.sectionId]?.startedAt);
+      if (served !== null && secStart !== null && served < secStart - 1000) {
+        v.push(err('INV-9', `question ${s.questionId} served before its section started`));
+      }
     }
   }
 

@@ -1248,7 +1248,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
     type Closing = {
       doc: FirebaseFirestore.QueryDocumentSnapshot;
       // 'stale_freeze_sweep' retired with D-30 — nothing produces it now.
-      reason: 'deadline_expired_sweep';
+      reason: string;
       /** Frozen seconds to credit on close (stale freezes are granted in full). */
       grantFrozenSeconds: number;
       wasFrozen: boolean;
@@ -1256,7 +1256,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
 
     const candidates: Closing[] = expiredSnap.docs.map((doc) => ({
       doc,
-      reason: 'deadline_expired_sweep' as const,
+      reason: 'deadline_expired_sweep',
       grantFrozenSeconds: 0,
       wasFrozen: false,
     }));
@@ -1352,24 +1352,34 @@ export const scheduledCloseExpiredAttempts = onSchedule(
     for (const doc of frozenSnap.docs) {
       const d = doc.data() as { assessmentId?: string };
       const paper = d.assessmentId ? await loadPaper(d.assessmentId) : null;
-      if (!paper) continue;          // cannot prove the window shut; leave it
-      let windowClosed = false;
+      if (!paper) continue;          // cannot prove the sitting over; leave it
+      let endedReason: string | null = null;
       try {
         const verdict = resolveTiming(
           toCoreAttempt(doc.data() as Record<string, unknown>),
           paper.coreAssessment,
           nowMs,
         );
-        windowClosed = verdict.kind === 'ended' && verdict.reason === 'window_closed';
+        // ANY 'ended', not only window_closed (widened 2026-08-03). While a
+        // freeze is open the resolver pins every student clock at the freeze
+        // instant, so 'ended' here means one of exactly two things: the
+        // availability window shut in real time (A10 row 1), or the sitting
+        // was ALREADY over before the pause began — someone froze an attempt
+        // whose overall clock had run out. The second kind was invisible to
+        // both sweep queries: status 'frozen' excluded it from query (A), and
+        // the window test here excluded it too, so with no endDate it would
+        // simply never close. An attempt the resolver calls over is over;
+        // which wall ended it does not change that.
+        endedReason = verdict.kind === 'ended' ? verdict.reason : null;
       } catch (e) {
         console.warn('[closeExpiredAttempts] frozen verdict failed; leaving open', doc.id, e);
         continue;
       }
-      if (!windowClosed) continue;
+      if (endedReason === null || endedReason === 'not_open_yet') continue;
 
       candidates.push({
         doc,
-        reason: 'deadline_expired_sweep',
+        reason: `sweep_${endedReason}`,
         // No grant on this path. FREEZE_CREDIT_EXTENDS_WINDOW is false, so
         // credit cannot move the wall that is ending this attempt — handing
         // out time here would be arithmetic that changes nothing, recorded as
@@ -1500,6 +1510,32 @@ export const scheduledCloseExpiredAttempts = onSchedule(
         data.resumeRequiresVerification = false;
         if (item.grantFrozenSeconds > 0) {
           data.totalFrozenSeconds = FieldValue.increment(item.grantFrozenSeconds);
+        }
+        // ── A terminal attempt carries no live freeze state (2026-08-03) ─
+        //
+        // Same cleanup gradeAttempt does at finalisation, for the same
+        // reason: deriveRosterStatus reads frozenAt BEFORE the terminal
+        // status, so leaving it behind showed a closed sitting as "frozen"
+        // in the roster forever. The ledger entry is CLOSED with a zero
+        // grant, not deleted — the pause happened, and the record says so.
+        data.frozenAt = FieldValue.delete();
+        data.frozenBy = FieldValue.delete();
+        data.frozenReason = FieldValue.delete();
+        if (Array.isArray(att.freezes) && att.freezes.some((f) => !f.endedAt)) {
+          data.freezes = att.freezes.map((f) => {
+            if (f.endedAt) return f;
+            const startMsF = Date.parse(f.startedAt);
+            return {
+              ...f,
+              endedAt: nowIso,
+              elapsedMs: Number.isFinite(startMsF)
+                ? Math.max(0, nowMs - startMsF) : 0,
+              grantedMs: 0,
+              decidedBy: null,
+              decidedAt: nowIso,
+              note: `closed by sweep (${closeReason})`,
+            };
+          });
         }
       }
 
@@ -3821,22 +3857,58 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     //
     // Doctrine D8: every automatic state a student can be put into must have
     // an automatic exit, on a bounded timer, in the student's favour.
-    const isTrappedFrozen =
-      attempt.status === 'frozen' && attemptWindowClosed(attempt);
+    //
+    // Loaded BEFORE the freeze/idempotency guards (moved 2026-08-03): the
+    // trapped-frozen decision below is now the RESOLVER's, and the resolver
+    // needs the assessment. One extra read on the idempotent no-op path is
+    // the cost; a guard that reasons from the same clock the rest of the
+    // system runs on is what it buys.
+    const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+    const assessment = assessmentSnap.data() as GradingAssessmentDoc;
+
+    // ── Is this sitting actually OVER? Ask the resolver ────────────
+    //
+    // The old test was attemptWindowClosed(), which reads answersLockedAfter —
+    // the section/overall lock, NOT the availability window. Those are
+    // precisely the clocks an open freeze HOLDS (4.3), so "lock instant has
+    // passed while frozen" no longer means the sitting is over; it means the
+    // pause is old. Deciding the escape hatch on it would reopen the hole F5
+    // closed, through the guard built to be its one exception.
+    //
+    // resolve() knows the difference: while a freeze is open it pins every
+    // student clock at the freeze instant and races only the availability
+    // window against real time (A10). 'ended' therefore means one of exactly
+    // two things — the window shut, or the sitting was already over before
+    // the pause began — and both are states where finalising is right.
+    //
+    // Fails soft to the previous lock-based reading: a resolver fault must
+    // never leave a genuinely trapped student with no exit (D8).
+    let sittingOver: boolean;
+    try {
+      const v = resolveTiming(
+        toCoreAttempt(attempt as unknown as Record<string, unknown>),
+        toCoreAssessment(assessment as unknown as Record<string, unknown>),
+        Date.now(),
+      );
+      sittingOver = v.kind === 'ended';
+    } catch {
+      sittingOver = attemptWindowClosed(attempt);
+    }
+    const isTrappedFrozen = attempt.status === 'frozen' && sittingOver;
 
     // ── A paused student may not end their own sitting (F5) ────────
     //
     // The guard below tests `status !== 'in_progress'`, and a freeze now puts
     // the attempt in 'frozen', so this is mostly closed by construction. It is
-    // stated explicitly anyway because the ONE exception — isTrappedFrozen —
-    // is deliberately a hole in that guard, and it must stay scoped to the
-    // case that justifies it: a window that has provably closed. Without this
-    // an open pause plus an already-passed lock would let the student finalise
-    // during an active invigilation, which is precisely what a pause exists to
-    // prevent. A grader is unaffected; ending a paused sitting is a legitimate
-    // staff action.
+    // stated explicitly anyway because the ONE exception — a sitting the
+    // resolver says is OVER — must stay scoped to the case that justifies it.
+    // While there is still held time on the clock, a paused student waits for
+    // the human who paused them; once the sitting is provably over, refusing
+    // their finalise would strand them (D8). A grader is unaffected either
+    // way; ending a paused sitting is a legitimate staff action.
     const openFreeze = (attempt.freezes ?? []).find((f) => !f.endedAt);
-    if (openFreeze && !isGrader) {
+    if (openFreeze && !isGrader && !sittingOver) {
       throw new HttpsError('failed-precondition',
         'ATTEMPT_PAUSED: this sitting has been paused by an invigilator and ' +
         'cannot be submitted until it is resumed.');
@@ -3848,10 +3920,6 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       }
       throw new HttpsError('failed-precondition', 'Attempt already finalised.');
     }
-
-    const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
-    if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
-    const assessment = assessmentSnap.data() as GradingAssessmentDoc;
 
     const sections = normalizeSections(assessment);
 
@@ -3908,6 +3976,40 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     // flag at all and closed looking like an ordinary manual submit.
     if (attempt.freezeState?.frozen === true || openFreeze) {
       updates['integrityLog.finalizedWhileFrozen'] = true;
+    }
+
+    // ── A terminal attempt carries no live freeze state (2026-08-03) ─
+    //
+    // Nothing that finalised an attempt ever cleared these, and the roster's
+    // deriveRosterStatus checks `frozenAt` BEFORE the terminal status — so a
+    // sitting finalised while paused (grader action, trapped-frozen escape,
+    // or the sweep) showed as "frozen" in the roster forever, over a status
+    // of submitted. The pause is over by definition: the sitting it paused no
+    // longer exists.
+    //
+    // The ledger entry is CLOSED, not deleted — it is the record that the
+    // pause happened. grantedMs 0: finalisation grants nothing, because
+    // there is no remaining sitting for credit to extend, and inventing a
+    // grant here would be the sweep's retired stale-freeze mistake again.
+    if (openFreeze || attempt.freezeState?.frozen === true) {
+      updates.frozenAt = FieldValue.delete();
+      updates.frozenBy = FieldValue.delete();
+      updates.frozenReason = FieldValue.delete();
+      updates.freezeState = { frozen: false, clearedBy: 'finalize', since: nowIso };
+      updates.resumeRequiresVerification = false;
+      if (openFreeze) {
+        const startMsF = Date.parse(openFreeze.startedAt);
+        updates.freezes = (attempt.freezes ?? []).map((f) => f.endedAt ? f : ({
+          ...f,
+          endedAt: nowIso,
+          elapsedMs: Number.isFinite(startMsF)
+            ? Math.max(0, Date.parse(nowIso) - startMsF) : 0,
+          grantedMs: 0,
+          decidedBy: isGrader ? request.auth!.uid : null,
+          decidedAt: nowIso,
+          note: `closed at finalisation (${reason ?? 'auto'})`,
+        }));
+      }
     }
 
     // ── Timing analytics (Phase 1b) ───────────────────────────────

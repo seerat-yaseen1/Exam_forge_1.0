@@ -16,7 +16,8 @@
     "build:core": "tsc -p tsconfig.core.json && cp .tmp-core/examTimingCore.js timing-core.cjs && rm -rf .tmp-core",
     "test:timing": "npm run build:core && node timing.sweep.cjs",
     "test:freeze": "npm run build && node test/freeze.suite.cjs",
-    "test": "npm run test:timing && npm run test:freeze"
+    "test": "npm run test:timing && npm run test:freeze && node test/exam.e2e.cjs",
+    "test:e2e": "npm run build && node test/exam.e2e.cjs"
   },
   "dependencies": {
     "firebase-admin": "^12.6.0",

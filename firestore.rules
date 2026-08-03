@@ -790,11 +790,29 @@ service cloud.firestore {
 
       allow create: if isWebOwner();
 
+      // 'frozen' is accepted alongside 'in_progress' on the student path
+      // (2026-08-03), and the reason is the flush-on-freeze. A pause now sets
+      // status:'frozen' so the transition callables refuse a paused student —
+      // but the client only LEARNS of a freeze through its snapshot listener,
+      // and the first thing it does on learning is flush the answer sitting
+      // in the 1.5s debounce window. Requiring in_progress on both sides
+      // denied exactly that write, in exactly the case it exists for: the
+      // selection in front of a student at the instant they were paused was
+      // lost if the tab closed before release. saveAnswerNoAdvance documents
+      // the same posture for sequential delivery, in the same words.
+      //
+      // The exposure this accepts is bounded: the whitelist still limits the
+      // patch to answers+updatedAt (status cannot be changed — a status edit
+      // would appear in affectedKeys and fail hasOnly), and
+      // answerWriteWindowOpen still bounds it in time by the materialised
+      // lock, which an open freeze holds in place server-side.
       allow update: if isWebOwner()
                        || (role() == 'student'
                            && resource.data.studentId == request.auth.token.studentId
-                           && resource.data.status == 'in_progress'
-                           && request.resource.data.status == 'in_progress'
+                           && (resource.data.status == 'in_progress'
+                               || resource.data.status == 'frozen')
+                           && (request.resource.data.status == 'in_progress'
+                               || request.resource.data.status == 'frozen')
                            && studentAttemptUpdateFieldsAllowed()
                            && studentAnswerWriteAllowed()
                            && answerWriteWindowOpen())

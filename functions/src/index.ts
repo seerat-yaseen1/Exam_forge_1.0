@@ -7616,7 +7616,32 @@ function toCoreAssessment(raw: Record<string, unknown>): CoreAssessment {
   };
 }
 
-/** Map a stored attempt onto the core's plain input shape. */
+/**
+ * Map a stored attempt onto the core's plain input shape.
+ *
+ * THIS MAPPER IS THE RESOLVER'S ENTIRE VIEW OF THE WORLD. A field missing here
+ * is not missing in one place — it is invisible in every place at once, because
+ * every caller that reasons about timing goes through it: getExamVerdict,
+ * submitSection's deadline gate, the expiry sweep, gradeAttempt's trapped-frozen
+ * check, and every computeAttemptLocks call site.
+ *
+ * A-01: `penalties` was absent, and the consequences were exactly that broad.
+ * penaltyForClock() reads `a.penalties`, found undefined, and returned 0 — so a
+ * deduction an invigilator had recorded, with an actor and an instant, was
+ * invisible to the student's own screen and was REFUNDED IN FULL the next time
+ * anything recomputed the locks. Ordinary progress undid it: submitSection's
+ * advance branch re-derives answersLockedAfter from this shape, so pressing
+ * "next section" restored the time somebody had deliberately taken away.
+ *
+ * It looked correct under test because closeFreezeUpdates is the one site that
+ * reattaches penalties by hand (see `penalisedAttempt` there) — so the freeze
+ * suite's "penalties reach the write gate" check passed on the instant of
+ * unfreeze and nothing exercised the instant after.
+ *
+ * No invariant caught it either, and that is worth stating: INV-3a forbids the
+ * overall bound moving EARLIER without a ledger row behind it. A refund moves it
+ * LATER, which is the direction the whole module is built to treat as safe.
+ */
 function toCoreAttempt(raw: Record<string, unknown>): CoreAttempt {
   const d = raw as Record<string, any>;
   return {
@@ -7630,6 +7655,10 @@ function toCoreAttempt(raw: Record<string, unknown>): CoreAttempt {
     creditedFreezeMs: d.creditedFreezeMs,
     totalFrozenSeconds: d.totalFrozenSeconds,
     freezes: d.freezes,
+    // A-01. Kept adjacent to `freezes` on purpose: credit and deduction are the
+    // two halves of one ledger, and they must travel together or the arithmetic
+    // is one-sided in the student's favour.
+    penalties: Array.isArray(d.penalties) ? d.penalties : undefined,
     scores: d.scores,
     gradedAnswers: d.gradedAnswers,
     answersLockedAfter: d.answersLockedAfter,

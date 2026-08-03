@@ -1,13 +1,18 @@
 # Exam timer & freeze — behavioural audit
 
 **Date:** 2026-08-03 · **Branch:** `claude/exam-timer-behavioral-audit-gxicdo`
+**Status:** all 14 findings fixed. Both suites green — see §8.
 **Method:** executable. Two suites, both runnable from `functions/`:
 
 ```
 npm test              # both
 npm run test:timing   # examTimingCore property sweep  — 13,446 states, PASS
-npm run test:freeze   # freeze behavioural suite        — 15 scenarios, 19 failing checks
+npm run test:freeze   # freeze behavioural suite        — 15 scenarios, 64 checks, PASS
 ```
+
+The failing counts quoted throughout §2 are what the suite reported **before**
+the fixes, and are kept as the record of what was actually wrong. Every one of
+them now passes.
 
 `functions/test/freeze.suite.cjs` calls the **compiled production callables**
 (`functions/lib/index.js`) against an in-memory Firestore and a virtual clock.
@@ -434,7 +439,7 @@ Ranks 3, 7 and 8 remain untested.
 
 ---
 
-## 7. Suggested fix order
+## 7. Fix order (completed)
 
 1. **F1** — route `submitSection`'s two gates through `resolve()` /
    `computeDeadlines`. Delete the inline arithmetic. Highest impact, smallest diff.
@@ -451,3 +456,65 @@ Ranks 3, 7 and 8 remain untested.
    `staffAttemptUpdateFieldsAllowed()`; both are callable-only now.
 7. **F10, F11, F13, F14** — mechanical.
 8. Turn on `noUnusedLocals`.
+
+
+---
+
+## 8. What changed
+
+All fixes are on `claude/exam-timer-behavioral-audit-gxicdo`. Both suites pass:
+13,446 states / zero defects, and 64 freeze checks / zero failures.
+
+### `functions/src/index.ts`
+
+| Finding | Change |
+|---|---|
+| F1 | `submitSection`'s two deadline gates deleted and replaced with `computeDeadlines` + `effectiveNowMs`. The clamp instants come from the same numbers. |
+| F2 | `unfreezeAttempt` writes `penalties`, and `computeAttemptLocks` gained `penaltyForClock` terms so a deduction reaches `answersLockedAfter`. |
+| F3 | `preLedgerCreditEntry()` migrates a legacy `totalFrozenSeconds` into a synthetic closed ledger row in the same write that opens the first real one. |
+| F4 | `verifyAndResume` no longer increments `totalFrozenSeconds`; both release paths go through `closeFreezeUpdates`, which derives it from the ledger. |
+| F5 | A pause writes `status: 'frozen'`, so every existing student-transition guard applies. `gradeAttempt` refuses a non-grader finalise while an entry is open, and flags `finalizedWhileFrozen` from the ledger as well as `freezeState`. |
+| F6 | `reportExtensionCheck` is transactional and opens a real ledger entry (`reason: 'extension_check'`) with `frozenAt`, so both server and client clocks pause. |
+| F7 | `verifyAndResume` recomputes locks and `freezeCredits` via `closeFreezeUpdates`, granting the pause in full (doctrine D8 — an automatic state exits in the student's favour). |
+| F8 | The sweep's staleness fallback skips attempts with an open freeze. |
+| F9 | The sweep's frozen branch asks `resolve()` for `ended:window_closed` instead of `attemptWindowClosed()`, which despite its name read the *answer lock* — the very clock a freeze holds — and so fired on the state it was meant to protect. |
+| F10 | `startSection`'s mandatory-break gate adds `creditForAnchor` on the submit instant. |
+| F11 | `snapshotClocks()` excludes grace, so `clocksAtFreeze` describes the clock the student was actually watching. |
+| F13 | Both `lateAnswer` sites use `questionGraceSeconds` (imported from the core, not redeclared) and add freeze credit. |
+| F14 | `unfreezeAttempt` converts with `toCoreAssessment` instead of casting the raw doc. |
+| — | New shared helpers `openFreezeUpdates` / `closeFreezeUpdates`: one way into a pause and one way out, for both mechanisms. |
+| — | `closeFreezeUpdates` accepts three "when did this pause start" shapes (ledger entry, `frozenAt`, `freezeState.since`) so an attempt already paused at deploy time is measured, not zeroed. |
+
+### `functions/tsconfig.json`
+`noUnusedLocals: true` — the check that would have failed the build on F2.
+Enabling it also surfaced that `deleteAuthUser` destructures
+`deleteAttemptsOnWebOwnerAssessments` and never forwards it to
+`purgeStudentData`, so that option has never done anything. **Left unfixed and
+commented in place** — wiring it up changes what gets deleted, which is not a
+decision to make in passing.
+
+### `firestore.rules`
+`staffAttemptUpdateFieldsAllowed()` reduced to `['updatedAt']`. `frozenAt`,
+`frozenBy`, `frozenReason` and `totalFrozenSeconds` are callable-only. Verified
+no client path still writes them.
+
+### `src/lib/submissionService.ts`
+`getBreakState()` accepts `'frozen'` (a paused student on a break is still on a
+break — the roster pill would otherwise vanish the moment an invigilator pauses
+them), credits the break from `freezeCredits.breakMs`, and pins its reference
+instant on `frozenAt`.
+
+### Not fixed, and why
+
+* **Rules are still untested.** `@firebase/rules-unit-testing` is not a
+  dependency and adding an emulator harness is its own change. F12 is fixed by
+  inspection, not by a passing test — the weakest evidence in this document.
+* **Ranks 7 and 8 of §6** (ExamShell timer effects, `registerSession`
+  concurrency) remain untested.
+* **`REQUIRE_SESSION_ID = false`** is unchanged. Flipping it locks out any
+  cached client that predates the field, which is a rollout decision.
+* **`CONSUME_LEGACY_FROZEN_SECONDS`** stays `true`. Its justification is now
+  actually true — after F4, `totalFrozenSeconds` only ever holds granted time —
+  but whether existing production attempts carry elapsed values written by the
+  old `verifyAndResume` is a data question that needs a read-only production
+  sweep, not a code change.

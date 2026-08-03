@@ -1601,7 +1601,11 @@ export function getBreakState(
   sections: Array<{ id: string; name: string; breakAfter?: { durationMinutes: number; mandatory: boolean } }>,
   nowMs: number = Date.now(),
 ): { sectionName: string; nextSectionName: string; secondsRemaining: number; expired: boolean; mandatory: boolean } | null {
-  if (attempt.status !== 'in_progress') return null;
+  // 'frozen' counts as mid-break. A pause now sets status:'frozen' (F5), and a
+  // paused student on a break is still on a break — the roster's "On break"
+  // pill vanishing at exactly the moment an invigilator pauses them would hide
+  // the state from the person who just changed it.
+  if (attempt.status !== 'in_progress' && attempt.status !== 'frozen') return null;
   const cur = sections[attempt.currentSectionIdx];
   const next = sections[attempt.currentSectionIdx + 1];
   if (!cur || !next || !cur.breakAfter || cur.breakAfter.durationMinutes <= 0) return null;
@@ -1609,8 +1613,17 @@ export function getBreakState(
   const nextTiming = attempt.sectionTimings[next.id];
   if (!curTiming?.submittedAt) return null;
   if (nextTiming?.startedAt) return null;
-  const endsAt = new Date(curTiming.submittedAt).getTime() + cur.breakAfter.durationMinutes * 60 * 1000;
-  const remainingMs = endsAt - nowMs;
+  // D-29: the break is a clock and it is credited, exactly as the resolver's
+  // pendingBreak and the shell's own BreakScreen compute it. freezeCredits is
+  // materialised by the server; nothing is derived here.
+  const endsAt = new Date(curTiming.submittedAt).getTime()
+    + cur.breakAfter.durationMinutes * 60 * 1000
+    + (attempt.freezeCredits?.breakMs ?? 0);
+  // While paused the countdown holds where it was, the same way SectionTimer
+  // and BreakScreen pin their reference instant on frozenAt.
+  const frozenMs = attempt.frozenAt ? Date.parse(attempt.frozenAt) : NaN;
+  const refNow = Number.isFinite(frozenMs) ? Math.min(nowMs, frozenMs) : nowMs;
+  const remainingMs = endsAt - refNow;
   return {
     sectionName: cur.name,
     nextSectionName: next.name,

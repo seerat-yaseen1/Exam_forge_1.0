@@ -646,14 +646,38 @@ service cloud.firestore {
     //
     // Deletion now goes through the softDeleteAttempt callable: webOwner only,
     // and it writes the deletionAudit row in the same transaction as the state
-    // change. Freeze / unfreeze stay here — those are genuine invigilation
-    // powers and staff need them live during a sitting.
+    // change.
+    //
+    // F-12 (audit 2026-08-03): FREEZE LEFT THIS LIST TOO, and the reason is
+    // sharper than the deletion one.
+    //
+    // The four freeze fields were here because the roster used to freeze with a
+    // bare updateDoc. It does not any more — submissionService.freezeAttempt
+    // and unfreezeAttempt have called the freezeAttempt / unfreezeAttempt
+    // callables since Phase 4 — so this whitelist authorised nothing the
+    // product still does, while leaving two holes open:
+    //
+    //   'totalFrozenSeconds' is CONSUMED AS CREDIT. examTimingCore's
+    //   CONSUME_LEGACY_FROZEN_SECONDS is true, so on an attempt with no ledger
+    //   creditedFreezeMs() reads this field directly. A single
+    //   updateDoc({totalFrozenSeconds: 86400}) from any faculty account in the
+    //   tenant granted a student twenty-four hours — bypassing the ledger, the
+    //   Math.min(granted, elapsed) cap that makes over-granting impossible, the
+    //   §3/§8 authority ladder, and the audit row. The same write with 0
+    //   destroys credit the student was already given, which is INV-4a from a
+    //   browser console. "Freeze credit cannot create time" was not an
+    //   invariant while this line existed.
+    //
+    //   'frozenAt' alone pauses the CLIENT (ExamShell derives isFrozen from it)
+    //   without opening a ledger entry, so effectiveNowMs never pins and the
+    //   server's clocks keep running behind a stopped display. That is D-03,
+    //   reconstructible by hand.
+    //
+    // Both are callable-only now, and both callables record who did it.
+    // 'updatedAt' stays: it is the one field staff UIs touch that carries no
+    // authority, and dropping it would break unrelated writes.
     function staffAttemptUpdateFieldsAllowed() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        'frozenAt',
-        'frozenBy',
-        'frozenReason',
-        'totalFrozenSeconds',
         'updatedAt'
       ]);
     }

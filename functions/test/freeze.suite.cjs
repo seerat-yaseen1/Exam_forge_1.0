@@ -177,7 +177,8 @@ async function FZ01() {
   await call(fns.freezeAttempt, { attemptId: 'att_1', reason: 'phone rang' }, STAFF());
   const frozen = A();
   check(Array.isArray(frozen.freezes) && frozen.freezes.length === 1, 'freeze opens one ledger entry');
-  eq(frozen.status, 'in_progress', 'freezeAttempt leaves status at in_progress');
+  eq(frozen.status, 'frozen',
+    'a pause puts the attempt in a state the student cannot write from (F5)');
   check(!!frozen.frozenAt, 'legacy frozenAt is stamped (client pauses on it)');
 
   advance(min(10));                                  // paused ten minutes
@@ -466,7 +467,7 @@ async function FZ08() {
   await fns.scheduledCloseExpiredAttempts.run({});
 
   const after = A();
-  eq(after.status, 'in_progress',
+  eq(after.status, 'frozen',
     'a seven-hour freeze is still a freeze — the sweep leaves it for a human');
   check(!after.autoSubmitReason,
     'no automatic close reason was stamped', `autoSubmitReason=${after.autoSubmitReason}`);
@@ -496,8 +497,8 @@ async function FZ09() {
   // The question was served at t0 and has a 90s limit. Five minutes later it
   // is long gone, so the snapshot should read 0 — not null, and not a live
   // number. Section A: 30m limit, 5m used.
-  near(snap.sectionMs, min(25) + sec(30), 1500,
-    'sectionMs snapshot = section remaining, grace included');
+  near(snap.sectionMs, min(25), 1500,
+    'sectionMs snapshot = section remaining as the STUDENT sees it, grace excluded');
   eq(snap.questionMs, 0, 'questionMs snapshot = 0 for a question already past its limit');
 
   // What the student's own SectionTimer renders, transcribed from
@@ -651,6 +652,16 @@ async function FZ14() {
   check(after >= before - 1,
     'INV-4a · credit after the cycle is at least what it was before',
     `before=${before}ms after=${after}ms (lost ${(before - after) / 1000}s)`);
+
+  // The migration writes a synthetic ledger row, so the ledger's own
+  // invariants have to hold over it: no overlap with the real entry, granted
+  // never exceeding elapsed, and creditedFreezeMs equal to the sum.
+  const v = core.checkInvariants(toCore(A()), {
+    sections: [{ id: 'SA', timeLimit: 30, questionIds: ['q1', 'q2'] },
+               { id: 'SB', timeLimit: 20, questionIds: ['q3'] }],
+  }).filter((x) => x.severity === 'error');
+  check(v.length === 0, 'the carried-forward row satisfies INV-4b / INV-4c',
+    v.map((x) => `${x.id}: ${x.message}`).join('; '));
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -673,8 +684,8 @@ async function FZ15() {
   eq(r.frozen, true, 'the extension check froze the sitting');
   const frozen = A();
   eq(frozen.status, 'frozen', 'status went to frozen');
-  check(!frozen.frozenAt,
-    'no frozenAt is written — the client pauses its clocks on frozenAt only',
+  check(!!frozen.frozenAt,
+    'frozenAt is stamped, so the CLIENT pauses its clocks too (F6)',
     `frozenAt=${frozen.frozenAt}`);
   check(Array.isArray(frozen.freezes) && frozen.freezes.length === 1,
     'an extension freeze opens a ledger entry like every other pause',

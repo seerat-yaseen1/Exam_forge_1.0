@@ -6555,9 +6555,43 @@ function closeFreezeUpdates(
       decidedBy: opts.decidedBy ?? undefined,
     });
   };
-  addPenalty('question', clamp(wanted.questionMs, remaining(dl.questionEndsAt)));
-  addPenalty('section', clamp(wanted.sectionMs, remaining(dl.sectionEndsAt)));
-  addPenalty('overall', clamp(wanted.overallMs, remaining(dl.overallEndsAt)));
+  // ── The caps are CUMULATIVE, innermost first (A-04) ─────────────
+  //
+  // Each cap used to be measured against its own clock alone:
+  //
+  //   question -> remaining(question)
+  //   section  -> remaining(section)
+  //   overall  -> remaining(overall)
+  //
+  // Correct in isolation, and wrong together, because PENALTY_REACHES routes a
+  // deduction OUTWARD (examTimingCore:204): time taken from the question is
+  // also gone from the section and from the total. So the overall clock
+  // absorbed sectionPenalty + overallPenalty while only the second had ever
+  // been capped against it.
+  //
+  // Measured: a 60m exam with a 30m section, frozen at +5:00 and released at
+  // +8:00 with 3m granted and a large deduction asked on both clocks. Section
+  // capped at 25.5m, overall capped at 55.5m, both individually right — and
+  // the overall clock then absorbed 81m against 63.5m of runway, landing
+  // overallLockedAfter at t0 − 17:30. Seventeen minutes before the exam began.
+  // The student was instantly and irrecoverably out of time.
+  //
+  // A4 promises "no arithmetic that can go negative"; this is that arithmetic
+  // going negative through the door A5 left open. Each cap now subtracts what
+  // the inner clocks have already taken from it, so the TOTAL any clock
+  // absorbs is at most what that clock had left.
+  //
+  // NO FLOOR IS APPLIED TO THE RESULTING DEADLINE, deliberately. With the caps
+  // right, the worst case is a deadline landing exactly at `now` — "you have
+  // no time left", which is a legitimate thing for an invigilator to decide.
+  // Flooring on top would mask a deadline that had gone into the past for some
+  // OTHER reason, and hiding that is how a clock defect survives a release.
+  const qPenalty = clamp(wanted.questionMs, remaining(dl.questionEndsAt));
+  const sPenalty = clamp(wanted.sectionMs, remaining(dl.sectionEndsAt) - qPenalty);
+  const oPenalty = clamp(wanted.overallMs, remaining(dl.overallEndsAt) - qPenalty - sPenalty);
+  addPenalty('question', qPenalty);
+  addPenalty('section', sPenalty);
+  addPenalty('overall', oPenalty);
 
   const penalisedAttempt = {
     ...creditedAttempt,

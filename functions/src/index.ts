@@ -34,8 +34,17 @@ import {
   sectionDeadlineMs,
   overallDeadlineMs,
   creditForAnchor,
+  penaltyForClock,
   computeFreezeCredits,
   computeDeadlines,
+  // D-14's "one number, consumed by BOTH sides". index.ts previously declared
+  // its own section/overall defaults and hardcoded the question one as a bare
+  // `5` in two places (F13) — so a per-assessment questionGraceSeconds was
+  // honoured by the resolver and ignored by the two functions that flag a late
+  // answer. Imported, not redeclared.
+  DEFAULT_QUESTION_GRACE_SECONDS,
+  effectiveNowMs,
+  openFreezeStartedMs,
   openSectionId,
   type CorePenalty,
   resolve as resolveTiming,
@@ -1276,28 +1285,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
     // The window is the institution's outer wall, not one of the student's
     // clocks. Same reason resolve() evaluates it against real time while every
     // other deadline pauses (4.3).
-    for (const doc of frozenSnap.docs) {
-      const d = doc.data() as {
-        answersLockedAfter?: unknown;
-        freezeState?: { since?: string } | null;
-        frozenAt?: string | null;
-      };
-      if (!attemptWindowClosed(d, nowMs)) continue;
-
-      candidates.push({
-        doc,
-        reason: 'deadline_expired_sweep',
-        // No grant on this path. FREEZE_CREDIT_EXTENDS_WINDOW is false, so
-        // credit cannot move the wall that is ending this attempt — handing
-        // out time here would be arithmetic that changes nothing, recorded as
-        // though it were a decision. The paused time stays unadjudicated,
-        // which is the truth: nobody adjudicated it.
-        grantFrozenSeconds: 0,
-        wasFrozen: true,
-      });
-    }
-
-    if (candidates.length === 0) {
+    if (candidates.length === 0 && frozenSnap.empty) {
       console.log('[closeExpiredAttempts] nothing to consider');
       return;
     }
@@ -1346,6 +1334,52 @@ export const scheduledCloseExpiredAttempts = onSchedule(
       }
     }
 
+    // ── The frozen branch, asking the RESOLVER (F9) ───────────────
+    //
+    // This used to gate on attemptWindowClosed(), which despite its name reads
+    // `answersLockedAfter` — the SECTION/OVERALL lock, not the availability
+    // window. Those are the clocks a freeze is supposed to hold, and a paused
+    // attempt necessarily carries a stale one, so the branch fired on exactly
+    // the state it was meant to protect: a seven-hour pause was auto-submitted
+    // and graded because its pre-freeze section lock had passed.
+    //
+    // A10 row 1 says the AVAILABILITY WINDOW closing during a freeze finalises
+    // the attempt, and nothing else does. resolve() is the one place that
+    // knows the difference — it evaluates the window against real time while
+    // every other deadline pauses (4.3) — so the sweep asks it rather than
+    // approximating it. Placed here, after loadPaper exists, because it needs
+    // the paper to answer at all.
+    for (const doc of frozenSnap.docs) {
+      const d = doc.data() as { assessmentId?: string };
+      const paper = d.assessmentId ? await loadPaper(d.assessmentId) : null;
+      if (!paper) continue;          // cannot prove the window shut; leave it
+      let windowClosed = false;
+      try {
+        const verdict = resolveTiming(
+          toCoreAttempt(doc.data() as Record<string, unknown>),
+          paper.coreAssessment,
+          nowMs,
+        );
+        windowClosed = verdict.kind === 'ended' && verdict.reason === 'window_closed';
+      } catch (e) {
+        console.warn('[closeExpiredAttempts] frozen verdict failed; leaving open', doc.id, e);
+        continue;
+      }
+      if (!windowClosed) continue;
+
+      candidates.push({
+        doc,
+        reason: 'deadline_expired_sweep',
+        // No grant on this path. FREEZE_CREDIT_EXTENDS_WINDOW is false, so
+        // credit cannot move the wall that is ending this attempt — handing
+        // out time here would be arithmetic that changes nothing, recorded as
+        // though it were a decision. The paused time stays unadjudicated,
+        // which is the truth: nobody adjudicated it.
+        grantFrozenSeconds: 0,
+        wasFrozen: true,
+      });
+    }
+
     let closed = 0;
     let graded = 0;
     let ungraded = 0;
@@ -1376,6 +1410,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
         answers?: Record<string, AttemptAnswerDoc & { answeredAt?: string }>;
         gradingConfig?: AssessmentGradingConfigS;
         updatedAt?: string;
+        freezes?: FreezeLedgerEntry[];
       };
 
       const paperEarly = att.assessmentId ? await loadPaper(att.assessmentId) : null;
@@ -1410,9 +1445,28 @@ export const scheduledCloseExpiredAttempts = onSchedule(
           const core = toCoreAttempt(att as unknown as Record<string, unknown>);
           const verdict = resolveTiming(core, paperEarly.coreAssessment, nowMs);
           if (verdict.kind !== 'ended') {
+            // ── D-30, restored (F8) ─────────────────────────────────
+            //
+            // STALE_FREEZE_HOURS was commented out for D-30 — "a freeze is
+            // owned by a human and does not time out" — and the generic
+            // staleness fallback below re-implemented it at the same six
+            // hours, from the other side. A paused attempt keeps its stale
+            // pre-freeze answersLockedAfter, so query (A) picks it up; the
+            // resolver correctly answers "not ended" because the clocks are
+            // held; and this branch then closed it anyway as
+            // 'abandoned_sweep', grading it with no credit and without even
+            // the finalizedWhileFrozen flag.
+            //
+            // An open pause is the one state where "nobody has touched this"
+            // is expected rather than evidence of abandonment. The student
+            // cannot touch it — that is what the pause means. The window
+            // branch above is still the automatic ending (A10); this one is
+            // for attempts nobody is holding.
+            const paused = openFreezeStartedMs(core) !== null;
             const touched = att.updatedAt ? Date.parse(att.updatedAt) : NaN;
-            const stale = !Number.isFinite(touched)
-              || touched <= nowMs - STALE_ATTEMPT_HOURS * 3_600_000;
+            const stale = !paused
+              && (!Number.isFinite(touched)
+                || touched <= nowMs - STALE_ATTEMPT_HOURS * 3_600_000);
             if (!stale) {
               skipped++;
               console.log(`[closeExpiredAttempts] leaving ${item.doc.id} open — ` +
@@ -1716,8 +1770,14 @@ export const deleteAuthUser = onCall<DeleteAuthUserData>(
     const callerRole = request.auth.token.role as Role | undefined;
     const callerInstituteId = request.auth.token.instituteId as string | undefined;
 
-    const { role, uid, successorId, confirmLiveOwnership,
-            deleteAttemptsOnWebOwnerAssessments } =
+    // NOTE (found by enabling noUnusedLocals, 2026-08-03): the payload also
+    // carries `deleteAttemptsOnWebOwnerAssessments`, and purgeStudentData
+    // accepts an option of that name — but this callable destructured it and
+    // never forwarded it, so the option has never had any effect. Left
+    // unforwarded here deliberately: wiring it up CHANGES WHAT GETS DELETED,
+    // which is not a decision a timer audit should make on the way past. It
+    // needs its own change, with its own review.
+    const { role, uid, successorId, confirmLiveOwnership } =
       request.data || ({} as DeleteAuthUserData);
     if (!role || !COLLECTION_BY_ROLE[role]) throw new HttpsError('invalid-argument', 'Invalid role.');
     if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
@@ -3709,6 +3769,7 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       lastHeartbeatAt?: string | null;
       createdAt?: string;
       freezeState?: { frozen?: boolean } | null;
+      freezes?: FreezeLedgerEntry[];
       securityConfig?: { tier?: string; requireSEB?: boolean } | null;
       gradingConfig?: AssessmentGradingConfigS;   // frozen at startExam
       // Read for the trapped-frozen escape hatch below. Loose shape: a
@@ -3762,6 +3823,24 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     // an automatic exit, on a bounded timer, in the student's favour.
     const isTrappedFrozen =
       attempt.status === 'frozen' && attemptWindowClosed(attempt);
+
+    // ── A paused student may not end their own sitting (F5) ────────
+    //
+    // The guard below tests `status !== 'in_progress'`, and a freeze now puts
+    // the attempt in 'frozen', so this is mostly closed by construction. It is
+    // stated explicitly anyway because the ONE exception — isTrappedFrozen —
+    // is deliberately a hole in that guard, and it must stay scoped to the
+    // case that justifies it: a window that has provably closed. Without this
+    // an open pause plus an already-passed lock would let the student finalise
+    // during an active invigilation, which is precisely what a pause exists to
+    // prevent. A grader is unaffected; ending a paused sitting is a legitimate
+    // staff action.
+    const openFreeze = (attempt.freezes ?? []).find((f) => !f.endedAt);
+    if (openFreeze && !isGrader) {
+      throw new HttpsError('failed-precondition',
+        'ATTEMPT_PAUSED: this sitting has been paused by an invigilator and ' +
+        'cannot be submitted until it is resumed.');
+    }
 
     if (attempt.status !== 'in_progress' && !isGrader && !isTrappedFrozen) {
       if (reason === 'terminated') {
@@ -3820,9 +3899,14 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     }
 
     // ── Freeze flag (Phase 1c) ────────────────────────────────────
-    // Record if this attempt was finalized while still frozen (unresolved
-    // extension freeze). Detective flag for the reviewer — not blocking.
-    if (attempt.freezeState?.frozen === true) {
+    // Record if this attempt was finalized while still paused. Detective flag
+    // for the reviewer — not blocking.
+    //
+    // The ledger is checked as well as freezeState (F5). freezeState is only
+    // written by the extension path, so an attempt finalised during an
+    // INVIGILATOR pause — the case a reviewer most needs to see — carried no
+    // flag at all and closed looking like an ordinary manual submit.
+    if (attempt.freezeState?.frozen === true || openFreeze) {
       updates['integrityLog.finalizedWhileFrozen'] = true;
     }
 
@@ -4695,39 +4779,76 @@ export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
   { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const callerUid = request.auth.uid;
     const callerStudentId = request.auth.token.studentId as string | undefined;
     const { attemptId, passed, found } = request.data || ({} as ReportExtensionCheckData);
     if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
 
     const db = getFirestore();
     const ref = db.collection('attempts').doc(attemptId);
-    const snap = await ref.get();
-    if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
-    const a = snap.data() as {
-      studentId: string;
-      status: string;
-      assessmentId: string;
-      securityConfig?: { tier?: string; requireExtensionCheck?: boolean; requireSEB?: boolean } | null;
-    };
-    if (a.studentId !== callerStudentId) {
-      throw new HttpsError('permission-denied', 'Not your attempt.');
-    }
 
-    const nowIso = new Date().toISOString();
-    const updates: Record<string, unknown> = {
-      lastExtensionCheck: { at: nowIso, passed: !!passed, found: found ?? [] },
-      updatedAt: nowIso,
-    };
+    // Transactional now, because a freeze is a ledger append and an append
+    // read-modify-written outside a transaction can lose a concurrent entry.
+    const shouldFreeze = await db.runTransaction(async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+      const a = snap.data() as {
+        studentId: string;
+        status: string;
+        assessmentId: string;
+        freezes?: FreezeLedgerEntry[];
+        securityConfig?: { tier?: string; requireExtensionCheck?: boolean; requireSEB?: boolean } | null;
+      };
+      if (a.studentId !== callerStudentId) {
+        throw new HttpsError('permission-denied', 'Not your attempt.');
+      }
+      assertSEB(request.data?.sebToken, callerUid, a.securityConfig?.requireSEB, a.assessmentId);
 
-    assertSEB(request.data?.sebToken, request.auth.uid, a.securityConfig?.requireSEB, a.assessmentId);
-    const tierRequiresCheck = a.securityConfig?.requireExtensionCheck === true;
-    const shouldFreeze = !passed && a.status === 'in_progress' && tierRequiresCheck;
-    if (shouldFreeze) {
-      updates.freezeState = { frozen: true, reason: 'extension_detected', since: nowIso };
-      updates.resumeRequiresVerification = true;
-      updates.status = 'frozen';
-    }
-    await ref.update(updates);
+      const nowIso = new Date().toISOString();
+      const tierRequiresCheck = a.securityConfig?.requireExtensionCheck === true;
+      const alreadyOpen = (a.freezes ?? []).some((f) => !f.endedAt);
+      const freezeNow = !passed && a.status === 'in_progress' && tierRequiresCheck && !alreadyOpen;
+
+      // Read before write, and only when there is a freeze to snapshot.
+      const aSnap = freezeNow && a.assessmentId
+        ? await txn.get(db.collection('assessments').doc(a.assessmentId))
+        : null;
+
+      const updates: Record<string, unknown> = {
+        lastExtensionCheck: { at: nowIso, passed: !!passed, found: found ?? [] },
+        updatedAt: nowIso,
+      };
+
+      if (freezeNow) {
+        // ── The same pause every other freeze opens (F6) ───────────
+        //
+        // This wrote freezeState + status and nothing else. No ledger entry
+        // meant openFreezeStartedMs found nothing, so effectiveNowMs never
+        // pinned and every SERVER clock kept running; no frozenAt meant
+        // ExamShell's isFrozen stayed false, so every CLIENT clock kept
+        // running too and all four auto-expiry paths stayed armed. A student
+        // frozen out by an antivirus false positive was refused answer
+        // writes by the rules while their section drained, and was resolved
+        // into the next section without ever being released.
+        //
+        // reason:'extension_check' is what still distinguishes it, and
+        // assertCanUnfreeze already reads that field: a system pause has no
+        // human owner, so any invigilator may clear it.
+        const opened = openFreezeUpdates(
+          a as unknown as Record<string, unknown>,
+          aSnap?.exists ? (aSnap.data() as Record<string, unknown>) : null,
+          { reason: 'extension_check', frozenBy: 'system', frozenByRole: 'system', nowIso },
+        );
+        Object.assign(updates, opened.updates);
+        updates.freezeState = { frozen: true, reason: 'extension_detected', since: nowIso };
+        updates.resumeRequiresVerification = true;
+        updates.frozenReason = 'Browser extension detected';
+      }
+
+      txn.update(ref, updates);
+      return freezeNow;
+    });
+
     return { ok: true, frozen: shouldFreeze };
   },
 );
@@ -4765,6 +4886,7 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
       // frozenAt. Both are read — see the accumulation note below.
       freezeState?: { frozen?: boolean; since?: string } | null;
       frozenAt?: string | null;
+      freezes?: FreezeLedgerEntry[];
     };
 
     const isStudentOwner = callerRole === 'student' && callerStudentId === a.studentId;
@@ -4795,43 +4917,66 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
 
     const nowIso = new Date().toISOString();
 
-    // ── Measure the freeze (D-02 / D-03, Phase 1) ─────────────────
-    // An extension freeze accumulated NOTHING: totalFrozenSeconds was never
-    // touched on this path, so even after Phase 4 makes freeze a real pause
-    // there would be no measured interval to credit. Recording it now means
-    // freezes that happen between this deploy and Phase 4 are creditable
-    // later rather than lost.
+    // ── Release through the SAME function as unfreezeAttempt ──────
     //
-    // FieldValue.increment, not read-then-write. The invigilator path
-    // (unfreezeAttempt) computes `current + additional` from a total supplied
-    // by the CLIENT, so stale roster state or two invigilators acting on one
-    // attempt makes accumulated credit go DOWN. This path must not inherit
-    // that defect — increment is atomic and cannot regress. (Fixing the
-    // invigilator path is Phase 4, where freeze becomes a callable.)
+    // This used to write status, freezeState and
+    // `totalFrozenSeconds: FieldValue.increment(elapsed)` — and no lock, no
+    // freezeCredits. Two separate defects came out of that:
     //
-    // Nothing consumes totalFrozenSeconds in a deadline yet. That is Phase 4,
-    // deliberately: crediting time is an authority DECISION, and inventing a
-    // silent default here would be the "broken promise" the timing spec warns
-    // about, just in the generous direction.
-    const frozenSinceIso = a.freezeState?.since ?? a.frozenAt ?? null;
-    let frozenForSeconds = 0;
-    if (frozenSinceIso) {
-      const sinceMs = Date.parse(frozenSinceIso);
-      if (Number.isFinite(sinceMs)) {
-        frozenForSeconds = Math.max(0, Math.floor((Date.now() - sinceMs) / 1000));
-      }
-    }
+    //   F4  Two writers, two meanings, one field. unfreezeAttempt SETS
+    //       totalFrozenSeconds from the ledger (GRANTED time); this
+    //       INCREMENTED it with measured ELAPSED time. A later invigilator
+    //       pause therefore overwrote the extension credit with its own much
+    //       smaller ledger sum, and accumulated credit FELL — measured at ten
+    //       minutes lost, with overallLockedAfter moving eight minutes
+    //       earlier and no penalty row to justify it. INV-4a and INV-3a.
+    //
+    //   F7  Doctrine D5: the materialised lock is a CACHE and every event
+    //       that changes an input must recompute it. Granting credit changes
+    //       an input. A released student carried a pre-freeze
+    //       answersLockedAfter and pre-freeze freezeCredits until some later
+    //       section boundary happened to recompute them.
+    //
+    // GRANTED IN FULL, and that is a policy choice worth naming. A human
+    // pauses a sitting and owes a decision on the paused time, which is why
+    // unfreezeAttempt demands an explicit grantedMs. Nobody decided this one:
+    // an automated check paused the student. Doctrine D8 says an automatic
+    // state needs an automatic exit in the STUDENT'S FAVOUR, and the retired
+    // stale-freeze branch in the sweep applied exactly this rule ("stale
+    // freezes are granted in full"). An invigilator who judges the pause the
+    // student's own fault can still deduct it with unfreezeAttempt's
+    // penalties.
+    const elapsedForGrant = (() => {
+      const open = (a.freezes ?? []).find((f) => !f.endedAt);
+      const since = open?.startedAt ?? a.freezeState?.since ?? a.frozenAt ?? null;
+      if (!since) return 0;
+      const ms = Date.parse(since);
+      return Number.isFinite(ms) ? Math.max(0, Date.now() - ms) : 0;
+    })();
 
-    await ref.update({
-      status: 'in_progress',
-      freezeState: { frozen: false, clearedBy: isInvigilator ? 'invigilator' : 'auto', since: nowIso },
-      resumeRequiresVerification: false,
-      ...(frozenForSeconds > 0
-        ? { totalFrozenSeconds: FieldValue.increment(frozenForSeconds) }
-        : {}),
-      updatedAt: nowIso,
-    });
-    return { ok: true, resumed: true, frozenForSeconds };
+    const aSnap = a.assessmentId
+      ? await db.collection('assessments').doc(a.assessmentId).get()
+      : null;
+
+    const closed = closeFreezeUpdates(
+      a as unknown as Record<string, unknown>,
+      aSnap?.exists ? (aSnap.data() as Record<string, unknown>) : null,
+      {
+        grantedMs: elapsedForGrant,
+        decidedBy: isInvigilator ? request.auth!.uid : null,
+        note: 'extension check cleared',
+        nowIso,
+        clearedBy: isInvigilator ? 'invigilator' : 'auto',
+      },
+    );
+
+    await ref.update(closed.updates);
+    return {
+      ok: true,
+      resumed: true,
+      frozenForSeconds: Math.round(closed.elapsedMs / 1000),
+      grantedMs: closed.grantedMs,
+    };
   },
 );
 
@@ -4934,10 +5079,27 @@ export const submitAnswerAndAdvance = onCall<SubmitAnswerAndAdvanceData>(
       ['question', 'section', 'break', 'choose', 'ended']);
     const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;
+    // ── What "late" means, from one source (F13 / D-14) ────────────
+    //
+    // This was `qLimit + 5`, hardcoded, in both this function and its sibling.
+    // D-14's fix was "one number, consumed by BOTH sides" — the assessment's
+    // questionGraceSeconds — and the resolver consumed it while these two did
+    // not, so an exam configured with a 15s grace flagged answers late that
+    // the resolver considered on time.
+    //
+    // Freeze credit is applied for the same reason it applies to every other
+    // clock: a pause the invigilator gave back is time the student is entitled
+    // to spend, and flagging their answer late for spending it re-imposes the
+    // pause as a penalty nobody decided.
+    const lateGraceSec =
+      (assessment as { questionGraceSeconds?: number } | undefined)?.questionGraceSeconds
+      ?? DEFAULT_QUESTION_GRACE_SECONDS;
     let lateAnswer = false;
     if (typeof qLimit === 'number' && qLimit > 0) {
+      const creditSec = creditForAnchor(
+        toCoreAttempt(attempt as unknown as Record<string, unknown>), current.servedAt) / 1000;
       const elapsedSec = (Date.parse(nowIso) - Date.parse(current.servedAt)) / 1000;
-      if (elapsedSec > qLimit + 5) lateAnswer = true; // 5s grace for latency
+      if (elapsedSec > qLimit + lateGraceSec + creditSec) lateAnswer = true;
     }
 
     const updates: Record<string, unknown> = { updatedAt: nowIso };
@@ -5174,10 +5336,27 @@ export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
     const sectionsNorm = assessment ? normalizeSections(assessment) : [];
     const secDef = sectionsNorm.find((s) => s.id === current.sectionId);
     const qLimit = secDef?.questionTimeLimit;
+    // ── What "late" means, from one source (F13 / D-14) ────────────
+    //
+    // This was `qLimit + 5`, hardcoded, in both this function and its sibling.
+    // D-14's fix was "one number, consumed by BOTH sides" — the assessment's
+    // questionGraceSeconds — and the resolver consumed it while these two did
+    // not, so an exam configured with a 15s grace flagged answers late that
+    // the resolver considered on time.
+    //
+    // Freeze credit is applied for the same reason it applies to every other
+    // clock: a pause the invigilator gave back is time the student is entitled
+    // to spend, and flagging their answer late for spending it re-imposes the
+    // pause as a penalty nobody decided.
+    const lateGraceSec =
+      (assessment as { questionGraceSeconds?: number } | undefined)?.questionGraceSeconds
+      ?? DEFAULT_QUESTION_GRACE_SECONDS;
     let lateAnswer = false;
     if (typeof qLimit === 'number' && qLimit > 0) {
+      const creditSec = creditForAnchor(
+        toCoreAttempt(attempt as unknown as Record<string, unknown>), current.servedAt) / 1000;
       const elapsedSec = (Date.parse(nowIso) - Date.parse(current.servedAt)) / 1000;
-      if (elapsedSec > qLimit + 5) lateAnswer = true; // 5s grace for latency
+      if (elapsedSec > qLimit + lateGraceSec + creditSec) lateAnswer = true;
     }
 
     // Firestore rejects `undefined`, so a missing value is normalised to null.
@@ -5852,6 +6031,347 @@ function assertCanUnfreeze(
     `It can be resumed by them, or by someone above them.`);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ONE FREEZE MECHANISM  (F6 / F7 — 2026-08-03)
+//
+// There were two, with different shapes, and every consumer had to know both:
+//
+//   freezeAttempt         freezes[] entry + frozenAt   status stays in_progress
+//   reportExtensionCheck  freezeState + status:'frozen'  no ledger, no frozenAt
+//
+// Only the first paused anything. effectiveNowMs() pins the resolver's clock
+// off an OPEN LEDGER ENTRY, and ExamShell derives isFrozen from frozenAt, so an
+// extension freeze stopped neither the server's clocks nor the client's: a
+// student locked out by an antivirus false positive watched their section drain
+// behind the overlay, was refused answer writes by firestore.rules
+// (status != 'in_progress'), and was resolved into the NEXT section without
+// ever being released. That is D-32 and D-36 again, in the mechanism nobody
+// converted.
+//
+// It also left three other rules half-applied: the sweep's window-close branch
+// queries status:'frozen' and therefore never saw an invigilator freeze (F9),
+// and verifyAndResume wrote totalFrozenSeconds with FieldValue.increment while
+// unfreezeAttempt SET the same field from the ledger, so the two disagreed
+// about what the field even meant and credit went DOWN (F4).
+//
+// Both paths now open and close the same ledger entry through these two
+// helpers. The difference between an invigilator pause and a system pause is
+// where it belongs — in `reason`, which assertCanUnfreeze already keys off —
+// and not in the shape of the state.
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Pre-ledger credit, carried across the moment the ledger begins (F3).
+ *
+ * creditForAnchor switches branch the instant `freezes` is non-empty: with no
+ * ledger it returns the flat `totalFrozenSeconds`, with one it sums per-freeze
+ * grantedMs. So on an attempt carrying legacy credit, pressing Freeze DELETED
+ * that credit — the open entry has no grantedMs yet, so the sum is zero.
+ * Measured at eight minutes lost on the button press.
+ *
+ * Migrating it as a synthetic CLOSED row keeps the arithmetic continuous.
+ *
+ * THE ANCHOR IS A RECONSTRUCTION, and worth being honest about. A pre-ledger
+ * total records no instants, so which clocks it was meant to credit cannot be
+ * recovered. Anchoring it at the OPEN SECTION's start (attempt start when
+ * between sections) reproduces exactly what the student's deadlines said one
+ * moment earlier for the overall and section clocks, and declines to credit a
+ * question served later — which is what D-28 would have decided had the data
+ * existed. It is the closest truthful reading available, not a measurement.
+ *
+ * Returns null when there is nothing to migrate, which is every attempt
+ * created after the ledger shipped. Drains as legacy attempts finish.
+ */
+function preLedgerCreditEntry(
+  att: { totalFrozenSeconds?: number; freezes?: FreezeLedgerEntry[]; startedAt?: string;
+         sectionTimings?: Record<string, { startedAt?: string; submittedAt?: string }> },
+  nowIso: string,
+): FreezeLedgerEntry | null {
+  if (Array.isArray(att.freezes) && att.freezes.length > 0) return null;
+  const legacy = att.totalFrozenSeconds;
+  if (typeof legacy !== 'number' || !Number.isFinite(legacy) || legacy <= 0) return null;
+
+  const openId = openSectionId(toCoreAttempt(att as unknown as Record<string, unknown>));
+  const anchor = (openId ? att.sectionTimings?.[openId]?.startedAt : undefined)
+    || att.startedAt
+    || nowIso;
+
+  return {
+    id: `fz_legacy_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    startedAt: anchor,
+    endedAt: anchor,
+    reason: 'system',
+    frozenBy: null,
+    frozenByRole: 'system',
+    elapsedMs: Math.round(legacy * 1000),
+    grantedMs: Math.round(legacy * 1000),
+    decidedBy: null,
+    decidedAt: nowIso,
+    note: 'pre-ledger credit carried forward (totalFrozenSeconds)',
+    clocksAtFreeze: null,
+  };
+}
+
+/**
+ * Snapshot what each clock had left at this instant (§2).
+ *
+ * EXCLUDES GRACE (F11). The stored deadline includes sectionGraceSeconds, so
+ * `deadline - now` was 30 s (default) larger than the number on the student's
+ * own screen — SectionTimer renders `timeLimit - elapsed` with no grace. The
+ * resume modal showed a "time remaining at the pause" the student had never
+ * seen, and derived its per-clock penalty caps from it, so a deduction could
+ * eat into the latency buffer rather than into the student's time.
+ *
+ * The server-side clamp in unfreezeAttempt still measures against the real
+ * post-credit deadline, grace included. This only changes what is DESCRIBED,
+ * so the description matches the thing it describes.
+ *
+ * null means the clock was not running — no question in standard delivery, no
+ * section between sections, no cap configured. Distinct from 0, which means it
+ * had run out, and A10 turns on the difference.
+ */
+function snapshotClocks(
+  core: CoreAttempt,
+  coreAsmt: CoreAssessment,
+  nowMs: number,
+): FreezeLedgerEntry['clocksAtFreeze'] {
+  const d = computeDeadlines(core, coreAsmt);
+  const graceMs = (x: number | null, gs: number | undefined, dflt: number) =>
+    x === null ? null : Math.max(0, x - nowMs - (gs ?? dflt) * 1000);
+  return {
+    questionMs: graceMs(d.questionEndsAt, coreAsmt.questionGraceSeconds, DEFAULT_QUESTION_GRACE_SECONDS),
+    sectionMs: graceMs(d.sectionEndsAt, coreAsmt.sectionGraceSeconds, DEFAULT_SECTION_GRACE_SECONDS),
+    overallMs: graceMs(d.overallEndsAt, coreAsmt.overallGraceSeconds, DEFAULT_OVERALL_GRACE_SECONDS),
+  };
+}
+
+/**
+ * Everything a pause writes, for either mechanism.
+ *
+ * Fails soft on the snapshot: a missing or unreadable assessment yields nulls,
+ * never a thrown freeze. An invigilator must always be able to stop a sitting,
+ * and a system check must always be able to, and a snapshot is worth less than
+ * the pause itself.
+ */
+function openFreezeUpdates(
+  att: Record<string, unknown>,
+  assessmentRaw: Record<string, unknown> | null,
+  opts: {
+    reason: FreezeLedgerEntry['reason'];
+    frozenBy: string | null;
+    frozenByRole: FreezeLedgerEntry['frozenByRole'];
+    nowIso: string;
+  },
+): { updates: Record<string, unknown>; entry: FreezeLedgerEntry } {
+  let clocksAtFreeze: FreezeLedgerEntry['clocksAtFreeze'] = null;
+  try {
+    if (assessmentRaw) {
+      clocksAtFreeze = snapshotClocks(
+        toCoreAttempt(att), toCoreAssessment(assessmentRaw), Date.parse(opts.nowIso));
+    }
+  } catch { clocksAtFreeze = null; }
+
+  const entry: FreezeLedgerEntry = {
+    id: `fz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    startedAt: opts.nowIso,
+    reason: opts.reason,
+    frozenBy: opts.frozenBy,
+    frozenByRole: opts.frozenByRole,
+    clocksAtFreeze,
+  };
+
+  // F3: carry pre-ledger credit across the branch switch, in the same write.
+  const carried = preLedgerCreditEntry(
+    att as Parameters<typeof preLedgerCreditEntry>[0], opts.nowIso);
+  const ledger = carried ? [carried, entry] : [entry];
+
+  return {
+    entry,
+    updates: {
+      freezes: FieldValue.arrayUnion(...ledger),
+      ...(carried ? { creditedFreezeMs: carried.grantedMs ?? 0 } : {}),
+      // ── A pause is a state the student cannot write from (F5) ────
+      //
+      // freezeAttempt left `status` at 'in_progress', and every guard on the
+      // student's transition paths tests exactly that — so a paused student
+      // could still advance questions, start and submit sections, and
+      // FINALISE their own attempt, with the clocks stopped by
+      // effectiveNowMs. A pause that stops the clock but not the student is
+      // an unbounded time grant to anyone willing to call the callable
+      // directly.
+      //
+      // 'frozen' is the state the extension path already used and every
+      // reader already understands: firestore.rules require 'in_progress' on
+      // both sides of a student write, getStudentAssessments counts it as
+      // live, examHeartbeat ignores it, and the sweep's window-close branch
+      // queries it — which is also what makes A10 reach an invigilator freeze
+      // for the first time (F9).
+      //
+      // saveAnswerNoAdvance deliberately still accepts it. The client learns
+      // of a freeze through its subscription, so the in-flight flush lands
+      // AFTER the pause; refusing it would fail the one call that exists to
+      // save the answer in front of a student being paused.
+      status: 'frozen',
+      // Legacy fields kept in step for one release — SectionTimer pauses on
+      // frozenAt, and the roster reads frozenBy/frozenReason. The extension
+      // path now writes them too, which is what makes the CLIENT pause on a
+      // system freeze (F6).
+      frozenAt: opts.nowIso,
+      frozenBy: opts.frozenBy,
+      updatedAt: opts.nowIso,
+    },
+  };
+}
+
+/**
+ * Close the open entry, decide credit, and recompute everything that depends
+ * on it. The single implementation of "the pause is over".
+ *
+ * RECOMPUTING IS NOT OPTIONAL (doctrine D5, and F7). verifyAndResume used to
+ * write status and freezeState and nothing else, so a released student carried
+ * a pre-freeze answersLockedAfter and pre-freeze freezeCredits. The credit
+ * surfaced later, at whatever section boundary happened to run
+ * computeAttemptLocks next, as the flat legacy total applied to whichever clock
+ * was running then. Both halves of that are fixed by doing the work here.
+ */
+function closeFreezeUpdates(
+  att: Record<string, unknown>,
+  assessmentRaw: Record<string, unknown> | null,
+  opts: {
+    grantedMs: number;
+    decidedBy: string | null;
+    note?: string | null;
+    nowIso: string;
+    penalties?: { questionMs?: number; sectionMs?: number; overallMs?: number };
+    decidedByRole?: string;
+    clearedBy?: 'invigilator' | 'auto' | 'sweep';
+  },
+): {
+  updates: Record<string, unknown>;
+  elapsedMs: number; grantedMs: number; creditedFreezeMs: number;
+} {
+  const d = att as {
+    freezes?: FreezeLedgerEntry[]; frozenAt?: string | null;
+    freezeState?: { frozen?: boolean; since?: string } | null;
+    startedAt?: string; penalties?: CorePenalty[];
+    sectionTimings?: Record<string, { startedAt?: string; submittedAt?: string }>;
+  };
+  const nowMs = Date.parse(opts.nowIso);
+
+  const ledger = [...(d.freezes ?? [])];
+  const idx = ledger.findIndex((f) => !f.endedAt);
+  // Three shapes, because an attempt already paused when this deploys can be
+  // in any of them: a ledger entry (both paths, from now on), `frozenAt` (an
+  // invigilator freeze from before the ledger), or `freezeState.since` (an
+  // extension freeze from before this change — the only field that path ever
+  // wrote). Missing all three would measure a zero-length pause and grant
+  // nothing, which is the in-flight student paying for our migration.
+  const startedAtIso = idx >= 0
+    ? ledger[idx].startedAt
+    : (d.frozenAt || d.freezeState?.since || null);
+  const startMs = startedAtIso ? Date.parse(startedAtIso) : NaN;
+  const elapsedMs = Number.isFinite(startMs) ? Math.max(0, nowMs - startMs) : 0;
+  // Cannot grant more than actually elapsed (INV-4c).
+  const granted = Math.min(Math.max(0, Math.round(opts.grantedMs)), elapsedMs);
+
+  const closed: FreezeLedgerEntry = {
+    ...(idx >= 0 ? ledger[idx] : {
+      id: `fz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      startedAt: startedAtIso ?? opts.nowIso,
+      reason: 'invigilator' as const,
+    }),
+    endedAt: opts.nowIso,
+    elapsedMs,
+    grantedMs: granted,
+    decidedBy: opts.decidedBy,
+    decidedAt: opts.nowIso,
+    ...(opts.note ? { note: String(opts.note).slice(0, 500) } : {}),
+  };
+  if (idx >= 0) ledger[idx] = closed; else ledger.push(closed);
+
+  // Derived from the ledger, never incremented from a caller-supplied total.
+  // This is what makes INV-4a hold by construction — and now holds for BOTH
+  // release paths, where verifyAndResume's FieldValue.increment did not (F4).
+  const creditedFreezeMs = ledger.reduce(
+    (sum, f) => sum + Math.max(0, f.grantedMs ?? 0), 0);
+
+  const creditedAttempt = {
+    ...toCoreAttempt(att),
+    freezes: ledger,
+    creditedFreezeMs,
+  } as CoreAttempt;
+
+  const coreAsmt = assessmentRaw ? toCoreAssessment(assessmentRaw) : ({ sections: [] } as CoreAssessment);
+
+  // Penalties, capped against the POST-CREDIT clock (A4).
+  const dl = computeDeadlines(creditedAttempt, coreAsmt);
+  const remaining = (endsAt: number | null): number =>
+    endsAt === null ? 0 : Math.max(0, endsAt - nowMs);
+  const wanted = opts.penalties ?? {};
+  const clamp = (asked: unknown, cap: number): number => {
+    const n = typeof asked === 'number' && Number.isFinite(asked) ? asked : 0;
+    return Math.max(0, Math.min(Math.round(n), cap));
+  };
+  const penaltyRows: CorePenalty[] = [];
+  const addPenalty = (clock: PenaltyClockS, amountMs: number) => {
+    if (amountMs <= 0) return;
+    penaltyRows.push({
+      id: `pen_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      freezeId: closed.id,
+      clock,
+      amountMs,
+      decidedAt: opts.nowIso,
+      decidedBy: opts.decidedBy ?? undefined,
+    });
+  };
+  addPenalty('question', clamp(wanted.questionMs, remaining(dl.questionEndsAt)));
+  addPenalty('section', clamp(wanted.sectionMs, remaining(dl.sectionEndsAt)));
+  addPenalty('overall', clamp(wanted.overallMs, remaining(dl.overallEndsAt)));
+
+  const penalisedAttempt = {
+    ...creditedAttempt,
+    penalties: [...(d.penalties ?? []), ...penaltyRows],
+  } as CoreAttempt;
+
+  const openId = openSectionId(penalisedAttempt);
+  const openSectionIso = openId ? d.sectionTimings?.[openId]?.startedAt : undefined;
+  const openSectionLimit = openId
+    ? (assessmentRaw?.sections as Array<{ id: string; timeLimit?: number }> | undefined)
+        ?.find((s) => s.id === openId)?.timeLimit
+    : undefined;
+
+  const updates: Record<string, unknown> = {
+    freezes: ledger,
+    creditedFreezeMs,
+    penalties: penalisedAttempt.penalties,
+    // The exit from the state openFreezeUpdates put them in. Paired here so
+    // there is exactly one way in and one way out.
+    status: 'in_progress',
+    // Cleared on both release paths. verifyAndResume used to leave a stale
+    // `{frozen: true}` behind on the invigilator path and vice versa.
+    freezeState: { frozen: false, clearedBy: opts.clearedBy ?? 'invigilator', since: opts.nowIso },
+    resumeRequiresVerification: false,
+    // Legacy mirror, kept in step for one release. GRANTED, not elapsed.
+    totalFrozenSeconds: Math.round(creditedFreezeMs / 1000),
+    frozenAt: FieldValue.delete(),
+    frozenBy: FieldValue.delete(),
+    frozenReason: FieldValue.delete(),
+    updatedAt: opts.nowIso,
+  };
+  applyLockUpdates(updates, computeAttemptLocks(
+    d.startedAt,
+    openSectionIso,
+    openSectionLimit,
+    (assessmentRaw ?? {}) as Parameters<typeof computeAttemptLocks>[3],
+    penalisedAttempt,
+  ));
+  applyCreditUpdates(updates, penalisedAttempt);
+
+  return { updates, elapsedMs, grantedMs: granted, creditedFreezeMs };
+}
+
+type PenaltyClockS = 'question' | 'section' | 'overall';
+
 /**
  * Pause a sitting. (Phase 4.)
  *
@@ -6012,55 +6532,26 @@ export const freezeAttempt = onCall<FreezeAttemptData>(
       // the ones that were true when the pause landed — not when someone next
       // opens a modal. Recomputing later would be asking the present state a
       // question about the past.
-      //
-      // Fails soft. A missing assessment yields nulls, never a thrown freeze:
-      // an invigilator must always be able to stop a sitting, and a snapshot
-      // is worth less than the pause itself.
-      let clocksAtFreeze: FreezeLedgerEntry['clocksAtFreeze'] = null;
-      try {
-        const aSnap = att.assessmentId
-          ? await txn.get(db.collection('assessments').doc(att.assessmentId))
-          : null;
-        if (aSnap?.exists) {
-          const core = toCoreAttempt(att as unknown as Record<string, unknown>);
-          const asmt = toCoreAssessment(aSnap.data() as Record<string, unknown>);
-          const d = computeDeadlines(core, asmt);
-          const nowMsF = Date.parse(nowIso);
-          // null means "this clock was not running" — no question in standard
-          // delivery, no section between sections, no cap configured. That is
-          // a different fact from 0, which means it had run out, and A10 turns
-          // on the difference: an absent clock is an option NOT OFFERED, an
-          // expired one is an option offered with a cap of zero.
-          const left = (x: number | null) => x === null ? null : Math.max(0, x - nowMsF);
-          clocksAtFreeze = {
-            questionMs: left(d.questionEndsAt),
-            sectionMs:  left(d.sectionEndsAt),
-            overallMs:  left(d.overallEndsAt),
-          };
-        }
-      } catch {
-        clocksAtFreeze = null;
-      }
+      const aSnap = att.assessmentId
+        ? await txn.get(db.collection('assessments').doc(att.assessmentId))
+        : null;
 
-      const entry: FreezeLedgerEntry = {
-        id: `fz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        startedAt: nowIso,
-        reason: 'invigilator',
-        frozenBy: actor.uid,
-        // §3/§8: authority attaches per freeze, so the role is part of the
-        // record rather than something 4.6 has to infer later.
-        frozenByRole: actor.role as FreezeLedgerEntry['frozenByRole'],
-        clocksAtFreeze,
-      };
+      const { updates, entry } = openFreezeUpdates(
+        att as unknown as Record<string, unknown>,
+        aSnap?.exists ? (aSnap.data() as Record<string, unknown>) : null,
+        {
+          reason: 'invigilator',
+          frozenBy: actor.uid,
+          // §3/§8: authority attaches per freeze, so the role is part of the
+          // record rather than something 4.6 has to infer later.
+          frozenByRole: actor.role as FreezeLedgerEntry['frozenByRole'],
+          nowIso,
+        },
+      );
 
       txn.update(ref, {
-        freezes: FieldValue.arrayUnion(entry),
-        // Legacy fields kept in step for one release — SectionTimer pauses on
-        // frozenAt, and the roster reads frozenBy/frozenReason.
-        frozenAt: nowIso,
-        frozenBy: actor.uid,
+        ...updates,
         ...(reason ? { frozenReason: String(reason).slice(0, 300) } : {}),
-        updatedAt: nowIso,
       });
       return { alreadyFrozen: false, entryId: entry.id, actor };
     });
@@ -6152,12 +6643,6 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
       const lockSnap = att.assessmentId
         ? await txn.get(db.collection('assessments').doc(att.assessmentId))
         : null;
-      const lockA = (lockSnap?.data() ?? {}) as {
-        sections?: Array<{ id: string; timeLimit?: number }>;
-        sectionGraceSeconds?: number;
-        overallTimeLimit?: number;
-        overallGraceSeconds?: number;
-      };
 
       const ledger = [...(att.freezes ?? [])];
       const idx = ledger.findIndex((f) => !f.endedAt);
@@ -6170,138 +6655,28 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
         throw new HttpsError('failed-precondition', 'Attempt is not frozen.');
       }
 
-      const nowMs = Date.now();
-      const nowIso = new Date(nowMs).toISOString();
-      const startMs = Date.parse(startedAtIso);
-      const elapsedMs = Number.isFinite(startMs) ? Math.max(0, nowMs - startMs) : 0;
-      // Cannot grant more than actually elapsed (INV-4c). Over-granting would
-      // let an invigilator hand out arbitrary time through a field meant to
-      // record one.
-      const granted = Math.min(Math.round(grantedMs), elapsedMs);
+      const nowIso = new Date().toISOString();
 
-      const closed: FreezeLedgerEntry = {
-        ...(idx >= 0 ? ledger[idx] : {
-          id: `fz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-          startedAt: startedAtIso, reason: 'invigilator' as const,
-        }),
-        endedAt: nowIso,
-        elapsedMs,
-        grantedMs: granted,
-        decidedBy: actor.uid,
-        decidedAt: nowIso,
-        ...(note ? { note: String(note).slice(0, 500) } : {}),
-      };
-      if (idx >= 0) ledger[idx] = closed; else ledger.push(closed);
-
-      // Derived from the ledger, never incremented from a caller-supplied
-      // total. This is what makes INV-4a hold by construction.
-      const creditedFreezeMs = ledger.reduce(
-        (sum, f) => sum + Math.max(0, f.grantedMs ?? 0), 0);
-
-      // ── Phase 4.3: GIVE THE TIME BACK ───────────────────────────
+      // ── Everything the release writes lives in closeFreezeUpdates ──
       //
-      // Doctrine D5: the materialised lock is a CACHE, and every event that
-      // changes an input must recompute it. Granting credit changes an input.
-      //
-      // Without this the whole feature is decorative. The ledger recorded the
-      // grant, creditedFreezeMs rose, getExamVerdict credited it — and
-      // answersLockedAfter, the field firestore.rules actually enforces, kept
-      // its pre-freeze value. The student would be released to a section that
-      // had already ended, holding a receipt for time nothing would honour.
-      //
-      // Recomputed from the ledger AFTER the entry is closed, so the credit
-      // the invigilator just granted is included. `openSectionIso` is the
-      // section the student is actually in — the same bound startSection and
-      // submitSection materialise, so all three agree.
-      const creditedAttempt = {
-        ...(toCoreAttempt(att as unknown as Record<string, unknown>)),
-        freezes: ledger,
-        creditedFreezeMs,
-      } as CoreAttempt;
-      // openSectionId is the core's own rule, including the '' startedAt
-      // sentinel. Re-deriving "which section is open" by hand here is exactly
-      // how two expressions of one rule start disagreeing.
-      const openId = openSectionId(creditedAttempt);
-      const openSectionIso = openId
-        ? att.sectionTimings?.[openId]?.startedAt
-        : undefined;
-      const openSectionLimit = openId
-        ? lockA.sections?.find((sec) => sec.id === openId)?.timeLimit
-        : undefined;
-
-      // ── Phase 4.5 · penalties (A4) ──────────────────────────────
-      //
-      // CAPPED AGAINST THE POST-CREDIT CLOCK. `creditedAttempt` already holds
-      // the grant just made, so resolving it here yields exactly what each
-      // clock has left once the student is released — which is what A4 means
-      // by "capped at that clock's remaining time", and what makes "no
-      // arithmetic that can go negative" true even when the grant is partial.
-      //
-      // Capping is not validation, it is the model. A4: "Ending a unit is
-      // simply its maximum — there is no separate 'end the question' action."
-      // So a request for more than remains is not an error to reject; it is an
-      // instruction to end that unit, and clamping expresses it exactly.
-      const nowMsUnfreeze = Date.parse(nowIso);
-      const dl = computeDeadlines(creditedAttempt, lockA as unknown as CoreAssessment);
-      const remaining = (endsAt: number | null): number =>
-        endsAt === null ? 0 : Math.max(0, endsAt - nowMsUnfreeze);
-
-      const wanted = request.data?.penalties ?? {};
-      const clamp = (askedMs: unknown, capMs: number): number => {
-        const n = typeof askedMs === 'number' && Number.isFinite(askedMs) ? askedMs : 0;
-        return Math.max(0, Math.min(Math.round(n), capMs));
-      };
-      const penaltyRows: Array<{
-        id: string; freezeId: string; clock: 'question' | 'section' | 'overall';
-        amountMs: number; decidedAt: string; decidedBy: string; decidedByRole: string;
-      }> = [];
-      const addPenalty = (clock: 'question' | 'section' | 'overall', amountMs: number) => {
-        if (amountMs <= 0) return;   // no row for a decision not taken
-        penaltyRows.push({
-          id: `pen_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          freezeId: idx >= 0 ? ledger[idx].id : 'unknown',
-          clock,
-          amountMs,
-          decidedAt: nowIso,
+      // Closing the entry, deriving creditedFreezeMs from the ledger, clamping
+      // the A4 deductions against the post-credit clock, recomputing the three
+      // lock fields and re-materialising freezeCredits are one operation, and
+      // they are now expressed once. verifyAndResume performs the same release
+      // through the same function, so the invigilator path and the system path
+      // cannot reach different state (F4 / F7).
+      const closed = closeFreezeUpdates(
+        att as unknown as Record<string, unknown>,
+        lockSnap?.exists ? (lockSnap.data() as Record<string, unknown>) : null,
+        {
+          grantedMs,
           decidedBy: actor.uid,
+          note,
+          nowIso,
+          penalties: request.data?.penalties,
           decidedByRole: actor.role,
-        });
-      };
-      // A clock that does not exist right now cannot be penalised — A10 says
-      // the option is "not offered, not a silent no-op". remaining() is 0 for
-      // an absent bound, so the clamp refuses it here too and the UI and the
-      // server agree rather than one quietly swallowing the other's request.
-      addPenalty('question', clamp(wanted.questionMs, remaining(dl.questionEndsAt)));
-      addPenalty('section',  clamp(wanted.sectionMs,  remaining(dl.sectionEndsAt)));
-      addPenalty('overall',  clamp(wanted.overallMs,  remaining(dl.overallEndsAt)));
-
-      const penaltyLedger = [...(att.penalties ?? []), ...penaltyRows];
-      const penalisedAttempt = {
-        ...creditedAttempt,
-        penalties: penaltyLedger,
-      } as CoreAttempt;
-
-      const updates: Record<string, unknown> = {
-        freezes: ledger,
-        creditedFreezeMs,
-        // Legacy field kept in step for one release. Deliberately mirrors
-        // GRANTED time, not elapsed — it is about to become the credit figure.
-        totalFrozenSeconds: Math.round(creditedFreezeMs / 1000),
-        frozenAt: FieldValue.delete(),
-        frozenBy: FieldValue.delete(),
-        frozenReason: FieldValue.delete(),
-        updatedAt: nowIso,
-      };
-      applyLockUpdates(updates, computeAttemptLocks(
-        att.startedAt as string | undefined,
-        openSectionIso,
-        openSectionLimit,
-        lockA,
-        creditedAttempt,
-      ));
-      // D-35: the numbers the student's screen counts down with, refreshed in
-      // the same write as the deadlines they mirror.
-      applyCreditUpdates(updates, creditedAttempt);
+        },
+      );
 
       // ── A9: unfreeze invalidates the provisional grade ──────────
       //
@@ -6315,9 +6690,14 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
       // attempt, which is the exact state A9 forbids. Deleting a row that is
       // not there is a no-op, so no existence check is needed.
       txn.delete(db.collection('provisionalGrades').doc(attemptId));
-      txn.update(ref, updates);
+      txn.update(ref, closed.updates);
 
-      return { elapsedMs, grantedMs: granted, creditedFreezeMs, actor };
+      return {
+        elapsedMs: closed.elapsedMs,
+        grantedMs: closed.grantedMs,
+        creditedFreezeMs: closed.creditedFreezeMs,
+        actor,
+      };
     });
 
     await writeAuditRow(db, {
@@ -7056,11 +7436,25 @@ function computeAttemptLocks(
   // Zero when no attempt is supplied, so untouched callers are unchanged.
   const sectionCredit = creditFrom ? creditForAnchor(creditFrom, sectionStartedAtIso) : 0;
   const overallCredit = creditFrom ? creditForAnchor(creditFrom, attemptStartedAtIso) : 0;
+  // ── Phase 4.5 completion: penalties reach the WRITE GATE too (F2) ──
+  //
+  // Credit reached this function in 4.3 and deductions never did, so a
+  // recorded penalty shortened the resolver's answer and the student's screen
+  // while answersLockedAfter — the field firestore.rules actually enforces —
+  // kept the unpenalised instant. The same split that made D-03, pointed the
+  // other way: the display taking time the gate still allowed.
+  //
+  // Anchored exactly as the credit is. penaltyForClock counts only deductions
+  // decided AFTER the clock started, and PENALTY_REACHES routes a question or
+  // section deduction outward into the total, so the two bounds absorb
+  // precisely what the resolver says they do.
+  const sectionPenalty = creditFrom ? penaltyForClock(creditFrom, 'section', sectionStartedAtIso) : 0;
+  const overallPenalty = creditFrom ? penaltyForClock(creditFrom, 'overall', attemptStartedAtIso) : 0;
   const secMs = sectionDeadlineMs(
-    sectionStartedAtIso, sectionTimeLimitMin, a.sectionGraceSeconds, sectionCredit,
+    sectionStartedAtIso, sectionTimeLimitMin, a.sectionGraceSeconds, sectionCredit, sectionPenalty,
   );
   const ovrMs = overallDeadlineMs(
-    attemptStartedAtIso, a.overallTimeLimit, a.overallGraceSeconds, overallCredit,
+    attemptStartedAtIso, a.overallTimeLimit, a.overallGraceSeconds, overallCredit, overallPenalty,
   );
 
   const section = secMs === null ? null : new Date(secMs);
@@ -7517,7 +7911,23 @@ export const startSection = onCall<StartSectionData>(
         } | undefined;
         const brk = breakAfterCompletion(a?.sections, attempt.sectionIds, idx);
         if (brk && brk.mandatory) {
-          const breakEndsAt = new Date(prevTiming.submittedAt).getTime() + brk.durationMinutes * 60_000;
+          // ── A break is a clock, and it is credited too (F6 / D-29) ──
+          //
+          // This was `submittedAt + durationMinutes`, full stop. D-29 added a
+          // credit term to the break deadline in the RESOLVER and this gate —
+          // the other place that decides when a break ends — was never
+          // updated. Freeze a student for six minutes during a ten-minute
+          // mandatory break and getExamVerdict held them until +16 while this
+          // let them in at +10: the screen said "on a break" and the server
+          // said "come in".
+          //
+          // creditForAnchor on the submit instant, which is when the break
+          // began, so only pauses that started after it count — the same
+          // per-clock rule every other deadline uses.
+          const anchorIso = prevTiming.submittedAt;
+          const breakEndsAt = new Date(anchorIso).getTime()
+            + brk.durationMinutes * 60_000
+            + creditForAnchor(toCoreAttempt(attempt as unknown as Record<string, unknown>), anchorIso);
           if (Date.now() < breakEndsAt) {
             throw new HttpsError('failed-precondition', 'Mandatory break has not ended yet.');
           }
@@ -7716,8 +8126,33 @@ export const submitSection = onCall<SubmitSectionData>(
     const serverNow = Date.now();
     const timeUsedSeconds = Math.max(0, Math.floor((serverNow - startedMs) / 1000));
 
-    const sec = a.sections?.find((s) => s.id === sectionId);
-    const graceSec = a.sectionGraceSeconds ?? DEFAULT_SECTION_GRACE_SECONDS;
+    // ── The deadlines this call is judged against (F1) ───────────────
+    //
+    // These two gates used to build their own deadlines inline:
+    //
+    //   startedMs + sec.timeLimit * 60_000 + graceSec * 1000
+    //   examStartMs + a.overallTimeLimit * 60_000 + overallGraceSec * 1000
+    //
+    // No freeze credit, no penalty, and compared against Date.now() rather
+    // than effectiveNowMs. The note that used to sit above the overall check
+    // said so in as many words — "the server ignores freeze here; credited
+    // only in the client display" — which was the posture BEFORE Phase 4.3
+    // credited the write gate, and it stayed here after every other path moved.
+    //
+    // The result was that a grant could not be spent. answersLockedAfter moved
+    // out, getExamVerdict said 'section', the student's screen showed the time
+    // restored — and this function threw SECTION_DEADLINE_EXCEEDED and clamped
+    // submittedAt back to the pre-freeze instant. The clamp then re-anchored
+    // the following break, so the damage outlived the section.
+    //
+    // One source now. computeDeadlines applies credit per clock (D-28) and
+    // subtracts recorded penalties (A4); effectiveNowMs holds time still while
+    // a freeze is open (4.3). This gate and the resolver cannot disagree,
+    // because they are the same function.
+    const gateCore = toCoreAttempt(attempt as unknown as Record<string, unknown>);
+    const gateAsmt = toCoreAssessment(aSnap.data() as Record<string, unknown>);
+    const gateDl = computeDeadlines(gateCore, gateAsmt);
+    const evalNow = effectiveNowMs(gateCore, serverNow);
 
     // ── Overall exam deadline (hard cut) ─────────────────────────────
     // Anchored on attempt.startedAt — the wall-clock start of the whole
@@ -7734,21 +8169,16 @@ export const submitSection = onCall<SubmitSectionData>(
     // is answered stands. Grace is the overall knob (own 30s default), the
     // single trailing buffer for network lag at the buzzer.
     //
-    // Freeze posture matches the section check: the server ignores freeze
-    // here (grace absorbs slack; freeze is an invigilator escape hatch
-    // credited only in the client display). Consistent with the existing
-    // section-deadline enforcement above.
-    if (a.overallTimeLimit && a.overallTimeLimit > 0 && attempt.startedAt) {
-      const overallGraceSec = a.overallGraceSeconds ?? DEFAULT_OVERALL_GRACE_SECONDS;
-      const examStartMs = new Date(attempt.startedAt).getTime();
-      const overallDeadlineMs = examStartMs + a.overallTimeLimit * 60_000 + overallGraceSec * 1000;
-      if (serverNow > overallDeadlineMs) {
+    // Freeze posture: credited and paused, exactly like every other clock —
+    // see the note on gateDl above.
+    if (gateDl.overallEndsAt !== null) {
+      const overallDeadlineMs = gateDl.overallEndsAt;
+      if (evalNow > overallDeadlineMs) {
         // Close the current section at its true submit time (clamped to the
         // section's own deadline if that is earlier), never advancing.
         let sectionCloseMs = serverNow;
-        if (sec?.timeLimit && sec.timeLimit > 0) {
-          const sectionDeadlineMs = startedMs + sec.timeLimit * 60_000 + graceSec * 1000;
-          sectionCloseMs = Math.min(serverNow, sectionDeadlineMs);
+        if (gateDl.sectionEndsAt !== null) {
+          sectionCloseMs = Math.min(serverNow, gateDl.sectionEndsAt);
         }
         const closeIso = new Date(sectionCloseMs).toISOString();
         const usedSec = Math.max(0, Math.floor((sectionCloseMs - startedMs) / 1000));
@@ -7763,9 +8193,9 @@ export const submitSection = onCall<SubmitSectionData>(
       }
     }
 
-    if (sec?.timeLimit && sec.timeLimit > 0) {
-      const deadlineMs = startedMs + sec.timeLimit * 60_000 + graceSec * 1000;
-      if (serverNow > deadlineMs) {
+    if (gateDl.sectionEndsAt !== null) {
+      const deadlineMs = gateDl.sectionEndsAt;
+      if (evalNow > deadlineMs) {
         // Strict: close the section at its true deadline (no extra credit) and
         // signal the client the submit was late. The section is finalised
         // regardless so the student cannot get stuck or gain time.

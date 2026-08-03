@@ -11,7 +11,10 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "sourceMap": true,
-    "noImplicitReturns": true
+    "noImplicitReturns": true,
+    // F2 shipped a fully-built penalty ledger that was assigned and never read.
+    // This is the check that would have failed the build on it.
+    "noUnusedLocals": true
   },
   "include": ["src/**/*.ts"]
 }

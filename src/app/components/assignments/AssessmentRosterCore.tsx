@@ -134,6 +134,16 @@ function isReviewable(a: Attempt | null | undefined): boolean {
 
 function deriveRosterStatus(attempt: Attempt | null): RosterStatus {
   if (!attempt) return 'not_started';
+  // Terminal status wins over frozenAt (2026-08-03). No finalisation path
+  // used to clear frozenAt, so a sitting closed while paused — by a grader,
+  // by the trapped-frozen escape, or by the sweep — showed here as "frozen"
+  // forever over a status of submitted. The server now cleans the field up at
+  // finalisation; this ordering keeps the display truthful for attempts
+  // finalised before that shipped, which no backfill will ever touch.
+  if (attempt.status === 'submitted' || attempt.status === 'auto_submitted'
+      || attempt.status === 'terminated') {
+    return attempt.status as RosterStatus;
+  }
   if (attempt.frozenAt) return 'frozen';
   return attempt.status as RosterStatus;
 }

@@ -817,12 +817,20 @@ regression('INV-1 · two open sections are caught', () => {
 });
 
 regression('INV-2 · two unlocked served questions are caught', () => {
-  const asmt = { sections: [{ id: 'A', questionIds: ['q1', 'q2'] }] };
+  // deliveryMode matters since 2026-08-03: INV-2 is scoped to SEQUENTIAL
+  // delivery, because standard mode serves the whole paper unlocked by
+  // design ("all unlocked = free nav" at the startExam serve site) and the
+  // unconditional check reported a violation on every standard sitting.
+  const asmt = { deliveryMode: 'linear', sections: [{ id: 'A', questionIds: ['q1', 'q2'] }] };
   const a = { status: 'in_progress', sectionIds: ['A'], sectionTimings: { A: { startedAt: iso(T0) } },
     servedQuestions: [
       { questionId: 'q1', sectionId: 'A', servedAt: iso(T0), locked: false },
       { questionId: 'q2', sectionId: 'A', servedAt: iso(T0), locked: false }] };
   assert.ok(C.checkInvariants(a, asmt).some((x) => x.id === 'INV-2'));
+  // And the standard-mode counterpart: the same state is NOT a violation
+  // when the whole paper is legitimately open.
+  const std = { ...asmt, deliveryMode: 'standard' };
+  assert.ok(!C.checkInvariants(a, std).some((x) => x.id === 'INV-2'));
 });
 
 regression('INV-10 · an ungraded terminal attempt is caught', () => {

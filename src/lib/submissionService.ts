@@ -1264,7 +1264,20 @@ export async function freezeAttempt(
 export async function unfreezeAttempt(
   attemptId: string,
   grantedMs: number,
-  note?: string
+  note?: string,
+  /**
+   * Deductions taken in the same decision (Phase 4.5 / §4).
+   *
+   * Positive milliseconds per clock; direction is carried by which clock, not
+   * by a sign. Omitted or all-zero is the ordinary case and records nothing.
+   *
+   * Sent as asked and CLAMPED SERVER-SIDE against the post-credit clock. The
+   * modal computes the same caps for display, so the two normally agree; if
+   * they ever diverge the server wins and less is deducted than requested,
+   * which is the only direction that cannot cost a student time nobody
+   * authorised.
+   */
+  penalties?: { questionMs?: number; sectionMs?: number; overallMs?: number },
 ): Promise<{ elapsedMs: number; grantedMs: number; creditedFreezeMs: number }> {
   // Phase 4: resuming requires an explicit decision about the paused time.
   //
@@ -1279,10 +1292,23 @@ export async function unfreezeAttempt(
   // is how "the timer said one thing and the marking said another" happened in
   // the first place. Zero is a valid answer; it just has to be given.
   const call = httpsCallable<
-    { attemptId: string; grantedMs: number; note?: string },
+    { attemptId: string; grantedMs: number; note?: string;
+      penalties?: { questionMs?: number; sectionMs?: number; overallMs?: number } },
     { ok: true; elapsedMs: number; grantedMs: number; creditedFreezeMs: number }
   >(functions, 'unfreezeAttempt');
-  const res = await call({ attemptId, grantedMs, ...(note ? { note } : {}) });
+  // Only sent when something is actually being taken. An all-zero object would
+  // be indistinguishable from a real decision in the request log, and the
+  // server writes no ledger row for a zero anyway.
+  const anyPenalty = !!penalties && (
+    (penalties.questionMs ?? 0) > 0 ||
+    (penalties.sectionMs ?? 0) > 0 ||
+    (penalties.overallMs ?? 0) > 0
+  );
+  const res = await call({
+    attemptId, grantedMs,
+    ...(note ? { note } : {}),
+    ...(anyPenalty ? { penalties } : {}),
+  });
   return {
     elapsedMs: res.data.elapsedMs,
     grantedMs: res.data.grantedMs,

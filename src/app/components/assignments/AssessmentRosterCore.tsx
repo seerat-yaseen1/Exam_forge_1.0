@@ -302,7 +302,11 @@ function UnfreezeConfirmModal({
   studentName: string;
   attempt: Attempt;
   loading: boolean;
-  onConfirm: (grantedMs: number, note?: string) => void;
+  onConfirm: (
+    grantedMs: number,
+    note?: string,
+    penalties?: { questionMs: number; sectionMs: number; overallMs: number },
+  ) => void;
   onCancel: () => void;
 }) {
   const [frozenSecs, setFrozenSecs] = useState(() =>
@@ -355,6 +359,86 @@ function UnfreezeConfirmModal({
   // understated the pausing and overstated the credit at once.
   //
   // Shown as what it is: credit already given, and this pause separately.
+  // ══════════════════════════════════════════════════════════════
+  // PHASE 4.5 STAGE 2 — PENALTIES  (§4, §5, §10)
+  // ══════════════════════════════════════════════════════════════
+  //
+  // CAPS. What a clock will have once the student is released is:
+  //
+  //     clocksAtFreeze  −  pause elapsed  +  credit granted
+  //
+  // Not an approximation — it is the server's own arithmetic rearranged. The
+  // server caps against computeDeadlines on the credited attempt, which is
+  // (anchor + limit + grace + credit) − now; expand `now` as
+  // freezeInstant + elapsed and the two expressions are identical.
+  //
+  // Which is why the caps MOVE as you change the grant. Give back less and
+  // there is less to take away, because A4 promises no arithmetic that can go
+  // negative and the cap is what keeps that promise.
+  //
+  // The server clamps again regardless. If the two ever disagree the server
+  // wins and LESS is deducted than was asked for — the safe direction, and the
+  // one that cannot cost a student time nobody authorised.
+  const openFreeze = (attempt.freezes ?? []).find((f) => !f.endedAt);
+  const snap = openFreeze?.clocksAtFreeze ?? null;
+
+  // null means the clock was not running at all — no question in standard
+  // delivery, no section between sections, no configured cap. §10: the option
+  // is NOT OFFERED, rather than offered and silently doing nothing. 0 is a
+  // different fact (it had run out) and IS offered, with a cap of zero.
+  const capFor = (atFreeze: number | null | undefined): number | null => {
+    if (atFreeze === null || atFreeze === undefined) return null;
+    return Math.max(0, Math.round((atFreeze - frozenSecs * 1000 + grantNum * 1000) / 1000));
+  };
+  const caps = {
+    question: capFor(snap?.questionMs),
+    section:  capFor(snap?.sectionMs),
+    overall:  capFor(snap?.overallMs),
+  };
+
+  const [penQ, setPenQ] = useState('0');
+  const [penS, setPenS] = useState('0');
+  const [penO, setPenO] = useState('0');
+  const takeNum = (raw: string, cap: number | null): number =>
+    cap === null ? 0 : Math.max(0, Math.min(parseInt(raw || '0', 10) || 0, cap));
+  const takes = {
+    question: takeNum(penQ, caps.question),
+    section:  takeNum(penS, caps.section),
+    overall:  takeNum(penO, caps.overall),
+  };
+  const anyPenalty = takes.question + takes.section + takes.overall > 0;
+
+  // §5: deduction travels OUTWARD. A question deduction is also felt by the
+  // section and the total; a section deduction by the total; never inward.
+  const leftAfter = {
+    question: caps.question === null ? null
+      : Math.max(0, caps.question - takes.question),
+    section: caps.section === null ? null
+      : Math.max(0, caps.section - takes.section - takes.question),
+    overall: caps.overall === null ? null
+      : Math.max(0, caps.overall - takes.overall - takes.section - takes.question),
+  };
+
+  // §10: "Last question of the last section, maximum penalty — question →
+  // section → exam, all at once. Confirmation must say so before committing."
+  //
+  // Reported in CASCADE order, outermost first, because that is the order the
+  // consequences actually happen in: the total ending is what ends the
+  // section, which is what ends the question. Listing the question first would
+  // read as three separate events rather than one falling into the next.
+  const willEnd: string[] = [];
+  if (leftAfter.overall === 0 && caps.overall !== null) willEnd.push('the exam');
+  else if (leftAfter.section === 0 && caps.section !== null) willEnd.push('this section');
+  else if (leftAfter.question === 0 && caps.question !== null) willEnd.push('this question');
+  // A clock ending because its container ended is not a deduction on it (§5),
+  // so the cascade is named as consequence rather than listed as a peer.
+  const cascadeNote =
+    leftAfter.overall === 0 && caps.overall !== null
+      ? 'The section and the current question end with it.'
+      : leftAfter.section === 0 && caps.section !== null
+        ? 'The current question ends with it.'
+        : null;
+
   const alreadyCredited = attempt.totalFrozenSeconds ?? 0;
   const creditedLabel   = secsToLabel(alreadyCredited);
   const priorFreezes    = (attempt.freezes ?? []).filter((f) => f.endedAt).length;
@@ -489,12 +573,99 @@ function UnfreezeConfirmModal({
               style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: '#0C0C0B' }}
             />
           </div>
+
+          {/* ── §4: take time from a clock ────────────────────────── */}
+          {snap ? (
+            <div className="px-3 py-3"
+              style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+              <p className="text-xs mb-0.5" style={{ color: '#0C0C0B' }}>
+                Take time away (optional)
+              </p>
+              <p className="text-xs mb-2.5" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                Each is capped at what that clock will have. Taking the maximum ends that unit.
+              </p>
+
+              {([
+                ['question', 'Question', penQ, setPenQ] as const,
+                ['section',  'Section',  penS, setPenS] as const,
+                ['overall',  'Total',    penO, setPenO] as const,
+              ]).map(([key, label, val, setVal]) => {
+                const cap = caps[key];
+                // §10: not offered rather than offered-and-inert.
+                if (cap === null) {
+                  return (
+                    <div key={key} className="flex items-center gap-2 mb-1.5">
+                      <span className="text-xs w-16" style={{ color: '#C4C3BD' }}>{label}</span>
+                      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+                        not running — nothing to take
+                      </span>
+                    </div>
+                  );
+                }
+                const taken = takes[key];
+                const rem = leftAfter[key];
+                return (
+                  <div key={key} className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs w-16" style={{ color: '#4A4A45' }}>{label}</span>
+                    <input
+                      type="number" min={0} max={cap} value={val}
+                      onChange={(e) => setVal(e.target.value)}
+                      disabled={loading || cap === 0}
+                      className="text-xs px-2 py-1 w-20"
+                      style={{
+                        border: '1px solid #D8D6CF', borderRadius: 2,
+                        color: cap === 0 ? '#C4C3BD' : '#0C0C0B',
+                        background: cap === 0 ? '#F0EFEB' : '#FFFFFF',
+                      }}
+                    />
+                    <span className="text-xs" style={{ color: '#9A9891' }}>
+                      of {secsToLabel(cap)}
+                    </span>
+                    {taken > 0 && (
+                      <span className="text-xs" style={{ color: rem === 0 ? '#9B2828' : '#92680A' }}>
+                        → {rem === 0 ? 'ends' : `${secsToLabel(rem ?? 0)} left`}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // Pre-Phase-4.5 freezes have no snapshot. Say so rather than
+            // showing three inputs whose caps would be guesses.
+            <p className="text-xs px-3" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+              This pause was recorded before per-clock deductions were available,
+              so only the time-to-give-back decision applies.
+            </p>
+          )}
+
+          {/*
+            §10: "Confirmation must say so before committing."
+            Named explicitly, in cascade order, because ending a unit is a
+            consequence of the numbers above rather than something the
+            invigilator clicked — and nothing is reversible (§10).
+          */}
+          {willEnd.length > 0 && (
+            <div className="flex items-start gap-2.5 px-3 py-3"
+              style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+              <AlertCircle size={12} strokeWidth={1.5}
+                style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
+              <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+                This ends <strong>{willEnd[0]}</strong> for {studentName}.
+                {cascadeNote ? ` ${cascadeNote}` : ''} This cannot be undone.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button
-            onClick={() => onConfirm(grantNum * 1000, note.trim() || undefined)}
+            onClick={() => onConfirm(grantNum * 1000, note.trim() || undefined, {
+              questionMs: takes.question * 1000,
+              sectionMs:  takes.section  * 1000,
+              overallMs:  takes.overall  * 1000,
+            })}
             disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
@@ -2473,11 +2644,12 @@ export function AssessmentRosterCore({
 
   // ── Execute unfreeze (called from modal confirm) ───────────────
   const executeUnfreeze = useCallback(async (
-    attempt: Attempt, grantedMs: number, note?: string
+    attempt: Attempt, grantedMs: number, note?: string,
+    penalties?: { questionMs: number; sectionMs: number; overallMs: number },
   ) => {
     setPendingUnfreeze(null);
     setFreezeLoadingId(attempt.id);
-    try { await unfreezeAttempt(attempt.id, grantedMs, note); }
+    try { await unfreezeAttempt(attempt.id, grantedMs, note, penalties); }
     catch (e) { console.error('[Roster] unfreeze failed', e); }
     finally { setFreezeLoadingId(null); }
   }, []);
@@ -2817,8 +2989,8 @@ export function AssessmentRosterCore({
             studentName={pendingUnfreeze.studentName}
             attempt={pendingUnfreeze.attempt}
             loading={freezeLoadingId === pendingUnfreeze.attempt.id}
-            onConfirm={(grantedMs, note) =>
-              executeUnfreeze(pendingUnfreeze.attempt, grantedMs, note)}
+            onConfirm={(grantedMs, note, penalties) =>
+              executeUnfreeze(pendingUnfreeze.attempt, grantedMs, note, penalties)}
             onCancel={() => setPendingUnfreeze(null)}
           />
         )}

@@ -5667,9 +5667,36 @@ creditFrom) {
     const overallPenalty = creditFrom ? (0, examTimingCore_1.penaltyForClock)(creditFrom, 'overall', attemptStartedAtIso) : 0;
     const secMs = (0, examTimingCore_1.sectionDeadlineMs)(sectionStartedAtIso, sectionTimeLimitMin, a.sectionGraceSeconds, sectionCredit, sectionPenalty);
     const ovrMs = (0, examTimingCore_1.overallDeadlineMs)(attemptStartedAtIso, a.overallTimeLimit, a.overallGraceSeconds, overallCredit, overallPenalty);
+    // ── The availability window is part of the write gate (A-07) ────
+    //
+    // The note further up used to say the WINDOW and QUESTION bounds were
+    // "deliberately NOT folded in… that belongs to Phase 5". This is that step,
+    // for the window. resolve() has always treated endDate as a hard outer wall
+    // (R2/A10) and startExam refuses entry past it — but `answersLockedAfter`,
+    // the field firestore.rules actually enforces, ignored it. So between the
+    // window closing and the student's own overall deadline, the rules still let
+    // answers through: measured at a lock reading +181m on an exam whose window
+    // shut at +20m, with getExamVerdict already returning window_closed. The only
+    // thing standing in the way was the hourly sweep.
+    //
+    // It goes into `combined` ONLY. The split `section` / `overall` fields exist
+    // so the client can tell WHICH clock ran out, and a window closure is neither
+    // of them — folding it into either would make the shell report the wrong
+    // reason and, worse, advance a student to the next section when the exam is
+    // over.
+    //
+    // No freeze credit, matching computeDeadlines exactly:
+    // FREEZE_CREDIT_EXTENDS_WINDOW is false, because the window belongs to the
+    // institution rather than to the student's clocks.
+    //
+    // The QUESTION bound is still deliberately excluded. It is anchored on a
+    // served instant that moves several times a minute in sequential delivery,
+    // and materialising it would mean rewriting the lock on every question —
+    // where the callable path now enforces it directly (A-03).
+    const windowMs = (0, examTimingCore_1.toMs)(a.endDate);
     const section = secMs === null ? null : new Date(secMs);
     const overall = ovrMs === null ? null : new Date(ovrMs);
-    const bounds = [secMs, ovrMs].filter((x) => x !== null);
+    const bounds = [secMs, ovrMs, windowMs].filter((x) => x !== null);
     const combined = bounds.length === 0 ? null : new Date(Math.min(...bounds));
     return { section, overall, combined };
 }

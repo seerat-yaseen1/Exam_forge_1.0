@@ -694,17 +694,29 @@ function checkInvariants(a, asmt) {
         }
     }
     // ── INV-3 (state form) · the lock cache agrees with itself ──────
+    //
+    // A-07 widened what `combined` is a minimum OVER. It used to be
+    // min(section, overall); the availability window is now folded in too,
+    // because that is the field firestore.rules enforces and the window was the
+    // one wall the write gate could not see.
+    //
+    // So the combined lock may legitimately sit EARLIER than either split bound.
+    // The split pair keeps its exact meaning — it answers "which of the
+    // student's own clocks ran out", and a window closure is neither of them —
+    // which is why the window is not expected to appear in `section` or
+    // `overall`.
     const sec = toMs(a.sectionLockedAfter);
     const ovr = toMs(a.overallLockedAfter);
     const comb = toMs(a.answersLockedAfter);
+    const win = toMs(asmt.endDate);
     const bounds = [sec, ovr].filter((x) => x !== null);
     if (bounds.length > 0) {
-        const expect = Math.min(...bounds);
+        const expect = Math.min(...bounds, ...(win === null ? [] : [win]));
         if (comb === null) {
             v.push(err('INV-3', 'answersLockedAfter is null while a split bound exists'));
         }
         else if (Math.abs(comb - expect) > 1500) {
-            v.push(err('INV-3', 'answersLockedAfter is not min(section, overall)'));
+            v.push(err('INV-3', 'answersLockedAfter is not min(section, overall, window)'));
         }
     }
     // The D-01 signature: the section lock anchored to a section the student

@@ -31,6 +31,9 @@ import {
   getAllAttemptsByStudentAndAssessment,
   freezeAttempt,
   unfreezeAttempt,
+  gradeProvisional,
+  getProvisionalGrade,
+  type ProvisionalGrade,
   softDeleteAttempt,
   getBreakState,
   type Attempt,
@@ -1406,6 +1409,38 @@ function AttemptDrawer({
   const canFreeze   = (rosterStatus === 'in_progress') && !!attempt;
   const canUnfreeze = rosterStatus === 'frozen' && !!attempt;
 
+  // ── Phase 4.4 · provisional grade (A9) ──────────────────────────
+  //
+  // Lives in its own collection, never on the attempt, so the student cannot
+  // read it and it cannot go stale on a live sitting. unfreezeAttempt deletes
+  // it in the same transaction as the release, which is why this refetches
+  // whenever the freeze state changes: a cleared flag means the row is gone,
+  // and showing a mark that no longer exists would be the same class of
+  // wrongness the storage design exists to prevent.
+  const [provisional, setProvisional] = useState<ProvisionalGrade | null>(null);
+  const [provisionalBusy, setProvisionalBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!attempt?.id || !attempt.frozenAt) { setProvisional(null); return; }
+    void getProvisionalGrade(attempt.id).then((g) => {
+      if (!cancelled) setProvisional(g);
+    });
+    return () => { cancelled = true; };
+  }, [attempt?.id, attempt?.frozenAt]);
+
+  const runProvisional = useCallback(async () => {
+    if (!attempt?.id) return;
+    setProvisionalBusy(true);
+    try {
+      await gradeProvisional(attempt.id);
+      setProvisional(await getProvisionalGrade(attempt.id));
+    } catch (e) {
+      console.error('[Roster] provisional grade failed', e);
+    } finally {
+      setProvisionalBusy(false);
+    }
+  }, [attempt?.id]);
+
   // ── Which attempt's responses to show ─────────────────────────
   //
   // ResponseViewer used to be hardwired to `attempt` (the latest), so a
@@ -1483,6 +1518,30 @@ function AttemptDrawer({
               Flag session
             </button>
           )}
+          {/*
+            ── Phase 4.4 / A9: grade a paused sitting without ending it ──
+            Offered only while the flag is up, because that is the only state
+            in which a mark can be provisional. A live student has no need of
+            it; a finished one already has a real grade this must never shadow.
+          */}
+          {canUnfreeze && (
+            <button
+              onClick={() => { void runProvisional(); }}
+              disabled={provisionalBusy}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity"
+              style={{
+                background: '#FFFFFF', border: '1px solid #DDDBD5',
+                color: '#4A4A45', borderRadius: 2,
+                cursor: provisionalBusy ? 'not-allowed' : 'pointer',
+                opacity: provisionalBusy ? 0.5 : 1,
+              }}
+            >
+              {provisionalBusy
+                ? <Loader2 size={10} className="animate-spin" />
+                : <FileText size={11} strokeWidth={1.5} />}
+              {provisional ? 'Re-grade provisionally' : 'Grade provisionally'}
+            </button>
+          )}
           {canUnfreeze && (
             <button
               onClick={() => onRequestUnfreeze(attempt, student.name)}
@@ -1500,6 +1559,40 @@ function AttemptDrawer({
             </button>
           )}
         </div>
+
+        {/*
+          ── Phase 4.4 / A9: shown as a result, VISIBLY DISTINCT ──────
+          A9 requires a provisional mark to be legible as a result and
+          impossible to mistake for a submission. Hence the dashed border and
+          the explicit "not a submission" line: a percentage in a roster reads
+          as final unless something says otherwise, and the whole point of this
+          feature is that it is not.
+
+          Answered-count is shown alongside the score because A10 asks for a
+          near-empty result rather than a bare 0% — a student flagged on
+          question one has not failed, they have barely started, and those look
+          identical if you print the percentage alone.
+        */}
+        {provisional && rosterStatus === 'frozen' && (
+          <div className="mt-3 px-3 py-2.5"
+            style={{ background: '#FAFAF8', border: '1px dashed #C4C3BD', borderRadius: 2 }}>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+                PROVISIONAL — NOT A SUBMISSION
+              </p>
+              <p className="text-xs" style={{ color: '#9A9891' }}>
+                {formatRelative(provisional.gradedAt)}
+              </p>
+            </div>
+            <p className="text-sm" style={{ color: '#0C0C0B' }}>
+              {provisional.scores?.percentage ?? 0}% · {provisional.answeredCount} answered
+            </p>
+            <p className="text-xs mt-1" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+              Where this student had reached when the session was flagged. The
+              student cannot see this, and it is discarded when the flag is cleared.
+            </p>
+          </div>
+        )}
 
         {rosterStatus === 'frozen' && attempt?.frozenAt && (
           <div className="flex items-start gap-2 mt-3 px-3 py-2.5"

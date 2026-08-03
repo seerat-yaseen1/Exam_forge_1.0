@@ -1040,11 +1040,9 @@ exports.scheduledCloseExpiredAttempts = (0, scheduler_1.onSchedule)({
             const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
             const paper = {
                 assessment,
-                sections,
                 questionMap,
                 answerMap,
                 exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
-                coreAssessment: toCoreAssessment(assessment),
             };
             papers.set(assessmentId, paper);
             return paper;
@@ -1054,6 +1052,34 @@ exports.scheduledCloseExpiredAttempts = (0, scheduler_1.onSchedule)({
             papers.set(assessmentId, null);
             return null;
         }
+    }
+    // ── Per-attempt contract (A-05 / A-06) ────────────────────────
+    //
+    // `sections` and the resolver's view were cached PER ASSESSMENT, which was
+    // right while every attempt of an exam was marked against one live paper.
+    // They are per attempt now: each carries the paper and the clocks it was
+    // actually given, so two students of the same exam can legitimately differ
+    // (a shuffle, or a staff edit between their start times).
+    //
+    // The question/answer MAPS stay cached per assessment — they are keyed by
+    // question id, and re-reading them 500 times is the cost this cache exists
+    // to avoid. A frozen paper can name an id the live document no longer
+    // lists, so anything missing is topped up once and folded into the same
+    // cache. On the common path (no edit since publish) nothing is missing and
+    // this reads nothing.
+    async function contractFor(paper, attemptRaw) {
+        const live = paper.assessment;
+        const contract = examContractFor(attemptRaw, live) ?? live;
+        const sections = normalizeSections(contract);
+        const missing = Array.from(new Set(sections.flatMap((s) => s.questions.map((q) => q.questionId)))).filter((qid) => !paper.questionMap.has(qid));
+        if (missing.length > 0) {
+            const extra = await loadQuestionAndAnswerMaps(db, missing);
+            for (const [k, v] of extra.questionMap)
+                paper.questionMap.set(k, v);
+            for (const [k, v] of extra.answerMap)
+                paper.answerMap.set(k, v);
+        }
+        return { sections, coreAssessment: toCoreAssessment(contract) };
     }
     // ── The frozen branch, asking the RESOLVER (F9) ───────────────
     //
@@ -1077,7 +1103,7 @@ exports.scheduledCloseExpiredAttempts = (0, scheduler_1.onSchedule)({
             continue; // cannot prove the sitting over; leave it
         let endedReason = null;
         try {
-            const verdict = (0, examTimingCore_1.resolve)(toCoreAttempt(doc.data()), paper.coreAssessment, nowMs);
+            const verdict = (0, examTimingCore_1.resolve)(toCoreAttempt(doc.data()), (await contractFor(paper, doc.data())).coreAssessment, nowMs);
             // ANY 'ended', not only window_closed (widened 2026-08-03). While a
             // freeze is open the resolver pins every student clock at the freeze
             // instant, so 'ended' here means one of exactly two things: the
@@ -1160,7 +1186,7 @@ exports.scheduledCloseExpiredAttempts = (0, scheduler_1.onSchedule)({
         if (paperEarly && !item.wasFrozen) {
             try {
                 const core = toCoreAttempt(att);
-                const verdict = (0, examTimingCore_1.resolve)(core, paperEarly.coreAssessment, nowMs);
+                const verdict = (0, examTimingCore_1.resolve)(core, (await contractFor(paperEarly, att)).coreAssessment, nowMs);
                 if (verdict.kind !== 'ended') {
                     // ── D-30, restored (F8) ─────────────────────────────────
                     //
@@ -1249,8 +1275,10 @@ exports.scheduledCloseExpiredAttempts = (0, scheduler_1.onSchedule)({
         const paper = paperEarly;
         if (paper) {
             try {
+                // A-05: mark against the paper THIS attempt sat.
+                const { sections: attemptSections } = await contractFor(paper, att);
                 const { scores, gradedAnswers } = scoreAttemptAnswers({
-                    sections: paper.sections,
+                    sections: attemptSections,
                     questionMap: paper.questionMap,
                     answerMap: paper.answerMap,
                     answers: att.answers,
@@ -2900,7 +2928,10 @@ exports.gradeAttempt = (0, https_1.onCall)({ region: 'us-central1', secrets: [SE
     const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!assessmentSnap.exists)
         throw new https_1.HttpsError('not-found', 'Assessment not found.');
-    const assessment = assessmentSnap.data();
+    // A-05 / A-06: the paper and clocks THIS attempt was given, not whatever
+    // the assessment says now. Legacy attempts carry no snapshot and fall
+    // through to the live document, exactly as before.
+    const assessment = examContractFor(attempt, assessmentSnap.data());
     // ── Is this sitting actually OVER? Ask the resolver ────────────
     //
     // The old test was attemptWindowClosed(), which reads answersLockedAfter —
@@ -3781,7 +3812,9 @@ function assertSequentialAnswerWindowOpen(attempt, assessmentRaw, nowMs) {
     let evalNow;
     try {
         const core = toCoreAttempt(attempt);
-        const dl = (0, examTimingCore_1.computeDeadlines)(core, toCoreAssessment(assessmentRaw));
+        // A-06: the clocks this attempt was given, not the exam's current ones.
+        const contract = examContractFor(attempt, assessmentRaw) ?? assessmentRaw;
+        const dl = (0, examTimingCore_1.computeDeadlines)(core, toCoreAssessment(contract));
         endsAt = minNonNullMs(dl.sectionEndsAt, dl.overallEndsAt);
         evalNow = (0, examTimingCore_1.effectiveNowMs)(core, nowMs);
     }
@@ -4574,7 +4607,8 @@ function openFreezeUpdates(att, assessmentRaw, opts) {
     let clocksAtFreeze = null;
     try {
         if (assessmentRaw) {
-            clocksAtFreeze = snapshotClocks(toCoreAttempt(att), toCoreAssessment(assessmentRaw), Date.parse(opts.nowIso));
+            // A-06: snapshot against the contract this attempt is sitting under.
+            clocksAtFreeze = snapshotClocks(toCoreAttempt(att), toCoreAssessment(examContractFor(att, assessmentRaw) ?? assessmentRaw), Date.parse(opts.nowIso));
         }
     }
     catch {
@@ -4683,7 +4717,9 @@ function closeFreezeUpdates(att, assessmentRaw, opts) {
         freezes: ledger,
         creditedFreezeMs,
     };
-    const coreAsmt = assessmentRaw ? toCoreAssessment(assessmentRaw) : { sections: [] };
+    // A-06: every deadline this release recomputes is the attempt's own.
+    const contractRaw = assessmentRaw ? (examContractFor(att, assessmentRaw) ?? assessmentRaw) : null;
+    const coreAsmt = contractRaw ? toCoreAssessment(contractRaw) : { sections: [] };
     // Penalties, capped against the POST-CREDIT clock (A4).
     const dl = (0, examTimingCore_1.computeDeadlines)(creditedAttempt, coreAsmt);
     const remaining = (endsAt) => endsAt === null ? 0 : Math.max(0, endsAt - nowMs);
@@ -4759,7 +4795,8 @@ exports.gradeProvisional = (0, https_1.onCall)({ region: 'us-central1' }, async 
     const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!assessmentSnap.exists)
         throw new https_1.HttpsError('not-found', 'Assessment not found.');
-    const assessment = assessmentSnap.data();
+    // A-05: a provisional mark is still a mark; grade the paper they sat.
+    const assessment = examContractFor(attempt, assessmentSnap.data());
     const sections = normalizeSections(assessment);
     const qIds = Array.from(new Set(sections.flatMap((sec) => sec.questions.map((q) => q.questionId))));
     const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
@@ -4990,7 +5027,8 @@ exports.getExamVerdict = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
     if (!aSnap.exists)
         throw new https_1.HttpsError('not-found', 'Assessment not found.');
     const core = toCoreAttempt(att);
-    const coreAsmt = toCoreAssessment(aSnap.data());
+    // A-06: the student's screen renders the contract they started under.
+    const coreAsmt = toCoreAssessment(examContractFor(att, aSnap.data()));
     const serverNow = Date.now();
     const verdict = (0, examTimingCore_1.resolve)(core, coreAsmt, serverNow);
     // serverNow rides along so the client can measure its own skew against the
@@ -5365,6 +5403,14 @@ EXAM_HOT_PATH, async (request) => {
         // stored when the exam actually defines a policy (keeps legacy attempts
         // clean; absent === legacy scoring).
         ...(a.gradingConfig ? { gradingConfig: a.gradingConfig } : {}),
+        // ── Frozen paper + timing contract (A-05 / A-06) ──────────────
+        // The third snapshot on this document, and it exists for the same reason
+        // as the two above it: what a student is marked against, and the clocks
+        // they race, must be what they were given — not whatever the assessment
+        // says by the time anyone looks. `ordered` is this student's own play
+        // order, so a shuffle is captured too. See examContractFor for what is
+        // deliberately left reading live (the availability window).
+        examSnapshot: buildExamSnapshot(aSnap.data(), ordered),
         totalFrozenSeconds: 0,
         serverAnchored: true, // marks this attempt as using server-owned timestamps
         // Phase C — allocation provenance: which materialization admitted this
@@ -5574,6 +5620,88 @@ creditFrom) {
 // students rather than generated states.
 // ══════════════════════════════════════════════════════════════════
 /** Map a stored assessment onto the core's plain input shape. */
+/**
+ * The exam contract a given attempt is sitting under. (A-05 / A-06.)
+ *
+ * WHAT WENT WRONG. `securityLockedAt` freezes exactly seven fields —
+ * securityTier, deliveryMode, requireCamera, allowMobile,
+ * requireExtensionCheck, autoResume and the stamp itself (firestore.rules:571).
+ * `sections`, `questions` and every timing field are not among them, while
+ * grading marked against normalizeSections(THE LIVE DOC) and computeAttemptLocks
+ * read timeLimit / overallTimeLimit / the grace knobs from the LIVE DOC on every
+ * recompute.
+ *
+ * So an ordinary staff edit to a running exam reached students already sitting
+ * it. Two measured failures:
+ *
+ *   A-05  The builder re-draws rule-based sections AT RANDOM on every save with
+ *         status 'active' (DetailsStep -> resolveQuestionsForSections). A
+ *         student who had answered every question correctly scored 30/40: their
+ *         correct answer to a question the re-draw had removed was discarded,
+ *         and a question they were never shown was counted as a blank.
+ *   A-06  Editing overallTimeLimit from 120 to 20 moved a live student's
+ *         deadline 100 minutes earlier, retroactively, and flipped their
+ *         verdict to 'ended'.
+ *
+ * THE FIX IS TO FREEZE, NOT TO FORBID. Locking the fields in the rules would
+ * also block legitimate repairs to an exam nobody has started yet, and would
+ * not help the attempts already running. Freezing the contract onto the attempt
+ * is the pattern this codebase already uses twice — `securityConfig` and
+ * `gradingConfig` are both snapshotted at startExam for exactly this reason —
+ * so this extends it to the two things that were left reading live.
+ *
+ * WHAT IS DELIBERATELY NOT FROZEN: startDate and endDate. The availability
+ * window is the institution's outer wall, not one of the student's clocks (A10,
+ * and the reason resolve() races it against real time while every other
+ * deadline pauses). Staff closing an exam early or extending it is an
+ * admissions decision that must keep working, so the merge below lets those —
+ * and everything else the snapshot does not name, such as passingScore and the
+ * review audiences, which regradeAttempts exists to re-apply — come from the
+ * live document.
+ *
+ * LEGACY ATTEMPTS carry no snapshot and fall through to the live document,
+ * which is exactly today's behaviour. Nothing in flight changes on deploy.
+ */
+function examContractFor(attempt, liveAssessment) {
+    const snap = attempt.examSnapshot;
+    if (!snap || !Array.isArray(snap.sections))
+        return liveAssessment;
+    // Frozen paper + frozen timing OVER the live doc, so fields the snapshot
+    // deliberately omits still track the assessment.
+    return { ...(liveAssessment ?? {}), ...snap };
+}
+/**
+ * Build the frozen contract, at startExam, from the sections actually played.
+ *
+ * `ordered` is the per-student play order after any shuffle, so the snapshot
+ * records the paper THIS student was given — not the builder's list. Marks and
+ * order ride along because grading needs them; timeLimit, questionTimeLimit and
+ * breakAfter because the clocks do.
+ */
+function buildExamSnapshot(a, ordered) {
+    const rawSections = (a.sections ?? []);
+    const rawById = new Map(rawSections.map((s) => [s.id, s]));
+    return {
+        sections: ordered.map((s) => stripUndefined({
+            id: s.id,
+            name: s.name,
+            questions: s.questions.map((q) => stripUndefined({
+                questionId: q.questionId, marks: q.marks, order: q.order,
+            })),
+            timeLimit: rawById.get(s.id)?.timeLimit,
+            questionTimeLimit: s.questionTimeLimit,
+            breakAfter: rawById.get(s.id)?.breakAfter,
+        })),
+        ...stripUndefined({
+            overallTimeLimit: a.overallTimeLimit,
+            overallGraceSeconds: a.overallGraceSeconds,
+            sectionGraceSeconds: a.sectionGraceSeconds,
+            questionGraceSeconds: a.questionGraceSeconds,
+            sectionStartOrder: a.sectionStartOrder,
+            deliveryMode: a.deliveryMode,
+        }),
+    };
+}
 function toCoreAssessment(raw) {
     const doc = raw;
     // normalizeSections gives the same question sets grading uses; the raw
@@ -5710,7 +5838,7 @@ project) {
     try {
         const a0 = toCoreAttempt(attemptRaw);
         const a = project ? project(a0) : a0;
-        const asmt = toCoreAssessment(assessmentRaw);
+        const asmt = toCoreAssessment(examContractFor(attemptRaw, assessmentRaw) ?? assessmentRaw);
         const verdict = (0, examTimingCore_1.resolve)(a, asmt, Date.now());
         if (!decided.includes(verdict.kind)) {
             console.log(`[timing/${where}] verdict=${verdict.kind}` +
@@ -5952,7 +6080,9 @@ exports.startSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
         const prevTiming = attempt.sectionTimings[prevId];
         if (prevTiming?.submittedAt) {
             const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
-            const a = aSnap.data();
+            // A-06: break schedule comes from the frozen contract too — a break
+            // added or removed mid-sitting must not reach a student already in it.
+            const a = examContractFor(attempt, aSnap.data());
             const brk = breakAfterCompletion(a?.sections, attempt.sectionIds, idx);
             if (brk && brk.mandatory) {
                 // ── A break is a clock, and it is credited too (F6 / D-29) ──
@@ -5985,7 +6115,12 @@ exports.startSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
     // shape. One extra document read per section start is a fair price for the
     // rule that stops a student answering after their time is gone.
     const lockSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
-    const lockA = (lockSnap.data() ?? {});
+    // A-06: timing comes from the contract this attempt is sitting under, so a
+    // live edit to timeLimit / overallTimeLimit / grace cannot move the
+    // deadline of a student already inside the exam. blockedStudents is
+    // deliberately live — a block is an invigilation decision taken NOW, and
+    // the snapshot does not carry it, so it arrives through the merge.
+    const lockA = (examContractFor(attempt, lockSnap.data()) ?? {});
     // D-21: reuses the read this line already performs — no extra cost.
     assertNotBlocked(lockA, studentId);
     // Phase 3b shadow — the resolver's view of a section that is starting.
@@ -6091,7 +6226,11 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
     const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!aSnap.exists)
         throw new https_1.HttpsError('not-found', 'Assessment not found.');
-    const a = aSnap.data();
+    // A-06: one contract, used by the break schedule, both deadline gates and
+    // every lock recompute below. blockedStudents rides in live through the
+    // merge — see examContractFor.
+    const contractRaw = examContractFor(attempt, aSnap.data());
+    const a = contractRaw;
     // D-21: a block must stop the sitting advancing, not only a reload.
     assertNotBlocked(a, studentId);
     // ── Server-side pause decision (positional breaks) ───────────────
@@ -6184,7 +6323,7 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
     // a freeze is open (4.3). This gate and the resolver cannot disagree,
     // because they are the same function.
     const gateCore = toCoreAttempt(attempt);
-    const gateAsmt = toCoreAssessment(aSnap.data());
+    const gateAsmt = toCoreAssessment(contractRaw);
     const gateDl = (0, examTimingCore_1.computeDeadlines)(gateCore, gateAsmt);
     const evalNow = (0, examTimingCore_1.effectiveNowMs)(gateCore, serverNow);
     // ── Overall exam deadline (hard cut) ─────────────────────────────

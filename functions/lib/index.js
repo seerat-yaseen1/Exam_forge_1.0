@@ -5995,7 +5995,8 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
     if (role !== 'student' || !studentId) {
         throw new https_1.HttpsError('permission-denied', 'Only students may submit a section.');
     }
-    const { attemptId, sectionId, nextSectionId, nextSectionIdx, pauseBeforeNext } = request.data || {};
+    // nextSectionIdx is deliberately NOT destructured — see the interface.
+    const { attemptId, sectionId, nextSectionId, pauseBeforeNext } = request.data || {};
     if (!attemptId || !sectionId) {
         throw new https_1.HttpsError('invalid-argument', 'attemptId and sectionId are required.');
     }
@@ -6036,6 +6037,56 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
         ? breakAfterCompletion(a.sections, attempt.sectionIds, playIdx + 1)
         : null;
     const mandatoryBreakDue = !!(breakDue && breakDue.mandatory);
+    // ── Which section, if any, this call may advance INTO (A-02) ─────
+    //
+    // `nextSectionId` and `nextSectionIdx` arrive from request.data and were
+    // used verbatim: written as a dot-path key onto sectionTimings, assigned
+    // straight to currentSectionIdx, and — the part that mattered — used to
+    // re-anchor answersLockedAfter, which is the field firestore.rules gates
+    // every answer write on.
+    //
+    // Naming the section being submitted was therefore a TIME EXPLOIT. The one
+    // update both closed SA and re-opened it, and the lock was recomputed as
+    // `now + SA's full time limit`. Measured at +30:30 → +56:00 on a single
+    // call, repeatable, and unbounded on the very ordinary configuration of
+    // per-section limits with no overall cap. It also rewrote the section's own
+    // startedAt, which is INV-9 ("a section's start instant never moves").
+    //
+    // Everything below is a rule startSection has always enforced (:7941 for
+    // "already started", :7960 for INV-1). This branch is the same transition
+    // and simply never acquired them.
+    //
+    // ONE CASE IS NOT AN ATTACK AND MUST NOT THROW: a retry after a lost
+    // response. The client re-sends the same submit, the next section is by
+    // then legitimately started, and the desired end state is exactly what is
+    // already stored. That is an idempotent no-op — the advance WRITES are
+    // skipped, so nothing is re-anchored, and the call still succeeds and still
+    // returns the served question. Turning a dropped response into a hard error
+    // would strand a student for a network blip.
+    const requestedNext = typeof nextSectionId === 'string' && nextSectionId
+        ? nextSectionId : null;
+    const playedIds = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
+    let advanceTo = null;
+    let advanceIdx = -1;
+    let advanceAlreadyStarted = false;
+    if (requestedNext) {
+        if (requestedNext === sectionId) {
+            throw new https_1.HttpsError('invalid-argument', 'SECTION_ADVANCE_INVALID: a section cannot advance into itself.');
+        }
+        advanceIdx = playedIds.indexOf(requestedNext);
+        if (advanceIdx < 0) {
+            throw new https_1.HttpsError('invalid-argument', 'SECTION_ADVANCE_INVALID: that section is not part of this attempt.');
+        }
+        if (attempt.sectionTimings?.[requestedNext]?.submittedAt) {
+            throw new https_1.HttpsError('invalid-argument', 'SECTION_ADVANCE_INVALID: that section is already finished.');
+        }
+        advanceAlreadyStarted = !!attempt.sectionTimings?.[requestedNext]?.startedAt;
+        advanceTo = requestedNext;
+    }
+    // currentSectionIdx is DERIVED, never taken from the caller. It is only a
+    // convenience mirror of the play order — the timings are the record — but a
+    // caller-set index is still state nobody authored.
+    const advanceIdxSafe = advanceIdx;
     const startedMs = new Date(timing.startedAt).getTime();
     const serverNow = Date.now();
     const timeUsedSeconds = Math.max(0, Math.floor((serverNow - startedMs) / 1000));
@@ -6117,15 +6168,15 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
                 [`sectionTimings.${sectionId}.timeUsedSeconds`]: cappedUsed,
                 updatedAt: new Date().toISOString(),
             };
-            if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
+            if (advanceTo && !advanceAlreadyStarted && !pauseBeforeNext && !mandatoryBreakDue) {
                 const lateNextStartIso = new Date().toISOString();
-                lateUpdates.currentSectionIdx = nextSectionIdx;
-                lateUpdates[`sectionTimings.${nextSectionId}.startedAt`] = lateNextStartIso;
-                lateUpdates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
+                lateUpdates.currentSectionIdx = advanceIdxSafe;
+                lateUpdates[`sectionTimings.${advanceTo}.startedAt`] = lateNextStartIso;
+                lateUpdates[`sectionTimings.${advanceTo}.timeUsedSeconds`] = 0;
                 // D-01: recompute the write lock for the section being ENTERED.
                 // Same reasoning as the on-time branch below — see the note there.
                 const lateCore = toCoreAttempt(attempt);
-                applyLockUpdates(lateUpdates, computeAttemptLocks(attempt.startedAt, lateNextStartIso, a.sections?.find((s) => s.id === nextSectionId)?.timeLimit, a, lateCore));
+                applyLockUpdates(lateUpdates, computeAttemptLocks(attempt.startedAt, lateNextStartIso, a.sections?.find((s) => s.id === advanceTo)?.timeLimit, a, lateCore));
                 // D-35: anchors for the section being ENTERED, so its credit is 0
                 // rather than the departing section's.
                 applyCreditUpdates(lateUpdates, lateCore, {
@@ -6147,7 +6198,7 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
     let nextQuestion = null;
     // Phase 3b shadow — what would the resolver have said about the state as
     // it stands the instant before this write? Reported, never acted on.
-    auditTiming('submitSection', attemptId, attempt, aSnap.data(), !nextSectionId ? ['ended']
+    auditTiming('submitSection', attemptId, attempt, aSnap.data(), !advanceTo ? ['ended']
         : mandatoryBreakDue ? ['break']
             // pauseBeforeNext is the client saying "stop here" — which it does for
             // a break OR for student-choice. Either verdict agrees.
@@ -6162,10 +6213,14 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
             [sectionId]: { ...core.sectionTimings?.[sectionId], submittedAt: nowIso },
         },
     }));
-    if (nextSectionId && !pauseBeforeNext && !mandatoryBreakDue) {
-        updates.currentSectionIdx = nextSectionIdx;
-        updates[`sectionTimings.${nextSectionId}.startedAt`] = nowIso;
-        updates[`sectionTimings.${nextSectionId}.timeUsedSeconds`] = 0;
+    if (advanceTo && !pauseBeforeNext && !mandatoryBreakDue) {
+        // A-02: skipped on a retry whose advance already landed, so a lost
+        // response cannot re-anchor a lock or move a section's start instant.
+        if (!advanceAlreadyStarted) {
+            updates.currentSectionIdx = advanceIdxSafe;
+            updates[`sectionTimings.${advanceTo}.startedAt`] = nowIso;
+            updates[`sectionTimings.${advanceTo}.timeUsedSeconds`] = 0;
+        }
         // ── Recompute the answer-write lock (D-01, master plan Phase 1) ──
         //
         // THIS IS THE FIX FOR THE WORST BUG IN THE MODULE. Read this before
@@ -6196,7 +6251,7 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
         // combined lock is a minimum over a CHANGING active section, so it has
         // no monotonicity property. Only the per-section and overall bounds do.
         const advCore = toCoreAttempt(attempt);
-        applyLockUpdates(updates, computeAttemptLocks(attempt.startedAt, nowIso, a.sections?.find((s) => s.id === nextSectionId)?.timeLimit, a, advCore));
+        applyLockUpdates(updates, computeAttemptLocks(attempt.startedAt, nowIso, a.sections?.find((s) => s.id === advanceTo)?.timeLimit, a, advCore));
         applyCreditUpdates(updates, advCore, {
             sectionStartedAt: nowIso,
             questionServedAt: nowIso,
@@ -6210,8 +6265,8 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
         const dMode = attempt.securityConfig?.deliveryMode ?? 'standard';
         if (dMode === 'linear' || dMode === 'adaptive') {
             const served = attempt.servedQuestions ?? [];
-            const existingHere = served.find((s) => s.sectionId === nextSectionId);
-            const firstQid = existingHere?.questionId ?? attempt.questionOrder?.[nextSectionId]?.[0];
+            const existingHere = served.find((s) => s.sectionId === advanceTo);
+            const firstQid = existingHere?.questionId ?? attempt.questionOrder?.[advanceTo]?.[0];
             if (firstQid) {
                 const qSnap = await db.collection('questions').doc(firstQid).get();
                 if (qSnap.exists) {
@@ -6240,7 +6295,7 @@ exports.submitSection = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
                         // reader to tolerate it.
                         updates.servedQuestions = appendServedQuestion(served, {
                             questionId: firstQid,
-                            sectionId: nextSectionId,
+                            sectionId: advanceTo,
                             difficulty: qData.difficulty ?? 'medium',
                             servedAt: nowIso,
                             locked: false,

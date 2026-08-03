@@ -2593,6 +2593,34 @@ function resolveGradingPolicyS(config, sectionId, difficulty) {
         blankScore,
     };
 }
+/**
+ * Marks for one answered question, penalty included. THE single expression of
+ * "Option A" — the rule both engines are graded by.
+ *
+ *   any positive score        -> that score, untouched
+ *   nothing right at all      -> minus the configured penalty
+ *   right and wrong cancelling-> ZERO. Not a penalty. (A-08.)
+ *
+ * The third line is the fix. Both call sites used to read
+ * `multiplier > 0 ? multiplier * marks : -penalty`, directly under a comment
+ * promising "negative marking applies ONLY to a FULLY wrong answer… any
+ * correct/partial content keeps its positive award untouched". For multi-select
+ * that is not what `multiplier === 0` means: the multiplier is
+ * max(0, (hits − wrongs) / |correct|), so a student who picked one of two
+ * correct options and one wrong one lands on exactly 0 and took the full
+ * penalty — the identical mark given to a student who picked only wrong
+ * options, and worse than the zero given to one who left it blank.
+ *
+ * Expressed once now rather than duplicated per engine, because the divergence
+ * this fixes was two copies of one rule drifting from the sentence above them.
+ */
+function awardFor(outcome, policy, questionMarks) {
+    if (outcome.multiplier > 0)
+        return outcome.multiplier * questionMarks;
+    if (outcome.anyCorrect)
+        return 0;
+    return -penaltyFor(policy, questionMarks);
+}
 // Compute the penalty (a POSITIVE number to subtract) for a fully-wrong answer
 // under a resolved policy, given the question's own marks.
 function penaltyFor(policy, questionMarks) {
@@ -2607,7 +2635,8 @@ function scoreMCQMultiplier(q, ans, value) {
     if (q.variant === 'single' || q.variant === 'truefalse' || q.variant === 'fillblank') {
         const selected = typeof value === 'string' ? value : '';
         const isCorrect = ans.correctIds.includes(selected);
-        return { multiplier: isCorrect ? 1 : 0, isCorrect };
+        // One selection: "any correct content" and "correct" are the same question.
+        return { multiplier: isCorrect ? 1 : 0, isCorrect, anyCorrect: isCorrect };
     }
     if (q.variant === 'multi') {
         const selected = Array.isArray(value) ? value : [];
@@ -2622,24 +2651,31 @@ function scoreMCQMultiplier(q, ans, value) {
         }
         const raw = correct.size > 0 ? (hits - wrongs) / correct.size : 0;
         const mult = Math.max(0, raw);
-        return { multiplier: mult, isCorrect: mult === 1 };
+        // A-08: hits, not the multiplier. A student who found one of two correct
+        // options and added one wrong one nets to zero — they knew something, and
+        // the penalty is reserved for knowing nothing.
+        return { multiplier: mult, isCorrect: mult === 1, anyCorrect: hits > 0 };
     }
-    return { multiplier: 0, isCorrect: false };
+    return { multiplier: 0, isCorrect: false, anyCorrect: false };
 }
 function scoreMatchMultiplier(ans, value) {
     if (typeof value !== 'object' || Array.isArray(value)) {
-        return { multiplier: 0, isCorrect: false };
+        return { multiplier: 0, isCorrect: false, anyCorrect: false };
     }
     const m = value;
-    if (ans.correctPairs.length === 0)
-        return { multiplier: 0, isCorrect: false };
+    if (ans.correctPairs.length === 0) {
+        return { multiplier: 0, isCorrect: false, anyCorrect: false };
+    }
     let correct = 0;
     for (const pair of ans.correctPairs) {
         if (m[pair.leftId] === pair.rightId)
             correct++;
     }
     const mult = correct / ans.correctPairs.length;
-    return { multiplier: mult, isCorrect: mult === 1 };
+    // Match never had the multi-select problem — correct/total is zero only when
+    // nothing matched — but it states the rule the same way so the two engines
+    // cannot drift into applying one policy differently.
+    return { multiplier: mult, isCorrect: mult === 1, anyCorrect: correct > 0 };
 }
 function reviewAudienceAllows(assessment, audience) {
     const list = Array.isArray(assessment.allowReviewTo)
@@ -2791,24 +2827,20 @@ function scoreAttemptAnswers(params) {
             else if (studentAnswer && q && ans) {
                 answered++;
                 if (q.engine === 'mcq') {
-                    const { multiplier, isCorrect } = scoreMCQMultiplier(q, ans, studentAnswer.value);
-                    // Option A: negative marking applies ONLY to a FULLY wrong answer
-                    // (multiplier 0). Any correct/partial content keeps its positive
-                    // award untouched — negative marking and partial credit stay
-                    // cleanly separated (partial credit is its own future feature).
-                    const award = multiplier > 0 ? multiplier * aq.marks : -penaltyFor(policy, aq.marks);
+                    const outcome = scoreMCQMultiplier(q, ans, studentAnswer.value);
+                    const award = awardFor(outcome, policy, aq.marks);
                     sectionAwarded += award;
                     totalAwarded += award;
                     exposed.marksAwarded = award;
-                    exposed.isCorrect = isCorrect;
+                    exposed.isCorrect = outcome.isCorrect;
                 }
                 else if (q.engine === 'match') {
-                    const { multiplier, isCorrect } = scoreMatchMultiplier(ans, studentAnswer.value);
-                    const award = multiplier > 0 ? multiplier * aq.marks : -penaltyFor(policy, aq.marks);
+                    const outcome = scoreMatchMultiplier(ans, studentAnswer.value);
+                    const award = awardFor(outcome, policy, aq.marks);
                     sectionAwarded += award;
                     totalAwarded += award;
                     exposed.marksAwarded = award;
-                    exposed.isCorrect = isCorrect;
+                    exposed.isCorrect = outcome.isCorrect;
                 }
                 else {
                     // text engine — needs human grading

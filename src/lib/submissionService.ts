@@ -185,7 +185,10 @@ export type AttemptScores = {
   total: number;                   // sum of awarded marks
   available: number;               // maximum possible marks
   percentage: number;              // (total / available) * 100
-  passed: boolean;                 // met passingScore threshold (if defined)
+  // G-02: null while the paper still awaits manual marking — a pass/fail
+  // statement before every awardable mark is awarded is a verdict on
+  // marking that has not happened. Render three states, never two.
+  passed: boolean | null;          // met passingScore threshold (if defined)
   bySection: SectionScore[];
   requiresManualReview: boolean;   // true if any textual questions need human grading
 };

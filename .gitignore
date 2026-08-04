@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Lockfiles — this repo does not track them (no pnpm-lock.yaml at the root
+# either); installs are resolved from the manifests.
+package-lock.json
+pnpm-lock.yaml
+
+# Build outputs.
+#
+# functions/lib/ IS ignored now, and the reason is the Figma Make round-trip.
+# The project's source of truth is the Make file; every "Update files from
+# Figma Make" push therefore deletes lib/ (Make does not hold it), and every
+# local `npm run build` recreates it — so a tracked lib/ produced an ~8,000
+# line add/delete churn on alternate commits and, worse, made real source
+# diffs hard to see inside it.
+#
+# Nothing depends on it being committed: firebase.json's predeploy runs
+# `npm run build` before every deploy, and the test suites build it locally.
+# This is also the prior audit's M2 recommendation, arrived at independently.
+functions/lib/
+functions/timing-core.cjs
+functions/.tmp-core/
+
+# Local env / editor
+.env
+.env.local
+.DS_Store

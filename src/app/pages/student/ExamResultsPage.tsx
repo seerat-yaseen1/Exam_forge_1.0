@@ -49,12 +49,17 @@ function formatDate(iso: string): string {
 
 // ── Score ring (SVG donut) ─────────────────────────────────────────
 
-function ScoreRing({ pct, passed }: { pct: number; passed: boolean }) {
+// G-02: `passed` is three-state. Null means the paper still has answers a
+// human must mark, so the ring shows an amber "PENDING" rather than stamping
+// FAILED in red over a score that is only a floor.
+function ScoreRing({ pct, passed }: { pct: number; passed: boolean | null }) {
   const r   = 42;
   const circ = 2 * Math.PI * r;
   const dash = circ * Math.min(1, pct / 100);
 
-  const color = passed ? '#1E7B3C' : '#9B2828';
+  const color = passed === true ? '#1E7B3C'
+    : passed === false ? '#9B2828'
+    : '#92680A';
 
   return (
     <svg width={110} height={110} viewBox="0 0 110 110">
@@ -76,7 +81,7 @@ function ScoreRing({ pct, passed }: { pct: number; passed: boolean }) {
         {pct}%
       </text>
       <text x={55} y={66} textAnchor="middle" style={{ fontSize: 10, fill: '#9A9891' }}>
-        {passed ? 'PASSED' : 'FAILED'}
+        {passed === true ? 'PASSED' : passed === false ? 'FAILED' : 'PENDING'}
       </text>
     </svg>
   );
@@ -532,20 +537,35 @@ export function ExamResultsPage() {
                       ))}
                     </div>
                     {assessment.passingScore !== undefined && (
+                      // G-02: three states, not two. `passed === null` means the
+                      // paper still has answers a human must mark, and telling a
+                      // student "Did not pass" on a score that cannot yet be
+                      // final is the one outcome this screen must never produce.
                       <div
                         className="flex items-center gap-2 px-3 py-2"
                         style={{
-                          background: attempt.scores.passed ? '#F0F9F4' : '#FDF5F5',
-                          border: `1px solid ${attempt.scores.passed ? '#B8E6C8' : '#F2CECE'}`,
+                          background: attempt.scores.passed === true ? '#F0F9F4'
+                            : attempt.scores.passed === false ? '#FDF5F5'
+                            : '#FDF8EC',
+                          border: `1px solid ${attempt.scores.passed === true ? '#B8E6C8'
+                            : attempt.scores.passed === false ? '#F2CECE'
+                            : '#EBD9A8'}`,
                           borderRadius: 2, display: 'inline-flex',
                         }}
                       >
-                        {attempt.scores.passed
+                        {attempt.scores.passed === true
                           ? <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
-                          : <XCircle size={12} strokeWidth={1.5} style={{ color: '#9B2828' }} />
+                          : attempt.scores.passed === false
+                            ? <XCircle size={12} strokeWidth={1.5} style={{ color: '#9B2828' }} />
+                            : <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#92680A' }} />
                         }
-                        <p className="text-xs" style={{ color: attempt.scores.passed ? '#1E7B3C' : '#9B2828' }}>
-                          {attempt.scores.passed ? 'Passed' : 'Did not pass'}
+                        <p className="text-xs" style={{
+                          color: attempt.scores.passed === true ? '#1E7B3C'
+                            : attempt.scores.passed === false ? '#9B2828'
+                            : '#92680A' }}>
+                          {attempt.scores.passed === true ? 'Passed'
+                            : attempt.scores.passed === false ? 'Did not pass'
+                            : 'Result pending — awaiting marking'}
                           {' '}(pass mark: {assessment.passingScore}%)
                         </p>
                       </div>

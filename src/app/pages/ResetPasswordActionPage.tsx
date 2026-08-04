@@ -163,8 +163,8 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
 
           {stage === 'verifying' && (
             <div className="flex flex-col items-center py-8">
-              <Loader2 size={24} strokeWidth={1.5} className="animate-spin" style={{ color: '#9A9891' }} />
-              <p className="text-xs mt-4" style={{ color: '#9A9891' }}>Verifying your reset link…</p>
+              <Loader2 size={24} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
+              <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Verifying your reset link…</p>
             </div>
           )}
 
@@ -173,7 +173,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
               <div className="flex flex-col items-center py-6">
                 <AlertTriangle size={30} strokeWidth={1} style={{ color: '#9B2828' }} />
                 <p className="text-sm mt-4" style={{ color: '#0C0C0B' }}>Reset link expired</p>
-                <p className="text-xs mt-2 text-center" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                   This password-reset link is invalid, has expired, or has already been used.
                   Reset links can only be opened once. Please request a new one.
                 </p>
@@ -191,7 +191,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
               <div className="flex flex-col items-center py-6">
                 <CheckCircle2 size={32} strokeWidth={1} style={{ color: '#2A6B3A' }} />
                 <p className="text-sm mt-4" style={{ color: '#0C0C0B' }}>Password updated</p>
-                <p className="text-xs mt-2 text-center" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                   Your password has been set. You may now sign in with your new credentials.
                 </p>
                 <button onClick={() => navigate(loginPath, { replace: true })}
@@ -205,10 +205,10 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
 
           {stage === 'form' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+              <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                 SET A NEW PASSWORD
               </p>
-              <p className="text-xs mb-6" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
+              <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                 For <span style={{ color: '#4A4A45' }}>{accountEmail}</span>. Choose a strong password you haven't used before.
               </p>
 
@@ -225,7 +225,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
                       style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
                     <button type="button" onClick={() => setShowNew((v) => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2"
-                      style={{ color: '#9A9891' }} tabIndex={-1}>
+                      style={{ color: '#6B6B66' }} tabIndex={-1}>
                       {showNew ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   </div>
@@ -244,7 +244,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
                       style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
                     <button type="button" onClick={() => setShowConfirm((v) => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2"
-                      style={{ color: '#9A9891' }} tabIndex={-1}>
+                      style={{ color: '#6B6B66' }} tabIndex={-1}>
                       {showConfirm ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   </div>
@@ -273,7 +273,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
 
           <Link to={loginPath}
             className="flex items-center justify-center gap-1.5 mt-5 text-xs"
-            style={{ color: '#9A9891' }}>
+            style={{ color: '#6B6B66' }}>
             <ArrowLeft size={12} /> Back to sign in
           </Link>
         </div>

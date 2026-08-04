@@ -38,7 +38,7 @@ function formatSyncAge(d: Date) {
 
 // Multi-value metadata pills
 function MetaPills({ values }: { values?: string[] }) {
-  if (!values?.length) return <span style={{ color: '#C4C3BD' }}>—</span>;
+  if (!values?.length) return <span style={{ color: '#6B6B66' }}>—</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {values.map((v, i) => (
@@ -233,7 +233,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
         <div className="flex items-center gap-4">
           {!loading && total > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3">
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 {total} {total === 1 ? 'student' : 'students'}
               </span>
               <span style={{ color: '#E3E1DB' }}>·</span>
@@ -241,7 +241,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
               {disabled > 0 && (
                 <>
                   <span style={{ color: '#E3E1DB' }}>·</span>
-                  <span className="text-xs" style={{ color: '#9A9891' }}>{disabled} disabled</span>
+                  <span className="text-xs" style={{ color: '#6B6B66' }}>{disabled} disabled</span>
                 </>
               )}
             </motion.div>
@@ -253,7 +253,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                   style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
                 <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
               </div>
-              <span className="text-xs" style={{ color: '#C4C3BD' }}>{syncDisplay}</span>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>{syncDisplay}</span>
             </div>
           )}
         </div>
@@ -293,7 +293,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
             <p className="text-xs flex-1" style={{ color: emailNotice.ok ? '#2A6B3A' : '#9B2828' }}>
               {emailNotice.message}
             </p>
-            <button onClick={() => setEmailNotice(null)} style={{ color: '#C4C3BD' }}>
+            <button onClick={() => setEmailNotice(null)} style={{ color: '#6B6B66' }}>
               <X size={11} strokeWidth={1.5} />
             </button>
           </motion.div>
@@ -319,7 +319,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
               {['STUDENT', 'ROLE', 'STATUS', 'PROGRAM / GROUP', 'ENROLLED', ''].map((col, i) => (
                 <th key={i} className="text-left px-5 py-3 text-xs"
                   style={{
-                    color: '#9A9891', letterSpacing: '0.08em', fontWeight: 400,
+                    color: '#6B6B66', letterSpacing: '0.08em', fontWeight: 400,
                     width: i === 0 ? '28%' : i === 1 ? '10%' : i === 2 ? '12%' : i === 3 ? '22%' : i === 4 ? '14%' : '14%',
                   }}>
                   {col}
@@ -336,7 +336,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                 <td colSpan={6}>
                   <div className="flex flex-col items-center py-16">
                     <GraduationCap size={28} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-                    <p className="text-xs mt-4" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>
+                    <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                       No students enrolled
                     </p>
                     <p className="text-xs mt-1" style={{ color: '#DDDBD5' }}>
@@ -377,7 +377,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                   {/* Name + email */}
                   <td className="px-5 py-3.5">
                     <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.4 }}>{student.name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{student.email}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{student.email}</p>
                   </td>
 
                   {/* Role */}
@@ -393,10 +393,10 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                     <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                       style={student.status === 'active'
                         ? { background: '#F0F7F2', color: '#2A6B3A', border: '1px solid #C6DECE', borderRadius: 2 }
-                        : { background: '#F5F5F3', color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                        : { background: '#F5F5F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                       <span style={{
                         width: 5, height: 5, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
-                        background: student.status === 'active' ? '#2A6B3A' : '#C4C3BD',
+                        background: student.status === 'active' ? '#2A6B3A' : '#6B6B66',
                       }} />
                       {student.status === 'active' ? 'Active' : 'Disabled'}
                     </span>
@@ -412,16 +412,16 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                         <MetaPills values={student.group} />
                       )}
                       {!(student.program?.length ?? 0) && !(student.group?.length ?? 0) && (
-                        <span className="text-xs" style={{ color: '#C4C3BD' }}>—</span>
+                        <span className="text-xs" style={{ color: '#6B6B66' }}>—</span>
                       )}
                     </div>
                   </td>
 
                   {/* Enrolled date */}
                   <td className="px-5 py-3.5">
-                    <p className="text-xs" style={{ color: '#9A9891' }}>{formatDate(student.createdAt)}</p>
+                    <p className="text-xs" style={{ color: '#6B6B66' }}>{formatDate(student.createdAt)}</p>
                     {student.firstLoginRequired && (
-                      <p className="text-xs mt-0.5" style={{ color: '#B0AEA8', fontStyle: 'italic' }}>Awaiting login</p>
+                      <p className="text-xs mt-0.5" style={{ color: '#6B6B66', fontStyle: 'italic' }}>Awaiting login</p>
                     )}
                   </td>
 
@@ -457,7 +457,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                         </button>
                         <button onClick={() => setDeletingId(null)} disabled={deleteLoading}
                           className="text-xs px-2 py-1"
-                          style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                           Cancel
                         </button>
                         </div>
@@ -469,9 +469,9 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                           disabled={resendingId === student.id}
                           title="Resend password-setup link"
                           className="p-2 rounded transition-all"
-                          style={{ color: '#C4C3BD', cursor: resendingId === student.id ? 'not-allowed' : 'pointer' }}
+                          style={{ color: '#6B6B66', cursor: resendingId === student.id ? 'not-allowed' : 'pointer' }}
                           onMouseEnter={(e) => { if (resendingId !== student.id) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#C4C3BD'; }}>
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
                           {resendingId === student.id
                             ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
                             : <Mail size={13} strokeWidth={1.5} />}
@@ -481,9 +481,9 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                           disabled={isTogglingStatus}
                           title={student.status === 'active' ? 'Disable student' : 'Enable student'}
                           className="p-2 rounded transition-all"
-                          style={{ color: '#C4C3BD', cursor: isTogglingStatus ? 'not-allowed' : 'pointer' }}
+                          style={{ color: '#6B6B66', cursor: isTogglingStatus ? 'not-allowed' : 'pointer' }}
                           onMouseEnter={(e) => { if (!isTogglingStatus) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#C4C3BD'; }}>
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
                           {isTogglingStatus
                             ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
                             : student.status === 'active'
@@ -494,9 +494,9 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                           onClick={() => setDeletingId(student.id)}
                           title="Remove student"
                           className="p-2 rounded transition-all"
-                          style={{ color: '#C4C3BD' }}
+                          style={{ color: '#6B6B66' }}
                           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#9B2828'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#C4C3BD'; }}>
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
                           <Trash2 size={13} strokeWidth={1.5} />
                         </button>
                       </div>
@@ -510,7 +510,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
       </div>
 
       {!loading && total > 0 && (
-        <p className="text-xs mt-3" style={{ color: '#C4C3BD' }}>
+        <p className="text-xs mt-3" style={{ color: '#6B6B66' }}>
           Data refreshes automatically every 5 seconds.
         </p>
       )}

@@ -26,7 +26,7 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-xs truncate" style={{ color: '#9A9891' }}>{label}</p>
+        <p className="text-xs truncate" style={{ color: '#6B6B66' }}>{label}</p>
         <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{value}</p>
       </div>
     </div>
@@ -52,7 +52,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
           onClick={() => onChange(t.id)}
           className="text-xs px-4 py-2.5 transition-all relative"
           style={{
-            color: active === t.id ? '#0C0C0B' : '#9A9891',
+            color: active === t.id ? '#0C0C0B' : '#6B6B66',
             borderBottom: active === t.id ? '2px solid #0C0C0B' : '2px solid transparent',
             letterSpacing: '0.02em',
             marginBottom: -1,
@@ -70,15 +70,15 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 
 function StubTab({ label, step, description }: { label: string; step: string; description: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20" style={{ color: '#C4C3BD' }}>
+    <div className="flex flex-col items-center justify-center py-20" style={{ color: '#6B6B66' }}>
       <div
         className="flex items-center justify-center text-xs mb-4 select-none"
-        style={{ width: 28, height: 28, borderRadius: 2, background: '#EEECEA', color: '#9A9891', letterSpacing: '0.04em' }}
+        style={{ width: 28, height: 28, borderRadius: 2, background: '#EEECEA', color: '#6B6B66', letterSpacing: '0.04em' }}
       >
         {step}
       </div>
       <p className="text-xs" style={{ letterSpacing: '0.1em' }}>{label}</p>
-      <p className="text-xs mt-2" style={{ color: '#B0AEA8' }}>{description}</p>
+      <p className="text-xs mt-2" style={{ color: '#6B6B66' }}>{description}</p>
     </div>
   );
 }
@@ -137,9 +137,9 @@ export function QuestionsPage() {
           style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}
         >
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>WEB OWNER</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>WEB OWNER</p>
             <h1 className="text-base" style={{ color: '#0C0C0B' }}>Questions</h1>
-            <p className="text-xs mt-1" style={{ color: '#B0AEA8' }}>
+            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
               Global question pool — upload questions, organise into banks, grant access to institutes.
             </p>
           </div>
@@ -174,9 +174,9 @@ export function QuestionsPage() {
 
         {/* ── Stat pills ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-          <StatPill icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Total Questions" value={loading ? '…' : fmt(questions.length)} />
-          <StatPill icon={<Library size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Question Banks" value={fmt(bankCount)} />
-          <StatPill icon={<Share2 size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Active Grants" value={fmt(grantCount)} />
+          <StatPill icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Total Questions" value={loading ? '…' : fmt(questions.length)} />
+          <StatPill icon={<Library size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Question Banks" value={fmt(bankCount)} />
+          <StatPill icon={<Share2 size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Active Grants" value={fmt(grantCount)} />
         </div>
 
         {/* ── Tabs ── */}
@@ -205,8 +205,8 @@ export function QuestionsPage() {
           {/* ── SUBJECTS ── */}
           {activeTab === 'subjects' && (
             <div className="px-6 py-6">
-              <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>SUBJECT REGISTRY</p>
-              <p className="text-xs mb-5" style={{ color: '#B0AEA8', lineHeight: 1.7 }}>
+              <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>SUBJECT REGISTRY</p>
+              <p className="text-xs mb-5" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
                 Canonical subject names used across all questions. Add aliases so that bulk uploads using alternate names (e.g. QUANT, Maths) automatically resolve to the correct subject. Use Merge to permanently consolidate two subjects.
               </p>
               <SubjectManager />

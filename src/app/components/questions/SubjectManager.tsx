@@ -37,7 +37,7 @@ function AliasRow({
         onClick={onRemove}
         disabled={removing}
         className="transition-opacity hover:opacity-60 ml-0.5"
-        style={{ color: '#9A9891', cursor: removing ? 'not-allowed' : 'pointer' }}
+        style={{ color: '#6B6B66', cursor: removing ? 'not-allowed' : 'pointer' }}
       >
         {removing ? <Loader2 size={9} className="animate-spin" /> : <X size={9} strokeWidth={2} />}
       </button>
@@ -130,7 +130,7 @@ function SubjectCard({
                 {renameSaving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
               </button>
               <button type="button" onClick={() => { setRenaming(false); setNewName(subject.name); }}
-                className="text-xs px-2.5 py-1.5" style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+                className="text-xs px-2.5 py-1.5" style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
               >
                 <X size={10} strokeWidth={2} />
               </button>
@@ -142,7 +142,7 @@ function SubjectCard({
               <button
                 type="button" onClick={() => { setRenaming(true); setNewName(subject.name); }}
                 className="transition-opacity hover:opacity-60" title="Rename"
-                style={{ color: '#C4C3BD' }}
+                style={{ color: '#6B6B66' }}
               >
                 <Pencil size={11} strokeWidth={1.5} />
               </button>
@@ -155,14 +155,14 @@ function SubjectCard({
         {/* Question count */}
         <span
           className="text-xs px-2 py-0.5 select-none flex-shrink-0"
-          style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891' }}
+          style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}
         >
           {subject.questionCount} {subject.questionCount === 1 ? 'question' : 'questions'}
         </span>
 
         {/* Alias count pill */}
         {subject.aliases.length > 0 && (
-          <span className="text-xs flex-shrink-0" style={{ color: '#B0AEA8' }}>
+          <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>
             {subject.aliases.length} alias{subject.aliases.length > 1 ? 'es' : ''}
           </span>
         )}
@@ -170,7 +170,7 @@ function SubjectCard({
         {/* Expand toggle */}
         <button
           type="button" onClick={() => setExpanded((v) => !v)}
-          className="transition-opacity hover:opacity-60 flex-shrink-0" style={{ color: '#C4C3BD' }}
+          className="transition-opacity hover:opacity-60 flex-shrink-0" style={{ color: '#6B6B66' }}
         >
           {expanded ? <ChevronUp size={14} strokeWidth={1.5} /> : <ChevronDown size={14} strokeWidth={1.5} />}
         </button>
@@ -179,13 +179,13 @@ function SubjectCard({
       {/* Expanded alias management */}
       {expanded && (
         <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid #F0EFEB' }}>
-          <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>ALIASES</p>
-          <p className="text-xs mb-3" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
+          <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>ALIASES</p>
+          <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
             Aliases are alternate names that resolve to this subject. When a question or bulk-upload uses an alias, it is automatically mapped to <strong>{subject.name}</strong>.
           </p>
           <div className="flex flex-wrap gap-1.5 mb-3">
             {subject.aliases.length === 0 && (
-              <span className="text-xs" style={{ color: '#C4C3BD' }}>No aliases yet.</span>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>No aliases yet.</span>
             )}
             {subject.aliases.map((a) => (
               canEdit ? (
@@ -298,11 +298,11 @@ function MergeModal({
       >
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <div>
-            <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>SUBJECT MANAGER</p>
+            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>SUBJECT MANAGER</p>
             <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>Merge Subjects</p>
           </div>
           {phase !== 'merging' && (
-            <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+            <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
               <X size={14} strokeWidth={1.5} />
             </button>
           )}
@@ -354,7 +354,7 @@ function MergeModal({
               {/* Preview */}
               {canPreview && source && target && (
                 <div className="px-4 py-4 mb-5" style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                  <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>IMPACT PREVIEW</p>
+                  <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>IMPACT PREVIEW</p>
                   <p className="text-xs mb-1" style={{ color: '#0C0C0B', lineHeight: 1.7 }}>
                     <strong>{source.questionCount}</strong> questions tagged <strong>"{source.name}"</strong> will be updated to <strong>"{target.name}"</strong>.
                   </p>
@@ -390,7 +390,7 @@ function MergeModal({
 
           {phase === 'merging' && progress && (
             <div className="flex flex-col items-center py-8">
-              <Loader2 size={22} className="animate-spin mb-4" style={{ color: '#9A9891' }} />
+              <Loader2 size={22} className="animate-spin mb-4" style={{ color: '#6B6B66' }} />
               <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>
                 {progress.phase === 'counting' ? 'Counting affected questions…' :
                  progress.phase === 'updating' ? `Updating questions… ${progress.done} / ${progress.total}` :
@@ -418,7 +418,7 @@ function MergeModal({
               </div>
               <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>Merge complete</p>
               <p className="text-xs" style={{ color: '#2A6B3A' }}>{result.updatedCount} questions updated.</p>
-              <p className="text-xs mt-1" style={{ color: '#B0AEA8' }}>
+              <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
                 "{source?.name}" is now an alias of "{target?.name}".
               </p>
             </div>
@@ -440,7 +440,7 @@ function MergeModal({
             >
               <Merge size={11} strokeWidth={1.5} /> Confirm Merge
             </button>
-            <button type="button" onClick={onClose} className="text-xs px-4 py-2.5" style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            <button type="button" onClick={onClose} className="text-xs px-4 py-2.5" style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
               Cancel
             </button>
           </div>
@@ -534,7 +534,7 @@ export function SubjectManager({
           className="flex items-center gap-2 px-3 py-2 flex-1"
           style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2, minWidth: 180 }}
         >
-          <Tag size={12} strokeWidth={1.5} style={{ color: '#B0AEA8', flexShrink: 0 }} />
+          <Tag size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
           <input
             type="text" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search subjects or aliases…"
@@ -549,11 +549,11 @@ export function SubjectManager({
           type="button" onClick={handleRefresh} disabled={refreshing}
           title="Refresh question counts from Firestore"
           className="flex items-center gap-1.5 text-xs px-3 py-2 transition-opacity hover:opacity-70"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891', background: '#FAFAF8' }}
+          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FAFAF8' }}
         >
           {refreshing
-            ? <Loader2 size={12} className="animate-spin" style={{ color: '#9A9891' }} />
-            : <RefreshCw size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+            ? <Loader2 size={12} className="animate-spin" style={{ color: '#6B6B66' }} />
+            : <RefreshCw size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           }
           Refresh counts
         </button>
@@ -564,7 +564,7 @@ export function SubjectManager({
         <button
           type="button" onClick={() => setShowMerge(true)}
           className="flex items-center gap-1.5 text-xs px-3 py-2 transition-opacity hover:opacity-70"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891', background: '#FAFAF8' }}
+          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FAFAF8' }}
         >
           <Merge size={12} strokeWidth={1.5} /> Merge subjects
         </button>
@@ -600,7 +600,7 @@ export function SubjectManager({
       {addErr && <p className="text-xs mb-3" style={{ color: '#9B2828' }}>{addErr}</p>}
 
       {/* Stats row */}
-      <p className="text-xs mb-3" style={{ color: '#B0AEA8' }}>
+      <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
         {subjects.length} subjects · {subjects.reduce((acc, s) => acc + s.questionCount, 0)} questions total
         {search && <span> · showing {filtered.length} results</span>}
       </p>
@@ -608,10 +608,10 @@ export function SubjectManager({
       {/* List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 size={18} className="animate-spin" style={{ color: '#C4C3BD' }} />
+          <Loader2 size={18} className="animate-spin" style={{ color: '#6B6B66' }} />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center py-12" style={{ color: '#C4C3BD' }}>
+        <div className="flex flex-col items-center py-12" style={{ color: '#6B6B66' }}>
           <div style={{ width: 1, height: 24, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 12 }} />
           <p className="text-xs" style={{ letterSpacing: '0.1em' }}>
             {search ? 'NO SUBJECTS MATCH' : 'NO SUBJECTS YET'}

@@ -54,7 +54,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
         <p className="text-xs" style={{ color: '#0C0C0B' }}>
           {user?.name}
         </p>
-        <p className="text-xs mt-0.5 truncate" style={{ color: '#9A9891' }}>
+        <p className="text-xs mt-0.5 truncate" style={{ color: '#6B6B66' }}>
           {user?.email}
         </p>
       </div>
@@ -72,7 +72,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
             ((e.currentTarget as HTMLElement).style.background = 'transparent')
           }
         >
-          <User size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <User size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           Profile
         </button>
         <button
@@ -86,7 +86,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
             ((e.currentTarget as HTMLElement).style.background = 'transparent')
           }
         >
-          <Shield size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <Shield size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           Security
         </button>
       </div>
@@ -104,7 +104,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
             ((e.currentTarget as HTMLElement).style.background = 'transparent')
           }
         >
-          <LogOut size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <LogOut size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           Sign out
         </button>
       </div>
@@ -132,7 +132,7 @@ function SidebarNavItem({ to, icon, label, isActive }: NavItemProps) {
         style={{
           paddingLeft: isActive ? 18 : 20,
           paddingRight: 16,
-          color: isActive ? '#0C0C0B' : '#9A9891',
+          color: isActive ? '#0C0C0B' : '#6B6B66',
           background: isActive ? '#F7F6F3' : 'transparent',
           borderLeft: isActive ? '2px solid #0C0C0B' : '2px solid transparent',
           letterSpacing: '0.01em',
@@ -145,7 +145,7 @@ function SidebarNavItem({ to, icon, label, isActive }: NavItemProps) {
         }}
         onMouseLeave={(e) => {
           if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color = '#9A9891';
+            (e.currentTarget as HTMLElement).style.color = '#6B6B66';
             (e.currentTarget as HTMLElement).style.background = 'transparent';
           }
         }}
@@ -288,7 +288,7 @@ export function DashboardLayout() {
           <p
             className="text-xs"
             style={{
-              color: '#C4C3BD',
+              color: '#6B6B66',
               letterSpacing: '0.1em',
               marginBottom: 6,
             }}

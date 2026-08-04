@@ -63,7 +63,7 @@ function OverviewTab({
           className="flex items-center gap-2 mb-8"
         >
           <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#2A6B3A' }} />
-          <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>
+          <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>
             FACULTY · {session.instituteName.toUpperCase()}
           </span>
         </motion.div>
@@ -74,13 +74,13 @@ function OverviewTab({
           transition={{ delay: 0.15, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="text-center"
         >
-          <p className="text-xs mb-3" style={{ color: '#B0AEA8', letterSpacing: '0.06em' }}>
+          <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
             {formatDate()}
           </p>
           <h1 className="text-2xl font-light mb-3" style={{ color: '#0C0C0B', letterSpacing: '0.02em' }}>
             {getGreeting()}, {firstName}.
           </h1>
-          <p className="text-sm" style={{ color: '#9A9891', lineHeight: 1.7 }}>
+          <p className="text-sm" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
             Your workspace is ready.
           </p>
         </motion.div>
@@ -103,9 +103,9 @@ function OverviewTab({
             style={{ background: '#F0EFEB', color: '#4A4A45', borderRadius: 2, letterSpacing: '0.04em' }}>
             Faculty
           </span>
-          <span className="text-xs" style={{ color: '#C4C3BD' }}>
+          <span className="text-xs" style={{ color: '#6B6B66' }}>
             Code:{' '}
-            <span style={{ fontFamily: 'monospace', letterSpacing: '0.12em', color: '#9A9891' }}>
+            <span style={{ fontFamily: 'monospace', letterSpacing: '0.12em', color: '#6B6B66' }}>
               {session.instituteCode}
             </span>
           </span>
@@ -122,7 +122,7 @@ function OverviewTab({
           className="px-5 py-5"
           style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 3 }}
         >
-          <p className="text-xs mb-4" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>
+          <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             AUTHORITY HIERARCHY
           </p>
           <div className="flex items-center gap-0 flex-wrap">
@@ -134,7 +134,7 @@ function OverviewTab({
               <div key={i} className="flex items-center">
                 <span className="text-xs px-2.5 py-1"
                   style={{
-                    color: item.active ? '#0C0C0B' : '#B0AEA8',
+                    color: item.active ? '#0C0C0B' : '#6B6B66',
                     background: item.active ? '#F0EFEB' : 'transparent',
                     borderRadius: 2, fontWeight: item.active ? 500 : 400,
                   }}>
@@ -146,7 +146,7 @@ function OverviewTab({
               </div>
             ))}
           </div>
-          <p className="text-xs mt-3" style={{ color: '#C4C3BD', lineHeight: 1.6 }}>
+          <p className="text-xs mt-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
             You operate within the boundaries defined by your institute.
           </p>
         </motion.div>
@@ -159,24 +159,24 @@ function OverviewTab({
           className="px-5 py-5"
           style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 3 }}
         >
-          <p className="text-xs mb-4" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>
+          <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             SCHOOLS ACCESS
           </p>
 
           {permLoading ? (
             <div className="flex items-center gap-2">
-              <Loader2 size={13} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-              <span className="text-xs" style={{ color: '#C4C3BD' }}>Checking permissions…</span>
+              <Loader2 size={13} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+              <span className="text-xs" style={{ color: '#6B6B66' }}>Checking permissions…</span>
             </div>
           ) : !instituteSME ? (
             <div className="flex items-start gap-2.5">
-              <Lock size={12} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0, marginTop: 1 }} />
+              <Lock size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0, marginTop: 1 }} />
               <div>
-                <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                   Schools access has not been enabled for this institute. Contact your administrator.
                 </p>
                 <span className="inline-flex items-center gap-1 text-xs mt-2 px-2 py-0.5"
-                  style={{ background: '#F0EFEB', color: '#B0AEA8', borderRadius: 2 }}>
+                  style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 2 }}>
                   <Shield size={9} strokeWidth={1.5} /> Locked
                 </span>
               </div>
@@ -185,7 +185,7 @@ function OverviewTab({
             <div className="flex items-start gap-2.5">
               <Lock size={12} strokeWidth={1.5} style={{ color: '#8B5E1A', flexShrink: 0, marginTop: 1 }} />
               <div>
-                <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                   You have view-only access to the Schools hierarchy. Your administrator can grant full management rights.
                 </p>
                 <button
@@ -203,7 +203,7 @@ function OverviewTab({
             <div className="flex items-start gap-2.5">
               <ShieldCheck size={12} strokeWidth={1.5} style={{ color: '#2A6B3A', flexShrink: 0, marginTop: 1 }} />
               <div>
-                <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                   Full Schools management access granted. You can create, edit, and manage the academic hierarchy.
                 </p>
                 <button
@@ -294,11 +294,11 @@ export function FacultyLandingPage() {
     >
       {/* Page header */}
       <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
-        <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>FACULTY</p>
+        <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>FACULTY</p>
         <h1 className="text-base" style={{ color: '#0C0C0B' }}>{session.name}</h1>
-        <p className="text-xs mt-1" style={{ color: '#B0AEA8' }}>
+        <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
           {session.instituteName} ·{' '}
-          <span style={{ fontFamily: 'monospace', letterSpacing: '0.1em', color: '#9A9891' }}>
+          <span style={{ fontFamily: 'monospace', letterSpacing: '0.1em', color: '#6B6B66' }}>
             {session.instituteCode}
           </span>
         </p>
@@ -314,22 +314,22 @@ export function FacultyLandingPage() {
               onClick={() => setActiveTab(tab.key)}
               className="relative flex items-center gap-1.5 px-5 py-3 text-xs transition-colors select-none"
               style={{
-                color: isActive ? '#0C0C0B' : '#9A9891',
+                color: isActive ? '#0C0C0B' : '#6B6B66',
                 background: 'transparent',
                 letterSpacing: '0.04em',
                 fontWeight: isActive ? 500 : 400,
               }}
               onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-              onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#9A9891'; }}
+              onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}
             >
               {tab.icon && (
-                <span style={{ color: isActive ? '#0C0C0B' : '#C4C3BD' }}>{tab.icon}</span>
+                <span style={{ color: isActive ? '#0C0C0B' : '#6B6B66' }}>{tab.icon}</span>
               )}
               {tab.label}
 
               {/* Schools tab: contextual status indicator */}
               {tab.key === 'schools' && !permLoading && (
-                <span className="ml-0.5" style={{ color: '#C4C3BD' }}>
+                <span className="ml-0.5" style={{ color: '#6B6B66' }}>
                   {canManage
                     ? <ShieldCheck size={9} strokeWidth={1.5} style={{ color: '#2A6B3A' }} />
                     : canView
@@ -385,7 +385,7 @@ export function FacultyLandingPage() {
               )}
               {permLoading ? (
                 <div className="flex items-center justify-center py-16">
-                  <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+                  <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
                 </div>
               ) : (
                 <SchoolsTab

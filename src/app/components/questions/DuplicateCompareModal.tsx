@@ -69,12 +69,12 @@ export function DuplicateCompareModal({ row, pool, allRows, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <div>
-            <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>DUPLICATE COMPARISON</p>
+            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>DUPLICATE COMPARISON</p>
             <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>
               {score ? REASON_LABEL[score.matchedReason] : 'No match'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
             <X size={15} strokeWidth={1.5} />
           </button>
         </div>
@@ -87,7 +87,7 @@ export function DuplicateCompareModal({ row, pool, allRows, onClose }: Props) {
             <ScorePill label="Correct answer"     value={score.answerMatch ? 'Match' : 'Differs'} tone={score.answerMatch ? 'warn' : 'ok'} />
             <div style={{ flex: 1 }} />
             {matchedId && (
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 Matched ID: <code style={{ fontFamily: 'monospace', background: '#F0EFEB', padding: '1px 5px', borderRadius: 2 }}>{matchedId}</code>
               </span>
             )}
@@ -131,14 +131,14 @@ export function DuplicateCompareModal({ row, pool, allRows, onClose }: Props) {
             />
           ) : (
             <div className="px-5 py-6">
-              <p className="text-xs" style={{ color: '#9A9891' }}>Matched question not found in pool.</p>
+              <p className="text-xs" style={{ color: '#6B6B66' }}>Matched question not found in pool.</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-3 flex items-center gap-3 flex-shrink-0" style={{ borderTop: '1px solid #E3E1DB' }}>
-          <div className="flex items-center gap-2" style={{ color: '#9A9891' }}>
+          <div className="flex items-center gap-2" style={{ color: '#6B6B66' }}>
             <ArrowLeftRight size={12} strokeWidth={1.5} />
             <span className="text-xs">Same subject + topic only — cross-subject duplicates are not flagged.</span>
           </div>
@@ -172,7 +172,7 @@ function ScorePill({ label, value, tone }: { label: string; value: string; tone:
   }[tone];
   return (
     <div className="flex flex-col">
-      <span className="text-xs" style={{ color: '#B0AEA8', letterSpacing: '0.06em', fontSize: 10 }}>{label.toUpperCase()}</span>
+      <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em', fontSize: 10 }}>{label.toUpperCase()}</span>
       <span
         className="text-xs px-2 py-0.5 mt-1 self-start"
         style={{ background: palette.bg, border: `1px solid ${palette.border}`, color: palette.text, borderRadius: 2 }}
@@ -204,8 +204,8 @@ function Side({
       }}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em', fontSize: 10 }}>{heading}</span>
-        <span className="text-xs" style={{ color: '#C4C3BD', fontSize: 10 }}>{sheet}</span>
+        <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em', fontSize: 10 }}>{heading}</span>
+        <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10 }}>{sheet}</span>
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -222,7 +222,7 @@ function Side({
       </div>
 
       <p className="text-xs mb-3" style={{ color: '#0C0C0B', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-        {stem || <em style={{ color: '#B0AEA8' }}>No stem</em>}
+        {stem || <em style={{ color: '#6B6B66' }}>No stem</em>}
       </p>
 
       {options.length > 0 && (
@@ -239,7 +239,7 @@ function Side({
                   borderRadius: 2,
                 }}
               >
-                <span className="text-xs" style={{ color: '#9A9891', fontSize: 10, minWidth: 14 }}>
+                <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10, minWidth: 14 }}>
                   {String.fromCharCode(65 + i)}.
                 </span>
                 <span className="text-xs flex-1" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>

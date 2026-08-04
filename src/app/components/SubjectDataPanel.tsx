@@ -134,14 +134,14 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
                   {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                   {collectionLabel(s.collection)}
                 </span>
-                <span className="text-xs" style={{ color: unreadable ? '#7A5B12' : '#9A9891' }}>
+                <span className="text-xs" style={{ color: unreadable ? '#7A5B12' : '#6B6B66' }}>
                   {unreadable ? 'unreadable' : `${s.records!.length}`}
                 </span>
               </button>
               {open && (
                 <div className="px-2.5 pb-2">
                   {s.note && (
-                    <p className="text-xs mb-1.5" style={{ color: '#B0AEA8' }}>{s.note}</p>
+                    <p className="text-xs mb-1.5" style={{ color: '#6B6B66' }}>{s.note}</p>
                   )}
                   {unreadable ? (
                     <p className="text-xs" style={{ color: '#7A5B12' }}>
@@ -164,7 +164,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
         })}
       </div>
 
-      <p className="text-xs" style={{ color: '#B0AEA8', lineHeight: 1.5 }}>
+      <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
         {data.note} Credentials and session tokens are excluded. Face detection
         during exams runs in the browser only — no images or biometric data are
         stored.

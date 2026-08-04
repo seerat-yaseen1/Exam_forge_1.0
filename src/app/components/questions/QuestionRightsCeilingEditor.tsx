@@ -74,7 +74,7 @@ export function QuestionRightsCeilingEditor({
 
   return (
     <div>
-      <p className="text-xs mb-3" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+      <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
         The maximum question rights this institute may hold, and — per right — the modes it may grant to its faculty.
         Everything is off by default. The institute admin can grant faculty rights only at or below this ceiling.
       </p>
@@ -90,7 +90,7 @@ export function QuestionRightsCeilingEditor({
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs" style={{ color: '#0C0C0B' }}>{RIGHT_LABEL[r]}</p>
-                <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{RIGHT_HINT[r]}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{RIGHT_HINT[r]}</p>
               </div>
               <button
                 onClick={() => toggleAllowed(r)}
@@ -100,7 +100,7 @@ export function QuestionRightsCeilingEditor({
                   border: `1px solid ${c.allowed ? '#C6DECE' : '#E3E1DB'}`,
                   borderRadius: 2,
                   background: c.allowed ? '#F0F7F2' : '#FFFFFF',
-                  color: c.allowed ? '#2A6B3A' : '#9A9891',
+                  color: c.allowed ? '#2A6B3A' : '#6B6B66',
                   cursor: saving ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -119,7 +119,7 @@ export function QuestionRightsCeilingEditor({
             {/* Grantable modes — only meaningful when the right is allowed */}
             {c.allowed && (
               <div className="flex items-center gap-2 mt-3 pl-0.5">
-                <span className="text-xs" style={{ color: '#B0AEA8' }}>Grantable to faculty as:</span>
+                <span className="text-xs" style={{ color: '#6B6B66' }}>Grantable to faculty as:</span>
                 {(['direct', 'request'] as QuestionRightMode[]).map((mode) => {
                   const on = c.modes.includes(mode);
                   return (
@@ -132,7 +132,7 @@ export function QuestionRightsCeilingEditor({
                         border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
                         borderRadius: 2,
                         background: on ? '#F0F7F2' : '#FFFFFF',
-                        color: on ? '#2A6B3A' : '#9A9891',
+                        color: on ? '#2A6B3A' : '#6B6B66',
                         cursor: saving ? 'not-allowed' : 'pointer',
                       }}
                       title={mode === 'request' ? 'Request mode requires the approval workflow (coming in a later phase)' : undefined}

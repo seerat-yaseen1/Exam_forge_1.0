@@ -24,7 +24,7 @@ function InstituteMark({ logo, name, size = 28 }: { logo: string | null; name: s
       border: '1px solid #E3E1DB', display: 'flex', alignItems: 'center',
       justifyContent: 'center', flexShrink: 0,
     }}>
-      <Building2 size={size * 0.42} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+      <Building2 size={size * 0.42} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
     </div>
   );
 }
@@ -91,8 +91,8 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
         <StudentAvatar name={session?.name ?? ''} size={30} />
         <div className="min-w-0">
           <p className="text-xs font-medium truncate" style={{ color: '#0C0C0B' }}>{session?.name}</p>
-          <p className="text-xs truncate mt-0.5" style={{ color: '#9A9891' }}>{session?.instituteName}</p>
-          <p className="text-xs truncate mt-0.5" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>
+          <p className="text-xs truncate mt-0.5" style={{ color: '#6B6B66' }}>{session?.instituteName}</p>
+          <p className="text-xs truncate mt-0.5" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
             STUDENT
           </p>
         </div>
@@ -189,7 +189,7 @@ export function StudentDashboardLayout() {
               <div className="flex items-center gap-2.5 px-3 py-1.5 rounded"
                 style={{ background: '#F7F6F3', border: '1px solid #E3E1DB' }}>
                 <InstituteMark logo={instituteLogo} name={session.instituteName} size={20} />
-                <span className="text-xs" style={{ color: '#9A9891' }}>{session.instituteName}</span>
+                <span className="text-xs" style={{ color: '#6B6B66' }}>{session.instituteName}</span>
               </div>
             )}
             <div className="relative">
@@ -219,9 +219,9 @@ export function StudentDashboardLayout() {
                   key={item.path}
                   onClick={() => navigate(item.path)}
                   className="flex items-center gap-1.5 text-xs px-3 py-2.5 relative transition-colors"
-                  style={{ color: isActive ? '#0C0C0B' : '#9A9891', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                  style={{ color: isActive ? '#0C0C0B' : '#6B6B66', background: 'transparent', border: 'none', cursor: 'pointer' }}
                   onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#9A9891'; }}
+                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}
                 >
                   {item.icon}
                   {item.label}

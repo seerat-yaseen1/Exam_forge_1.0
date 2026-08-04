@@ -162,7 +162,7 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
           type="button"
           onClick={onClose}
           className="text-xs px-3 py-1.5 transition-opacity hover:opacity-60"
-          style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
         >
           Cancel
         </button>
@@ -275,7 +275,7 @@ export function InlineMathButton({ onInsert }: InlineMathButtonProps) {
           width: 26, height: 26, borderRadius: 2,
           border: open ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
           background: open ? '#0C0C0B' : '#FAFAF8',
-          color: open ? '#FFFFFF' : '#9A9891',
+          color: open ? '#FFFFFF' : '#6B6B66',
           fontFamily: 'serif', fontSize: 14,
         }}
       >

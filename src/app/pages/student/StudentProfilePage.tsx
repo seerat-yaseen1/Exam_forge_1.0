@@ -20,10 +20,10 @@ function AcademicStructure({ studentId }: { studentId: string }) {
   if (loading) {
     return (
       <div className="bg-white p-6 mt-6" style={{ border: '1px solid #E3E1DB', borderRadius: 2 }}>
-        <p className="text-xs mb-4" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>ACADEMIC STRUCTURE</p>
+        <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>ACADEMIC STRUCTURE</p>
         <div className="flex items-center gap-2">
-          <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-          <span className="text-xs" style={{ color: '#C4C3BD' }}>Loading assignments…</span>
+          <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+          <span className="text-xs" style={{ color: '#6B6B66' }}>Loading assignments…</span>
         </div>
       </div>
     );
@@ -50,17 +50,17 @@ function AcademicStructure({ studentId }: { studentId: string }) {
         style={{ borderBottom: expanded ? '1px solid #E3E1DB' : 'none' }}
       >
         <div className="flex items-center gap-2">
-          <BookOpen size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+          <BookOpen size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             ACADEMIC STRUCTURE
           </p>
-          <span className="text-xs px-1.5 py-0.5" style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 10 }}>
+          <span className="text-xs px-1.5 py-0.5" style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 10 }}>
             {mappings.length}
           </span>
         </div>
         {expanded
-          ? <ChevronDown size={13} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-          : <ChevronRight size={13} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />}
+          ? <ChevronDown size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          : <ChevronRight size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
       </button>
 
       <AnimatePresence initial={false}>
@@ -80,12 +80,12 @@ function AcademicStructure({ studentId }: { studentId: string }) {
                     {schoolMappings.map((m) => (
                       <div key={m.id} className="flex items-start gap-2">
                         <span className="text-xs px-1.5 py-0.5 mt-0.5 flex-shrink-0"
-                          style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 2 }}>
+                          style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 2 }}>
                           {NODE_LEVEL_LABELS[m.nodeType]}
                         </span>
                         <div>
                           <p className="text-xs" style={{ color: '#0C0C0B' }}>{m.nodeName}</p>
-                          <p className="text-xs mt-0.5 break-all" style={{ color: '#C4C3BD' }}>{m.breadcrumb}</p>
+                          <p className="text-xs mt-0.5 break-all" style={{ color: '#6B6B66' }}>{m.breadcrumb}</p>
                         </div>
                       </div>
                     ))}
@@ -110,33 +110,33 @@ export function StudentProfilePage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+        <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
           PROFILE
         </p>
         <h1 className="text-2xl font-medium" style={{ color: '#0C0C0B' }}>
           {session.name}
         </h1>
-        <p className="text-sm mt-1" style={{ color: '#9A9891' }}>
+        <p className="text-sm mt-1" style={{ color: '#6B6B66' }}>
           Student — {session.instituteName}
         </p>
       </div>
 
       {/* Basic information */}
       <div className="bg-white p-6 mb-6" style={{ border: '1px solid #E3E1DB', borderRadius: 2 }}>
-        <p className="text-xs mb-4" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+        <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
           BASIC INFORMATION
         </p>
         <div className="grid gap-4">
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Full Name</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Full Name</p>
             <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.name}</p>
           </div>
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Email Address</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Email Address</p>
             <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.email}</p>
           </div>
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Account Status</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Account Status</p>
             <div className="inline-flex items-center gap-1.5 px-2 py-1" style={{
               background: session.status === 'active' ? '#F0F7F2' : '#F7F6F3',
               border: `1px solid ${session.status === 'active' ? '#C6DECE' : '#E3E1DB'}`,
@@ -144,10 +144,10 @@ export function StudentProfilePage() {
             }}>
               <div style={{
                 width: 5, height: 5, borderRadius: '50%',
-                background: session.status === 'active' ? '#2A6B3A' : '#9A9891',
+                background: session.status === 'active' ? '#2A6B3A' : '#6B6B66',
               }} />
               <span className="text-xs" style={{
-                color: session.status === 'active' ? '#2A6B3A' : '#9A9891',
+                color: session.status === 'active' ? '#2A6B3A' : '#6B6B66',
                 textTransform: 'capitalize',
               }}>
                 {session.status}
@@ -159,16 +159,16 @@ export function StudentProfilePage() {
 
       {/* Institute information */}
       <div className="bg-white p-6 mb-6" style={{ border: '1px solid #E3E1DB', borderRadius: 2 }}>
-        <p className="text-xs mb-4" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+        <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
           INSTITUTE INFORMATION
         </p>
         <div className="grid gap-4">
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Institute Name</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Institute Name</p>
             <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.instituteName}</p>
           </div>
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Institute Code</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Institute Code</p>
             <p className="text-sm font-mono" style={{ color: '#4A4A45', letterSpacing: '0.12em' }}>
               {session.instituteCode}
             </p>
@@ -180,43 +180,43 @@ export function StudentProfilePage() {
       {(session.group?.length || session.section?.length || session.specialisation?.length ||
         session.program?.length || session.degreeLevel?.length || session.school?.length) && (
         <div className="bg-white p-6 mb-6" style={{ border: '1px solid #E3E1DB', borderRadius: 2 }}>
-          <p className="text-xs mb-4" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+          <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             PROGRAM DETAILS
           </p>
           <div className="grid gap-4">
             {!!session.program?.length && (
               <div>
-                <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Program</p>
+                <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Program</p>
                 <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.program.join(', ')}</p>
               </div>
             )}
             {!!session.degreeLevel?.length && (
               <div>
-                <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Degree Level</p>
+                <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Degree Level</p>
                 <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.degreeLevel.join(', ')}</p>
               </div>
             )}
             {!!session.school?.length && (
               <div>
-                <p className="text-xs mb-1" style={{ color: '#9A9891' }}>School</p>
+                <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>School</p>
                 <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.school.join(', ')}</p>
               </div>
             )}
             {!!session.specialisation?.length && (
               <div>
-                <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Specialisation</p>
+                <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Specialisation</p>
                 <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.specialisation.join(', ')}</p>
               </div>
             )}
             {!!session.section?.length && (
               <div>
-                <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Section</p>
+                <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Section</p>
                 <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.section.join(', ')}</p>
               </div>
             )}
             {!!session.group?.length && (
               <div>
-                <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Group</p>
+                <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Group</p>
                 <p className="text-sm" style={{ color: '#0C0C0B' }}>{session.group.join(', ')}</p>
               </div>
             )}

@@ -122,7 +122,7 @@ function FilterBar({
     <div className="flex flex-col gap-3 px-5 py-4" style={{ borderBottom: '1px solid #F0EFEB' }}>
       {/* Search */}
       <div className="flex items-center gap-2 px-3 py-2" style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-        <Search size={13} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+        <Search size={13} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
         <input
           type="text"
           value={search}
@@ -133,7 +133,7 @@ function FilterBar({
         />
         {search && (
           <button onClick={() => setSearch('')} className="hover:opacity-60 transition-opacity">
-            <X size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+            <X size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           </button>
         )}
       </div>
@@ -187,7 +187,7 @@ function FilterBar({
       {!hideTaxonomy && (
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>SUBJECT</span>
+            <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>SUBJECT</span>
             <select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setTopicId(''); }} style={selectStyle}>
               <option value="">All subjects</option>
               {subjects.map((s) => (
@@ -197,7 +197,7 @@ function FilterBar({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>TOPIC</span>
+            <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>TOPIC</span>
             <select
               value={topicId}
               onChange={(e) => setTopicId(e.target.value)}
@@ -230,20 +230,20 @@ function QuestionRow({
 
   const stemBlock = (
     <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-      {truncate(question.stem, 110) || <em style={{ color: '#B0AEA8' }}>No stem</em>}
+      {truncate(question.stem, 110) || <em style={{ color: '#6B6B66' }}>No stem</em>}
     </p>
   );
 
   const stemBlockFull = (
     <p style={{ color: '#0C0C0B', fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-      {question.stem || <em style={{ color: '#B0AEA8' }}>No stem</em>}
+      {question.stem || <em style={{ color: '#6B6B66' }}>No stem</em>}
     </p>
   );
 
   const metaBlock = (
     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-      {question.subject && <span className="text-xs" style={{ color: '#9A9891' }}>{question.subject}</span>}
-      {question.topic && <span className="text-xs" style={{ color: '#C4C3BD' }}>· {question.topic}</span>}
+      {question.subject && <span className="text-xs" style={{ color: '#6B6B66' }}>{question.subject}</span>}
+      {question.topic && <span className="text-xs" style={{ color: '#6B6B66' }}>· {question.topic}</span>}
       {question.tags.slice(0, 3).map((tag) => (
         <span key={tag} className="text-xs px-1.5 py-0.5" style={{ background: '#F0EFEB', borderRadius: 2, color: '#6B6B66', fontSize: 10 }}>
           #{tag}
@@ -254,13 +254,13 @@ function QuestionRow({
 
   const actions = (
     <div className="flex items-center gap-1 flex-shrink-0">
-      <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+      <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
         <Eye size={13} strokeWidth={1.5} />
       </button>
-      <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+      <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
         <Pencil size={13} strokeWidth={1.5} />
       </button>
-      <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}>
+      <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
         <Trash2 size={13} strokeWidth={1.5} />
       </button>
     </div>
@@ -279,7 +279,7 @@ function QuestionRow({
         <div className="flex-1 min-w-0">{stemBlock}{metaBlock}</div>
         <div className="flex-shrink-0"><DiffChip difficulty={question.difficulty} /></div>
         <div className="flex-shrink-0 w-24 text-right">
-          <span className="text-xs" style={{ color: '#C4C3BD' }}>{formatDate(question.createdAt)}</span>
+          <span className="text-xs" style={{ color: '#6B6B66' }}>{formatDate(question.createdAt)}</span>
         </div>
         {actions}
       </div>
@@ -295,7 +295,7 @@ function QuestionRow({
           <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-xs mb-2.5">
             {question.subject && <span style={{ color: '#6B6B66' }}>{question.subject}</span>}
             {question.subject && question.topic && <span style={{ color: '#DDDBD5' }}>·</span>}
-            {question.topic && <span style={{ color: '#9A9891' }}>{question.topic}</span>}
+            {question.topic && <span style={{ color: '#6B6B66' }}>{question.topic}</span>}
           </div>
         )}
         {question.tags.length > 0 && (
@@ -307,7 +307,7 @@ function QuestionRow({
             ))}
           </div>
         )}
-        <div className="text-xs mb-3" style={{ color: '#C4C3BD' }}>Created {formatDate(question.createdAt)}</div>
+        <div className="text-xs mb-3" style={{ color: '#6B6B66' }}>Created {formatDate(question.createdAt)}</div>
         <div className="flex items-center gap-2 pt-3" style={{ borderTop: '1px solid #F0EFEB' }}>
           <div className="flex-1" />
           <button onClick={onPreview} aria-label="Preview" className="flex items-center justify-center transition-opacity hover:opacity-60"
@@ -319,7 +319,7 @@ function QuestionRow({
             <Pencil size={14} strokeWidth={1.5} />
           </button>
           <button onClick={onDelete} aria-label="Delete" className="flex items-center justify-center transition-opacity hover:opacity-60"
-            style={{ width: 36, height: 36, color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+            style={{ width: 36, height: 36, color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
             <Trash2 size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -332,12 +332,12 @@ function QuestionRow({
 
 function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16" style={{ color: '#C4C3BD' }}>
+    <div className="flex flex-col items-center justify-center py-16" style={{ color: '#6B6B66' }}>
       <div style={{ width: 1, height: 32, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 16 }} />
       <p className="text-xs" style={{ letterSpacing: '0.1em' }}>{filtered ? 'NO QUESTIONS MATCH' : 'NO QUESTIONS YET'}</p>
       {!filtered && (
         <button onClick={onAdd} className="mt-4 flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-70"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891', background: '#FFFFFF' }}>
+          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}>
           <Plus size={12} strokeWidth={1.5} /> Add first question
         </button>
       )}
@@ -366,8 +366,8 @@ function DeleteModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3.5 md:px-5 md:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>DELETE QUESTION</p>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>DELETE QUESTION</p>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -380,7 +380,7 @@ function DeleteModal({
             </p>
           </div>
           <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>Are you sure you want to delete:</p>
-          <p className="text-xs mt-1.5 italic break-words" style={{ color: '#9A9891' }}>"{truncate(question.stem, 80)}"</p>
+          <p className="text-xs mt-1.5 italic break-words" style={{ color: '#6B6B66' }}>"{truncate(question.stem, 80)}"</p>
         </div>
         <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 px-4 py-3.5 md:px-5 md:py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button
@@ -391,7 +391,7 @@ function DeleteModal({
           >
             {deleting ? <><Loader2 size={11} className="animate-spin" /> Deleting…</> : <><Trash2 size={11} /> Delete</>}
           </button>
-          <button onClick={onCancel} disabled={deleting} className="text-xs px-4 py-2.5" style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+          <button onClick={onCancel} disabled={deleting} className="text-xs px-4 py-2.5" style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -418,8 +418,8 @@ function PreviewModal({ question, onClose }: { question: Question; onClose: () =
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3.5 md:px-5 md:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>QUESTION PREVIEW</p>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>QUESTION PREVIEW</p>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -459,10 +459,10 @@ function QuestionPanel({
         style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
       >
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
             {mode === 'create' ? 'NEW QUESTION' : 'EDIT QUESTION'}
           </p>
-          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
             <X size={15} strokeWidth={1.5} />
           </button>
         </div>
@@ -599,7 +599,7 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
       <>
         {showAddButton && (
           <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid #F0EFEB' }}>
-            <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>QUESTIONS</span>
+            <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>QUESTIONS</span>
             <button
               onClick={openCreate}
               className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
@@ -623,10 +623,10 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
         {/* Column headers (desktop) */}
         {!loading && filtered.length > 0 && (
           <div className="hidden md:flex items-center gap-4 px-5 py-2" style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
-            <div className="flex-shrink-0 w-10"><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>TYPE</span></div>
-            <div className="flex-1"><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>QUESTION</span></div>
-            <div className="flex-shrink-0 w-16"><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>DIFF.</span></div>
-            <div className="flex-shrink-0 w-24 text-right"><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>CREATED</span></div>
+            <div className="flex-shrink-0 w-10"><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>TYPE</span></div>
+            <div className="flex-1"><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>QUESTION</span></div>
+            <div className="flex-shrink-0 w-16"><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>DIFF.</span></div>
+            <div className="flex-shrink-0 w-24 text-right"><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>CREATED</span></div>
             <div className="flex-shrink-0 w-20" />
           </div>
         )}
@@ -646,12 +646,12 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
 
         {!loading && filtered.length > 0 && (
           <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid #F0EFEB' }}>
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>
               {filtered.length} {filtered.length === 1 ? 'question' : 'questions'}
               {hasClearableFilters && ' matching filters'}
             </span>
             {hasClearableFilters && (
-              <button onClick={clearFilters} className="text-xs transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+              <button onClick={clearFilters} className="text-xs transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
                 Clear filters
               </button>
             )}

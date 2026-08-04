@@ -85,10 +85,10 @@ export function StudentLoginPage() {
         {/* Form card */}
         <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
           style={{ border: '1px solid #E3E1DB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+          <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             STUDENT ACCESS
           </p>
-          <p className="text-xs mb-6" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
+          <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
             Your Institute Code was provided in your registration email.
           </p>
 
@@ -139,9 +139,9 @@ export function StudentLoginPage() {
                 </label>
                 <Link to="/student/forgot-password"
                   className="text-xs transition-colors"
-                  style={{ color: '#9A9891', textDecoration: 'none' }}
+                  style={{ color: '#6B6B66', textDecoration: 'none' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                   Forgot password?
                 </Link>
               </div>
@@ -160,9 +160,9 @@ export function StudentLoginPage() {
                 <button type="button" tabIndex={-1}
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: '#B0AEA8' }}
+                  style={{ color: '#6B6B66' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#B0AEA8')}>
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                   {showPassword ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
               </div>
@@ -198,23 +198,23 @@ export function StudentLoginPage() {
         {/* Role links */}
         <div className="flex items-center justify-center gap-4 mt-6">
           <Link to="/login" className="text-xs transition-colors"
-            style={{ color: '#C4C3BD', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}>
+            style={{ color: '#6B6B66', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
             Web Owner
           </Link>
           <span style={{ color: '#E3E1DB' }}>·</span>
           <Link to="/institute/login" className="text-xs transition-colors"
-            style={{ color: '#C4C3BD', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}>
+            style={{ color: '#6B6B66', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
             Institute Admin
           </Link>
           <span style={{ color: '#E3E1DB' }}>·</span>
           <Link to="/faculty/login" className="text-xs transition-colors"
-            style={{ color: '#C4C3BD', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}>
+            style={{ color: '#6B6B66', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
             Faculty
           </Link>
         </div>

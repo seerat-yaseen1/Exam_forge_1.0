@@ -197,15 +197,15 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
             <div className="px-4 sm:px-6 py-4 sm:py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                  <p className="text-xs mb-0.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                     ASSIGN STUDENTS · {NODE_LEVEL_LABELS[nodeType].toUpperCase()}
                   </p>
                   <h2 className="text-sm" style={{ color: '#0C0C0B' }}>{nodeName}</h2>
-                  <p className="text-xs mt-1 truncate" style={{ color: '#C4C3BD' }}>{breadcrumb}</p>
+                  <p className="text-xs mt-1 truncate" style={{ color: '#6B6B66' }}>{breadcrumb}</p>
                 </div>
-                <button onClick={onClose} style={{ color: '#9A9891', flexShrink: 0, marginTop: 2 }}
+                <button onClick={onClose} style={{ color: '#6B6B66', flexShrink: 0, marginTop: 2 }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                   <X size={16} strokeWidth={1.5} />
                 </button>
               </div>
@@ -215,14 +215,14 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
             <div className="flex-1 overflow-y-auto">
               {loading ? (
                 <div className="flex items-center justify-center py-20">
-                  <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+                  <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
                 </div>
               ) : (
                 <>
                   {/* ── Currently assigned ── */}
                   {existingMappings.length > 0 && (
                     <div className="px-6 py-4" style={{ borderBottom: '1px solid #F0EFEB' }}>
-                      <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>
+                      <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                         CURRENTLY ASSIGNED ({existingMappings.length})
                       </p>
                       <div className="space-y-1">
@@ -234,16 +234,16 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
                           >
                             <div className="min-w-0">
                               <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{m.studentName}</p>
-                              <p className="text-xs truncate" style={{ color: '#9A9891' }}>{m.studentEmail}</p>
+                              <p className="text-xs truncate" style={{ color: '#6B6B66' }}>{m.studentEmail}</p>
                             </div>
                             <button
                               onClick={() => handleRemove(m.id)}
                               disabled={removingId === m.id}
                               title="Remove assignment"
                               className="ml-3 p-1.5 transition-colors"
-                              style={{ color: '#C4C3BD', flexShrink: 0 }}
+                              style={{ color: '#6B6B66', flexShrink: 0 }}
                               onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#9B2828')}
-                              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}
+                              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
                             >
                               {removingId === m.id
                                 ? <Loader2 size={11} className="animate-spin" />
@@ -257,13 +257,13 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
 
                   {/* ── Add students ── */}
                   <div className="px-6 py-4">
-                    <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>
+                    <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                       ADD STUDENTS
                     </p>
 
                     {/* Search */}
                     <div className="relative mb-3">
-                      <Search size={13} strokeWidth={1.5} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#C4C3BD' }} />
+                      <Search size={13} strokeWidth={1.5} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#6B6B66' }} />
                       <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -295,7 +295,7 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
                     {filtered.length === 0 ? (
                       <div className="flex flex-col items-center py-10">
                         <Users size={24} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-                        <p className="text-xs mt-3" style={{ color: '#C4C3BD' }}>
+                        <p className="text-xs mt-3" style={{ color: '#6B6B66' }}>
                           {search ? 'No students match your search.' : 'No active students in this institute.'}
                         </p>
                       </div>
@@ -330,13 +330,13 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
                                 }}
                               >
                                 {isSelected && <Check size={10} strokeWidth={2.5} style={{ color: 'white' }} />}
-                                {isMapped && <Check size={10} strokeWidth={2} style={{ color: '#9A9891' }} />}
+                                {isMapped && <Check size={10} strokeWidth={2} style={{ color: '#6B6B66' }} />}
                               </div>
 
                               {/* Info */}
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{student.name}</p>
-                                <p className="text-xs truncate" style={{ color: '#9A9891' }}>{student.email}</p>
+                                <p className="text-xs truncate" style={{ color: '#6B6B66' }}>{student.email}</p>
                                 {(() => {
                                   const places = otherPlacements.get(student.id);
                                   if (!places || places.length === 0) return null;
@@ -353,7 +353,7 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
 
                               {isMapped && (
                                 <span className="text-xs px-1.5 py-0.5 flex-shrink-0"
-                                  style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 2 }}>
+                                  style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 2 }}>
                                   Assigned
                                 </span>
                               )}
@@ -369,12 +369,12 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
 
             {/* Footer */}
             <div className="px-6 py-4 flex items-center justify-between" style={{ borderTop: '1px solid #E3E1DB' }}>
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 {selected.size > 0 ? `${selected.size} selected` : 'Select students to assign'}
               </span>
               <div className="flex items-center gap-3">
                 <button onClick={onClose} className="text-xs px-4 py-2"
-                  style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                   Close
                 </button>
                 <button

@@ -441,8 +441,8 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
           <div className="flex items-start gap-3 mt-6 px-4 py-3"
             style={{ background: '#F7F6F3', borderRadius: 2, border: '1px solid #E3E1DB' }}>
-            <BookOpen size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+            <BookOpen size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
               Build your academic hierarchy here: <strong style={{ color: '#4A4A45' }}>School → Level → Program → Session → Year → Semester → Course → Section → Group</strong>. Students can be assigned at any level. Semesters are optional per year.
             </p>
           </div>

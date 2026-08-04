@@ -119,16 +119,16 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
             {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div>
-                <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                <p className="text-xs mb-0.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                   {isEdit ? 'EDIT' : 'NEW'} COURSE
                 </p>
                 <h2 className="text-sm" style={{ color: '#0C0C0B' }}>
                   {isEdit ? `Editing "${editing!.name}"` : 'Add Course'}
                 </h2>
               </div>
-              <button onClick={onClose} style={{ color: '#9A9891' }}
+              <button onClick={onClose} style={{ color: '#6B6B66' }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                 <X size={16} strokeWidth={1.5} />
               </button>
             </div>
@@ -137,7 +137,7 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
             <div className="flex-1 px-6 py-6 overflow-y-auto space-y-5">
               {/* Course Name */}
               <div>
-                <label className="block mb-1.5 text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>
+                <label className="block mb-1.5 text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                   COURSE NAME *
                 </label>
                 <input
@@ -158,7 +158,7 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
 
               {/* Course Code */}
               <div>
-                <label className="block mb-1.5 text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>
+                <label className="block mb-1.5 text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                   COURSE CODE *
                 </label>
                 <input
@@ -180,7 +180,7 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
 
               {/* Parent context note */}
               <div className="px-4 py-3 rounded" style={{ background: '#F7F6F3', border: '1px solid #E3E1DB' }}>
-                <p className="text-xs" style={{ color: '#9A9891' }}>{parentLabel}</p>
+                <p className="text-xs" style={{ color: '#6B6B66' }}>{parentLabel}</p>
               </div>
             </div>
 
@@ -188,7 +188,7 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
             <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: '1px solid #E3E1DB' }}>
               <button onClick={onClose} disabled={saving}
                 className="text-xs px-4 py-2"
-                style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                 Cancel
               </button>
               <button onClick={handleSave} disabled={saving}

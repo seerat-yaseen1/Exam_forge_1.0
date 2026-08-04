@@ -74,7 +74,7 @@ export function FacultyDeletionRightsEditor({
 
   if (offerable.length === 0) {
     return (
-      <p className="text-xs" style={{ color: '#B0AEA8' }}>
+      <p className="text-xs" style={{ color: '#6B6B66' }}>
         This institute cannot delegate any deletion rights. Ask the Web Owner to
         raise the ceiling, or enable a grantable mode on it.
       </p>
@@ -120,7 +120,7 @@ export function FacultyDeletionRightsEditor({
 
   return (
     <div className="mt-4 pt-3" style={{ borderTop: '1px solid #EDEBE5' }}>
-      <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.05em' }}>
+      <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>
         DELETION RIGHTS
       </p>
 
@@ -135,7 +135,7 @@ export function FacultyDeletionRightsEditor({
               {!enforced && (
                 <span
                   className="text-xs px-1.5"
-                  style={{ color: '#B0AEA8', border: '1px solid #E3E1DB', borderRadius: 2 }}
+                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
                   title="Saved as configuration. Server enforcement for this resource arrives in a later phase."
                 >
                   not yet enforced
@@ -157,7 +157,7 @@ export function FacultyDeletionRightsEditor({
                           border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
                           borderRadius: 2,
                           background: on ? '#F0F7F2' : '#FFFFFF',
-                          color: on ? '#2A6B3A' : '#9A9891',
+                          color: on ? '#2A6B3A' : '#6B6B66',
                           cursor: saving ? 'not-allowed' : 'pointer',
                         }}
                         title={mode === 'request'
@@ -178,7 +178,7 @@ export function FacultyDeletionRightsEditor({
                   border: `1px solid ${fr.granted ? '#C6DECE' : '#E3E1DB'}`,
                   borderRadius: 2,
                   background: fr.granted ? '#F0F7F2' : '#FFFFFF',
-                  color: fr.granted ? '#2A6B3A' : '#9A9891',
+                  color: fr.granted ? '#2A6B3A' : '#6B6B66',
                   cursor: saving ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -190,7 +190,7 @@ export function FacultyDeletionRightsEditor({
       })}
 
       {anyUnenforced && (
-        <div className="flex items-start gap-1.5 mt-2 text-xs" style={{ color: '#B0AEA8' }}>
+        <div className="flex items-start gap-1.5 mt-2 text-xs" style={{ color: '#6B6B66' }}>
           <Info size={11} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
             Rows marked “not yet enforced” are stored as configuration. Those

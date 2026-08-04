@@ -31,7 +31,7 @@ export function StatPill({ icon, label, value }: { icon: React.ReactNode; label:
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-xs truncate" style={{ color: '#9A9891' }}>{label}</p>
+        <p className="text-xs truncate" style={{ color: '#6B6B66' }}>{label}</p>
         <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{value}</p>
       </div>
     </div>
@@ -68,14 +68,14 @@ export function FilterBar({ search, setSearch, statusFilter, setStatusFilter }: 
     <div className="flex flex-col gap-3 px-5 py-4" style={{ borderBottom: '1px solid #F0EFEB' }}>
       <div className="flex items-center gap-2 px-3 py-2"
         style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-        <Search size={13} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+        <Search size={13} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Search title, subject, description…"
           className="flex-1 text-xs outline-none"
           style={{ background: 'transparent', color: '#0C0C0B', fontSize: 13 }} />
         {search && (
           <button onClick={() => setSearch('')} className="hover:opacity-60 transition-opacity">
-            <X size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+            <X size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           </button>
         )}
       </div>
@@ -105,12 +105,12 @@ export function FilterBar({ search, setSearch, statusFilter, setStatusFilter }: 
 
 export function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16" style={{ color: '#C4C3BD' }}>
+    <div className="flex flex-col items-center justify-center py-16" style={{ color: '#6B6B66' }}>
       <div style={{ width: 1, height: 32, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 16 }} />
       <p className="text-xs" style={{ letterSpacing: '0.1em' }}>{filtered ? 'NO ASSESSMENTS MATCH' : 'NO ASSESSMENTS YET'}</p>
       {!filtered && (
         <button onClick={onAdd} className="mt-4 flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-70"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891', background: '#FFFFFF' }}>
+          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}>
           <Plus size={12} strokeWidth={1.5} /> Create first assessment
         </button>
       )}
@@ -129,7 +129,7 @@ export function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd: () =
 export function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-xs mb-0.5" style={{ color: '#9A9891' }}>{label}</p>
+      <p className="text-xs mb-0.5" style={{ color: '#6B6B66' }}>{label}</p>
       <div className="text-xs">{children}</div>
     </div>
   );

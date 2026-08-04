@@ -349,10 +349,10 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <div>
-            <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>QUESTION POOL</p>
+            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>QUESTION POOL</p>
             <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>Export Questions</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -372,7 +372,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
               {/* Subject */}
               <div className="mb-5">
                 <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>
-                  Subject <span style={{ color: '#B0AEA8' }}>(all if none selected)</span>
+                  Subject <span style={{ color: '#6B6B66' }}>(all if none selected)</span>
                 </label>
                 <SubjectMultiSelect
                   subjects={subjects}
@@ -384,7 +384,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
               {/* Difficulty */}
               <div className="mb-5">
                 <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>
-                  Difficulty <span style={{ color: '#B0AEA8' }}>(all if none selected)</span>
+                  Difficulty <span style={{ color: '#6B6B66' }}>(all if none selected)</span>
                 </label>
                 <div className="flex gap-2">
                   {DIFFICULTIES.map((d) => (
@@ -401,7 +401,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
               {/* Engine */}
               <div className="mb-5">
                 <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>
-                  Question type <span style={{ color: '#B0AEA8' }}>(all if none selected)</span>
+                  Question type <span style={{ color: '#6B6B66' }}>(all if none selected)</span>
                 </label>
                 <div className="flex gap-2">
                   {ENGINES.map((e) => (
@@ -417,7 +417,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
               {/* Tags */}
               <div className="mb-5">
                 <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>
-                  Tags <span style={{ color: '#B0AEA8' }}>(any match — blank = all)</span>
+                  Tags <span style={{ color: '#6B6B66' }}>(any match — blank = all)</span>
                 </label>
                 <TagFilterInput
                   tags={filters.tags}
@@ -430,7 +430,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
                 <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>Date created</label>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#B0AEA8' }}>From</p>
+                    <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>From</p>
                     <input
                       type="date"
                       value={filters.dateFrom}
@@ -439,7 +439,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
                     />
                   </div>
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#B0AEA8' }}>To</p>
+                    <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>To</p>
                     <input
                       type="date"
                       value={filters.dateTo}
@@ -469,10 +469,10 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
                         background: format === f.v ? '#F7F6F3' : '#FFFFFF',
                       }}
                     >
-                      <span style={{ color: format === f.v ? '#0C0C0B' : '#9A9891', marginTop: 1, flexShrink: 0 }}>{f.icon}</span>
+                      <span style={{ color: format === f.v ? '#0C0C0B' : '#6B6B66', marginTop: 1, flexShrink: 0 }}>{f.icon}</span>
                       <div>
                         <p className="text-xs" style={{ color: '#0C0C0B' }}>{f.label}</p>
-                        <p className="text-xs mt-0.5" style={{ color: '#B0AEA8', lineHeight: 1.5 }}>{f.sub}</p>
+                        <p className="text-xs mt-0.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{f.sub}</p>
                       </div>
                     </button>
                   ))}
@@ -501,10 +501,10 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
                 : <><Download size={11} strokeWidth={1.5} /> Export {filtered.length} question{filtered.length !== 1 ? 's' : ''}</>
               }
             </button>
-            <p className="text-xs" style={{ color: '#B0AEA8' }}>
+            <p className="text-xs" style={{ color: '#6B6B66' }}>
               {filtered.length} of {questions.length} questions match
             </p>
-            <button type="button" onClick={onClose} className="ml-auto text-xs" style={{ color: '#9A9891' }}>
+            <button type="button" onClick={onClose} className="ml-auto text-xs" style={{ color: '#6B6B66' }}>
               Cancel
             </button>
           </div>

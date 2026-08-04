@@ -59,7 +59,7 @@ export function DuplicateModal({ assessment, onConfirm, onCancel, duplicating }:
           <Copy size={14} strokeWidth={1.5} style={{ color: '#4A4A45' }} />
           <p className="text-sm" style={{ color: '#0C0C0B' }}>Duplicate assessment</p>
         </div>
-        <p className="text-xs mb-4" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+        <p className="text-xs mb-4" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
           Creates a new <strong style={{ color: '#4A4A45' }}>draft</strong>. Student attempts,
           responses, results and reports are never copied.
         </p>
@@ -72,7 +72,7 @@ export function DuplicateModal({ assessment, onConfirm, onCancel, duplicating }:
           style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#0C0C0B' }}
         />
 
-        <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>COPY OPTIONS</p>
+        <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>COPY OPTIONS</p>
         <div className="flex flex-col gap-1 mb-5">
           {rows.map((r) => {
             const checked = opts[r.key];
@@ -91,10 +91,10 @@ export function DuplicateModal({ assessment, onConfirm, onCancel, duplicating }:
                 }}>
                 {checked
                   ? <CheckSquare size={13} strokeWidth={1.5} style={{ color: '#0C0C0B', marginTop: 1 }} />
-                  : <Square size={13} strokeWidth={1.5} style={{ color: '#C4C3BD', marginTop: 1 }} />}
+                  : <Square size={13} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 1 }} />}
                 <span className="flex flex-col">
                   <span className="text-xs" style={{ color: '#0C0C0B' }}>{r.label}</span>
-                  <span className="text-xs" style={{ color: '#9A9891' }}>{r.hint}</span>
+                  <span className="text-xs" style={{ color: '#6B6B66' }}>{r.hint}</span>
                 </span>
               </button>
             );
@@ -137,8 +137,8 @@ export function DeleteModal({ assessment, onConfirm, onCancel, deleting }: {
         style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3.5 md:px-5 md:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>DELETE ASSESSMENT</p>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}><X size={14} strokeWidth={1.5} /></button>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>DELETE ASSESSMENT</p>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}><X size={14} strokeWidth={1.5} /></button>
         </div>
         <div className="px-4 py-4 md:px-5 md:py-5">
           <div className="flex items-start gap-2.5 mb-4 px-3 py-3"
@@ -149,7 +149,7 @@ export function DeleteModal({ assessment, onConfirm, onCancel, deleting }: {
             </p>
           </div>
           <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>Are you sure you want to delete:</p>
-          <p className="text-xs mt-1.5 italic break-words" style={{ color: '#9A9891' }}>"{truncate(assessment.title, 80)}"</p>
+          <p className="text-xs mt-1.5 italic break-words" style={{ color: '#6B6B66' }}>"{truncate(assessment.title, 80)}"</p>
         </div>
         <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 px-4 py-3.5 md:px-5 md:py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button onClick={onConfirm} disabled={deleting}
@@ -158,7 +158,7 @@ export function DeleteModal({ assessment, onConfirm, onCancel, deleting }: {
             {deleting ? <><Loader2 size={11} className="animate-spin" /> Deleting…</> : <><Trash2 size={11} /> Delete</>}
           </button>
           <button onClick={onCancel} disabled={deleting} className="text-xs px-4 py-2.5"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>Cancel</button>
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>Cancel</button>
         </div>
       </motion.div>
     </motion.div>
@@ -177,8 +177,8 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
         className="w-full" style={{ maxWidth: 620, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3.5 md:px-5 md:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>ASSESSMENT PREVIEW</p>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}><X size={14} strokeWidth={1.5} /></button>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>ASSESSMENT PREVIEW</p>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}><X size={14} strokeWidth={1.5} /></button>
         </div>
         <div className="px-4 py-4 md:px-5 md:py-5 max-h-[76vh] overflow-y-auto space-y-5">
           <div>
@@ -198,8 +198,8 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
           {(assessment.startDate || assessment.endDate) && (
             <div style={{ background: '#FAFAF8', border: '1px solid #F0EFEB', borderRadius: 2 }}>
               <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid #F0EFEB' }}>
-                <CalendarClock size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-                <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>SCHEDULE</span>
+                <CalendarClock size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>SCHEDULE</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
                 <MetaItem label="Start"><span style={{ color: '#0C0C0B' }}>{formatDateTime(assessment.startDate)}</span></MetaItem>
@@ -210,7 +210,7 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
           {assessment.sections && assessment.sections.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>SECTIONS ({assessment.sections.length})</p>
+                <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>SECTIONS ({assessment.sections.length})</p>
                 {assessment.sectionStartOrder && assessment.sectionStartOrder !== 'sequential' && (
                   <span
                     className="text-xs px-2 py-0.5"
@@ -227,18 +227,18 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5" style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="flex items-center justify-center flex-shrink-0"
-                          style={{ width: 18, height: 18, borderRadius: 2, background: '#F0EFEB', border: '1px solid #E3E1DB', fontSize: 9, color: '#9A9891' }}>
+                          style={{ width: 18, height: 18, borderRadius: 2, background: '#F0EFEB', border: '1px solid #E3E1DB', fontSize: 9, color: '#6B6B66' }}>
                           {si + 1}
                         </div>
                         <span className="text-xs truncate" style={{ color: '#0C0C0B' }}>{sec.name}</span>
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: '#9A9891' }}>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: '#6B6B66' }}>
                         {sec.timeLimit && <span className="flex items-center gap-1"><Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min</span>}
                         {sec.breakAfter && sec.breakAfter.durationMinutes > 0 && (
                           <span
                             className="flex items-center gap-1 px-1.5"
                             title={sec.breakAfter.mandatory ? 'Mandatory break' : 'Skippable break'}
-                            style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2, color: '#9A9891', padding: '1px 6px' }}
+                            style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2, color: '#6B6B66', padding: '1px 6px' }}
                           >
                             Break: {sec.breakAfter.durationMinutes} min
                           </span>
@@ -258,10 +258,10 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
                                   {r.difficulty}
                                 </span>
                                 <span style={{ color: '#6B6B66' }}>{r.subject}</span>
-                                <span style={{ color: '#C4C3BD', fontSize: 10 }}>›</span>
-                                <span style={{ color: '#9A9891', fontSize: 11 }}>{r.topic}</span>
+                                <span style={{ color: '#6B6B66', fontSize: 10 }}>›</span>
+                                <span style={{ color: '#6B6B66', fontSize: 11 }}>{r.topic}</span>
                               </div>
-                              <span style={{ color: '#9A9891' }}>{r.count} × {r.marksPerQuestion} mk</span>
+                              <span style={{ color: '#6B6B66' }}>{r.count} × {r.marksPerQuestion} mk</span>
                             </div>
                           );
                         })}

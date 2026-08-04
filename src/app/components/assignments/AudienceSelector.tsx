@@ -53,7 +53,7 @@ export function AudienceSelector({
         {icon}
         <div className="flex-1 min-w-0">
           <p className="text-xs" style={{ color: '#0C0C0B' }}>{label}</p>
-          <p className="text-xs mt-0.5" style={{ color: '#9A9891', lineHeight: 1.5 }}>{hint}</p>
+          <p className="text-xs mt-0.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{hint}</p>
           {locked && lockReason && (
             <p className="text-xs mt-1" style={{ color: '#92680A' }}>{lockReason}</p>
           )}

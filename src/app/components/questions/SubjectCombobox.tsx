@@ -131,7 +131,7 @@ function MatchKindBadge({ kind, alias }: { kind: 'exact' | 'alias' | 'fuzzy'; al
     </span>
   );
   return (
-    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: '#B0AEA8', fontSize: 10, letterSpacing: '0.06em' }}>
+    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.06em' }}>
       suggested
     </span>
   );
@@ -272,7 +272,7 @@ export function SubjectCombobox({
           transition: 'border-color 0.15s, background 0.15s',
         }}
       >
-        <Tag size={12} strokeWidth={1.5} style={{ color: '#B0AEA8', marginLeft: 10, flexShrink: 0 }} />
+        <Tag size={12} strokeWidth={1.5} style={{ color: '#6B6B66', marginLeft: 10, flexShrink: 0 }} />
         <input
           ref={inputRef}
           type="text"
@@ -291,10 +291,10 @@ export function SubjectCombobox({
           }}
         />
         {loading
-          ? <Loader2 size={12} className="animate-spin mr-2.5 flex-shrink-0" style={{ color: '#B0AEA8' }} />
+          ? <Loader2 size={12} className="animate-spin mr-2.5 flex-shrink-0" style={{ color: '#6B6B66' }} />
           : <ChevronDown
               size={12} strokeWidth={1.5} className="mr-2.5 flex-shrink-0 transition-transform"
-              style={{ color: '#B0AEA8', transform: open ? 'rotate(180deg)' : 'none' }}
+              style={{ color: '#6B6B66', transform: open ? 'rotate(180deg)' : 'none' }}
             />
         }
       </div>
@@ -317,12 +317,12 @@ export function SubjectCombobox({
         >
           {loading ? (
             <div className="flex items-center justify-center py-6 gap-2">
-              <Loader2 size={13} className="animate-spin" style={{ color: '#B0AEA8' }} />
-              <span className="text-xs" style={{ color: '#B0AEA8' }}>Loading subjects…</span>
+              <Loader2 size={13} className="animate-spin" style={{ color: '#6B6B66' }} />
+              <span className="text-xs" style={{ color: '#6B6B66' }}>Loading subjects…</span>
             </div>
           ) : suggestions.length === 0 ? (
             <div className="px-4 py-6 text-center">
-              <p className="text-xs" style={{ color: '#B0AEA8' }}>No subjects found.</p>
+              <p className="text-xs" style={{ color: '#6B6B66' }}>No subjects found.</p>
               {inputVal.trim().length >= 2 && (
                 <button
                   type="button"
@@ -341,8 +341,8 @@ export function SubjectCombobox({
               {/* Header hint */}
               {subjects.length > 0 && inputVal.trim() === '' && (
                 <div className="px-3 pt-2 pb-1.5 flex items-center gap-1.5">
-                  <Search size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-                  <span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.06em', fontSize: 10 }}>
+                  <Search size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                  <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em', fontSize: 10 }}>
                     ALL SUBJECTS — type to search
                   </span>
                 </div>
@@ -368,12 +368,12 @@ export function SubjectCombobox({
                       }}
                     >
                       {creating
-                        ? <Loader2 size={13} className="animate-spin flex-shrink-0" style={{ color: '#9A9891' }} />
-                        : <Plus size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: '#9A9891' }} />
+                        ? <Loader2 size={13} className="animate-spin flex-shrink-0" style={{ color: '#6B6B66' }} />
+                        : <Plus size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: '#6B6B66' }} />
                       }
                       <span className="text-xs">
                         Create <span style={{ color: '#0C0C0B' }}>"{s.name}"</span>
-                        <span style={{ color: '#B0AEA8' }}> as new subject</span>
+                        <span style={{ color: '#6B6B66' }}> as new subject</span>
                       </span>
                     </button>
                   );
@@ -407,7 +407,7 @@ export function SubjectCombobox({
                     {s.subject.questionCount > 0 && (
                       <span
                         className="text-xs px-1.5 py-0.5 select-none flex-shrink-0"
-                        style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 2, fontSize: 10 }}
+                        style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 2, fontSize: 10 }}
                       >
                         {s.subject.questionCount}
                       </span>

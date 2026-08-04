@@ -26,7 +26,7 @@ type Props = {
   onClose: () => void;
 };
 
-const INK = '#0C0C0B', MUTED = '#9A9891', FAINT = '#C4C3BD', LINE = '#E3E1DB', PAPER = '#FFFFFF', BG = '#F7F6F3';
+const INK = '#0C0C0B', MUTED = '#6B6B66', FAINT = '#6B6B66', LINE = '#E3E1DB', PAPER = '#FFFFFF', BG = '#F7F6F3';
 
 export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfirm, onClose }: Props) {
   const [query, setQuery] = useState('');

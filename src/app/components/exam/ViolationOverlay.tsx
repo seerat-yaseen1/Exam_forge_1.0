@@ -93,7 +93,7 @@ function OverlayCard({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="px-6 py-5">
-        <p className="text-xs mb-4" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+        <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
           {title}
         </p>
         {children}
@@ -155,7 +155,7 @@ export function WarningOverlay({ violationType, warningNumber, onDismiss }: Warn
             <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>
               {VIOLATION_LABELS[violationType]}
             </p>
-            <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
               Warning <strong>{warningNumber} of 3</strong>. You have{' '}
               <strong>{remaining} warning{remaining !== 1 ? 's' : ''}</strong> remaining before
               your exam is automatically terminated.
@@ -295,7 +295,7 @@ export function FullscreenRequiredOverlay({ onReturnFullscreen }: FullscreenProp
             <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>
               Fullscreen mode was exited
             </p>
-            <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
               This exam must be taken in fullscreen mode. This incident has been logged.
               Click the button below to return to fullscreen and continue your exam.
             </p>
@@ -342,7 +342,7 @@ export function TerminatedOverlay({ reason, onExitView }: TerminatedProps) {
         <p className="text-2xl mb-3" style={{ color: '#FFFFFF', fontWeight: 300, lineHeight: 1.3 }}>
           Your exam has been terminated.
         </p>
-        <p className="text-sm mb-6" style={{ color: '#9A9891', lineHeight: 1.7 }}>
+        <p className="text-sm mb-6" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
           {reason}
         </p>
         <div
@@ -359,7 +359,7 @@ export function TerminatedOverlay({ reason, onExitView }: TerminatedProps) {
           onClick={onExitView}
           className="flex items-center gap-2 text-xs px-5 py-2.5"
           style={{
-            border: '1px solid #4A4A45', color: '#9A9891',
+            border: '1px solid #4A4A45', color: '#6B6B66',
             borderRadius: 2, background: 'transparent', cursor: 'pointer',
           }}
         >

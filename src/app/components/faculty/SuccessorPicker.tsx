@@ -67,7 +67,7 @@ export function SuccessorPicker({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-1.5 text-xs" style={{ color: '#9A9891' }}>
+      <div className="flex items-center gap-1.5 text-xs" style={{ color: '#6B6B66' }}>
         <Loader2 size={10} className="animate-spin" /> Loading colleagues…
       </div>
     );
@@ -98,7 +98,7 @@ export function SuccessorPicker({
         ))}
       </select>
       {options.length === 0 && (
-        <span className="text-xs" style={{ color: '#B0AEA8' }}>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>
           No other active faculty — the institute administrator will inherit.
         </span>
       )}

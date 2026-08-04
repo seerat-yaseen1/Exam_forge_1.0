@@ -46,7 +46,7 @@ export function SebQuitPage() {
       <p className="text-sm mb-2 text-center" style={{ color: '#0C0C0B', lineHeight: 1.7, maxWidth: 380 }}>
         You may now close Safe Exam Browser.
       </p>
-      <p className="text-xs text-center" style={{ color: '#9A9891', lineHeight: 1.6, maxWidth: 380 }}>
+      <p className="text-xs text-center" style={{ color: '#6B6B66', lineHeight: 1.6, maxWidth: 380 }}>
         If Safe Exam Browser did not close automatically, quit it from its
         toolbar / taskbar quit button, or press Ctrl+Q (Windows) / Cmd+Q (Mac).
         A quit password, if one was set by your institute, may be requested.

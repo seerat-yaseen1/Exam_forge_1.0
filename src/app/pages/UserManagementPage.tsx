@@ -57,7 +57,7 @@ function validityColor(v: Institute): string {
   const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   if (days < 0) return '#9B2828';
   if (days <= 7) return '#8B5E1A';
-  return '#9A9891';
+  return '#6B6B66';
 }
 
 // ── Shared input style ────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ function Field({
     <div className="mb-5">
       <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
       {children}
-      {hint && <p className="mt-1.5 text-xs" style={{ color: '#B0AEA8' }}>{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs" style={{ color: '#6B6B66' }}>{hint}</p>}
     </div>
   );
 }
@@ -272,10 +272,10 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
             {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0"
               style={{ borderBottom: '1px solid #E3E1DB' }}>
-              <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
                 {isEdit ? 'EDIT INSTITUTE' : 'NEW INSTITUTE'}
               </p>
-              <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+              <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
                 <X size={15} strokeWidth={1.5} />
               </button>
             </div>
@@ -298,7 +298,7 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
                     <span style={{ fontFamily: 'monospace', fontSize: 14, letterSpacing: '0.16em', color: '#0C0C0B', fontWeight: 600 }}>
                       {editing!.code}
                     </span>
-                    <span className="ml-auto text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>IMMUTABLE</span>
+                    <span className="ml-auto text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>IMMUTABLE</span>
                   </div>
                 </Field>
               )}
@@ -306,8 +306,8 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
               {!isEdit && (
                 <div className="mb-5 flex items-start gap-2 px-3 py-2.5"
                   style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#B0AEA8', marginTop: 5, flexShrink: 0 }} />
-                  <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#6B6B66', marginTop: 5, flexShrink: 0 }} />
+                  <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                     A unique 6-character Institute ID will be generated automatically upon creation.
                   </p>
                 </div>
@@ -366,7 +366,7 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
                 </button>
                 <button onClick={onClose} disabled={saving}
                   className="text-xs px-4 py-2.5 transition-colors"
-                  style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
                   onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}>
                   Cancel
@@ -434,15 +434,15 @@ function ExtendValidityModal({
         <div className="flex items-center justify-between px-5 py-4"
           style={{ borderBottom: '1px solid #E3E1DB' }}>
           <div>
-            <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>EXTEND VALIDITY</p>
+            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>EXTEND VALIDITY</p>
             <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{institute.name}</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
         <div className="px-5 py-5">
-          <p className="text-xs mb-3" style={{ color: '#9A9891' }}>
+          <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
             Current expiry: <span style={{ color: '#0C0C0B' }}>{formatDate(institute.activeUntil)}</span>
           </p>
           <ValidityFields
@@ -464,7 +464,7 @@ function ExtendValidityModal({
           </button>
           <button onClick={onClose} disabled={saving}
             className="text-xs px-4 py-2.5"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -697,9 +697,9 @@ export function UserManagementPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-6"
           style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>WEB OWNER</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>WEB OWNER</p>
             <h1 className="text-base" style={{ color: '#0C0C0B' }}>User Management</h1>
-            <p className="text-xs mt-1" style={{ color: '#B0AEA8' }}>
+            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
               Institute Control — create, control, disable, and remove.
             </p>
           </div>
@@ -712,8 +712,8 @@ export function UserManagementPage() {
                   style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
                 <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
               </div>
-              <span className="text-xs" style={{ color: '#9A9891' }}>
-                Live{syncDisplay && <span style={{ color: '#C4C3BD' }}> · {syncDisplay}</span>}
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
+                Live{syncDisplay && <span style={{ color: '#6B6B66' }}> · {syncDisplay}</span>}
               </span>
             </div>
 
@@ -733,7 +733,7 @@ export function UserManagementPage() {
           {!loading && totalCount > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex items-center gap-4 flex-wrap mb-5">
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 {totalCount} {totalCount === 1 ? 'institute' : 'institutes'}
               </span>
               <span style={{ color: '#E3E1DB' }}>·</span>
@@ -741,7 +741,7 @@ export function UserManagementPage() {
               {disabledCount > 0 && (
                 <>
                   <span style={{ color: '#E3E1DB' }}>·</span>
-                  <span className="text-xs" style={{ color: '#9A9891' }}>{disabledCount} disabled</span>
+                  <span className="text-xs" style={{ color: '#6B6B66' }}>{disabledCount} disabled</span>
                 </>
               )}
             </motion.div>
@@ -771,7 +771,7 @@ export function UserManagementPage() {
                   <p className="text-xs mt-0.5" style={{ color: '#B06060' }}>{emailNotice.error}</p>
                 )}
               </div>
-              <button onClick={() => setEmailNotice(null)} className="ml-auto" style={{ color: '#C4C3BD' }}>
+              <button onClick={() => setEmailNotice(null)} className="ml-auto" style={{ color: '#6B6B66' }}>
                 <X size={12} strokeWidth={1.5} />
               </button>
             </motion.div>
@@ -837,7 +837,7 @@ export function UserManagementPage() {
                 {['INSTITUTE', 'ADMINISTRATOR', 'STATUS', 'VALID UNTIL', ''].map((col, i) => (
                   <th key={i} className="text-left px-5 py-3 text-xs"
                     style={{
-                      color: '#9A9891', letterSpacing: '0.08em', fontWeight: 400,
+                      color: '#6B6B66', letterSpacing: '0.08em', fontWeight: 400,
                       width: i === 0 ? '26%' : i === 1 ? '28%' : i === 2 ? '12%' : i === 3 ? '16%' : '18%',
                     }}>
                     {col}
@@ -854,7 +854,7 @@ export function UserManagementPage() {
                   <td colSpan={5}>
                     <div className="flex flex-col items-center py-16">
                       <Building2 size={30} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-                      <p className="text-xs mt-4" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>
+                      <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                         No institutes registered
                       </p>
                       <p className="text-xs mt-1" style={{ color: '#DDDBD5' }}>Create one to begin.</p>
@@ -895,20 +895,20 @@ export function UserManagementPage() {
                             {institute.name}
                           </p>
                           <p className="text-xs mt-0.5"
-                            style={{ color: '#B0AEA8', letterSpacing: '0.12em', fontFamily: 'monospace' }}>
+                            style={{ color: '#6B6B66', letterSpacing: '0.12em', fontFamily: 'monospace' }}>
                             {institute.code}
                           </p>
                         </div>
                         <ChevronRight size={12} strokeWidth={1.5}
                           className="opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 flex-shrink-0"
-                          style={{ color: '#9A9891' }} />
+                          style={{ color: '#6B6B66' }} />
                       </button>
                     </td>
 
                     {/* Administrator */}
                     <td className="px-5 py-3.5">
                       <p className="text-xs" style={{ color: '#2C2C2A' }}>{institute.adminName}</p>
-                      <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{institute.adminEmail}</p>
+                      <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{institute.adminEmail}</p>
                     </td>
 
                     {/* Status badge */}
@@ -916,10 +916,10 @@ export function UserManagementPage() {
                       <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                         style={institute.status === 'active'
                           ? { background: '#F0F7F2', color: '#2A6B3A', border: '1px solid #C6DECE', borderRadius: 2 }
-                          : { background: '#F5F5F3', color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                          : { background: '#F5F5F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                         <span style={{
                           width: 5, height: 5, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
-                          background: institute.status === 'active' ? '#2A6B3A' : '#C4C3BD',
+                          background: institute.status === 'active' ? '#2A6B3A' : '#6B6B66',
                         }} />
                         {institute.status === 'active' ? 'Active' : 'Disabled'}
                       </span>
@@ -930,7 +930,7 @@ export function UserManagementPage() {
                       <p className="text-xs" style={{ color: validityColor(institute), fontVariantNumeric: 'tabular-nums' }}>
                         {validityLabel(institute)}
                       </p>
-                      <p className="text-xs mt-0.5" style={{ color: '#C4C3BD', letterSpacing: '0.04em' }}>
+                      <p className="text-xs mt-0.5" style={{ color: '#6B6B66', letterSpacing: '0.04em' }}>
                         {institute.validityType?.toUpperCase()}
                       </p>
                     </td>
@@ -983,7 +983,7 @@ export function UserManagementPage() {
                               type="button"
                               onClick={() => setDeletePassVisible((v) => !v)}
                               className="absolute right-2 top-1/2 -translate-y-1/2"
-                              style={{ color: '#C4C3BD' }}>
+                              style={{ color: '#6B6B66' }}>
                               {deletePassVisible ? <EyeOff size={12} strokeWidth={1.5} /> : <Eye size={12} strokeWidth={1.5} />}
                             </button>
                           </div>
@@ -999,7 +999,7 @@ export function UserManagementPage() {
                             </button>
                             <button onClick={() => { setDeletingId(null); setDeletePassError(''); }} disabled={deleteLoading}
                               className="text-xs px-2.5 py-1.5"
-                              style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                              style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
                               Cancel
                             </button>
                           </div>
@@ -1057,7 +1057,7 @@ export function UserManagementPage() {
         </div>
 
         {!loading && institutes.length > 0 && (
-          <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>
+          <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>
             Data refreshes automatically every 5 seconds.
           </p>
         )}
@@ -1102,12 +1102,12 @@ function ActionButton({
       disabled={disabled}
       title={title}
       className="p-2 rounded transition-all"
-      style={{ color: '#C4C3BD', cursor: disabled ? 'not-allowed' : 'pointer' }}
+      style={{ color: '#6B6B66', cursor: disabled ? 'not-allowed' : 'pointer' }}
       onMouseEnter={(e) => {
         if (!disabled) (e.currentTarget as HTMLElement).style.color = danger ? '#9B2828' : '#0C0C0B';
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.color = '#C4C3BD';
+        (e.currentTarget as HTMLElement).style.color = '#6B6B66';
       }}
     >
       {children}

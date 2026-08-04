@@ -46,7 +46,7 @@ export function FacultyQuestionRightsEditor({
 
   if (offerable.length === 0) {
     return (
-      <p className="text-xs" style={{ color: '#B0AEA8' }}>
+      <p className="text-xs" style={{ color: '#6B6B66' }}>
         This institute has no question rights enabled. Ask the Web Owner to raise the ceiling first.
       </p>
     );
@@ -88,7 +88,7 @@ export function FacultyQuestionRightsEditor({
 
   return (
     <div className="mt-2">
-      <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.05em' }}>QUESTION RIGHTS</p>
+      <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>QUESTION RIGHTS</p>
       {offerable.map((r) => {
         const modes = grantableModes(ceiling, r);
         const fr = rights[r];
@@ -111,7 +111,7 @@ export function FacultyQuestionRightsEditor({
                           border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
                           borderRadius: 2,
                           background: on ? '#F0F7F2' : '#FFFFFF',
-                          color: on ? '#2A6B3A' : '#9A9891',
+                          color: on ? '#2A6B3A' : '#6B6B66',
                           cursor: saving ? 'not-allowed' : 'pointer',
                         }}
                         title={mode === 'request' ? 'Faculty raises a request you approve (approval workflow arrives in a later phase)' : undefined}
@@ -130,7 +130,7 @@ export function FacultyQuestionRightsEditor({
                   border: `1px solid ${fr.granted ? '#C6DECE' : '#E3E1DB'}`,
                   borderRadius: 2,
                   background: fr.granted ? '#F0F7F2' : '#FFFFFF',
-                  color: fr.granted ? '#2A6B3A' : '#9A9891',
+                  color: fr.granted ? '#2A6B3A' : '#6B6B66',
                   cursor: saving ? 'not-allowed' : 'pointer',
                 }}
               >

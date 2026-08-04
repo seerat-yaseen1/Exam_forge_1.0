@@ -286,7 +286,7 @@ export function RuleBuilderPanel({
         }}>
 
         <div className="flex-shrink-0 px-4 pt-4 pb-2">
-          <p style={{ color: '#C4C3BD', fontSize: 10, letterSpacing: '0.09em' }}>SECTIONS</p>
+          <p style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.09em' }}>SECTIONS</p>
         </div>
 
         <div className="flex-1">
@@ -308,11 +308,11 @@ export function RuleBuilderPanel({
                 <span className="text-xs" style={{ color: isActive ? '#0C0C0B' : '#6B6B66', lineHeight: 1.4, wordBreak: 'break-word' }}>
                   {sec.name}
                 </span>
-                <span style={{ color: '#C4C3BD', fontSize: 10, marginTop: 2 }}>
+                <span style={{ color: '#6B6B66', fontSize: 10, marginTop: 2 }}>
                   {secQ > 0 ? `${secQ} Q · ${secMarks} mk` : 'no rules yet'}
                 </span>
                 {sec.timeLimit && (
-                  <span className="flex items-center gap-1 mt-1" style={{ color: '#B0AEA8', fontSize: 10 }}>
+                  <span className="flex items-center gap-1 mt-1" style={{ color: '#6B6B66', fontSize: 10 }}>
                     <Timer size={9} strokeWidth={1.5} />{sec.timeLimit} min
                   </span>
                 )}
@@ -323,8 +323,8 @@ export function RuleBuilderPanel({
 
         {/* Grand total at rail bottom */}
         <div className="flex-shrink-0 px-4 py-3" style={{ borderTop: '1px solid #E3E1DB', background: '#F7F6F3' }}>
-          <p style={{ color: '#9A9891', fontSize: 10 }}>{grandTotalQ} Q · {grandTotalMarks} marks</p>
-          <p style={{ color: '#C4C3BD', fontSize: 10, marginTop: 1 }}>
+          <p style={{ color: '#6B6B66', fontSize: 10 }}>{grandTotalQ} Q · {grandTotalMarks} marks</p>
+          <p style={{ color: '#6B6B66', fontSize: 10, marginTop: 1 }}>
             {sections.length} section{sections.length !== 1 ? 's' : ''} total
           </p>
         </div>
@@ -354,8 +354,8 @@ export function RuleBuilderPanel({
       ) : (
         <div className="px-5 py-2.5 flex-shrink-0 flex items-center gap-2"
           style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
-          <Layers size={11} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
-          <p style={{ color: '#9A9891', fontSize: 11, lineHeight: 1.5 }}>
+          <Layers size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+          <p style={{ color: '#6B6B66', fontSize: 11, lineHeight: 1.5 }}>
             No topics pre-assigned — showing full bank. Assign topics in Setup (Step 1) for a focused view.
           </p>
         </div>
@@ -364,7 +364,7 @@ export function RuleBuilderPanel({
       {/* ── Subject / topic / difficulty tree ── */}
       <div className="flex-1" style={locked ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
         {allSubjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16" style={{ color: '#C4C3BD' }}>
+          <div className="flex flex-col items-center justify-center py-16" style={{ color: '#6B6B66' }}>
             {isTopicFiltered ? (
               <>
                 <p className="text-xs">No topics assigned to this section</p>
@@ -400,7 +400,7 @@ export function RuleBuilderPanel({
                 >
                   {/* Chevron */}
                   <ChevronRight size={13} strokeWidth={1.5}
-                    style={{ color: '#9A9891', flexShrink: 0, transition: 'transform 0.15s', transform: isSubjectOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+                    style={{ color: '#6B6B66', flexShrink: 0, transition: 'transform 0.15s', transform: isSubjectOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
 
                   <span className="flex-1 text-xs" style={{ color: '#0C0C0B' }}>{subject}</span>
 
@@ -420,7 +420,7 @@ export function RuleBuilderPanel({
                     </span>
                   )}
 
-                  <span style={{ color: '#C4C3BD', fontSize: 11, flexShrink: 0 }}>{totalInBank} in bank</span>
+                  <span style={{ color: '#6B6B66', fontSize: 11, flexShrink: 0 }}>{totalInBank} in bank</span>
                 </button>
 
                 {/* Topics list */}
@@ -462,7 +462,7 @@ export function RuleBuilderPanel({
                                 <span style={{ flexShrink: 0 }}>
                                   {isTopicSelected
                                     ? <CheckSquare size={13} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-                                    : <Square size={13} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />}
+                                    : <Square size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                                 </span>
 
                                 {/* Topic name */}
@@ -479,7 +479,7 @@ export function RuleBuilderPanel({
 
                                 {/* Marks subtotal for this topic */}
                                 {topicMarks > 0 && (
-                                  <span style={{ color: '#9A9891', fontSize: 11, flexShrink: 0 }}>
+                                  <span style={{ color: '#6B6B66', fontSize: 11, flexShrink: 0 }}>
                                     {topicMarks} mk
                                   </span>
                                 )}
@@ -492,7 +492,7 @@ export function RuleBuilderPanel({
                                   </span>
                                 )}
 
-                                <span style={{ color: '#C4C3BD', fontSize: 10, flexShrink: 0 }}>
+                                <span style={{ color: '#6B6B66', fontSize: 10, flexShrink: 0 }}>
                                   {topicTotalInBank} in bank
                                 </span>
                               </button>
@@ -545,23 +545,23 @@ export function RuleBuilderPanel({
         return (
           <div className="flex-shrink-0 flex items-center gap-2 px-5 py-2"
             style={{ borderTop: '1px solid #F0EFEB', background: '#FDFBF7' }}>
-            <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#B0AEA8' }} />
-            <span className="text-xs" style={{ color: '#9A9891' }}>Penalty for this section</span>
+            <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <span className="text-xs" style={{ color: '#6B6B66' }}>Penalty for this section</span>
             {secOverrides ? (
               <div className="flex items-center gap-1.5 ml-auto">
                 <PenaltyInput compact policy={secPol ?? {}} onChange={(patch) => grading.setSectionPolicy(activeSection.id, patch)} />
                 <button type="button" onClick={() => grading.setSectionPolicy(activeSection.id, null)}
-                  style={{ fontSize: 10, color: '#9A9891', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  style={{ fontSize: 10, color: '#6B6B66', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
                   reset
                 </button>
               </div>
             ) : (
               <button type="button" onClick={() => grading.setSectionPolicy(activeSection.id, { penaltyValue: 0 })}
                 className="ml-auto flex items-center gap-1"
-                style={{ fontSize: 10, color: '#9A9891', padding: '2px 8px', border: '1px dashed #E3E1DB', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}>
-                <span style={{ color: '#C4C3BD' }}>inherits exam default:</span>
+                style={{ fontSize: 10, color: '#6B6B66', padding: '2px 8px', border: '1px dashed #E3E1DB', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}>
+                <span style={{ color: '#6B6B66' }}>inherits exam default:</span>
                 <span>{grading.resolveInherited(activeSection.id, 'medium')}</span>
-                <span style={{ color: '#C4C3BD' }}>· override</span>
+                <span style={{ color: '#6B6B66' }}>· override</span>
               </button>
             )}
           </div>
@@ -572,7 +572,7 @@ export function RuleBuilderPanel({
       {sectionTotalQ > 0 && (
         <div className="flex-shrink-0 flex items-center justify-between px-5 py-2.5"
           style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
-          <span className="text-xs" style={{ color: '#9A9891' }}>
+          <span className="text-xs" style={{ color: '#6B6B66' }}>
             {activeSection.name} · {sectionTotalQ} question{sectionTotalQ !== 1 ? 's' : ''}
           </span>
           <span className="text-xs" style={{ color: '#0C0C0B' }}>{sectionTotalMarks} marks</span>
@@ -635,7 +635,7 @@ export function SectionTopicPicker({
   if (allSubjects.length === 0) {
     return (
       <div className="py-5 text-center" style={{ borderTop: '1px solid #E3E1DB' }}>
-        <p style={{ color: '#C4C3BD', fontSize: 11 }}>No subjects in question bank</p>
+        <p style={{ color: '#6B6B66', fontSize: 11 }}>No subjects in question bank</p>
         <p style={{ color: '#DDDBD5', fontSize: 10, marginTop: 3 }}>Add questions first to assign topics</p>
       </div>
     );
@@ -659,7 +659,7 @@ export function SectionTopicPicker({
             >
               <ChevronRight
                 size={11} strokeWidth={1.5}
-                style={{ color: '#9A9891', flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'none' }}
+                style={{ color: '#6B6B66', flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'none' }}
               />
               <span className="flex-1 text-xs" style={{ color: '#0C0C0B' }}>{subject}</span>
               {assignedCount > 0 && (
@@ -694,7 +694,7 @@ export function SectionTopicPicker({
                         <span style={{ flexShrink: 0 }}>
                           {isChecked
                             ? <CheckSquare size={12} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-                            : <Square size={12} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />}
+                            : <Square size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                         </span>
                         <span className="flex-1 text-xs" style={{ color: isChecked ? '#0C0C0B' : '#6B6B66' }}>
                           {topic}
@@ -763,14 +763,14 @@ export function SubjectPickerPhase({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-14">
-        <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+        <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
       </div>
     );
   }
 
   if (subjects.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-14" style={{ color: '#C4C3BD' }}>
+      <div className="flex flex-col items-center justify-center py-14" style={{ color: '#6B6B66' }}>
         <BookOpen size={22} strokeWidth={1} style={{ marginBottom: 10 }} />
         <p className="text-xs">No subjects in question bank</p>
         <p style={{ fontSize: 11, color: '#DDDBD5', marginTop: 4 }}>Add questions with subject metadata first</p>
@@ -780,7 +780,7 @@ export function SubjectPickerPhase({
 
   return (
     <div>
-      <p className="text-xs mb-4" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+      <p className="text-xs mb-4" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
         Select the subjects this assessment will draw from. Topics are chosen in the next step.
       </p>
 
@@ -815,7 +815,7 @@ export function SubjectPickerPhase({
               {/* Name + meta */}
               <div className="flex-1 min-w-0">
                 <p className="text-xs" style={{ color: isSelected ? '#0C0C0B' : '#4A4A45' }}>{subj.name}</p>
-                <p style={{ fontSize: 10, color: '#B0AEA8', marginTop: 2 }}>
+                <p style={{ fontSize: 10, color: '#6B6B66', marginTop: 2 }}>
                   {topicCount} topic{topicCount !== 1 ? 's' : ''}{qCount > 0 ? ` · ${qCount} Q` : ''}
                 </p>
               </div>
@@ -831,7 +831,7 @@ export function SubjectPickerPhase({
 
       {/* Footer */}
       <div className="flex items-center justify-between mt-5">
-        <span className="text-xs" style={{ color: '#B0AEA8' }}>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>
           {selectedIds.length === 0
             ? 'Select at least one subject to continue'
             : `${selectedIds.length} subject${selectedIds.length !== 1 ? 's' : ''} selected`}
@@ -953,9 +953,9 @@ export function TopicPickerPhase({
 
   if (selectedSubjectIds.length === 0) {
     return (
-      <div className="py-10 text-center" style={{ color: '#C4C3BD' }}>
+      <div className="py-10 text-center" style={{ color: '#6B6B66' }}>
         <p className="text-xs">No subjects selected</p>
-        <button type="button" onClick={onBack} className="mt-3 text-xs transition-opacity hover:opacity-70" style={{ color: '#9A9891' }}>
+        <button type="button" onClick={onBack} className="mt-3 text-xs transition-opacity hover:opacity-70" style={{ color: '#6B6B66' }}>
           ← Back to subjects
         </button>
       </div>
@@ -964,7 +964,7 @@ export function TopicPickerPhase({
 
   return (
     <div>
-      <p className="text-xs mb-3" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+      <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
         Choose which topics to include. Grayed-out topics have no questions yet.
       </p>
 
@@ -989,7 +989,7 @@ export function TopicPickerPhase({
                 >
                   <ChevronRight
                     size={11} strokeWidth={1.5}
-                    style={{ color: '#9A9891', flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'none' }}
+                    style={{ color: '#6B6B66', flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'none' }}
                   />
                   <span className="flex-1 text-xs truncate" style={{ color: '#0C0C0B' }}>{subjName}</span>
                   {assignedCount > 0 && (
@@ -1027,7 +1027,7 @@ export function TopicPickerPhase({
                   >
                     {topics.length === 0 ? (
                       <div className="px-5 py-3" style={{ background: '#FFFFFF', borderTop: '1px solid #F0EFEB' }}>
-                        <p style={{ color: '#C4C3BD', fontSize: 11 }}>No topics found for this subject</p>
+                        <p style={{ color: '#6B6B66', fontSize: 11 }}>No topics found for this subject</p>
                       </div>
                     ) : (
                       topics.map((topic) => {
@@ -1053,12 +1053,12 @@ export function TopicPickerPhase({
                             <span style={{ flexShrink: 0 }}>
                               {isChecked
                                 ? <CheckSquare size={12} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-                                : <Square size={12} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />}
+                                : <Square size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                             </span>
                             <span className="flex-1 text-xs" style={{ color: isChecked ? '#0C0C0B' : '#6B6B66' }}>
                               {topic}
                             </span>
-                            <span style={{ fontSize: 10, color: hasQ ? '#B0AEA8' : '#C4C3BD', flexShrink: 0 }}>
+                            <span style={{ fontSize: 10, color: hasQ ? '#6B6B66' : '#6B6B66', flexShrink: 0 }}>
                               {hasQ ? `${qCount} Q` : 'No questions'}
                             </span>
                           </button>
@@ -1084,7 +1084,7 @@ export function TopicPickerPhase({
           ← Subjects
         </button>
         <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: '#B0AEA8' }}>
+          <span className="text-xs" style={{ color: '#6B6B66' }}>
             {selectedTopics.length === 0
               ? `${totalAvailableTopics} available`
               : `${selectedTopics.length} of ${totalAvailableTopics} selected`}

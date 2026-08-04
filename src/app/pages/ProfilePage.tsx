@@ -57,7 +57,7 @@ export function ProfilePage() {
       <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
         <p
           className="text-xs mb-1"
-          style={{ color: '#9A9891', letterSpacing: '0.1em' }}
+          style={{ color: '#6B6B66', letterSpacing: '0.1em' }}
         >
           WEB OWNER
         </p>
@@ -70,7 +70,7 @@ export function ProfilePage() {
       <div className="mb-8">
         <p
           className="text-xs mb-4"
-          style={{ color: '#9A9891', letterSpacing: '0.08em' }}
+          style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
         >
           ACCOUNT
         </p>
@@ -102,7 +102,7 @@ export function ProfilePage() {
             >
               {user?.email}
             </div>
-            <p className="mt-1.5 text-xs" style={{ color: '#B0AEA8' }}>
+            <p className="mt-1.5 text-xs" style={{ color: '#6B6B66' }}>
               Email address cannot be changed.
             </p>
           </div>
@@ -116,7 +116,7 @@ export function ProfilePage() {
       <form onSubmit={handleSave}>
         <p
           className="text-xs mb-4"
-          style={{ color: '#9A9891', letterSpacing: '0.08em' }}
+          style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
         >
           PLATFORM IDENTITY
         </p>
@@ -211,7 +211,7 @@ export function ProfilePage() {
                   Remove
                 </button>
               )}
-              <p className="text-xs" style={{ color: '#B0AEA8' }}>
+              <p className="text-xs" style={{ color: '#6B6B66' }}>
                 PNG, SVG, or JPG. Reflects immediately.
               </p>
             </div>

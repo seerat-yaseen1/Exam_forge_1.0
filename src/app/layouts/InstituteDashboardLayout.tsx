@@ -56,7 +56,7 @@ function InstituteMark({
         flexShrink: 0,
       }}
     >
-      <Building2 size={size * 0.44} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+      <Building2 size={size * 0.44} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
     </div>
   );
 }
@@ -116,7 +116,7 @@ function InstituteProfileDropdown({
           <p className="text-xs font-medium truncate" style={{ color: '#0C0C0B' }}>
             {session?.adminName}
           </p>
-          <p className="text-xs truncate mt-0.5" style={{ color: '#9A9891' }}>
+          <p className="text-xs truncate mt-0.5" style={{ color: '#6B6B66' }}>
             {session?.instituteName}
           </p>
         </div>
@@ -131,7 +131,7 @@ function InstituteProfileDropdown({
           onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
         >
-          <User size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <User size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           Profile
         </button>
 
@@ -142,7 +142,7 @@ function InstituteProfileDropdown({
           onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
         >
-          <Upload size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <Upload size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           {logo ? 'Change institute logo' : 'Upload institute logo'}
         </button>
       </div>
@@ -156,7 +156,7 @@ function InstituteProfileDropdown({
           onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
         >
-          <LogOut size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <LogOut size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           Sign out
         </button>
       </div>
@@ -178,7 +178,7 @@ function SidebarNavItem({
         style={{
           paddingLeft:  isActive ? 18 : 20,
           paddingRight: 16,
-          color:      isActive ? '#0C0C0B' : '#9A9891',
+          color:      isActive ? '#0C0C0B' : '#6B6B66',
           background: isActive ? '#F7F6F3' : 'transparent',
           borderLeft: isActive ? '2px solid #0C0C0B' : '2px solid transparent',
           letterSpacing: '0.01em',
@@ -191,7 +191,7 @@ function SidebarNavItem({
         }}
         onMouseLeave={(e) => {
           if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color      = '#9A9891';
+            (e.currentTarget as HTMLElement).style.color      = '#6B6B66';
             (e.currentTarget as HTMLElement).style.background = 'transparent';
           }
         }}
@@ -294,7 +294,7 @@ export function InstituteDashboardLayout() {
                   background: '#F0EFEB', border: '1px solid #E3E1DB',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <Loader2 size={14} strokeWidth={1.5} className="animate-spin" style={{ color: '#9A9891' }} />
+                  <Loader2 size={14} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
                 </div>
               ) : (
                 <InstituteMark logo={logo} name={session.instituteName} size={32} />
@@ -324,7 +324,7 @@ export function InstituteDashboardLayout() {
         }}
       >
         <div className="pt-5 pb-2 px-5">
-          <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em', marginBottom: 6 }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em', marginBottom: 6 }}>
             MODULES
           </p>
         </div>

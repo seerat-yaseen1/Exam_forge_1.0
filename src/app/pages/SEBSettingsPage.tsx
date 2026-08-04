@@ -155,15 +155,15 @@ export function SEBSettingsPage() {
       {/* Header */}
       <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
         <div className="flex items-center gap-2 mb-2">
-          <Shield size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+          <Shield size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
             PLATFORM SECURITY
           </p>
         </div>
         <h1 className="text-2xl font-light mb-1" style={{ color: '#0C0C0B', letterSpacing: '0.01em' }}>
           Safe Exam Browser
         </h1>
-        <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+        <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
           Config Keys accepted by SEB verification. A key is the checksum of a .seb
           config's settings — it identifies exactly one unmodified configuration.
         </p>
@@ -186,8 +186,8 @@ export function SEBSettingsPage() {
 
       {loading && (
         <div className="flex flex-col items-center py-24">
-          <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-          <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Loading SEB settings…</p>
+          <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+          <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading SEB settings…</p>
         </div>
       )}
 
@@ -203,14 +203,14 @@ export function SEBSettingsPage() {
         <>
           {/* Key list */}
           <div className="mb-8">
-            <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+            <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
               ACTIVE CONFIG KEYS ({settings.configKeys.length})
             </p>
 
             {settings.configKeys.length === 0 && (
               <div className="px-4 py-6 text-center"
                 style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2 }}>
-                <p className="text-xs" style={{ color: '#9A9891' }}>
+                <p className="text-xs" style={{ color: '#6B6B66' }}>
                   No Config Keys yet. Add the key shown in the SEB Config Tool for your
                   exam configuration.
                 </p>
@@ -222,7 +222,7 @@ export function SEBSettingsPage() {
                 <div key={key} className="flex items-center justify-between gap-3 px-4 py-3"
                   style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <KeyRound size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                    <KeyRound size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                     <p className="text-xs truncate" style={{ color: '#0C0C0B', fontFamily: 'ui-monospace, monospace' }}>
                       {revealed.has(key) ? key : maskKey(key)}
                     </p>
@@ -231,7 +231,7 @@ export function SEBSettingsPage() {
                     <button
                       onClick={() => toggleReveal(key)}
                       className="p-1.5"
-                      style={{ color: '#9A9891', cursor: 'pointer', background: 'none', border: 'none' }}
+                      style={{ color: '#6B6B66', cursor: 'pointer', background: 'none', border: 'none' }}
                       aria-label={revealed.has(key) ? 'Hide key' : 'Reveal key'}
                     >
                       {revealed.has(key) ? <EyeOff size={13} strokeWidth={1.5} /> : <Eye size={13} strokeWidth={1.5} />}
@@ -257,7 +257,7 @@ export function SEBSettingsPage() {
             </div>
 
             {settings.updatedAt && (
-              <p className="text-xs mt-2" style={{ color: '#C4C3BD' }}>
+              <p className="text-xs mt-2" style={{ color: '#6B6B66' }}>
                 Last updated {new Date(settings.updatedAt).toLocaleString('en-GB', {
                   day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
                 })}
@@ -267,7 +267,7 @@ export function SEBSettingsPage() {
 
           {/* Platform .seb file (Stage 4b) */}
           <div className="mb-8">
-            <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+            <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
               PLATFORM .SEB FILE
             </p>
             <div className="px-4 py-4"
@@ -283,7 +283,7 @@ export function SEBSettingsPage() {
                         {fileInfo.fileName || 'platform.seb'}
                       </a>
                       {fileInfo.updatedAt && (
-                        <p className="text-xs" style={{ color: '#C4C3BD' }}>
+                        <p className="text-xs" style={{ color: '#6B6B66' }}>
                           Uploaded {new Date(fileInfo.updatedAt).toLocaleString('en-GB', {
                             day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
                           })}
@@ -318,7 +318,7 @@ export function SEBSettingsPage() {
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                  <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                     No platform .seb file yet. Upload the file saved by the Config Tool —
                     every SEB exam using the platform keys will offer it on the briefing
                     gate automatically.
@@ -344,7 +344,7 @@ export function SEBSettingsPage() {
               {fileError && (
                 <p className="text-xs mt-2" style={{ color: '#9B2828' }}>{fileError}</p>
               )}
-              <p className="text-xs mt-3" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+              <p className="text-xs mt-3" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                 Rotating? Upload the new file AND add its Config Key above in the same
                 sitting — the file and the key must always describe the same configuration.
               </p>
@@ -353,7 +353,7 @@ export function SEBSettingsPage() {
 
           {/* Add key */}
           <div className="mb-8">
-            <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+            <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
               ADD A CONFIG KEY
             </p>
             <div className="px-4 py-4"
@@ -390,7 +390,7 @@ export function SEBSettingsPage() {
               {inputError && (
                 <p className="text-xs mt-2" style={{ color: '#9B2828' }}>{inputError}</p>
               )}
-              <p className="text-xs mt-2" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+              <p className="text-xs mt-2" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                 SEB Config Tool → Exam tab → "Use Browser &amp; Config Keys" → copy the
                 <strong> Config Key</strong> (not the Browser Exam Key).
               </p>
@@ -399,7 +399,7 @@ export function SEBSettingsPage() {
 
           {/* Rotation checklist */}
           <div className="mb-8">
-            <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+            <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
               ROTATING A CONFIGURATION
             </p>
             <div className="px-4 py-4"

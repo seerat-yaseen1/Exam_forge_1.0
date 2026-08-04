@@ -55,7 +55,7 @@ function StepStrip({ current }: { current: number }) {
                 style={{
                   width: 18, height: 18, borderRadius: '50%',
                   background: done ? '#2A6B3A' : active ? '#0C0C0B' : '#F0EFEB',
-                  color: (done || active) ? '#FFFFFF' : '#B0AEA8',
+                  color: (done || active) ? '#FFFFFF' : '#6B6B66',
                   fontSize: 9,
                   letterSpacing: '0.03em',
                   fontVariantNumeric: 'tabular-nums',
@@ -66,7 +66,7 @@ function StepStrip({ current }: { current: number }) {
               <span
                 className="text-xs"
                 style={{
-                  color: done ? '#2A6B3A' : active ? '#0C0C0B' : '#B0AEA8',
+                  color: done ? '#2A6B3A' : active ? '#0C0C0B' : '#6B6B66',
                   letterSpacing: '0.05em',
                 }}
               >
@@ -109,9 +109,9 @@ function Step1({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="px-6 py-6">
-      <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>STEP 1</p>
+      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STEP 1</p>
       <p className="text-sm mb-2" style={{ color: '#0C0C0B' }}>Download the template</p>
-      <p className="text-xs mb-6" style={{ color: '#B0AEA8', lineHeight: 1.7 }}>
+      <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
         The template contains three sheets — one per question engine. Each sheet includes column definitions and worked example rows. Fill from row 3 onwards; row 2 is an instruction row that the parser ignores.
       </p>
 
@@ -124,10 +124,10 @@ function Step1({ onNext }: { onNext: () => void }) {
             </div>
             <div className="space-y-1 mb-3">
               {c.cols.map((col) => (
-                <p key={col} className="text-xs" style={{ color: '#9A9891', fontFamily: 'monospace', fontSize: 11 }}>{col}</p>
+                <p key={col} className="text-xs" style={{ color: '#6B6B66', fontFamily: 'monospace', fontSize: 11 }}>{col}</p>
               ))}
             </div>
-            <p className="text-xs" style={{ color: '#C4C3BD', lineHeight: 1.5 }}>{c.note}</p>
+            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{c.note}</p>
           </div>
         ))}
       </div>
@@ -153,7 +153,7 @@ function Step1({ onNext }: { onNext: () => void }) {
           type="button"
           onClick={onNext}
           className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-          style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
         >
           I have a file ready <ChevronRight size={11} strokeWidth={1.5} />
         </button>
@@ -196,9 +196,9 @@ function Step2({
 
   return (
     <div className="px-6 py-6">
-      <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>STEP 2</p>
+      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STEP 2</p>
       <p className="text-sm mb-2" style={{ color: '#0C0C0B' }}>Upload your filled file</p>
-      <p className="text-xs mb-6" style={{ color: '#B0AEA8' }}>
+      <p className="text-xs mb-6" style={{ color: '#6B6B66' }}>
         Upload the filled XLSX template. All three sheets (MCQ, Text, Match) can be present — any sheets you left blank are simply ignored.
       </p>
 
@@ -223,12 +223,12 @@ function Step2({
           className="flex items-center justify-center mb-4"
           style={{ width: 44, height: 44, borderRadius: 3, background: '#F0EFEB', border: '1px solid #E3E1DB' }}
         >
-          <FileSpreadsheet size={20} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <FileSpreadsheet size={20} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
         </div>
         <p className="text-xs mb-1" style={{ color: '#0C0C0B' }}>
           {dragOver ? 'Drop the file here' : 'Click to browse or drag & drop'}
         </p>
-        <p className="text-xs" style={{ color: '#B0AEA8' }}>.xlsx / .xls — max 20 MB</p>
+        <p className="text-xs" style={{ color: '#6B6B66' }}>.xlsx / .xls — max 20 MB</p>
       </div>
 
       {error && (
@@ -240,7 +240,7 @@ function Step2({
 
       <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files?.[0]) process(e.target.files[0]); }} />
 
-      <button type="button" onClick={onBack} className="text-xs" style={{ color: '#9A9891' }}>
+      <button type="button" onClick={onBack} className="text-xs" style={{ color: '#6B6B66' }}>
         ← Back to template
       </button>
     </div>
@@ -290,7 +290,7 @@ function RowCard({
         <StatusDot status={status} />
 
         {/* Sheet + row */}
-        <span className="text-xs flex-shrink-0" style={{ color: '#C4C3BD', fontSize: 10, minWidth: 60 }}>
+        <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66', fontSize: 10, minWidth: 60 }}>
           {row.sheet} #{row.rowIndex}
         </span>
 
@@ -303,7 +303,7 @@ function RowCard({
 
         {/* Stem preview */}
         <span className="flex-1 text-xs truncate" style={{ color: '#0C0C0B' }}>
-          {draft.stem ? draft.stem.slice(0, 90) : <em style={{ color: '#B0AEA8' }}>No stem</em>}
+          {draft.stem ? draft.stem.slice(0, 90) : <em style={{ color: '#6B6B66' }}>No stem</em>}
         </span>
 
         {/* Subject pill */}
@@ -314,7 +314,7 @@ function RowCard({
               <span style={{ color: '#8B5E1A', marginLeft: 4, fontSize: 10 }}>NEW</span>
             )}
             {subjectResolution?.kind === 'alias' && (
-              <span style={{ color: '#B0AEA8', marginLeft: 4, fontSize: 10 }}>→ alias</span>
+              <span style={{ color: '#6B6B66', marginLeft: 4, fontSize: 10 }}>→ alias</span>
             )}
           </span>
         )}
@@ -350,7 +350,7 @@ function RowCard({
           </span>
         )}
 
-        <span className="text-xs flex-shrink-0" style={{ color: '#C4C3BD', fontSize: 10 }}>
+        <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66', fontSize: 10 }}>
           {expanded ? '▲' : '▼'}
         </span>
       </button>
@@ -477,7 +477,7 @@ function Step3({
 
   return (
     <div className="px-6 py-6 flex flex-col" style={{ minHeight: 0 }}>
-      <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>STEP 3</p>
+      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STEP 3</p>
       <p className="text-sm mb-3" style={{ color: '#0C0C0B' }}>Review & verify</p>
 
       {/* Summary bar */}
@@ -516,7 +516,7 @@ function Step3({
               onClick={() => setActiveTab(t)}
               className="text-xs px-4 py-2 transition-all"
               style={{
-                color: activeTab === t ? '#0C0C0B' : '#9A9891',
+                color: activeTab === t ? '#0C0C0B' : '#6B6B66',
                 borderBottom: activeTab === t ? '2px solid #0C0C0B' : '2px solid transparent',
                 marginBottom: -1,
               }}
@@ -530,7 +530,7 @@ function Step3({
       {/* Row list */}
       <div className="overflow-y-auto flex-1 mb-4" style={{ maxHeight: 340 }}>
         {rows.length === 0 ? (
-          <p className="text-xs text-center py-8" style={{ color: '#B0AEA8' }}>No rows in this sheet.</p>
+          <p className="text-xs text-center py-8" style={{ color: '#6B6B66' }}>No rows in this sheet.</p>
         ) : (
           rows.map((row) => (
             <RowCard
@@ -566,7 +566,7 @@ function Step3({
         >
           Save {rowsToSave.length} questions <ChevronRight size={11} strokeWidth={1.5} />
         </button>
-        <button type="button" onClick={onBack} className="text-xs" style={{ color: '#9A9891' }}>
+        <button type="button" onClick={onBack} className="text-xs" style={{ color: '#6B6B66' }}>
           ← Re-upload
         </button>
       </div>
@@ -706,14 +706,14 @@ function Step4({
     <div className="px-6 py-10 flex flex-col items-center justify-center" style={{ minHeight: 320 }}>
       {phase === 'saving' && (
         <>
-          <Loader2 size={24} className="animate-spin mb-5" style={{ color: '#9A9891' }} />
+          <Loader2 size={24} className="animate-spin mb-5" style={{ color: '#6B6B66' }} />
           <p className="text-sm mb-2" style={{ color: '#0C0C0B' }}>Saving questions…</p>
-          <p className="text-xs mb-5" style={{ color: '#B0AEA8' }}>{done} / {total}</p>
+          <p className="text-xs mb-5" style={{ color: '#6B6B66' }}>{done} / {total}</p>
           <div className="w-full" style={{ maxWidth: 280 }}>
             <div style={{ height: 4, background: '#E3E1DB', borderRadius: 2, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pct}%`, background: '#0C0C0B', borderRadius: 2, transition: 'width 0.3s ease' }} />
             </div>
-            <p className="text-xs mt-2 text-center" style={{ color: '#C4C3BD' }}>{pct}%</p>
+            <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66' }}>{pct}%</p>
           </div>
         </>
       )}
@@ -853,11 +853,11 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId, insti
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
           <div>
-            <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>QUESTION POOL</p>
+            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>QUESTION POOL</p>
             <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>Bulk Upload</p>
           </div>
           {step < 4 && (
-            <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+            <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
               <X size={15} strokeWidth={1.5} />
             </button>
           )}

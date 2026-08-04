@@ -80,7 +80,7 @@ function ScoreRing({ pct, passed }: { pct: number; passed: boolean | null }) {
       <text x={55} y={50} textAnchor="middle" style={{ fontSize: 18, fill: color, fontWeight: 300 }}>
         {pct}%
       </text>
-      <text x={55} y={66} textAnchor="middle" style={{ fontSize: 10, fill: '#9A9891' }}>
+      <text x={55} y={66} textAnchor="middle" style={{ fontSize: 10, fill: '#6B6B66' }}>
         {passed === true ? 'PASSED' : passed === false ? 'FAILED' : 'PENDING'}
       </text>
     </svg>
@@ -150,7 +150,7 @@ function ReviewQuestion({
 
   const statusIcon =
     question.engine === 'text'
-      ? <Eye size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+      ? <Eye size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
       : isCorrect
         ? <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
         : <XCircle size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />;
@@ -162,7 +162,7 @@ function ReviewQuestion({
         borderRadius: 3,
         overflow: 'hidden',
         borderLeft: `3px solid ${
-          question.engine === 'text' ? '#C4C3BD'
+          question.engine === 'text' ? '#6B6B66'
           : isCorrect ? '#1E7B3C'
           : '#9B2828'
         }`,
@@ -174,7 +174,7 @@ function ReviewQuestion({
         className="w-full flex items-center gap-3 px-4 py-3 text-left"
         style={{ background: '#FAFAF8', cursor: 'pointer' }}
       >
-        <span className="text-xs flex-shrink-0" style={{ color: '#9A9891', minWidth: 24 }}>
+        <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66', minWidth: 24 }}>
           Q{qNumber}
         </span>
         <div className="flex-1 min-w-0">
@@ -186,11 +186,11 @@ function ReviewQuestion({
           />
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs" style={{ color: '#9A9891' }}>{marks} mk</span>
+          <span className="text-xs" style={{ color: '#6B6B66' }}>{marks} mk</span>
           {statusIcon}
           {open
-            ? <ChevronUp size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-            : <ChevronDown size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+            ? <ChevronUp size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            : <ChevronDown size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           }
         </div>
       </button>
@@ -209,7 +209,7 @@ function ReviewQuestion({
 
               {/* Full stem */}
               <div>
-                <p className="text-xs mb-1.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>QUESTION</p>
+                <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>QUESTION</p>
                 <RichText
                   text={question.stem}
                   image={question.stemImage}
@@ -219,7 +219,7 @@ function ReviewQuestion({
 
               {/* Student's answer */}
               <div>
-                <p className="text-xs mb-1.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>YOUR ANSWER</p>
+                <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>YOUR ANSWER</p>
                 <div
                   className="px-3 py-2.5"
                   style={{
@@ -234,7 +234,7 @@ function ReviewQuestion({
               {/* Correct answer (MCQ / Match only) */}
               {question.engine === 'mcq' && (
                 <div>
-                  <p className="text-xs mb-1.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>CORRECT ANSWER</p>
+                  <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>CORRECT ANSWER</p>
                   <div
                     className="px-3 py-2.5"
                     style={{
@@ -252,7 +252,7 @@ function ReviewQuestion({
 
               {question.engine === 'match' && (
                 <div>
-                  <p className="text-xs mb-1.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>CORRECT PAIRS</p>
+                  <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>CORRECT PAIRS</p>
                   <div
                     className="px-3 py-2.5 space-y-1"
                     style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}
@@ -273,8 +273,8 @@ function ReviewQuestion({
               {question.engine === 'text' && (
                 <div className="flex items-center gap-2 px-3 py-2.5"
                   style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                  <Eye size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-                  <p className="text-xs" style={{ color: '#9A9891' }}>
+                  <Eye size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                  <p className="text-xs" style={{ color: '#6B6B66' }}>
                     This question requires manual grading by your examiner.
                   </p>
                 </div>
@@ -283,7 +283,7 @@ function ReviewQuestion({
               {/* Explanation */}
               {question.explanation && (
                 <div>
-                  <p className="text-xs mb-1.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>EXPLANATION</p>
+                  <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>EXPLANATION</p>
                   <RichText
                     text={question.explanation}
                     style={{ fontSize: 13, color: '#6B6B66', lineHeight: '1.7', display: 'block' }}
@@ -389,13 +389,13 @@ export function ExamResultsPage() {
         <button
           onClick={() => navigate('/student/assessments')}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-          style={{ border: '1px solid #E3E1DB', color: '#9A9891', borderRadius: 2, background: '#FFFFFF' }}
+          style={{ border: '1px solid #E3E1DB', color: '#6B6B66', borderRadius: 2, background: '#FFFFFF' }}
         >
           <ArrowLeft size={11} strokeWidth={1.5} />
           Assessments
         </button>
         <span style={{ color: '#E3E1DB' }}>›</span>
-        <p className="text-xs" style={{ color: '#9A9891' }}>Results</p>
+        <p className="text-xs" style={{ color: '#6B6B66' }}>Results</p>
       </div>
 
       {/*
@@ -453,8 +453,8 @@ export function ExamResultsPage() {
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="flex flex-col items-center py-24">
-              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-              <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Loading results…</p>
+              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+              <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading results…</p>
             </div>
           </motion.div>
         )}
@@ -477,7 +477,7 @@ export function ExamResultsPage() {
               <h1 className="text-2xl font-light mb-1" style={{ color: '#0C0C0B', letterSpacing: '0.01em' }}>
                 {assessment.title}
               </h1>
-              <p className="text-xs" style={{ color: '#9A9891' }}>
+              <p className="text-xs" style={{ color: '#6B6B66' }}>
                 Submitted {attempt.submittedAt ? formatDate(attempt.submittedAt) : ''}
               </p>
             </div>
@@ -489,7 +489,7 @@ export function ExamResultsPage() {
                 <XCircle size={16} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
                 <div>
                   <p className="text-xs mb-1" style={{ color: '#9B2828' }}>Exam terminated</p>
-                  <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                  <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                     {attempt.integrityLog?.terminatedReason || 'Your exam was terminated due to integrity violations.'}
                   </p>
                 </div>
@@ -504,7 +504,7 @@ export function ExamResultsPage() {
                 <p className="text-sm mt-4" style={{ color: '#0C0C0B' }}>
                   Your answers have been submitted successfully.
                 </p>
-                <p className="text-xs mt-2 text-center" style={{ color: '#9A9891', maxWidth: 320, lineHeight: 1.7 }}>
+                <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', maxWidth: 320, lineHeight: 1.7 }}>
                   Results for this assessment are not shown to students. Your examiner will
                   review your responses and share feedback separately.
                 </p>
@@ -531,7 +531,7 @@ export function ExamResultsPage() {
                         { label: 'Time used', value: formatTime(totalTimeUsed) },
                       ].map((item) => (
                         <div key={item.label}>
-                          <p className="text-xs mb-0.5" style={{ color: '#9A9891' }}>{item.label}</p>
+                          <p className="text-xs mb-0.5" style={{ color: '#6B6B66' }}>{item.label}</p>
                           <p className="text-sm" style={{ color: '#0C0C0B' }}>{item.value}</p>
                         </div>
                       ))}
@@ -572,8 +572,8 @@ export function ExamResultsPage() {
                     )}
                     {attempt.scores.requiresManualReview && (
                       <div className="flex items-center gap-2 mt-2">
-                        <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-                        <p className="text-xs" style={{ color: '#9A9891' }}>
+                        <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                        <p className="text-xs" style={{ color: '#6B6B66' }}>
                           Some answers require manual grading — score may change.
                         </p>
                       </div>
@@ -586,7 +586,7 @@ export function ExamResultsPage() {
                   <div className="mb-6"
                     style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
                     <div className="px-4 py-3" style={{ borderBottom: '1px solid #F0EFEB' }}>
-                      <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>SECTION BREAKDOWN</p>
+                      <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>SECTION BREAKDOWN</p>
                     </div>
                     {attempt.scores.bySection.map((sec, idx) => {
                       const secPct = sec.marksAvailable > 0
@@ -597,12 +597,12 @@ export function ExamResultsPage() {
                           className="flex items-center gap-4 px-4 py-3"
                           style={{ borderBottom: idx < attempt.scores!.bySection.length - 1 ? '1px solid #F0EFEB' : 'none' }}>
                           <div style={{ width: 20, height: 20, borderRadius: 2, background: '#F0EFEB', border: '1px solid #E3E1DB',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#9A9891', flexShrink: 0 }}>
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#6B6B66', flexShrink: 0 }}>
                             {idx + 1}
                           </div>
                           <p className="text-xs flex-1" style={{ color: '#0C0C0B' }}>{sec.sectionName}</p>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs" style={{ color: '#9A9891' }}>
+                            <span className="text-xs" style={{ color: '#6B6B66' }}>
                               {sec.answeredQuestions}/{sec.totalQuestions} answered
                             </span>
                             <span className="text-xs" style={{ color: '#0C0C0B' }}>
@@ -633,8 +633,8 @@ export function ExamResultsPage() {
               <div className="mb-6"
                 style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 3 }}>
                 <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid #F0EFEB' }}>
-                  <Shield size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-                  <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>INTEGRITY LOG</p>
+                  <Shield size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                  <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>INTEGRITY LOG</p>
                 </div>
                 <div className="px-4 py-3 grid grid-cols-3 gap-3">
                   {[
@@ -646,8 +646,8 @@ export function ExamResultsPage() {
                     { label: 'Total events', value: attempt.integrityLog.totalViolations },
                   ].filter((item) => item.value > 0).map((item) => (
                     <div key={item.label}>
-                      <p className="text-xs" style={{ color: '#C4C3BD' }}>{item.label}</p>
-                      <p className="text-xs" style={{ color: '#9A9891' }}>{item.value}</p>
+                      <p className="text-xs" style={{ color: '#6B6B66' }}>{item.label}</p>
+                      <p className="text-xs" style={{ color: '#6B6B66' }}>{item.value}</p>
                     </div>
                   ))}
                 </div>
@@ -657,7 +657,7 @@ export function ExamResultsPage() {
             {/* Your reports — resolution outcomes from the reviewer */}
             {reports.length > 0 && (
               <div className="mb-8">
-                <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                   YOUR REPORTS ({reports.length})
                 </p>
                 <div className="flex flex-col gap-2">
@@ -665,7 +665,7 @@ export function ExamResultsPage() {
                     const sc = r.status === 'fixed'
                       ? { bg: '#EAF6EE', border: '#B5D9C0', text: '#1E7B3C' }
                       : r.status === 'dismissed'
-                        ? { bg: '#F7F6F3', border: '#E3E1DB', text: '#9A9891' }
+                        ? { bg: '#F7F6F3', border: '#E3E1DB', text: '#6B6B66' }
                         : r.status === 'reviewed'
                           ? { bg: '#F7F6F3', border: '#E3E1DB', text: '#4A4A45' }
                           : { bg: '#FEF9EC', border: '#F5DFA0', text: '#92680A' };
@@ -685,7 +685,7 @@ export function ExamResultsPage() {
                             {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
                           </span>
                           <span className="text-xs" style={{ color: '#6B6B66' }}>{reasonLabel}</span>
-                          <span className="text-xs ml-auto" style={{ color: '#C4C3BD' }}>
+                          <span className="text-xs ml-auto" style={{ color: '#6B6B66' }}>
                             {new Date(r.createdAt).toLocaleDateString()}
                           </span>
                         </div>
@@ -701,7 +701,7 @@ export function ExamResultsPage() {
                           </p>
                         )}
                         {!r.resolution && r.status === 'open' && (
-                          <p className="text-xs mt-2" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                          <p className="text-xs mt-2" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                             Awaiting review by your evaluator.
                           </p>
                         )}
@@ -715,7 +715,7 @@ export function ExamResultsPage() {
             {/* Answer review */}
             {assessment.showResults && assessment.allowReview && questionMap.size > 0 && (
               <div className="mb-8">
-                <p className="text-xs mb-4" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                   ANSWER REVIEW
                 </p>
                 <div className="space-y-3">
@@ -745,7 +745,7 @@ export function ExamResultsPage() {
             {/* Footer */}
             <div className="flex items-center justify-between pt-4"
               style={{ borderTop: '1px solid #E3E1DB' }}>
-              <p className="text-xs" style={{ color: '#C4C3BD' }}>
+              <p className="text-xs" style={{ color: '#6B6B66' }}>
                 Attempt ID: <span style={{ fontFamily: 'monospace' }}>{attempt.id}</span>
               </p>
               <button

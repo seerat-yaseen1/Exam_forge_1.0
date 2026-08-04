@@ -206,7 +206,7 @@ export function FaceMonitor({ enabled, active, onViolation, onStateChange }: Fac
     detectionState === 'unavailable'  ? { color: '#92680A', label: 'Detection unavailable' } :
     detectionState === 'denied'       ? { color: '#9B2828', label: 'Camera denied' }   :
     detectionState === 'error'        ? { color: '#9B2828', label: 'Camera error' }    :
-                                        { color: '#C4C3BD', label: 'Initialising…' };
+                                        { color: '#6B6B66', label: 'Initialising…' };
 
   return (
     <div

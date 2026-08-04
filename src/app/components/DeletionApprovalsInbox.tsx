@@ -73,7 +73,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#9A9891' }}>
+      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
         <Loader2 size={12} className="animate-spin" /> Loading requests…
       </div>
     );
@@ -100,7 +100,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
       )}
 
       {toDecide.length === 0 && mine.length === 0 && (
-        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#B0AEA8' }}>
+        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
           <Inbox size={13} strokeWidth={1.5} /> No pending deletion requests.
         </div>
       )}
@@ -122,7 +122,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
                       Delete {entityTypeLabel(r.entityType).toLowerCase()}{' '}
                       <span style={{ color: '#6B6B66' }}>{r.entityLabel ?? r.entityId}</span>
                     </p>
-                    <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+                    <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
                       Requested by {r.requesterRole}
                       {r.reason ? ` — “${r.reason}”` : ''}
                     </p>
@@ -192,7 +192,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
                 <span style={{ color: '#6B6B66' }}>{r.entityLabel ?? r.entityId}</span>
               </p>
               <span className="text-xs px-2 py-0.5 flex-shrink-0"
-                style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#B0AEA8', background: '#FFFFFF' }}>
+                style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}>
                 Pending
               </span>
             </div>
@@ -202,16 +202,16 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
 
       {resolved.length > 0 && (
         <>
-          <p className="text-xs mb-2 mt-4" style={{ color: '#9A9891', letterSpacing: '0.05em' }}>
+          <p className="text-xs mb-2 mt-4" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>
             RECENTLY RESOLVED
           </p>
           {resolved.map((r) => (
             <div key={r.id} className="flex items-center justify-between gap-3 py-1.5">
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 {entityTypeLabel(r.entityType)} {r.entityLabel ?? r.entityId}
               </span>
               <span className="text-xs" style={{
-                color: r.status === 'approved' ? '#9B2828' : '#B0AEA8',
+                color: r.status === 'approved' ? '#9B2828' : '#6B6B66',
               }}>
                 {requestStatusLabel(r.status)}
               </span>

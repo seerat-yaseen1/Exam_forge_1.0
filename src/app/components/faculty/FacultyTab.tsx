@@ -337,7 +337,7 @@ export function FacultyTab({
         <div className="flex items-center gap-4">
           {!loading && total > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3">
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 {total} {total === 1 ? 'member' : 'members'}
               </span>
               <span style={{ color: '#E3E1DB' }}>·</span>
@@ -345,7 +345,7 @@ export function FacultyTab({
               {disabled > 0 && (
                 <>
                   <span style={{ color: '#E3E1DB' }}>·</span>
-                  <span className="text-xs" style={{ color: '#9A9891' }}>{disabled} disabled</span>
+                  <span className="text-xs" style={{ color: '#6B6B66' }}>{disabled} disabled</span>
                 </>
               )}
             </motion.div>
@@ -358,7 +358,7 @@ export function FacultyTab({
                   style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
                 <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
               </div>
-              <span className="text-xs" style={{ color: '#C4C3BD' }}>{syncDisplay}</span>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>{syncDisplay}</span>
             </div>
           )}
         </div>
@@ -398,7 +398,7 @@ export function FacultyTab({
             <p className="text-xs flex-1" style={{ color: emailNotice.ok ? '#2A6B3A' : '#9B2828' }}>
               {emailNotice.message}
             </p>
-            <button onClick={() => setEmailNotice(null)} style={{ color: '#C4C3BD' }}>
+            <button onClick={() => setEmailNotice(null)} style={{ color: '#6B6B66' }}>
               <X size={11} strokeWidth={1.5} />
             </button>
           </motion.div>
@@ -432,7 +432,7 @@ export function FacultyTab({
               {['FACULTY', 'ROLE', 'STATUS', 'GRANTED', 'SCHOOLS', 'STU. CREATE', 'ROSTER', ''].map((col, i) => (
                 <th key={i} className="text-left px-5 py-3 text-xs"
                   style={{
-                    color: '#9A9891', letterSpacing: '0.08em', fontWeight: 400,
+                    color: '#6B6B66', letterSpacing: '0.08em', fontWeight: 400,
                     width: i === 0 ? '24%' : i === 1 ? '9%' : i === 2 ? '9%' : i === 3 ? '10%' : i === 4 ? '9%' : i === 5 ? '10%' : i === 6 ? '9%' : '20%',
                   }}>
                   {col}
@@ -448,7 +448,7 @@ export function FacultyTab({
                 <td colSpan={6}>
                   <div className="flex flex-col items-center py-16">
                     <Users size={28} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-                    <p className="text-xs mt-4" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>
+                    <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                       No faculty registered
                     </p>
                     <p className="text-xs mt-1" style={{ color: '#DDDBD5' }}>
@@ -499,7 +499,7 @@ export function FacultyTab({
                   {/* Faculty name + email */}
                   <td className="px-5 py-3.5">
                     <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.4 }}>{faculty.name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{faculty.email}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{faculty.email}</p>
                   </td>
 
                   {/* Role badge */}
@@ -515,10 +515,10 @@ export function FacultyTab({
                     <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                       style={faculty.status === 'active'
                         ? { background: '#F0F7F2', color: '#2A6B3A', border: '1px solid #C6DECE', borderRadius: 2 }
-                        : { background: '#F5F5F3', color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                        : { background: '#F5F5F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                       <span style={{
                         width: 5, height: 5, borderRadius: '50%',
-                        background: faculty.status === 'active' ? '#2A6B3A' : '#C4C3BD',
+                        background: faculty.status === 'active' ? '#2A6B3A' : '#6B6B66',
                         display: 'inline-block', flexShrink: 0,
                       }} />
                       {faculty.status === 'active' ? 'Active' : 'Disabled'}
@@ -527,7 +527,7 @@ export function FacultyTab({
 
                   {/* Created */}
                   <td className="px-5 py-3.5">
-                    <p className="text-xs" style={{ color: '#9A9891' }}>{formatDate(faculty.createdAt)}</p>
+                    <p className="text-xs" style={{ color: '#6B6B66' }}>{formatDate(faculty.createdAt)}</p>
                   </td>
 
                   {/* Schools permission toggle */}
@@ -549,13 +549,13 @@ export function FacultyTab({
                       }}
                     >
                       {isTogglingSchools ? (
-                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#C4C3BD' }} />
+                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
                       ) : schoolsEnabled ? (
                         <ShieldCheck size={13} strokeWidth={1.5} style={{ color: '#2A6B3A' }} />
                       ) : (
-                        <Shield size={13} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+                        <Shield size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
                       )}
-                      <span style={{ color: schoolsEnabled && canToggleSchools ? '#2A6B3A' : '#C4C3BD' }}>
+                      <span style={{ color: schoolsEnabled && canToggleSchools ? '#2A6B3A' : '#6B6B66' }}>
                         {schoolsEnabled ? 'On' : 'Off'}
                       </span>
                     </button>
@@ -580,13 +580,13 @@ export function FacultyTab({
                       }}
                     >
                       {isTogglingStudents ? (
-                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#C4C3BD' }} />
+                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
                       ) : createStudentsEnabled ? (
                         <GraduationCap size={13} strokeWidth={1.5} style={{ color: '#2A6B3A' }} />
                       ) : (
-                        <GraduationCap size={13} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+                        <GraduationCap size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
                       )}
-                      <span style={{ color: createStudentsEnabled && canToggleStudents ? '#2A6B3A' : '#C4C3BD' }}>
+                      <span style={{ color: createStudentsEnabled && canToggleStudents ? '#2A6B3A' : '#6B6B66' }}>
                         {createStudentsEnabled ? 'On' : 'Off'}
                       </span>
                     </button>
@@ -611,11 +611,11 @@ export function FacultyTab({
                       }}
                     >
                       {isTogglingRosters ? (
-                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#C4C3BD' }} />
+                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
                       ) : (
-                        <Shield size={13} strokeWidth={1.5} style={{ color: manageRostersEnabled && canToggleRosters ? '#2A6B3A' : '#C4C3BD' }} />
+                        <Shield size={13} strokeWidth={1.5} style={{ color: manageRostersEnabled && canToggleRosters ? '#2A6B3A' : '#6B6B66' }} />
                       )}
-                      <span style={{ color: manageRostersEnabled && canToggleRosters ? '#2A6B3A' : '#C4C3BD' }}>
+                      <span style={{ color: manageRostersEnabled && canToggleRosters ? '#2A6B3A' : '#6B6B66' }}>
                         {manageRostersEnabled ? 'On' : 'Off'}
                       </span>
                     </button>
@@ -679,7 +679,7 @@ export function FacultyTab({
                           onClick={() => { setDeletingId(null); setSuccessorId(null); setLiveOwnedCount(null); }}
                           disabled={deleteLoading}
                           className="text-xs px-2 py-1"
-                          style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                           Cancel
                         </button>
                         </div>
@@ -693,7 +693,7 @@ export function FacultyTab({
                             title="Question rights"
                             className="p-2 rounded transition-all"
                             style={{
-                              color: rightsExpandedId === faculty.id ? '#2A6B3A' : '#C4C3BD',
+                              color: rightsExpandedId === faculty.id ? '#2A6B3A' : '#6B6B66',
                               cursor: 'pointer',
                             }}
                           >
@@ -706,9 +706,9 @@ export function FacultyTab({
                           disabled={isTogglingStatus}
                           title={faculty.status === 'active' ? 'Disable faculty' : 'Enable faculty'}
                           className="p-2 rounded transition-all"
-                          style={{ color: '#C4C3BD', cursor: isTogglingStatus ? 'not-allowed' : 'pointer' }}
+                          style={{ color: '#6B6B66', cursor: isTogglingStatus ? 'not-allowed' : 'pointer' }}
                           onMouseEnter={(e) => { if (!isTogglingStatus) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#C4C3BD'; }}>
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
                           {isTogglingStatus
                             ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
                             : faculty.status === 'active'
@@ -722,9 +722,9 @@ export function FacultyTab({
                           disabled={isResending}
                           title="Resend password-setup link"
                           className="p-2 rounded transition-all"
-                          style={{ color: '#C4C3BD', cursor: isResending ? 'not-allowed' : 'pointer' }}
+                          style={{ color: '#6B6B66', cursor: isResending ? 'not-allowed' : 'pointer' }}
                           onMouseEnter={(e) => { if (!isResending) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#C4C3BD'; }}>
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
                           {isResending
                             ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
                             : <Mail size={13} strokeWidth={1.5} />}
@@ -735,9 +735,9 @@ export function FacultyTab({
                           onClick={() => setDeletingId(faculty.id)}
                           title="Remove faculty member"
                           className="p-2 rounded transition-all"
-                          style={{ color: '#C4C3BD' }}
+                          style={{ color: '#6B6B66' }}
                           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#9B2828'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#C4C3BD'; }}>
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
                           <Trash2 size={13} strokeWidth={1.5} />
                         </button>
                       </div>
@@ -764,7 +764,7 @@ export function FacultyTab({
               <p className="text-xs" style={{ color: '#0C0C0B' }}>
                 Permissions — <span style={{ color: '#6B6B66' }}>{fac.name}</span>
               </p>
-              <button onClick={() => setRightsExpandedId(null)} className="p-1" style={{ color: '#9A9891' }}>
+              <button onClick={() => setRightsExpandedId(null)} className="p-1" style={{ color: '#6B6B66' }}>
                 <X size={13} strokeWidth={1.5} />
               </button>
             </div>
@@ -793,7 +793,7 @@ export function FacultyTab({
       })()}
 
       {!loading && total > 0 && (
-        <p className="text-xs mt-3" style={{ color: '#C4C3BD' }}>
+        <p className="text-xs mt-3" style={{ color: '#6B6B66' }}>
           Data refreshes automatically every 5 seconds.
         </p>
       )}

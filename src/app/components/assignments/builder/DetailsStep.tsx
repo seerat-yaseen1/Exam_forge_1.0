@@ -671,11 +671,11 @@ export function DetailsStep({
           <div className="flex items-center gap-2 mb-4">
             <button onClick={onBack}
               className="flex items-center gap-1 text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#B0AEA8' }}>
+              style={{ color: '#6B6B66' }}>
               <X size={11} strokeWidth={1.5} /> Back to Setup
             </button>
             <span style={{ color: '#DDDBD5', fontSize: 10 }}>·</span>
-            <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 2 OF 3 — RULES &amp; SETTINGS</p>
+            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>STEP 2 OF 3 — RULES &amp; SETTINGS</p>
           </div>
 
           {/* Two-column layout: left stacks Schedule/Grading/Section Limits, right holds Settings.
@@ -701,7 +701,7 @@ export function DetailsStep({
                 <LockedFieldWrapper label="Start Date & Time" reason={lockReason}>
                   <div className="flex items-center gap-2 px-3 py-2"
                     style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                    <Calendar size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                    <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                     <input type="datetime-local" value={startDate} readOnly className="flex-1 outline-none"
                       style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
                   </div>
@@ -716,14 +716,14 @@ export function DetailsStep({
                   <Field label="End Date & Time">
                     <div className="flex items-center gap-2 px-3 py-2"
                       style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                      <Calendar size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                      <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                       <input type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)}
                         className="flex-1 outline-none"
                         style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }}
                         min={toDateTimeLocal(assessment?.endDate) || startDate || undefined} />
                     </div>
                   </Field>
-                  <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: '#9A9891' }}>
+                  <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: '#6B6B66' }}>
                     <Clock size={9} strokeWidth={1.5} style={{ flexShrink: 0 }} />
                     You may only extend the deadline, not shorten it.
                   </p>
@@ -733,7 +733,7 @@ export function DetailsStep({
                 <LockedFieldWrapper label="End Date & Time" reason={lockReason}>
                   <div className="flex items-center gap-2 px-3 py-2"
                     style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                    <Calendar size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                    <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                     <input type="datetime-local" value={endDate} readOnly className="flex-1 outline-none"
                       style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
                   </div>
@@ -751,33 +751,33 @@ export function DetailsStep({
               <Field label="Passing Score" hint="(%, optional)">
                 <div className="flex items-center gap-2 px-3 py-2"
                   style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                  <Award size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                  <Award size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                   <input type="number" value={passingScore} onChange={(e) => setPassingScore(e.target.value)}
                     placeholder="e.g., 50" min="0" max="100" className="flex-1 outline-none"
                     style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                  {passingScore && <span style={{ color: '#C4C3BD', fontSize: 10 }}>%</span>}
+                  {passingScore && <span style={{ color: '#6B6B66', fontSize: 10 }}>%</span>}
                 </div>
               </Field>
 
               <Field label="Max Attempts" hint="(per student, default 1)">
                 <div className="flex items-center gap-2 px-3 py-2"
                   style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                  <ClipboardList size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                  <ClipboardList size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                   <input type="number" value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)}
                     placeholder="e.g., 2" min="1" className="flex-1 outline-none"
                     style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                  {maxAttempts && <span style={{ color: '#C4C3BD', fontSize: 10 }}>attempts</span>}
+                  {maxAttempts && <span style={{ color: '#6B6B66', fontSize: 10 }}>attempts</span>}
                 </div>
               </Field>
 
               <Field label="Section grace period" hint="(seconds past each section timer; blank = 30s default)">
                 <div className="flex items-center gap-2 px-3 py-2"
                   style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                  <Timer size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                  <Timer size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                   <input type="number" value={sectionGraceSeconds} onChange={(e) => setSectionGraceSeconds(e.target.value)}
                     placeholder="e.g., 30" min="0" className="flex-1 outline-none"
                     style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                  {sectionGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
+                  {sectionGraceSeconds && <span style={{ color: '#6B6B66', fontSize: 10 }}>seconds</span>}
                 </div>
               </Field>
 
@@ -786,7 +786,7 @@ export function DetailsStep({
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs" style={{ color: '#6B6A65' }}>Overall time limit</span>
-                    <span className="text-xs" style={{ color: '#C4C3BD' }}>(whole exam, optional)</span>
+                    <span className="text-xs" style={{ color: '#6B6B66' }}>(whole exam, optional)</span>
                   </div>
                   {/* Auto toggle — when on, the value is computed from the
                       sections and stays in sync. Off = manual entry. */}
@@ -806,7 +806,7 @@ export function DetailsStep({
                       background: overallAuto ? '#F0F9F4' : '#FFFFFF',
                     }}
                   >
-                    <span className="text-xs" style={{ color: overallAuto ? '#1E7B3C' : '#9A9891' }}>
+                    <span className="text-xs" style={{ color: overallAuto ? '#1E7B3C' : '#6B6B66' }}>
                       Auto
                     </span>
                     {overallAuto && <CheckCircle2 size={10} strokeWidth={2} style={{ color: '#1E7B3C' }} />}
@@ -817,7 +817,7 @@ export function DetailsStep({
                     border: '1px solid #E3E1DB', borderRadius: 2,
                     background: overallAuto ? '#F7F6F3' : '#FFFFFF',
                   }}>
-                  <Clock size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                  <Clock size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                   <input
                     type="number"
                     value={overallLimitDisplay}
@@ -832,9 +832,9 @@ export function DetailsStep({
                       fontSize: 12, border: 'none',
                     }}
                   />
-                  {overallLimitDisplay && <span style={{ color: '#C4C3BD', fontSize: 10 }}>minutes</span>}
+                  {overallLimitDisplay && <span style={{ color: '#6B6B66', fontSize: 10 }}>minutes</span>}
                 </div>
-                <p className="text-xs mt-1" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                   {overallAuto
                     ? `Auto: sum of section time, section grace, breaks and overall grace (currently ${autoOverallLimit}m). Counts from when a student begins — time in breaks and gaps between sections counts against it.`
                     : 'Counts from when a student begins the exam. The exam hard-cuts when this runs out, even mid-section. Blank = no overall cap.'}
@@ -844,11 +844,11 @@ export function DetailsStep({
               <Field label="Overall grace period" hint={`(seconds past the overall timer; blank = ${DEFAULT_OVERALL_GRACE_SECONDS}s default)`}>
                 <div className="flex items-center gap-2 px-3 py-2"
                   style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                  <Timer size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                  <Timer size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                   <input type="number" value={overallGraceSeconds} onChange={(e) => setOverallGraceSeconds(e.target.value)}
                     placeholder={`e.g., ${DEFAULT_OVERALL_GRACE_SECONDS}`} min="0" className="flex-1 outline-none"
                     style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                  {overallGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
+                  {overallGraceSeconds && <span style={{ color: '#6B6B66', fontSize: 10 }}>seconds</span>}
                 </div>
               </Field>
 
@@ -860,11 +860,11 @@ export function DetailsStep({
                 <Field label="Question grace period" hint="(seconds past each question's timer; blank = 5s default)">
                   <div className="flex items-center gap-2 px-3 py-2"
                     style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                    <Timer size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                    <Timer size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                     <input type="number" value={questionGraceSeconds} onChange={(e) => setQuestionGraceSeconds(e.target.value)}
                       placeholder="e.g., 5" min="0" className="flex-1 outline-none"
                       style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                    {questionGraceSeconds && <span style={{ color: '#C4C3BD', fontSize: 10 }}>seconds</span>}
+                    {questionGraceSeconds && <span style={{ color: '#6B6B66', fontSize: 10 }}>seconds</span>}
                   </div>
                 </Field>
               )}
@@ -886,7 +886,7 @@ export function DetailsStep({
                     }}
                   >
                     <div className="flex items-center gap-2">
-                      <AlertCircle size={13} strokeWidth={1.5} style={{ color: negMarkingOn ? '#9B2828' : '#9A9891' }} />
+                      <AlertCircle size={13} strokeWidth={1.5} style={{ color: negMarkingOn ? '#9B2828' : '#6B6B66' }} />
                       <span className="text-xs" style={{ color: negMarkingOn ? '#9B2828' : '#6B6A65' }}>
                         Deduct marks for wrong answers
                       </span>
@@ -897,7 +897,7 @@ export function DetailsStep({
                         borderRadius: 2, fontSize: 10,
                         border: `1px solid ${negMarkingOn ? '#F2CECE' : '#E3E1DB'}`,
                         background: negMarkingOn ? '#FFFFFF' : '#F7F6F3',
-                        color: negMarkingOn ? '#9B2828' : '#9A9891',
+                        color: negMarkingOn ? '#9B2828' : '#6B6B66',
                       }}
                     >
                       {negMarkingOn ? 'ON' : 'OFF'}
@@ -914,7 +914,7 @@ export function DetailsStep({
                         />
                       </Field>
 
-                      <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                      <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                         Only <strong>fully wrong</strong> answers are penalised. Partially correct answers keep their partial marks, and blanks are never penalised. The exam total never drops below zero.
                       </p>
                     </>
@@ -933,7 +933,7 @@ export function DetailsStep({
                         className="flex-1 outline-none"
                         style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }}
                       />
-                      <span style={{ color: '#C4C3BD', fontSize: 10 }}>marks</span>
+                      <span style={{ color: '#6B6B66', fontSize: 10 }}>marks</span>
                     </div>
                   </Field>
                 </div>
@@ -965,7 +965,7 @@ export function DetailsStep({
                           <div className="flex items-center justify-between px-3 py-1.5"
                             style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                             <span className="text-xs" style={{ color: '#6B6B66' }}>{sec.name}</span>
-                            <span className="text-xs flex items-center gap-1" style={{ color: '#9A9891' }}>
+                            <span className="text-xs flex items-center gap-1" style={{ color: '#6B6B66' }}>
                               <Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min
                             </span>
                           </div>
@@ -973,10 +973,10 @@ export function DetailsStep({
                         {breakMins > 0 && (
                           <div className="flex items-center justify-between px-3 py-1"
                             style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2 }}>
-                            <span className="text-xs" style={{ color: '#9A9891' }}>
+                            <span className="text-xs" style={{ color: '#6B6B66' }}>
                               Break {sec.breakMandatory ? '(mandatory)' : '(skippable)'}
                             </span>
-                            <span className="text-xs" style={{ color: '#9A9891' }}>{breakMins} min</span>
+                            <span className="text-xs" style={{ color: '#6B6B66' }}>{breakMins} min</span>
                           </div>
                         )}
                       </div>
@@ -1033,7 +1033,7 @@ export function DetailsStep({
                     );
                   })}
                 </div>
-                <p className="text-xs" style={{ color: '#9A9891' }}>
+                <p className="text-xs" style={{ color: '#6B6B66' }}>
                   {securityTier === 'mock'
                     ? 'Practice mode — no proctoring. Camera off, phones allowed.'
                     : securityTier === 'high_stake'
@@ -1052,7 +1052,7 @@ export function DetailsStep({
               {securityTier !== 'mock' && (
                 <div className="space-y-2">
                   <SettingsToggle
-                    icon={<Shield size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                    icon={<Shield size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                     label="Require Safe Exam Browser"
                     hint={securityTier === 'high_stake'
                       ? 'Locks the exam to genuine SEB — blocks VPNs, remote desktop, userscripts. Default on for high-stake.'
@@ -1091,7 +1091,7 @@ export function DetailsStep({
                         })}
                       </div>
                       {sebConfigSource === 'platform' ? (
-                        <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                        <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                           Uses the platform Config Keys and the platform .seb file from the
                           Safe Exam Browser page. Nothing else to set here.
                         </p>
@@ -1140,7 +1140,7 @@ export function DetailsStep({
                                 type="button"
                                 onClick={() => setSebFile(null)}
                                 className="p-1 flex-shrink-0"
-                                style={{ color: '#9A9891', background: 'none', border: 'none', cursor: 'pointer' }}
+                                style={{ color: '#6B6B66', background: 'none', border: 'none', cursor: 'pointer' }}
                                 aria-label="Clear chosen file"
                               >
                                 <X size={12} strokeWidth={1.5} />
@@ -1160,7 +1160,7 @@ export function DetailsStep({
                               {sebConfigFileUrl ? 'Choose .seb file to replace the current one…' : 'Choose .seb file…'}
                             </button>
                           )}
-                          <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+                          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                             {sebFile
                               ? `Will upload "${sebFile.name}" on save and offer it on this exam's briefing gate.`
                               : sebConfigFileUrl
@@ -1214,7 +1214,7 @@ export function DetailsStep({
                     exactly like linear, and the difficulty ladder does NOT
                     exist yet (the next question is simply the next in order).
                     Both now say what actually happens. */}
-                <p className="text-xs" style={{ color: '#9A9891' }}>
+                <p className="text-xs" style={{ color: '#6B6B66' }}>
                   {deliveryMode === 'linear'
                     ? 'One question at a time, no going back — enforced by the server. Answers are committed as the student advances.'
                     : deliveryMode === 'adaptive'
@@ -1260,7 +1260,7 @@ export function DetailsStep({
                     );
                   })}
                 </div>
-                <p className="text-xs" style={{ color: '#9A9891' }}>
+                <p className="text-xs" style={{ color: '#6B6B66' }}>
                   {sectionStartOrder === 'random'
                     ? 'Each student gets sections in a different order. Breaks apply by completion count — after the 1st completed section, the 2nd, and so on.'
                     : sectionStartOrder === 'student_choice'
@@ -1271,7 +1271,7 @@ export function DetailsStep({
 
               <div className="space-y-2">
                 <SettingsToggle
-                  icon={<Shuffle size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                  icon={<Shuffle size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                   label="Shuffle Questions"
                   hint="Randomise question order for each student"
                   value={shuffleQuestions}
@@ -1280,14 +1280,14 @@ export function DetailsStep({
                   lockReason={mut.shuffleQuestions ? undefined : lockReason}
                 />
                 <AudienceSelector
-                  icon={<BarChart2 size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                  icon={<BarChart2 size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                   label="Show Results"
                   hint="Who can see scores and outcomes after submission"
                   value={showResultsTo}
                   onChange={setShowResultsTo}
                 />
                 <AudienceSelector
-                  icon={<BookOpen size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                  icon={<BookOpen size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                   label="Allow Review"
                   hint="Who can see the questions and correct answers after submission"
                   value={allowReviewTo}
@@ -1352,17 +1352,17 @@ export function DetailsStep({
             <div className="flex items-center gap-2 mb-4">
               <button onClick={onBackToRules}
                 className="flex items-center gap-1 text-xs transition-opacity hover:opacity-60"
-                style={{ color: '#B0AEA8' }}>
+                style={{ color: '#6B6B66' }}>
                 <X size={11} strokeWidth={1.5} /> Back to Rules &amp; Settings
               </button>
               <span style={{ color: '#DDDBD5', fontSize: 10 }}>·</span>
-              <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 3 OF 3 — ALLOCATION</p>
+              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>STEP 3 OF 3 — ALLOCATION</p>
             </div>
 
             <div className="space-y-5" style={{ maxWidth: hierarchyMode ? 920 : 560 }}>
               <div>
                 <SectionLabel label="ALLOCATION" />
-                <p className="text-xs mt-2" style={{ color: '#9A9891' }}>
+                <p className="text-xs mt-2" style={{ color: '#6B6B66' }}>
                   Choose who takes this exam. Saving and publishing happen from this step.
                 </p>
               </div>

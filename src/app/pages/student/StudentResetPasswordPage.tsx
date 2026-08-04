@@ -105,7 +105,7 @@ export function StudentResetPasswordPage() {
               <div className="flex flex-col items-center py-6">
                 <CheckCircle2 size={32} strokeWidth={1} style={{ color: '#2A6B3A' }} />
                 <p className="text-sm mt-4" style={{ color: '#0C0C0B' }}>Password updated</p>
-                <p className="text-xs mt-2 text-center" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                   Your password has been set. You may now sign in with your new credentials.
                 </p>
                 <button onClick={() => navigate('/student/login', { replace: true })}
@@ -117,10 +117,10 @@ export function StudentResetPasswordPage() {
             </motion.div>
           ) : (
             <>
-              <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+              <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                 RESET PASSWORD
               </p>
-              <p className="text-xs mb-6" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
+              <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                 Enter the 16-character code from your email, then choose a new password.
               </p>
 
@@ -155,9 +155,9 @@ export function StudentResetPasswordPage() {
                       onFocus={onFocus} onBlur={onBlur} />
                     <button type="button" tabIndex={-1} onClick={() => setShowNew((v) => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                      style={{ color: '#B0AEA8' }}
+                      style={{ color: '#6B6B66' }}
                       onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#B0AEA8')}>
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                       {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                     </button>
                   </div>
@@ -178,9 +178,9 @@ export function StudentResetPasswordPage() {
                       onFocus={onFocus} onBlur={onBlur} />
                     <button type="button" tabIndex={-1} onClick={() => setShowConfirm((v) => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                      style={{ color: '#B0AEA8' }}
+                      style={{ color: '#6B6B66' }}
                       onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#B0AEA8')}>
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                       {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                     </button>
                   </div>
@@ -218,9 +218,9 @@ export function StudentResetPasswordPage() {
           {stage !== 'success' && (
             <Link to="/student/login"
               className="flex items-center gap-1.5 text-xs transition-colors"
-              style={{ color: '#9A9891', textDecoration: 'none' }}
+              style={{ color: '#6B6B66', textDecoration: 'none' }}
               onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
               <ArrowLeft size={12} strokeWidth={1.5} />Back to sign in
             </Link>
           )}

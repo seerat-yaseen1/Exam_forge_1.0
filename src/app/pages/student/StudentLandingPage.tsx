@@ -74,7 +74,7 @@ function AssignmentCard({ mapping, index }: { mapping: AcademicMapping; index: n
             {cfg.label}
           </span>
         </div>
-        <span className="text-xs" style={{ color: '#C4C3BD', flexShrink: 0 }}>
+        <span className="text-xs" style={{ color: '#6B6B66', flexShrink: 0 }}>
           {formatShortDate(mapping.createdAt)}
         </span>
       </div>
@@ -90,7 +90,7 @@ function AssignmentCard({ mapping, index }: { mapping: AcademicMapping; index: n
             <span
               className="text-xs"
               style={{
-                color: i === arr.length - 1 ? '#4A4A45' : '#C4C3BD',
+                color: i === arr.length - 1 ? '#4A4A45' : '#6B6B66',
                 fontWeight: i === arr.length - 1 ? 500 : 400,
               }}
             >
@@ -184,11 +184,11 @@ export function StudentLandingPage() {
       <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
         <div className="flex items-center gap-2 mb-2">
           <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#2A6B3A' }} />
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
             STUDENT · {session.instituteName.toUpperCase()}
           </p>
         </div>
-        <p className="text-xs mb-2" style={{ color: '#B0AEA8', letterSpacing: '0.06em' }}>
+        <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
           {formatDate()}
         </p>
         <h1 className="text-2xl font-light" style={{ color: '#0C0C0B', letterSpacing: '0.02em' }}>
@@ -199,8 +199,8 @@ export function StudentLandingPage() {
             style={{ background: '#F0EFEB', color: '#4A4A45', borderRadius: 2 }}>
             Student
           </span>
-          <span className="text-xs" style={{ color: '#C4C3BD' }}>
-            <span style={{ fontFamily: 'monospace', letterSpacing: '0.08em', color: '#9A9891' }}>
+          <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <span style={{ fontFamily: 'monospace', letterSpacing: '0.08em', color: '#6B6B66' }}>
               {session.email}
             </span>
           </span>
@@ -208,10 +208,10 @@ export function StudentLandingPage() {
           <span className="inline-flex items-center gap-1.5 text-xs"
             style={session.status === 'active'
               ? { color: '#2A6B3A' }
-              : { color: '#9A9891' }}>
+              : { color: '#6B6B66' }}>
             <span style={{
               width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
-              background: session.status === 'active' ? '#2A6B3A' : '#9A9891',
+              background: session.status === 'active' ? '#2A6B3A' : '#6B6B66',
             }} />
             {session.status === 'active' ? 'Active' : 'Disabled'}
           </span>
@@ -221,12 +221,12 @@ export function StudentLandingPage() {
       {/* Assignments section */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+          <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             ACADEMIC ASSIGNMENTS
           </span>
           {!loading && mappings.length > 0 && (
             <span className="text-xs px-1.5 py-0.5"
-              style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 10 }}>
+              style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 10 }}>
               {mappings.length}
             </span>
           )}
@@ -241,7 +241,7 @@ export function StudentLandingPage() {
                   style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
                 <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
               </div>
-              <span className="text-xs" style={{ color: '#C4C3BD' }}>{syncAge}</span>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>{syncAge}</span>
             </div>
           )}
           <button
@@ -263,8 +263,8 @@ export function StudentLandingPage() {
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="flex flex-col items-center py-20">
-              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-              <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Loading assignments…</p>
+              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+              <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading assignments…</p>
             </div>
           </motion.div>
         )}
@@ -287,7 +287,7 @@ export function StudentLandingPage() {
             <div className="flex flex-col items-center py-24"
               style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
               <GraduationCap size={32} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-              <p className="text-xs mt-4" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>
+              <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                 No assignments yet
               </p>
               <p className="text-xs mt-2" style={{ color: '#DDDBD5', maxWidth: 280, textAlign: 'center', lineHeight: 1.7 }}>
@@ -308,7 +308,7 @@ export function StudentLandingPage() {
                     <div key={nodeType}>
                       {/* Group header */}
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                        <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                           {label.toUpperCase()}S
                         </span>
                         <span className="text-xs px-1.5 py-0.5"
@@ -335,7 +335,7 @@ export function StudentLandingPage() {
             )}
 
             {/* Footer note */}
-            <p className="text-xs mt-6" style={{ color: '#C4C3BD', textAlign: 'center' }}>
+            <p className="text-xs mt-6" style={{ color: '#6B6B66', textAlign: 'center' }}>
               Your assignments are managed by your institute administrator.
             </p>
           </motion.div>

@@ -30,7 +30,7 @@ function validityInfo(activeUntil: string) {
   if (days < 0) return { label: 'Expired', color: '#9B2828' };
   if (days === 0) return { label: 'Expires today', color: '#8B5E1A' };
   if (days <= 7) return { label: `${days}d remaining`, color: '#8B5E1A' };
-  return { label: `Until ${formatDate(activeUntil)}`, color: '#9A9891' };
+  return { label: `Until ${formatDate(activeUntil)}`, color: '#6B6B66' };
 }
 
 type PrimaryTab = 'users' | 'schools' | 'permissions';
@@ -61,10 +61,10 @@ function PermToggle({
       }}
     >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        <span style={{ color: enabled ? '#2A6B3A' : '#9A9891' }}>{icon}</span>
+        <span style={{ color: enabled ? '#2A6B3A' : '#6B6B66' }}>{icon}</span>
         <div className="min-w-0">
           <p className="text-xs" style={{ color: '#0C0C0B' }}>{label}</p>
-          <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+          <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
             {isDisabled && disabledReason ? disabledReason : sublabel}
           </p>
         </div>
@@ -77,7 +77,7 @@ function PermToggle({
           border: `1px solid ${enabled ? '#C6DECE' : '#E3E1DB'}`,
           borderRadius: 2,
           background: enabled ? '#F0F7F2' : '#FFFFFF',
-          color: enabled ? '#2A6B3A' : '#9A9891',
+          color: enabled ? '#2A6B3A' : '#6B6B66',
           cursor: saving || isDisabled ? 'not-allowed' : 'pointer',
           opacity: saving ? 0.6 : 1,
         }}
@@ -218,7 +218,7 @@ export function InstituteDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
       </div>
     );
   }
@@ -228,9 +228,9 @@ export function InstituteDetailPage() {
       <div className="px-4 py-6 md:px-8 md:py-10" style={{ maxWidth: 1120, margin: '0 auto' }}>
         <button onClick={() => navigate('/dashboard/user-management')}
           className="flex items-center gap-1.5 text-xs mb-8 transition-colors"
-          style={{ color: '#9A9891' }}
+          style={{ color: '#6B6B66' }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
           <ChevronLeft size={13} strokeWidth={1.5} />User Management
         </button>
         <div className="flex items-center gap-2 px-4 py-3"
@@ -261,9 +261,9 @@ export function InstituteDetailPage() {
       <button
         onClick={() => navigate('/dashboard/user-management')}
         className="flex items-center gap-1.5 text-xs mb-6 transition-colors select-none"
-        style={{ color: '#9A9891' }}
+        style={{ color: '#6B6B66' }}
         onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}
+        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
       >
         <ChevronLeft size={12} strokeWidth={1.5} />
         User Management
@@ -275,7 +275,7 @@ export function InstituteDetailPage() {
         style={{ borderBottom: '1px solid #E3E1DB' }}
       >
         <div>
-          <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>WEB OWNER · INSTITUTE</p>
+          <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>WEB OWNER · INSTITUTE</p>
           <h1 className="text-lg font-medium mb-1" style={{ color: '#0C0C0B', letterSpacing: '-0.01em' }}>
             {institute.name}
           </h1>
@@ -287,10 +287,10 @@ export function InstituteDetailPage() {
             <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
               style={institute.status === 'active'
                 ? { background: '#F0F7F2', color: '#2A6B3A', border: '1px solid #C6DECE', borderRadius: 2 }
-                : { background: '#F5F5F3', color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                : { background: '#F5F5F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
               <span style={{
                 width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
-                background: institute.status === 'active' ? '#2A6B3A' : '#C4C3BD',
+                background: institute.status === 'active' ? '#2A6B3A' : '#6B6B66',
               }} />
               {institute.status === 'active' ? 'Active' : 'Disabled'}
             </span>
@@ -300,9 +300,9 @@ export function InstituteDetailPage() {
 
         {/* Admin info */}
         <div className="md:text-right">
-          <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>ADMINISTRATOR</p>
+          <p className="text-xs mb-0.5" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>ADMINISTRATOR</p>
           <p className="text-xs" style={{ color: '#2C2C2A' }}>{institute.adminName}</p>
-          <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{institute.adminEmail}</p>
+          <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{institute.adminEmail}</p>
         </div>
       </div>
 
@@ -315,12 +315,12 @@ export function InstituteDetailPage() {
               onClick={() => setPrimaryTab(tab.key)}
               className="relative flex items-center gap-1.5 px-4 py-2.5 text-xs select-none transition-colors"
               style={{
-                color: isActive ? '#0C0C0B' : '#9A9891',
+                color: isActive ? '#0C0C0B' : '#6B6B66',
                 fontWeight: isActive ? 500 : 400,
                 letterSpacing: '0.03em',
               }}
               onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-              onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#9A9891'; }}
+              onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}
             >
               {tab.icon}{tab.label}
               {isActive && (
@@ -356,12 +356,12 @@ export function InstituteDetailPage() {
                   <button key={sub.key} onClick={() => setUsersSubTab(sub.key)}
                     className="relative px-4 py-2.5 text-xs transition-colors select-none"
                     style={{
-                      color: isActive ? '#0C0C0B' : '#9A9891',
+                      color: isActive ? '#0C0C0B' : '#6B6B66',
                       fontWeight: isActive ? 500 : 400,
                       letterSpacing: '0.03em',
                     }}
                     onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#9A9891'; }}
+                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}
                   >
                     {sub.label}
                     {isActive && (
@@ -421,8 +421,8 @@ export function InstituteDetailPage() {
             transition={{ duration: 0.18 }}
             className="pt-6"
           >
-            <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>PERMISSION GATES</p>
-            <p className="text-xs mb-5" style={{ color: '#B0AEA8', lineHeight: 1.7 }}>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>PERMISSION GATES</p>
+            <p className="text-xs mb-5" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
               Control what this institute's admin and faculty members are allowed to do on the platform.
               Changes take effect immediately.
             </p>

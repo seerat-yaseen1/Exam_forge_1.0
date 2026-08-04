@@ -151,7 +151,7 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
         className="flex flex-col items-center justify-center gap-2 py-4 px-4"
         style={{ border: '1px dashed #E3E1DB', borderRadius: 3, background: '#FAFAF8' }}
       >
-        <Loader2 size={16} className="animate-spin" style={{ color: '#9A9891' }} />
+        <Loader2 size={16} className="animate-spin" style={{ color: '#6B6B66' }} />
         <div className="w-full" style={{ maxWidth: 140 }}>
           <div style={{ height: 3, background: '#E3E1DB', borderRadius: 2, overflow: 'hidden' }}>
             <div
@@ -165,7 +165,7 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
             />
           </div>
         </div>
-        <p className="text-xs" style={{ color: '#9A9891' }}>{progress}%</p>
+        <p className="text-xs" style={{ color: '#6B6B66' }}>{progress}%</p>
       </div>
     );
   }
@@ -190,13 +190,13 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
         }}
       >
         {dragOver
-          ? <Upload size={13} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
-          : <ImageIcon size={13} strokeWidth={1.5} style={{ color: '#B0AEA8', flexShrink: 0 }} />
+          ? <Upload size={13} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+          : <ImageIcon size={13} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
         }
-        <span className="text-xs" style={{ color: '#9A9891' }}>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>
           {dragOver ? 'Drop to upload' : label}
         </span>
-        <span className="text-xs ml-auto" style={{ color: '#C4C3BD' }}>
+        <span className="text-xs ml-auto" style={{ color: '#6B6B66' }}>
           {TYPE_LABEL} &lt;{SIZE_LABEL}
         </span>
       </div>

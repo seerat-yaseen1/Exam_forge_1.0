@@ -85,7 +85,7 @@ export function ForgotPasswordPage() {
               >
                 <p
                   className="text-xs mb-1"
-                  style={{ color: '#9A9891', letterSpacing: '0.08em' }}
+                  style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
                 >
                   PASSWORD RECOVERY
                 </p>
@@ -175,7 +175,7 @@ export function ForgotPasswordPage() {
               >
                 <p
                   className="text-xs mb-1"
-                  style={{ color: '#9A9891', letterSpacing: '0.08em' }}
+                  style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
                 >
                   CHECK YOUR INBOX
                 </p>
@@ -201,12 +201,12 @@ export function ForgotPasswordPage() {
           <Link
             to="/login"
             className="flex items-center gap-1.5 text-xs transition-colors"
-            style={{ color: '#9A9891', textDecoration: 'none' }}
+            style={{ color: '#6B6B66', textDecoration: 'none' }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLElement).style.color = '#0C0C0B';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#9A9891';
+              (e.currentTarget as HTMLElement).style.color = '#6B6B66';
             }}
           >
             <ArrowLeft size={12} strokeWidth={1.5} />

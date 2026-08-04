@@ -671,13 +671,13 @@ function FaceGateOverlay() {
           <Loader2 size={20} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>
             PREPARING MONITORING
           </p>
           <p className="text-sm" style={{ color: '#4A4A45', lineHeight: 1.6 }}>
             Setting up webcam monitoring before your exam begins…
           </p>
-          <p className="text-xs mt-1" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
+          <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
             This takes just a moment. Your questions will appear once monitoring is active.
           </p>
         </div>
@@ -774,7 +774,7 @@ function SubmitConfirmModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
             {isFinal ? 'SUBMIT EXAM' : `SUBMIT ${sectionName.toUpperCase()}`}
           </p>
         </div>
@@ -840,7 +840,7 @@ function SubmitConfirmModal({
             disabled={confirming}
             className="text-xs px-4 py-2.5"
             style={{
-              color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2,
+              color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2,
               cursor: confirming ? 'not-allowed' : 'pointer',
               opacity: confirming ? 0.5 : 1,
             }}
@@ -934,7 +934,7 @@ function BreakScreen({
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
       <div className="flex flex-col items-center gap-4" style={{ maxWidth: 440, textAlign: 'center', padding: '0 24px' }}>
-        <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>BREAK</p>
+        <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>BREAK</p>
         <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.6 }}>
           {state.then === 'choose'
             ? `${state.justSubmittedSectionName} submitted. Take a moment — you'll choose your next section when you continue.`
@@ -951,7 +951,7 @@ function BreakScreen({
             {mm}:{ss.toString().padStart(2, '0')}
           </span>
         </div>
-        <p className="text-xs" style={{ color: '#9A9891' }}>
+        <p className="text-xs" style={{ color: '#6B6B66' }}>
           {state.mandatory
             ? 'You must wait until the timer ends.'
             : 'You may skip this break and continue immediately.'}
@@ -991,7 +991,7 @@ function TimerChip({ label, children }: { label: string; children: ReactNode }) 
     <div className="flex items-center gap-1.5 flex-shrink-0">
       <span
         className="text-[10px] uppercase"
-        style={{ color: '#9A9891', letterSpacing: '0.06em', fontWeight: 500 }}
+        style={{ color: '#6B6B66', letterSpacing: '0.06em', fontWeight: 500 }}
       >
         {label}
       </span>
@@ -1020,7 +1020,7 @@ function SectionPicker({
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3', padding: 24 }}>
       <div className="flex flex-col items-center gap-4" style={{ maxWidth: 560, width: '100%' }}>
-        <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>CHOOSE YOUR NEXT SECTION</p>
+        <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>CHOOSE YOUR NEXT SECTION</p>
         <p className="text-sm" style={{ color: '#0C0C0B', textAlign: 'center', lineHeight: 1.6 }}>
           {completedCount === 0
             ? 'Pick which section you want to start with.'
@@ -1045,7 +1045,7 @@ function SectionPicker({
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E3E1DB'; }}
             >
               <span className="text-xs" style={{ color: '#0C0C0B' }}>{sec.name}</span>
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 {sec.questions.length} question{sec.questions.length === 1 ? '' : 's'}
                 {sec.timeLimit ? ` · ${sec.timeLimit} min` : ''}
               </span>
@@ -1053,7 +1053,7 @@ function SectionPicker({
           ))}
         </div>
         {picking && (
-          <div className="flex items-center gap-2" style={{ color: '#9A9891' }}>
+          <div className="flex items-center gap-2" style={{ color: '#6B6B66' }}>
             <Loader2 size={11} className="animate-spin" />
             <span className="text-xs">Starting section…</span>
           </div>
@@ -3205,13 +3205,13 @@ export function ExamShell() {
   if (shellStatus === 'loading') {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
         {/* Copy varies with startPhase so a staggered wait reads as progress
             rather than a stalled spinner. Deliberately NOT a countdown or a
             queue position: both invite students to compare with a neighbour
             and conclude something is wrong, when in fact the delay costs them
             nothing — their timer starts when their attempt does. */}
-        <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>
+        <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>
           {startPhase === 'retrying'
             ? 'Still preparing your exam…'
             : startPhase === 'queued'
@@ -3238,7 +3238,7 @@ export function ExamShell() {
           <p className="text-xs text-center mb-1" style={{ color: '#4A4A45', lineHeight: 1.7, maxWidth: 420 }}>
             {errorMsg}
           </p>
-          <p className="text-xs text-center mb-6" style={{ color: '#9A9891', lineHeight: 1.6, maxWidth: 420 }}>
+          <p className="text-xs text-center mb-6" style={{ color: '#6B6B66', lineHeight: 1.6, maxWidth: 420 }}>
             Your progress is saved — resuming inside Safe Exam Browser continues where you left off.
           </p>
           <div className="flex items-center gap-2 flex-wrap justify-center">
@@ -3319,8 +3319,8 @@ export function ExamShell() {
   if (shellStatus === 'submitting_section') {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-        <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Submitting this section…</p>
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Submitting this section…</p>
       </div>
     );
   }
@@ -3328,8 +3328,8 @@ export function ExamShell() {
   if (shellStatus === 'submitting_exam' || shellStatus === 'submitted') {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-        <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Submitting your exam…</p>
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Submitting your exam…</p>
       </div>
     );
   }
@@ -3430,12 +3430,12 @@ export function ExamShell() {
         {/* Section name + progress */}
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <Layers size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+            <Layers size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
             <span className="text-xs" style={{ color: '#0C0C0B' }}>
               {currentSection.name}
             </span>
             {totalSections > 1 && (
-              <span className="text-xs" style={{ color: '#C4C3BD' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 ({currentSectionIdx + 1}/{totalSections})
               </span>
             )}
@@ -3561,11 +3561,11 @@ export function ExamShell() {
           <Shield
             size={11}
             strokeWidth={1.5}
-            style={{ color: warningCount >= 2 ? '#9B2828' : warningCount >= 1 ? '#92680A' : '#C4C3BD' }}
+            style={{ color: warningCount >= 2 ? '#9B2828' : warningCount >= 1 ? '#92680A' : '#6B6B66' }}
           />
           <span
             className="text-xs"
-            style={{ color: warningCount >= 2 ? '#9B2828' : warningCount >= 1 ? '#92680A' : '#C4C3BD' }}
+            style={{ color: warningCount >= 2 ? '#9B2828' : warningCount >= 1 ? '#92680A' : '#6B6B66' }}
           >
             {warningCount}/{MAX_WARNINGS}
           </span>
@@ -3651,7 +3651,7 @@ export function ExamShell() {
               >
                 {isLinear ? (
                   <span className="flex items-center gap-1.5 text-xs px-1 py-2"
-                    style={{ color: '#9A9891' }}>
+                    style={{ color: '#6B6B66' }}>
                     <Shield size={12} strokeWidth={1.5} />
                     Answers are final — you cannot return to a question
                   </span>
@@ -3675,7 +3675,7 @@ export function ExamShell() {
                 <div className="flex items-center gap-2">
                   {isLinear ? (
                     <>
-                      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+                      <span className="text-xs" style={{ color: '#6B6B66' }}>
                         Question {currentSectionQIds.length}
                       </span>
                       {qSecondsLeft !== null && (
@@ -3699,7 +3699,7 @@ export function ExamShell() {
                     </>
                   ) : (
                     <>
-                      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+                      <span className="text-xs" style={{ color: '#6B6B66' }}>
                         {currentSectionQIds.length - unansweredInSection}
                         /{currentSectionQIds.length} answered in this section
                       </span>
@@ -3761,8 +3761,8 @@ export function ExamShell() {
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
-              <AlertTriangle size={16} strokeWidth={1} style={{ color: '#C4C3BD' }} />
-              <p className="text-xs" style={{ color: '#C4C3BD' }}>
+              <AlertTriangle size={16} strokeWidth={1} style={{ color: '#6B6B66' }} />
+              <p className="text-xs" style={{ color: '#6B6B66' }}>
                 No questions found in this section.
               </p>
             </div>

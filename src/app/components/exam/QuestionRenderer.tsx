@@ -69,7 +69,7 @@ function MCQSingleEngine({
               style={{
                 width: 18, height: 18,
                 borderRadius: '50%',
-                border: `1.5px solid ${isSelected ? '#0C0C0B' : '#C4C3BD'}`,
+                border: `1.5px solid ${isSelected ? '#0C0C0B' : '#6B6B66'}`,
                 background: isSelected ? '#0C0C0B' : 'transparent',
                 transition: 'all 0.12s',
               }}
@@ -82,7 +82,7 @@ function MCQSingleEngine({
             <span
               className="flex-shrink-0 text-xs"
               style={{
-                color: isSelected ? '#0C0C0B' : '#9A9891',
+                color: isSelected ? '#0C0C0B' : '#6B6B66',
                 fontWeight: isSelected ? 500 : 400,
                 minWidth: 14,
               }}
@@ -128,7 +128,7 @@ function MCQMultiEngine({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs mb-3" style={{ color: '#9A9891' }}>
+      <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
         Select all that apply.
       </p>
       {options.map((opt, idx) => {
@@ -151,7 +151,7 @@ function MCQMultiEngine({
               style={{
                 width: 18, height: 18,
                 borderRadius: 2,
-                border: `1.5px solid ${isSelected ? '#0C0C0B' : '#C4C3BD'}`,
+                border: `1.5px solid ${isSelected ? '#0C0C0B' : '#6B6B66'}`,
                 background: isSelected ? '#0C0C0B' : 'transparent',
                 transition: 'all 0.12s',
               }}
@@ -162,7 +162,7 @@ function MCQMultiEngine({
                 </svg>
               )}
             </div>
-            <span className="flex-shrink-0 text-xs" style={{ color: isSelected ? '#0C0C0B' : '#9A9891', minWidth: 14 }}>
+            <span className="flex-shrink-0 text-xs" style={{ color: isSelected ? '#0C0C0B' : '#6B6B66', minWidth: 14 }}>
               {letter}.
             </span>
             <div className="flex-1 min-w-0">
@@ -229,13 +229,13 @@ function TextEngine({
         }}
       />
       <div className="flex items-center justify-between mt-2">
-        <p className="text-xs" style={{ color: '#C4C3BD' }}>
+        <p className="text-xs" style={{ color: '#6B6B66' }}>
           {variant === 'long'
             ? 'Write a detailed response. Your answer is saved automatically.'
             : 'Provide a concise answer. Your answer is saved automatically.'}
         </p>
         {value.trim().length > 0 && (
-          <p className="text-xs" style={{ color: '#C4C3BD' }}>
+          <p className="text-xs" style={{ color: '#6B6B66' }}>
             {value.trim().split(/\s+/).filter(Boolean).length} words
           </p>
         )}
@@ -291,15 +291,15 @@ function MatchEngine({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs mb-3" style={{ color: '#9A9891' }}>
+      <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
         Match each item in Column A with the correct item in Column B.
       </p>
 
       {/* Column headers */}
       <div className="grid gap-3" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
-        <p className="text-xs px-2" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>COLUMN A</p>
+        <p className="text-xs px-2" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>COLUMN A</p>
         <div style={{ width: 20 }} />
-        <p className="text-xs px-2" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>COLUMN B</p>
+        <p className="text-xs px-2" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>COLUMN B</p>
       </div>
 
       {pairs.map((pair, idx) => {
@@ -330,7 +330,7 @@ function MatchEngine({
             </div>
 
             {/* Arrow */}
-            <div style={{ color: '#C4C3BD', fontSize: 16, userSelect: 'none' }}>→</div>
+            <div style={{ color: '#6B6B66', fontSize: 16, userSelect: 'none' }}>→</div>
 
             {/* Right dropdown */}
             <div className="relative">
@@ -344,7 +344,7 @@ function MatchEngine({
                   borderRadius: 3,
                   padding: '10px 36px 10px 12px',
                   fontSize: 13,
-                  color: selectedRightId ? '#0C0C0B' : '#C4C3BD',
+                  color: selectedRightId ? '#0C0C0B' : '#6B6B66',
                   cursor: 'pointer',
                   minHeight: 48,
                   transition: 'all 0.12s',
@@ -359,7 +359,7 @@ function MatchEngine({
                 size={13}
                 strokeWidth={1.5}
                 className="absolute pointer-events-none"
-                style={{ right: 10, top: '50%', transform: 'translateY(-50%)', color: '#9A9891' }}
+                style={{ right: 10, top: '50%', transform: 'translateY(-50%)', color: '#6B6B66' }}
               />
             </div>
           </div>
@@ -438,7 +438,7 @@ function FlagControl({
             }}
           >
             <div className="px-3 py-2" style={{ borderBottom: '1px solid #F0EFEB' }}>
-              <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                 REPORT THIS QUESTION
               </p>
             </div>
@@ -473,7 +473,7 @@ function FlagControl({
               </div>
             )}
             <div className="px-3 py-2" style={{ borderTop: '1px solid #F0EFEB' }}>
-              <p className="text-xs" style={{ color: '#C4C3BD', lineHeight: 1.5 }}>
+              <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                 Reports are submitted with your exam and reviewed by your evaluator.
               </p>
             </div>
@@ -532,7 +532,7 @@ export function QuestionRenderer({
             >
               {badgeText}
             </span>
-            <span className="text-xs" style={{ color: '#9A9891' }}>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>
               Q{questionNumber} of {totalQuestions}
             </span>
           </div>

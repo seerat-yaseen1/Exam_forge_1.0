@@ -101,11 +101,11 @@ export function ShareQuestionsModal({
               Share {questionIds.length} question{questionIds.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button onClick={onClose} className="p-1" style={{ color: '#9A9891' }}><X size={15} strokeWidth={1.5} /></button>
+          <button onClick={onClose} className="p-1" style={{ color: '#6B6B66' }}><X size={15} strokeWidth={1.5} /></button>
         </div>
 
         <div className="px-5 py-4">
-          <p className="text-xs mb-3" style={{ color: '#9A9891' }}>
+          <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
             Recipients inside your institute. Shared questions are read-only for them.
           </p>
 
@@ -116,7 +116,7 @@ export function ShareQuestionsModal({
             style={{ border: `1px solid ${shareAdmin ? '#C6DECE' : '#E3E1DB'}`, borderRadius: 2, background: shareAdmin ? '#F0F7F2' : '#FFFFFF' }}
           >
             <div className="flex items-center gap-2">
-              <Users size={13} strokeWidth={1.5} style={{ color: shareAdmin ? '#2A6B3A' : '#9A9891' }} />
+              <Users size={13} strokeWidth={1.5} style={{ color: shareAdmin ? '#2A6B3A' : '#6B6B66' }} />
               <span className="text-xs" style={{ color: '#0C0C0B' }}>Institute Admin</span>
             </div>
             {shareAdmin && <Check size={13} strokeWidth={2} style={{ color: '#2A6B3A' }} />}
@@ -124,11 +124,11 @@ export function ShareQuestionsModal({
 
           {/* Peer faculty */}
           {loading ? (
-            <div className="flex items-center gap-2 py-3 text-xs" style={{ color: '#9A9891' }}>
+            <div className="flex items-center gap-2 py-3 text-xs" style={{ color: '#6B6B66' }}>
               <Loader2 size={12} className="animate-spin" /> Loading faculty…
             </div>
           ) : peers.length === 0 ? (
-            <p className="text-xs py-2" style={{ color: '#B0AEA8' }}>No other faculty in your institute.</p>
+            <p className="text-xs py-2" style={{ color: '#6B6B66' }}>No other faculty in your institute.</p>
           ) : (
             peers.map((f) => {
               const on = !!selected[f.id];
@@ -141,7 +141,7 @@ export function ShareQuestionsModal({
                 >
                   <div className="min-w-0 text-left">
                     <p className="text-xs" style={{ color: '#0C0C0B' }}>{f.name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{f.email}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{f.email}</p>
                   </div>
                   {on && <Check size={13} strokeWidth={2} style={{ color: '#2A6B3A', flexShrink: 0 }} />}
                 </button>
@@ -162,7 +162,7 @@ export function ShareQuestionsModal({
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid #F0EFEB' }}>
-          <button onClick={onClose} disabled={saving} className="text-xs px-3 py-2" style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+          <button onClick={onClose} disabled={saving} className="text-xs px-3 py-2" style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
             Cancel
           </button>
           <button

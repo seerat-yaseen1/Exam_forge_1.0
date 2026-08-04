@@ -41,14 +41,14 @@ export function MyRequestsList({ facultyId }: { facultyId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 px-5 py-8 text-xs" style={{ color: '#9A9891' }}>
+      <div className="flex items-center gap-2 px-5 py-8 text-xs" style={{ color: '#6B6B66' }}>
         <Loader2 size={13} className="animate-spin" /> Loading your requests…
       </div>
     );
   }
   if (rows.length === 0) {
     return (
-      <div className="px-5 py-10 text-center text-xs" style={{ color: '#B0AEA8', letterSpacing: '0.08em' }}>
+      <div className="px-5 py-10 text-center text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
         NO REQUESTS YET
       </div>
     );
@@ -63,10 +63,10 @@ export function MyRequestsList({ facultyId }: { facultyId: string }) {
           </span>
           <div className="flex-1 min-w-0">
             <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>
-              {r.questionStem || <em style={{ color: '#B0AEA8' }}>New question</em>}
+              {r.questionStem || <em style={{ color: '#6B6B66' }}>New question</em>}
             </p>
             {r.reviewNote && (
-              <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>Note: {r.reviewNote}</p>
+              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>Note: {r.reviewNote}</p>
             )}
           </div>
           <StatusChip status={r.status} />

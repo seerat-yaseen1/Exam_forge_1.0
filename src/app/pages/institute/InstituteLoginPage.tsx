@@ -105,7 +105,7 @@ export function InstituteLoginPage() {
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           }}
         >
-          <p className="text-xs mb-6" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+          <p className="text-xs mb-6" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             INSTITUTE ADMIN ACCESS
           </p>
 
@@ -137,9 +137,9 @@ export function InstituteLoginPage() {
                 </label>
                 <Link to="/institute/forgot-password"
                   className="text-xs transition-colors"
-                  style={{ color: '#9A9891', textDecoration: 'none' }}
+                  style={{ color: '#6B6B66', textDecoration: 'none' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                   Forgot password?
                 </Link>
               </div>
@@ -160,9 +160,9 @@ export function InstituteLoginPage() {
                   tabIndex={-1}
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: '#B0AEA8' }}
+                  style={{ color: '#6B6B66' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#B0AEA8')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
                 >
                   {showPassword ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
@@ -207,9 +207,9 @@ export function InstituteLoginPage() {
           <Link
             to="/login"
             className="text-xs transition-colors"
-            style={{ color: '#C4C3BD', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}
+            style={{ color: '#6B6B66', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
           >
             Web Owner
           </Link>
@@ -217,9 +217,9 @@ export function InstituteLoginPage() {
           <Link
             to="/faculty/login"
             className="text-xs transition-colors"
-            style={{ color: '#C4C3BD', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}
+            style={{ color: '#6B6B66', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
           >
             Faculty
           </Link>
@@ -227,9 +227,9 @@ export function InstituteLoginPage() {
           <Link
             to="/student/login"
             className="text-xs transition-colors"
-            style={{ color: '#C4C3BD', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}
+            style={{ color: '#6B6B66', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
           >
             Student
           </Link>

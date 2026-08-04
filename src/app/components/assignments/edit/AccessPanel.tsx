@@ -96,7 +96,7 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
         <>
           <Field label="Add a student to the block list">
             <div className="flex items-center gap-2 px-3 py-2" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-              <Search size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+              <Search size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -115,7 +115,7 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
                     style={{ color: '#0C0C0B' }}
                   >
                     <span>{s.name}</span>
-                    <span className="ml-2" style={{ color: '#9A9891' }}>{s.email}</span>
+                    <span className="ml-2" style={{ color: '#6B6B66' }}>{s.email}</span>
                   </button>
                 ))}
               </div>
@@ -124,7 +124,7 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
 
           <Field label={`Blocked students (${blocked.length})`}>
             {blocked.length === 0 ? (
-              <p className="text-xs" style={{ color: '#9A9891' }}>No students are blocked.</p>
+              <p className="text-xs" style={{ color: '#6B6B66' }}>No students are blocked.</p>
             ) : (
               <div className="space-y-1">
                 {blocked.map((id) => {
@@ -137,12 +137,12 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
                     >
                       <div className="min-w-0">
                         <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{s?.name ?? id}</p>
-                        {s?.email && <p className="text-xs truncate" style={{ color: '#9A9891' }}>{s.email}</p>}
+                        {s?.email && <p className="text-xs truncate" style={{ color: '#6B6B66' }}>{s.email}</p>}
                       </div>
                       <button
                         onClick={() => setBlocked((prev) => prev.filter((x) => x !== id))}
                         className="p-1 hover:opacity-70"
-                        style={{ color: '#9A9891' }}
+                        style={{ color: '#6B6B66' }}
                         title="Remove"
                       >
                         <X size={12} strokeWidth={1.5} />

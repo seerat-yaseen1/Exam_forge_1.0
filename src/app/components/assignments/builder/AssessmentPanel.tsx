@@ -111,12 +111,12 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
         <div className="flex items-center gap-4">
           <button onClick={onClose}
             className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-60"
-            style={{ color: '#9A9891' }}>
+            style={{ color: '#6B6B66' }}>
             <X size={13} strokeWidth={1.5} />
             <span style={{ letterSpacing: '0.04em' }}>Cancel</span>
           </button>
           <div style={{ width: 1, height: 14, background: '#E3E1DB' }} />
-          <p className="text-xs" style={{ color: '#B0AEA8', letterSpacing: '0.1em' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
             {mode === 'create' ? 'NEW ASSESSMENT' : 'EDIT ASSESSMENT'}
           </p>
           {/* Step indicator */}
@@ -125,7 +125,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
               <React.Fragment key={n}>
                 {i > 0 && <div style={{ width: 16, height: 1, background: step >= n ? '#0C0C0B' : '#E3E1DB' }} />}
                 <div className="flex items-center justify-center"
-                  style={{ width: 18, height: 18, borderRadius: 9, background: step >= n ? '#0C0C0B' : '#E3E1DB', fontSize: 9, color: step >= n ? '#FFFFFF' : '#9A9891' }}>
+                  style={{ width: 18, height: 18, borderRadius: 9, background: step >= n ? '#0C0C0B' : '#E3E1DB', fontSize: 9, color: step >= n ? '#FFFFFF' : '#6B6B66' }}>
                   {n}
                 </div>
               </React.Fragment>

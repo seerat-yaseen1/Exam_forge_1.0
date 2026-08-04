@@ -78,7 +78,7 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
         {icon}
       </div>
       <div>
-        <p className="text-xs" style={{ color: '#9A9891' }}>{label}</p>
+        <p className="text-xs" style={{ color: '#6B6B66' }}>{label}</p>
         <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{value}</p>
       </div>
     </div>
@@ -119,7 +119,7 @@ function TabBar({ active, onChange, showRequests }: { active: Tab; onChange: (t:
           onClick={() => onChange(t.id)}
           className="text-xs px-4 py-2.5 transition-all"
           style={{
-            color: active === t.id ? '#0C0C0B' : '#9A9891',
+            color: active === t.id ? '#0C0C0B' : '#6B6B66',
             borderBottom: active === t.id ? '2px solid #0C0C0B' : '2px solid transparent',
             letterSpacing: '0.02em',
             marginBottom: -1,
@@ -166,7 +166,7 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
         className="flex items-center gap-2 px-3 py-2"
         style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}
       >
-        <Search size={13} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+        <Search size={13} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
         <input
           type="text"
           value={search}
@@ -177,7 +177,7 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
         />
         {search && (
           <button onClick={() => setSearch('')} className="hover:opacity-60 transition-opacity">
-            <X size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+            <X size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           </button>
         )}
       </div>
@@ -257,14 +257,14 @@ function QuestionRow({
 
       <div className="flex-1 min-w-0">
         <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-          {truncate(question.stem, 110) || <em style={{ color: '#B0AEA8' }}>No stem</em>}
+          {truncate(question.stem, 110) || <em style={{ color: '#6B6B66' }}>No stem</em>}
         </p>
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
           {question.subject && (
-            <span className="text-xs" style={{ color: '#9A9891' }}>{question.subject}</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>{question.subject}</span>
           )}
           {question.topic && (
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>· {question.topic}</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>· {question.topic}</span>
           )}
           {question.tags.slice(0, 3).map((tag) => (
             <span
@@ -283,25 +283,25 @@ function QuestionRow({
       </div>
 
       <div className="flex-shrink-0 w-24 text-right">
-        <span className="text-xs" style={{ color: '#C4C3BD' }}>{formatDate(question.createdAt)}</span>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>{formatDate(question.createdAt)}</span>
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0">
-        <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+        <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
           <Eye size={13} strokeWidth={1.5} />
         </button>
         {canShare && (
-          <button onClick={onShare} title="Share" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+          <button onClick={onShare} title="Share" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
             <Share2 size={13} strokeWidth={1.5} />
           </button>
         )}
         {canEdit && (
-          <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+          <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
             <Pencil size={13} strokeWidth={1.5} />
           </button>
         )}
         {canDelete && (
-          <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}>
+          <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
             <Trash2 size={13} strokeWidth={1.5} />
           </button>
         )}
@@ -314,7 +314,7 @@ function QuestionRow({
 
 function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd?: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16" style={{ color: '#C4C3BD' }}>
+    <div className="flex flex-col items-center justify-center py-16" style={{ color: '#6B6B66' }}>
       <div style={{ width: 1, height: 32, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 16 }} />
       <p className="text-xs" style={{ letterSpacing: '0.1em' }}>
         {filtered ? 'NO QUESTIONS MATCH' : 'NO QUESTIONS YET'}
@@ -323,7 +323,7 @@ function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd?: () => void
         <button
           onClick={onAdd}
           className="mt-4 flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-70"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891', background: '#FFFFFF' }}
+          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}
         >
           <Plus size={12} strokeWidth={1.5} /> Add first question
         </button>
@@ -356,8 +356,8 @@ function DeleteModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>DELETE QUESTION</p>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>DELETE QUESTION</p>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -372,7 +372,7 @@ function DeleteModal({
             </p>
           </div>
           <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>Are you sure you want to delete:</p>
-          <p className="text-xs mt-1.5 italic" style={{ color: '#9A9891' }}>"{truncate(question.stem, 80)}"</p>
+          <p className="text-xs mt-1.5 italic" style={{ color: '#6B6B66' }}>"{truncate(question.stem, 80)}"</p>
         </div>
         <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button
@@ -392,7 +392,7 @@ function DeleteModal({
             onClick={onCancel}
             disabled={deleting}
             className="text-xs px-4 py-2.5"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
           >
             Cancel
           </button>
@@ -421,8 +421,8 @@ function PreviewModal({ question, onClose }: { question: Question; onClose: () =
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>QUESTION PREVIEW</p>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>QUESTION PREVIEW</p>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -467,10 +467,10 @@ function QuestionPanel({
           className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom: '1px solid #E3E1DB' }}
         >
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
             {mode === 'create' ? 'NEW QUESTION' : 'EDIT QUESTION'}
           </p>
-          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
             <X size={15} strokeWidth={1.5} />
           </button>
         </div>
@@ -684,9 +684,9 @@ export function FacultyQuestionsPage() {
           style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}
         >
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>FACULTY</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>FACULTY</p>
             <h1 className="text-base" style={{ color: '#0C0C0B' }}>Questions</h1>
-            <p className="text-xs mt-1" style={{ color: '#B0AEA8' }}>
+            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
               Your personal question pool — visible only to you.
             </p>
           </div>
@@ -725,12 +725,12 @@ export function FacultyQuestionsPage() {
         {/* ── Stat pills ── */}
         <div className="grid grid-cols-2 gap-3 mb-8" style={{ maxWidth: 480 }}>
           <StatPill
-            icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+            icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
             label="Total Questions"
             value={loading ? '…' : String(questions.length)}
           />
           <StatPill
-            icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+            icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
             label="Subjects"
             value={loading ? '…' : String(subjects.length)}
           />
@@ -775,7 +775,7 @@ export function FacultyQuestionsPage() {
                   className="px-5 py-3 flex items-center justify-between"
                   style={{ borderTop: '1px solid #F0EFEB' }}
                 >
-                  <p className="text-xs" style={{ color: '#C4C3BD' }}>
+                  <p className="text-xs" style={{ color: '#6B6B66' }}>
                     {isFiltered
                       ? `${filtered.length} of ${questions.length} question${questions.length !== 1 ? 's' : ''}`
                       : `${questions.length} question${questions.length !== 1 ? 's' : ''}`}

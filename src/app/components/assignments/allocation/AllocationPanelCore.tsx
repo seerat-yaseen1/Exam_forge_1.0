@@ -30,7 +30,7 @@ import type { Institute } from '../../../../lib/firebaseService';
 import { NodePickerModal } from './NodePickerModal';
 import { AllocationPreview } from './AllocationPreview';
 
-const INK = '#0C0C0B', MUTED = '#9A9891', FAINT = '#C4C3BD', LINE = '#E3E1DB', PAPER = '#FFFFFF';
+const INK = '#0C0C0B', MUTED = '#6B6B66', FAINT = '#6B6B66', LINE = '#E3E1DB', PAPER = '#FFFFFF';
 
 const selectStyle: React.CSSProperties = {
   width: '100%', border: `1px solid ${LINE}`, borderRadius: 2,

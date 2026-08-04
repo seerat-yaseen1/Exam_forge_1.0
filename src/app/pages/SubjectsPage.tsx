@@ -127,7 +127,7 @@ export function SubjectsPage() {
             <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, letterSpacing: '0.04em', color: '#6B6B66' }}>
                 ALL SUBJECTS
-                {topics.length > 0 && <span style={{ color: '#C4C3BD' }}> · {topics.length} topics</span>}
+                {topics.length > 0 && <span style={{ color: '#6B6B66' }}> · {topics.length} topics</span>}
               </span>
               <div className="flex items-center gap-2">
                 <Button
@@ -297,7 +297,7 @@ function SubjectCard({
       {/* Header: slug + drill affordance */}
       <div className="flex items-center justify-between gap-2">
         <SlugChip id={subject.id} />
-        <ChevronRight size={16} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+        <ChevronRight size={16} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
       </div>
 
       {/* Name */}
@@ -308,14 +308,14 @@ function SubjectCard({
       {/* Stats footer */}
       <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid #F2F1EC' }}>
         <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           <span style={{ fontSize: 12 }}>{subject.questionCount}</span>
-          <span style={{ fontSize: 11, color: '#9A9891' }}>questions</span>
+          <span style={{ fontSize: 11, color: '#6B6B66' }}>questions</span>
         </span>
         <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-          <Layers size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <Layers size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           <span style={{ fontSize: 12 }}>{topicCount}</span>
-          <span style={{ fontSize: 11, color: '#9A9891' }}>topics</span>
+          <span style={{ fontSize: 11, color: '#6B6B66' }}>topics</span>
         </span>
       </div>
     </button>
@@ -394,14 +394,14 @@ function SubjectDetail({
           </p>
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-              <BookOpen size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+              <BookOpen size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
               <span style={{ fontSize: 12 }}>{subject.questionCount}</span>
-              <span style={{ fontSize: 11, color: '#9A9891' }}>questions</span>
+              <span style={{ fontSize: 11, color: '#6B6B66' }}>questions</span>
             </span>
             <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-              <Layers size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+              <Layers size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
               <span style={{ fontSize: 12 }}>{topics.length}</span>
-              <span style={{ fontSize: 11, color: '#9A9891' }}>topics</span>
+              <span style={{ fontSize: 11, color: '#6B6B66' }}>topics</span>
             </span>
           </div>
         </div>
@@ -494,15 +494,15 @@ function TopicCard({
       >
         <div className="flex items-center justify-between gap-2">
           <SlugChip id={topic.id} />
-          <ChevronRight size={16} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+          <ChevronRight size={16} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
         </div>
         <p className="break-words" style={{ color: '#0C0C0B', fontSize: 14, lineHeight: 1.4 }}>
           {topic.name}
         </p>
         <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           <span style={{ fontSize: 12 }}>{topic.questionCount}</span>
-          <span style={{ fontSize: 11, color: '#9A9891' }}>questions</span>
+          <span style={{ fontSize: 11, color: '#6B6B66' }}>questions</span>
         </span>
       </button>
 
@@ -558,7 +558,7 @@ function TopicQuestionsView({
       <div style={{ padding: 16, borderBottom: '1px solid #E8E7E1' }}>
         <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
           <SlugChip id={topic.id} />
-          <span style={{ fontSize: 11, color: '#9A9891' }}>in {subject.name}</span>
+          <span style={{ fontSize: 11, color: '#6B6B66' }}>in {subject.name}</span>
         </div>
         <p className="break-words" style={{ color: '#0C0C0B', fontSize: 16, lineHeight: 1.3 }}>{topic.name}</p>
       </div>

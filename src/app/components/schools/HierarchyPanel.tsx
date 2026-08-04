@@ -81,11 +81,11 @@ export function HierarchyPanel({
       {/* ── Section header ── */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+          <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             {label.toUpperCase()}
           </span>
           {!loading && items.length > 0 && (
-            <span className="text-xs px-1.5 py-0.5" style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 10 }}>
+            <span className="text-xs px-1.5 py-0.5" style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 10 }}>
               {items.length}
             </span>
           )}
@@ -125,7 +125,7 @@ export function HierarchyPanel({
         {!loading && items.length === 0 && (
           <div className="flex flex-col items-center py-12">
             <div style={{ color: '#DDDBD5' }}>{LEVEL_ICONS[level]}</div>
-            <p className="text-xs mt-3" style={{ color: '#C4C3BD', letterSpacing: '0.05em' }}>
+            <p className="text-xs mt-3" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>
               No {NODE_LEVEL_LABELS[level].toLowerCase()}s yet
             </p>
             {!readOnly && (
@@ -171,13 +171,13 @@ export function HierarchyPanel({
                   className="flex items-center gap-3 flex-1 text-left py-3"
                   style={{ cursor: isLeaf ? 'default' : 'pointer' }}
                 >
-                  <span style={{ color: '#C4C3BD', flexShrink: 0 }}>{LEVEL_ICONS[level]}</span>
+                  <span style={{ color: '#6B6B66', flexShrink: 0 }}>{LEVEL_ICONS[level]}</span>
                   <div className="min-w-0">
                     <span className="text-sm block truncate" style={{ color: '#0C0C0B' }}>
                       {item.name}
                     </span>
                     {(item.subtitle || item.meta) && (
-                      <span className="text-xs" style={{ color: '#9A9891' }}>
+                      <span className="text-xs" style={{ color: '#6B6B66' }}>
                         {[item.subtitle, item.meta].filter(Boolean).join(' · ')}
                       </span>
                     )}
@@ -213,7 +213,7 @@ export function HierarchyPanel({
                         onClick={() => setArchiveConfirmId(null)}
                         disabled={isArchiving}
                         className="text-xs px-2 py-1"
-                        style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+                        style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
                       >
                         Cancel
                       </button>
@@ -225,9 +225,9 @@ export function HierarchyPanel({
                         onClick={() => onEdit(item)}
                         title="Edit"
                         className="p-2 opacity-0 group-hover:opacity-100 transition-all"
-                        style={{ color: '#C4C3BD' }}
+                        style={{ color: '#6B6B66' }}
                         onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
                       >
                         <Pencil size={12} strokeWidth={1.5} />
                       </button>
@@ -236,9 +236,9 @@ export function HierarchyPanel({
                         onClick={() => setArchiveConfirmId(item.id)}
                         title="Archive"
                         className="p-2 opacity-0 group-hover:opacity-100 transition-all"
-                        style={{ color: '#C4C3BD' }}
+                        style={{ color: '#6B6B66' }}
                         onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#8B5E1A')}
-                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
                       >
                         <Archive size={12} strokeWidth={1.5} />
                       </button>
@@ -246,7 +246,7 @@ export function HierarchyPanel({
                       {!isLeaf && (
                         <span
                           className="p-2 opacity-0 group-hover:opacity-100 transition-all"
-                          style={{ color: '#C4C3BD' }}
+                          style={{ color: '#6B6B66' }}
                         >
                           <ChevronRight size={12} strokeWidth={1.5} />
                         </span>

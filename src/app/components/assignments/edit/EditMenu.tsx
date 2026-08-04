@@ -35,7 +35,7 @@ export function EditMenu({ assessment, onPatched, onOpenLegacyEditor }: Props) {
         title="Nothing to edit"
         disabled
         className="p-1.5 opacity-40 cursor-not-allowed"
-        style={{ color: '#9A9891' }}
+        style={{ color: '#6B6B66' }}
       >
         <Pencil size={13} strokeWidth={1.5} />
       </button>
@@ -49,7 +49,7 @@ export function EditMenu({ assessment, onPatched, onOpenLegacyEditor }: Props) {
           <button
             title="Edit"
             className="p-1.5 transition-opacity hover:opacity-60"
-            style={{ color: '#9A9891' }}
+            style={{ color: '#6B6B66' }}
           >
             <Pencil size={13} strokeWidth={1.5} />
           </button>

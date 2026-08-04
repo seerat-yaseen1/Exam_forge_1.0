@@ -26,7 +26,7 @@ export function FacultyProfilePage() {
       className="px-8 py-10"
       style={{ maxWidth: 640, margin: '0 auto' }}
     >
-      <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>PROFILE</p>
+      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>PROFILE</p>
       <h1 className="text-base mb-8" style={{ color: '#0C0C0B', borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
         {session?.name}
       </h1>
@@ -35,7 +35,7 @@ export function FacultyProfilePage() {
         {rows.map((row, i) => (
           <div key={i} className="flex items-start px-5 py-4"
             style={{ borderBottom: i < rows.length - 1 ? '1px solid #F0EFEB' : 'none' }}>
-            <p className="text-xs w-40 flex-shrink-0" style={{ color: '#9A9891', paddingTop: 1 }}>{row.label}</p>
+            <p className="text-xs w-40 flex-shrink-0" style={{ color: '#6B6B66', paddingTop: 1 }}>{row.label}</p>
             <p className="text-sm"
               style={{
                 color: '#0C0C0B',
@@ -48,7 +48,7 @@ export function FacultyProfilePage() {
         ))}
       </div>
 
-      <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>
+      <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>
         Profile details are managed by your institute administrator.
       </p>
     </motion.div>

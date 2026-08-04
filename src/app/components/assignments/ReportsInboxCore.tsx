@@ -36,7 +36,7 @@ const STATUS_LABEL: Record<ReportStatus, string> = {
 const STATUS_COLOR: Record<ReportStatus, { bg: string; border: string; text: string }> = {
   open:      { bg: '#FEF9EC', border: '#F5DFA0', text: '#92680A' },
   reviewed:  { bg: '#F7F6F3', border: '#E3E1DB', text: '#4A4A45' },
-  dismissed: { bg: '#F7F6F3', border: '#E3E1DB', text: '#9A9891' },
+  dismissed: { bg: '#F7F6F3', border: '#E3E1DB', text: '#6B6B66' },
   fixed:     { bg: '#EAF6EE', border: '#B5D9C0', text: '#1E7B3C' },
 };
 
@@ -106,7 +106,7 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={16} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+        <Loader2 size={16} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
       </div>
     );
   }
@@ -124,7 +124,7 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
       <div className="flex items-center gap-3 mb-5">
         <Flag size={14} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
         <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.08em' }}>QUESTION REPORTS</p>
-        <span className="text-xs ml-auto" style={{ color: '#9A9891' }}>
+        <span className="text-xs ml-auto" style={{ color: '#6B6B66' }}>
           {counts.open} open · {counts.fixed} fixed · {counts.dismissed} dismissed
         </span>
       </div>
@@ -139,13 +139,13 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
               style={{
                 borderRadius: 2, cursor: 'pointer',
                 background: isActive ? '#0C0C0B' : 'transparent',
-                color: isActive ? '#FFFFFF' : '#9A9891',
+                color: isActive ? '#FFFFFF' : '#6B6B66',
                 border: isActive ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
               }}>
               {tab === 'all' ? 'All' : STATUS_LABEL[tab]}
               <span style={{
                 background: isActive ? 'rgba(255,255,255,0.2)' : '#F0EFEB',
-                color: isActive ? '#FFFFFF' : '#9A9891',
+                color: isActive ? '#FFFFFF' : '#6B6B66',
                 borderRadius: 2, padding: '0 4px', fontSize: 10,
               }}>{count}</span>
             </button>
@@ -156,8 +156,8 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
       {byAssessment.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3"
           style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
-          <Flag size={20} strokeWidth={1} style={{ color: '#C4C3BD' }} />
-          <p className="text-xs" style={{ color: '#C4C3BD' }}>
+          <Flag size={20} strokeWidth={1} style={{ color: '#6B6B66' }} />
+          <p className="text-xs" style={{ color: '#6B6B66' }}>
             No reports {filter !== 'all' ? `with status "${STATUS_LABEL[filter]}"` : 'visible to you'}.
           </p>
         </div>
@@ -178,7 +178,7 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs" style={{ color: '#0C0C0B' }}>{entry.title}</p>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-xs" style={{ color: '#9A9891' }}>
+                    <span className="text-xs" style={{ color: '#6B6B66' }}>
                       {entry.reports.length} report{entry.reports.length !== 1 ? 's' : ''}
                     </span>
                     {Object.entries(reasonCounts).map(([reason, count]) => (
@@ -200,7 +200,7 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
                     )}
                   </div>
                 </div>
-                <ChevronRight size={13} strokeWidth={1.5} style={{ color: '#C4C3BD', marginTop: 4 }} />
+                <ChevronRight size={13} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 4 }} />
               </Link>
             );
           })}

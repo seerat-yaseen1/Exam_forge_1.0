@@ -95,23 +95,23 @@ export function NodeDrawer({ open, level, editing, ancestry, instituteId, onClos
             {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div>
-                <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                <p className="text-xs mb-0.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                   {isEdit ? 'EDIT' : 'NEW'} {levelLabel.toUpperCase()}
                 </p>
                 <h2 className="text-sm" style={{ color: '#0C0C0B' }}>
                   {isEdit ? `Editing "${editing!.name}"` : `Add ${levelLabel}`}
                 </h2>
               </div>
-              <button onClick={onClose} style={{ color: '#9A9891' }}
+              <button onClick={onClose} style={{ color: '#6B6B66' }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                 <X size={16} strokeWidth={1.5} />
               </button>
             </div>
 
             {/* Body */}
             <div className="flex-1 px-6 py-6 overflow-y-auto">
-              <label className="block mb-1.5 text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>
+              <label className="block mb-1.5 text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                 {levelLabel.toUpperCase()} NAME *
               </label>
               <input
@@ -133,7 +133,7 @@ export function NodeDrawer({ open, level, editing, ancestry, instituteId, onClos
               {error && (
                 <p className="text-xs mt-1.5" style={{ color: '#9B2828' }}>{error}</p>
               )}
-              <p className="text-xs mt-3" style={{ color: '#C4C3BD' }}>
+              <p className="text-xs mt-3" style={{ color: '#6B6B66' }}>
                 {getHint(level)}
               </p>
             </div>
@@ -142,7 +142,7 @@ export function NodeDrawer({ open, level, editing, ancestry, instituteId, onClos
             <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: '1px solid #E3E1DB' }}>
               <button onClick={onClose} disabled={saving}
                 className="text-xs px-4 py-2"
-                style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                 Cancel
               </button>
               <button onClick={handleSave} disabled={saving}

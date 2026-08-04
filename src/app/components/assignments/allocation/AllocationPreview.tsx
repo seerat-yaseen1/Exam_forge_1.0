@@ -13,7 +13,7 @@ import {
   type ResolvePreviewResponse,
 } from '../../../../lib/allocationService';
 
-const INK = '#0C0C0B', MUTED = '#9A9891', FAINT = '#C4C3BD', LINE = '#E3E1DB';
+const INK = '#0C0C0B', MUTED = '#6B6B66', FAINT = '#6B6B66', LINE = '#E3E1DB';
 
 type Props = {
   loading: boolean;

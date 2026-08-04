@@ -122,25 +122,25 @@ export function NodeStudentRoster({
           onClick={toggleCollapsed}
           className="flex items-center gap-2 select-none"
         >
-          <span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+          <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             STUDENTS AT OR BELOW THIS {levelLabel.toUpperCase()}
           </span>
 
           {loaded && !loading && members.length > 0 && (
             <span
               className="text-xs px-1.5 py-0.5"
-              style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 10 }}
+              style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 10 }}
               title={`${directCount} directly assigned · ${inheritedMembers.length} inherited from below`}
             >
               {members.length}
             </span>
           )}
           {!loaded && !loading && !isEager && (
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>— tap to load</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>— tap to load</span>
           )}
-          {loading && <Loader2 size={11} className="animate-spin" style={{ color: '#C4C3BD' }} />}
+          {loading && <Loader2 size={11} className="animate-spin" style={{ color: '#6B6B66' }} />}
 
-          <span style={{ color: '#C4C3BD' }}>
+          <span style={{ color: '#6B6B66' }}>
             {collapsed
               ? <ChevronDown size={12} strokeWidth={1.5} />
               : <ChevronUp size={12} strokeWidth={1.5} />}
@@ -188,7 +188,7 @@ export function NodeStudentRoster({
                     size={16}
                     strokeWidth={1}
                     className="animate-spin"
-                    style={{ color: '#C4C3BD' }}
+                    style={{ color: '#6B6B66' }}
                   />
                 </div>
               )}
@@ -197,7 +197,7 @@ export function NodeStudentRoster({
               {!loading && !loaded && !isEager && (
                 <button onClick={ensureLoaded}
                   className="w-full flex items-center justify-center gap-1.5 py-8 text-xs transition-colors hover:bg-[#FAFAF8]"
-                  style={{ color: '#9A9891' }}>
+                  style={{ color: '#6B6B66' }}>
                   <Users size={13} strokeWidth={1.5} />
                   Load students at or below this {levelLabel.toLowerCase()}
                 </button>
@@ -214,7 +214,7 @@ export function NodeStudentRoster({
               {loaded && !loading && members.length === 0 && (
                 <div className="flex flex-col items-center py-10">
                   <Users size={22} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-                  <p className="text-xs mt-3" style={{ color: '#C4C3BD' }}>
+                  <p className="text-xs mt-3" style={{ color: '#6B6B66' }}>
                     No students at or below this {levelLabel.toLowerCase()}
                   </p>
                   {!readOnly && (
@@ -263,13 +263,13 @@ export function NodeStudentRoster({
                           {m.studentName}
                           {inherited && (
                             <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5"
-                              style={{ background: '#F4F3EF', color: '#9A9891', borderRadius: 3 }}
+                              style={{ background: '#F4F3EF', color: '#6B6B66', borderRadius: 3 }}
                               title={m.breadcrumb}>
                               <CornerDownRight size={9} strokeWidth={1.5} /> via {via}
                             </span>
                           )}
                         </p>
-                        <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+                        <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
                           {m.studentEmail}
                         </p>
                       </div>
@@ -281,12 +281,12 @@ export function NodeStudentRoster({
                           disabled={removingId === m.id}
                           title="Remove assignment"
                           className="ml-3 p-1.5 transition-colors flex-shrink-0"
-                          style={{ color: '#C4C3BD' }}
+                          style={{ color: '#6B6B66' }}
                           onMouseEnter={(e) =>
                             ((e.currentTarget as HTMLElement).style.color = '#9B2828')
                           }
                           onMouseLeave={(e) =>
-                            ((e.currentTarget as HTMLElement).style.color = '#C4C3BD')
+                            ((e.currentTarget as HTMLElement).style.color = '#6B6B66')
                           }
                         >
                           {removingId === m.id ? (

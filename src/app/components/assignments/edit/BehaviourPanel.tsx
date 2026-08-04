@@ -158,7 +158,7 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex-1">
               <p className="text-xs" style={{ color: '#0C0C0B' }}>Overall time limit (minutes)</p>
-              <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
                 Whole-exam cap, counted from when a student begins. Hard-cuts the exam when it runs out. Blank = no cap.
               </p>
             </div>
@@ -175,7 +175,7 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
                 background: overallAuto ? '#F0F9F4' : '#FFFFFF',
               }}
             >
-              <span className="text-xs" style={{ color: overallAuto ? '#1E7B3C' : '#9A9891' }}>Auto</span>
+              <span className="text-xs" style={{ color: overallAuto ? '#1E7B3C' : '#6B6B66' }}>Auto</span>
             </button>
           </div>
           <input
@@ -193,7 +193,7 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
             }}
           />
           {overallAuto && (
-            <p className="text-xs mt-1" style={{ color: '#9A9891' }}>
+            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
               Auto: section time + section grace + breaks + overall grace (currently {autoOverallLimit}m).
             </p>
           )}
@@ -259,7 +259,7 @@ function ToggleRow({ label, hint, checked, onChange }: {
     <div className="flex items-start justify-between gap-4 py-3" style={{ borderTop: '1px solid #F0EFEB' }}>
       <div className="flex-1">
         <p className="text-xs" style={{ color: '#0C0C0B' }}>{label}</p>
-        {hint && <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{hint}</p>}
+        {hint && <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{hint}</p>}
       </div>
       <Switch checked={checked} onCheckedChange={onChange} />
     </div>

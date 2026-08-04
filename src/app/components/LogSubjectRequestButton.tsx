@@ -77,7 +77,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
     border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
     borderRadius: 2,
     background: on ? '#F0F7F2' : '#FFFFFF',
-    color: on ? '#2A6B3A' : '#9A9891',
+    color: on ? '#2A6B3A' : '#6B6B66',
     cursor: busy ? ('not-allowed' as const) : ('pointer' as const),
   });
 
@@ -85,7 +85,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
     <div className="flex flex-col gap-2 px-2.5 py-2"
       style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs" style={{ color: '#B0AEA8', minWidth: 64 }}>They asked</span>
+        <span className="text-xs" style={{ color: '#6B6B66', minWidth: 64 }}>They asked</span>
         {(['access', 'erasure'] as SubjectRequestType[]).map((t) => (
           <button
             key={t}
@@ -100,7 +100,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs" style={{ color: '#B0AEA8', minWidth: 64 }}>On</span>
+        <span className="text-xs" style={{ color: '#6B6B66', minWidth: 64 }}>On</span>
         <input
           type="date"
           value={receivedAt}
@@ -109,7 +109,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
           className="text-xs px-2 py-1"
           style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
         />
-        <span className="text-xs" style={{ color: '#C4C3BD' }}>when they asked, not today</span>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>when they asked, not today</span>
       </div>
 
       <input
@@ -137,7 +137,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
           onClick={() => { setOpenForm(false); setError(''); }}
           disabled={busy}
           className="text-xs px-3 py-1"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891', background: '#FFFFFF' }}
+          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}
         >
           Cancel
         </button>

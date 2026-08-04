@@ -112,7 +112,7 @@ export function ResultsExportModal({
         <span
           style={{
             width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
-            border: `1px solid ${active ? '#0C0C0B' : '#C4C3BD'}`,
+            border: `1px solid ${active ? '#0C0C0B' : '#6B6B66'}`,
             background: active ? '#0C0C0B' : 'transparent',
             boxShadow: active ? 'inset 0 0 0 2.5px #FFFFFF' : 'none',
           }}
@@ -120,7 +120,7 @@ export function ResultsExportModal({
         {icon}
         <span className="text-xs" style={{ color: '#0C0C0B' }}>{label}</span>
       </div>
-      <p className="text-xs mt-1" style={{ color: '#9A9891', lineHeight: 1.5, paddingLeft: 20 }}>
+      <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.5, paddingLeft: 20 }}>
         {hint}
       </p>
     </button>
@@ -148,7 +148,7 @@ export function ResultsExportModal({
             <Download size={13} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
             <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>EXPORT RESULTS</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#C4C3BD' }}>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -172,13 +172,13 @@ export function ResultsExportModal({
                   format === o.value, () => setFormat(o.value), o.label, o.hint,
                   o.icon === 'xlsx'
                     ? <FileSpreadsheet size={12} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
-                    : <FileText size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                    : <FileText size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                 )
               )}
             </div>
           </div>
 
-          <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
             Covers all <strong style={{ color: '#4A4A45' }}>{students.length}</strong>{' '}
             allocated student{students.length === 1 ? '' : 's'} — those who never attempted
             appear as “Not attempted”. Deleted attempts are excluded, matching the live
@@ -211,7 +211,7 @@ export function ResultsExportModal({
             onClick={onClose}
             disabled={busy}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
           >
             Cancel
           </button>

@@ -65,7 +65,7 @@ export function InstitutePicker({
         style={{ borderBottom: '1px solid #F0EFEB', background: '#FAFAF8' }}
       >
         <div className="flex items-center gap-1.5">
-          <Building2 size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <Building2 size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           <span className="text-xs" style={{ color: '#6B6B66' }}>
             {selectedIds.length === 0
               ? 'No institutes selected'
@@ -77,7 +77,7 @@ export function InstitutePicker({
             <button
               onClick={() => onChange([...new Set([...selectedIds, ...filtered.map((i) => i.id)])])}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#9A9891' }}
+              style={{ color: '#6B6B66' }}
             >
               Select all ({filtered.length})
             </button>
@@ -86,7 +86,7 @@ export function InstitutePicker({
             <button
               onClick={() => onChange([])}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#9A9891' }}
+              style={{ color: '#6B6B66' }}
             >
               Clear
             </button>
@@ -99,7 +99,7 @@ export function InstitutePicker({
         className="flex items-center gap-2 px-3 py-2"
         style={{ borderBottom: '1px solid #F0EFEB' }}
       >
-        <Search size={11} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+        <Search size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -109,7 +109,7 @@ export function InstitutePicker({
         />
         {search && (
           <button onClick={() => setSearch('')}>
-            <X size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+            <X size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           </button>
         )}
       </div>
@@ -118,11 +118,11 @@ export function InstitutePicker({
       <div style={{ maxHeight: 200, overflowY: 'auto' }}>
         {loadingInst ? (
           <div className="flex items-center justify-center py-6">
-            <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+            <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-6 text-center">
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>No institutes found</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>No institutes found</span>
           </div>
         ) : (
           filtered.map((inst) => {
@@ -163,7 +163,7 @@ export function InstitutePicker({
                 <span
                   className="text-xs px-1.5 py-0.5 flex-shrink-0"
                   style={{
-                    background: '#F0EFEB', color: '#9A9891',
+                    background: '#F0EFEB', color: '#6B6B66',
                     borderRadius: 2, fontSize: 10,
                   }}
                 >
@@ -273,7 +273,7 @@ export function StudentPicker({
         style={{ borderBottom: '1px solid #F0EFEB', background: '#FAFAF8' }}
       >
         <div className="flex items-center gap-1.5">
-          <Users size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+          <Users size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           <span className="text-xs" style={{ color: '#6B6B66' }}>
             {selectedIds.length === 0
               ? 'No students selected'
@@ -285,7 +285,7 @@ export function StudentPicker({
             <button
               onClick={selectAllVisible}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#9A9891' }}
+              style={{ color: '#6B6B66' }}
             >
               Select {filterInstId === 'all' ? 'all' : 'all in institute'} ({filtered.length})
             </button>
@@ -294,7 +294,7 @@ export function StudentPicker({
             <button
               onClick={() => onChange([])}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#9A9891' }}
+              style={{ color: '#6B6B66' }}
             >
               Clear all
             </button>
@@ -362,7 +362,7 @@ export function StudentPicker({
         className="flex items-center gap-2 px-3 py-2"
         style={{ borderBottom: '1px solid #F0EFEB' }}
       >
-        <Search size={11} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+        <Search size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -372,7 +372,7 @@ export function StudentPicker({
         />
         {search && (
           <button onClick={() => setSearch('')}>
-            <X size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+            <X size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
           </button>
         )}
       </div>
@@ -381,11 +381,11 @@ export function StudentPicker({
       <div style={{ maxHeight: 240, overflowY: 'auto' }}>
         {loadingStudents ? (
           <div className="flex items-center justify-center py-6">
-            <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+            <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-6 text-center">
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>
               {search ? 'No students match your search' : 'No students found'}
             </span>
           </div>
@@ -424,13 +424,13 @@ export function StudentPicker({
 
                 <div className="flex-1 min-w-0">
                   <p className="text-xs" style={{ color: '#0C0C0B' }}>{student.name}</p>
-                  <p className="text-xs" style={{ color: '#B0AEA8', marginTop: 1 }}>{student.email}</p>
+                  <p className="text-xs" style={{ color: '#6B6B66', marginTop: 1 }}>{student.email}</p>
                 </div>
 
                 <span
                   className="text-xs px-1.5 py-0.5 flex-shrink-0"
                   style={{
-                    background: '#F0EFEB', color: '#9A9891',
+                    background: '#F0EFEB', color: '#6B6B66',
                     borderRadius: 2, fontSize: 10,
                     maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}

@@ -19,7 +19,7 @@ export function RouteFallback() {
       className="min-h-screen flex flex-col items-center justify-center"
       style={{ background: '#F7F6F3' }}
     >
-      <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+      <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
     </div>
   );
 }

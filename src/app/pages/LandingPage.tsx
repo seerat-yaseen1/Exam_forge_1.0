@@ -26,7 +26,7 @@ export function LandingPage() {
         />
         <p
           className="text-xs"
-          style={{ color: '#C4C3BD', letterSpacing: '0.14em' }}
+          style={{ color: '#6B6B66', letterSpacing: '0.14em' }}
         >
           COMMAND CENTER
         </p>

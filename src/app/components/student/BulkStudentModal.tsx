@@ -294,7 +294,7 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
           <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
             style={{ borderBottom: '1px solid #E3E1DB' }}>
             <div>
-              <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
                 {step === 'upload'   && 'BULK ADD STUDENTS'}
                 {step === 'preview'  && `PREVIEW — ${rows.length} ROW${rows.length !== 1 ? 'S' : ''} FOUND`}
                 {step === 'creating' && 'CREATING ACCOUNTS'}
@@ -302,7 +302,7 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
               </p>
               <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{instituteName}</p>
             </div>
-            <button onClick={handleClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+            <button onClick={handleClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
               <X size={14} strokeWidth={1.5} />
             </button>
           </div>
@@ -314,7 +314,7 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
               <div className="flex items-center justify-between mb-5 px-3 py-2.5"
                 style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                 <div className="flex items-center gap-2">
-                  <FileSpreadsheet size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+                  <FileSpreadsheet size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
                   <span className="text-xs" style={{ color: '#4A4A45' }}>Download the student template before uploading</span>
                 </div>
                 <button onClick={downloadTemplate}
@@ -337,11 +337,11 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
                   border: `2px dashed ${dragOver ? '#0C0C0B' : '#E3E1DB'}`,
                   background: dragOver ? '#F7F6F3' : '#FAFAF8', borderRadius: 3,
                 }}>
-                <Upload size={24} strokeWidth={1} style={{ color: dragOver ? '#0C0C0B' : '#C4C3BD', marginBottom: 12 }} />
+                <Upload size={24} strokeWidth={1} style={{ color: dragOver ? '#0C0C0B' : '#6B6B66', marginBottom: 12 }} />
                 <p className="text-sm" style={{ color: dragOver ? '#0C0C0B' : '#4A4A45' }}>
                   Drag & drop or click to upload
                 </p>
-                <p className="text-xs mt-1.5" style={{ color: '#B0AEA8' }}>CSV or XLSX · Max 500 rows · Max 5 MB</p>
+                <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>CSV or XLSX · Max 500 rows · Max 5 MB</p>
               </div>
               <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileInput} />
 
@@ -355,11 +355,11 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
               )}
 
               <div className="mt-5">
-                <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>REQUIRED COLUMNS</p>
+                <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>REQUIRED COLUMNS</p>
                 {['Name, Email (mandatory)', 'Program, Degree Level, School, Group, Section, Specialisation (all optional)'].map((r, i) => (
                   <div key={i} className="flex items-start gap-2 mb-1.5">
-                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#C4C3BD', marginTop: 5, flexShrink: 0 }} />
-                    <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>{r}</p>
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#6B6B66', marginTop: 5, flexShrink: 0 }} />
+                    <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>{r}</p>
                   </div>
                 ))}
               </div>
@@ -371,7 +371,7 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
             <>
               <div className="flex items-center gap-4 px-6 py-3 flex-shrink-0"
                 style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
-                <span className="text-xs" style={{ color: '#9A9891' }}>File: <span style={{ color: '#4A4A45' }}>{fileName}</span></span>
+                <span className="text-xs" style={{ color: '#6B6B66' }}>File: <span style={{ color: '#4A4A45' }}>{fileName}</span></span>
                 <span style={{ color: '#E3E1DB' }}>·</span>
                 <span className="text-xs" style={{ color: '#2A6B3A' }}>{validRows.length} valid</span>
                 {rows.filter((r) => !r.valid).length > 0 && (
@@ -390,7 +390,7 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
                     <tr style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
                       {['#', 'NAME', 'EMAIL', 'PROGRAM', 'DEGREE', 'STATUS'].map((h, i) => (
                         <th key={i} className="text-left px-4 py-2.5 text-xs"
-                          style={{ color: '#9A9891', letterSpacing: '0.07em', fontWeight: 400 }}>
+                          style={{ color: '#6B6B66', letterSpacing: '0.07em', fontWeight: 400 }}>
                           {h}
                         </th>
                       ))}
@@ -401,7 +401,7 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
                       <tr key={row.index}
                         style={{ borderBottom: '1px solid #F0EFEB', background: row.valid ? 'transparent' : '#FDF5F5' }}>
                         <td className="px-4 py-2.5">
-                          <span className="text-xs" style={{ color: '#C4C3BD' }}>{row.index + 1}</span>
+                          <span className="text-xs" style={{ color: '#6B6B66' }}>{row.index + 1}</span>
                         </td>
                         <td className="px-4 py-2.5">
                           <p className="text-xs" style={{ color: row.valid ? '#0C0C0B' : '#9B2828' }}>
@@ -417,10 +417,10 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
                           </p>
                         </td>
                         <td className="px-4 py-2.5">
-                          <p className="text-xs" style={{ color: '#9A9891' }}>{row.program || '—'}</p>
+                          <p className="text-xs" style={{ color: '#6B6B66' }}>{row.program || '—'}</p>
                         </td>
                         <td className="px-4 py-2.5">
-                          <p className="text-xs" style={{ color: '#9A9891' }}>{row.degreeLevel || '—'}</p>
+                          <p className="text-xs" style={{ color: '#6B6B66' }}>{row.degreeLevel || '—'}</p>
                         </td>
                         <td className="px-4 py-2.5">
                           {row.valid ? (
@@ -441,7 +441,7 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
                 style={{ borderTop: '1px solid #E3E1DB' }}>
                 <button onClick={() => setStep('upload')}
                   className="text-xs px-4 py-2.5 transition-colors"
-                  style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
                   onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}>
                   ← Back
@@ -467,11 +467,11 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
           {/* ── Creating ── */}
           {step === 'creating' && (
             <div className="flex flex-col items-center justify-center py-20 px-8 flex-1">
-              <Loader2 size={28} strokeWidth={1} className="animate-spin mb-5" style={{ color: '#9A9891' }} />
+              <Loader2 size={28} strokeWidth={1} className="animate-spin mb-5" style={{ color: '#6B6B66' }} />
               <p className="text-sm" style={{ color: '#0C0C0B' }}>
                 Creating {validRows.length} student {validRows.length === 1 ? 'account' : 'accounts'}…
               </p>
-              <p className="text-xs mt-1.5" style={{ color: '#B0AEA8' }}>
+              <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>
                 Sending credentials by email. Please wait.
               </p>
               <div className="w-full mt-8" style={{ maxWidth: 280 }}>
@@ -511,7 +511,7 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
                     <tr style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
                       {['NAME', 'EMAIL', 'RESULT'].map((h, i) => (
                         <th key={i} className="text-left px-4 py-2.5 text-xs"
-                          style={{ color: '#9A9891', letterSpacing: '0.07em', fontWeight: 400,
+                          style={{ color: '#6B6B66', letterSpacing: '0.07em', fontWeight: 400,
                             width: i === 0 ? '30%' : i === 1 ? '42%' : '28%' }}>
                           {h}
                         </th>

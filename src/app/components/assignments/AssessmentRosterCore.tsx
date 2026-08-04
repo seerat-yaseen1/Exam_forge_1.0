@@ -172,7 +172,7 @@ function totalQuestions(attempt: Attempt): number {
 // ── Status chip ───────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<RosterStatus, { label: string; bg: string; text: string; border: string; dot: string }> = {
-  not_started:   { label: 'Not started',     bg: '#F7F6F3', text: '#9A9891', border: '#E3E1DB', dot: '#C4C3BD' },
+  not_started:   { label: 'Not started',     bg: '#F7F6F3', text: '#6B6B66', border: '#E3E1DB', dot: '#6B6B66' },
   in_progress:   { label: 'Live',            bg: '#F0F9F4', text: '#1E7B3C', border: '#B8E6C8', dot: '#1E7B3C' },
   frozen:        { label: 'Flagged',         bg: '#FFFBF0', text: '#92680A', border: '#F5DFA0', dot: '#D4A017' },
   submitted:     { label: 'Submitted',       bg: '#F7F6F3', text: '#6B6B66', border: '#DDDBD5', dot: '#6B6B66' },
@@ -231,7 +231,7 @@ function FreezeConfirmModal({
             <PauseCircle size={13} strokeWidth={1.5} style={{ color: '#1D4ED8' }} />
             <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>FREEZE SESSION</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#C4C3BD' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -250,7 +250,7 @@ function FreezeConfirmModal({
           <div>
             <label className="text-xs mb-1.5 block" style={{ color: '#6B6B66' }}>
               Reason{' '}
-              <span style={{ color: '#C4C3BD' }}>(optional — visible in the audit log)</span>
+              <span style={{ color: '#6B6B66' }}>(optional — visible in the audit log)</span>
             </label>
             <textarea
               value={reason}
@@ -288,7 +288,7 @@ function FreezeConfirmModal({
             onClick={onCancel}
             disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
           >
             Cancel
           </button>
@@ -475,7 +475,7 @@ function UnfreezeConfirmModal({
             <PlayCircle size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
             <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>UNFREEZE SESSION</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#C4C3BD' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -524,12 +524,12 @@ function UnfreezeConfirmModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="px-3 py-3"
               style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-1" style={{ color: '#9A9891' }}>This freeze</p>
+              <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>This freeze</p>
               <p className="text-xs" style={{ color: '#1D4ED8' }}>{thisFreeze}</p>
             </div>
             <div className="px-3 py-3"
               style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-1" style={{ color: '#9A9891' }}>
+              <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>
                 Already credited{priorFreezes > 0 ? ` (${priorFreezes} earlier ${priorFreezes === 1 ? 'pause' : 'pauses'})` : ''}
               </p>
               <p className="text-xs" style={{ color: '#0C0C0B' }}>{creditedLabel}</p>
@@ -539,7 +539,7 @@ function UnfreezeConfirmModal({
           {attempt.frozenReason && (
             <div className="px-3 py-2.5"
               style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-0.5" style={{ color: '#9A9891' }}>Freeze reason on record</p>
+              <p className="text-xs mb-0.5" style={{ color: '#6B6B66' }}>Freeze reason on record</p>
               <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.5 }}>{attempt.frozenReason}</p>
             </div>
           )}
@@ -558,7 +558,7 @@ function UnfreezeConfirmModal({
                 className="text-xs px-2 py-1.5 w-24"
                 style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: '#0C0C0B' }}
               />
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 seconds of {thisFreeze}
               </span>
               {givingLess && (
@@ -571,7 +571,7 @@ function UnfreezeConfirmModal({
                 </button>
               )}
             </div>
-            <p className="text-xs mt-2" style={{ color: givingLess ? '#92680A' : '#9A9891', lineHeight: 1.5 }}>
+            <p className="text-xs mt-2" style={{ color: givingLess ? '#92680A' : '#6B6B66', lineHeight: 1.5 }}>
               {givingLess
                 ? `${secsToLabel(frozenSecs - grantNum)} of this pause will NOT be returned. The student is told either way.`
                 : 'The full pause is returned to their clocks.'}
@@ -591,7 +591,7 @@ function UnfreezeConfirmModal({
               <p className="text-xs mb-0.5" style={{ color: '#0C0C0B' }}>
                 Take time away (optional)
               </p>
-              <p className="text-xs mb-2.5" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+              <p className="text-xs mb-2.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                 Each is capped at what that clock will have. Taking the maximum ends that unit.
               </p>
 
@@ -605,8 +605,8 @@ function UnfreezeConfirmModal({
                 if (cap === null) {
                   return (
                     <div key={key} className="flex items-center gap-2 mb-1.5">
-                      <span className="text-xs w-16" style={{ color: '#C4C3BD' }}>{label}</span>
-                      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+                      <span className="text-xs w-16" style={{ color: '#6B6B66' }}>{label}</span>
+                      <span className="text-xs" style={{ color: '#6B6B66' }}>
                         not running — nothing to take
                       </span>
                     </div>
@@ -624,11 +624,11 @@ function UnfreezeConfirmModal({
                       className="text-xs px-2 py-1 w-20"
                       style={{
                         border: '1px solid #D8D6CF', borderRadius: 2,
-                        color: cap === 0 ? '#C4C3BD' : '#0C0C0B',
+                        color: cap === 0 ? '#6B6B66' : '#0C0C0B',
                         background: cap === 0 ? '#F0EFEB' : '#FFFFFF',
                       }}
                     />
-                    <span className="text-xs" style={{ color: '#9A9891' }}>
+                    <span className="text-xs" style={{ color: '#6B6B66' }}>
                       of {secsToLabel(cap)}
                     </span>
                     {taken > 0 && (
@@ -643,7 +643,7 @@ function UnfreezeConfirmModal({
           ) : (
             // Pre-Phase-4.5 freezes have no snapshot. Say so rather than
             // showing three inputs whose caps would be guesses.
-            <p className="text-xs px-3" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+            <p className="text-xs px-3" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
               This pause was recorded before per-clock deductions were available,
               so only the time-to-give-back decision applies.
             </p>
@@ -695,7 +695,7 @@ function UnfreezeConfirmModal({
             onClick={onCancel}
             disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
           >
             Cancel
           </button>
@@ -732,7 +732,7 @@ function BlockConfirmModal({
             <Ban size={13} strokeWidth={1.5} style={{ color: '#9A3412' }} />
             <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>BLOCK STUDENT</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#C4C3BD' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -761,7 +761,7 @@ function BlockConfirmModal({
           </button>
           <button onClick={onCancel} disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -797,7 +797,7 @@ function UnblockConfirmModal({
             <CircleSlash size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
             <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>UNBLOCK STUDENT</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#C4C3BD' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -823,7 +823,7 @@ function UnblockConfirmModal({
           </button>
           <button onClick={onCancel} disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -924,7 +924,7 @@ const CATEGORY_CONFIG: Record<AnswerCategory, {
   wrong:       { label: 'Wrong',       bg: '#FDF5F5', text: '#9B2828', border: '#F2CECE', dot: '#9B2828',  icon: <XCircle size={11} strokeWidth={1.5} /> },
   penalized:   { label: 'Penalized',   bg: '#FBEFEF', text: '#7F1D1D', border: '#E9B8B8', dot: '#7F1D1D',  icon: <XCircle size={11} strokeWidth={1.5} /> },
   partial:     { label: 'Partial',     bg: '#FFFBF0', text: '#92680A', border: '#F5DFA0', dot: '#D4A017',  icon: <AlertCircle size={11} strokeWidth={1.5} /> },
-  unattempted: { label: 'Unattempted', bg: '#F7F6F3', text: '#9A9891', border: '#E3E1DB', dot: '#C4C3BD',  icon: <Minus size={11} strokeWidth={1.5} /> },
+  unattempted: { label: 'Unattempted', bg: '#F7F6F3', text: '#6B6B66', border: '#E3E1DB', dot: '#6B6B66',  icon: <Minus size={11} strokeWidth={1.5} /> },
   text:        { label: 'Text',        bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8',  icon: <FileText size={11} strokeWidth={1.5} /> },
 };
 
@@ -1010,14 +1010,14 @@ function ResponseViewer({
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4">
-        <Loader2 size={12} className="animate-spin" style={{ color: '#C4C3BD' }} />
-        <span className="text-xs" style={{ color: '#C4C3BD' }}>Loading questions…</span>
+        <Loader2 size={12} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <span className="text-xs" style={{ color: '#6B6B66' }}>Loading questions…</span>
       </div>
     );
   }
 
   if (questions.length === 0) {
-    return <p className="text-xs py-2" style={{ color: '#C4C3BD' }}>No question data available.</p>;
+    return <p className="text-xs py-2" style={{ color: '#6B6B66' }}>No question data available.</p>;
   }
 
   return (
@@ -1035,7 +1035,7 @@ function ResponseViewer({
               style={{
                 borderRadius: 2,
                 background: isActive ? (cfg?.bg ?? '#0C0C0B') : 'transparent',
-                color: isActive ? (cfg?.text ?? '#FFFFFF') : '#9A9891',
+                color: isActive ? (cfg?.text ?? '#FFFFFF') : '#6B6B66',
                 border: isActive
                   ? `1px solid ${cfg?.border ?? '#0C0C0B'}`
                   : '1px solid #E3E1DB',
@@ -1046,7 +1046,7 @@ function ResponseViewer({
               {tab.label}
               <span style={{
                 background: isActive ? (cfg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)') : '#F0EFEB',
-                color: isActive ? (cfg?.text ?? '#FFFFFF') : '#9A9891',
+                color: isActive ? (cfg?.text ?? '#FFFFFF') : '#6B6B66',
                 borderRadius: 2, padding: '0 4px', fontSize: 10,
               }}>{tab.count}</span>
             </button>
@@ -1117,10 +1117,10 @@ function ResponseViewer({
                 <span style={{ color: cfg.text, flexShrink: 0, marginTop: 1 }}>{cfg.icon}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-                    <span style={{ color: '#C4C3BD', marginRight: 6 }}>Q{idx + 1}</span>
+                    <span style={{ color: '#6B6B66', marginRight: 6 }}>Q{idx + 1}</span>
                     {q.stem.length > 80 ? q.stem.slice(0, 80) + '…' : q.stem}
                   </p>
-                  <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+                  <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
                     {item.sectionName} · {item.marks} mark{item.marks !== 1 ? 's' : ''}
                     {item.awarded > 0 && item.awarded < item.marks && (
                       <span style={{ color: cfg.text }}> · {item.awarded} awarded</span>
@@ -1138,7 +1138,7 @@ function ResponseViewer({
                 </span>
                 <Eye
                   size={11} strokeWidth={1.5}
-                  style={{ color: '#C4C3BD', flexShrink: 0, marginTop: 2, transform: isOpen ? 'rotate(0deg)' : 'rotate(0deg)', opacity: isOpen ? 0.8 : 0.4 }}
+                  style={{ color: '#6B6B66', flexShrink: 0, marginTop: 2, transform: isOpen ? 'rotate(0deg)' : 'rotate(0deg)', opacity: isOpen ? 0.8 : 0.4 }}
                 />
               </button>
 
@@ -1149,13 +1149,13 @@ function ResponseViewer({
 
                   {/* Full stem */}
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Question</p>
+                    <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Question</p>
                     <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.6 }}>{q.stem}</p>
                   </div>
 
                   {/* Student answer */}
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Student's answer</p>
+                    <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Student's answer</p>
                     <p className="text-xs px-2.5 py-2"
                       style={{
                         background: item.category === 'unattempted' ? '#F7F6F3' : cfg.bg,
@@ -1163,7 +1163,7 @@ function ResponseViewer({
                         borderRadius: 2, color: '#0C0C0B', lineHeight: 1.6,
                       }}>
                       {item.category === 'unattempted'
-                        ? <span style={{ color: '#C4C3BD' }}>Not answered</span>
+                        ? <span style={{ color: '#6B6B66' }}>Not answered</span>
                         : studentAnswerText}
                     </p>
                   </div>
@@ -1171,7 +1171,7 @@ function ResponseViewer({
                   {/* Correct answer (MCQ / match / text model) */}
                   {correctAnswerText && item.category !== 'correct' && (
                     <div>
-                      <p className="text-xs mb-1" style={{ color: '#9A9891' }}>
+                      <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>
                         {q.engine === 'text' ? 'Model answer' : 'Correct answer'}
                       </p>
                       <p className="text-xs px-2.5 py-2"
@@ -1187,7 +1187,7 @@ function ResponseViewer({
                   {/* Explanation */}
                   {q.explanation && (
                     <div>
-                      <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Explanation</p>
+                      <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Explanation</p>
                       <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>{q.explanation}</p>
                     </div>
                   )}
@@ -1247,7 +1247,7 @@ function SoftDeleteConfirmModal({
             <Trash2 size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />
             <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>DELETE ATTEMPT</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#C4C3BD' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -1275,7 +1275,7 @@ function SoftDeleteConfirmModal({
           </button>
           <button onClick={onCancel} disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -1383,14 +1383,14 @@ function AttemptsPanel({
       <div className="flex items-center gap-4">
         <div className="flex-1 px-3 py-3"
           style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-          <p className="text-xs mb-0.5" style={{ color: '#9A9891' }}>Attempts used</p>
+          <p className="text-xs mb-0.5" style={{ color: '#6B6B66' }}>Attempts used</p>
           <p className="text-xs" style={{ color: '#0C0C0B' }}>
             {histLoading ? '…' : finished}
             {effectiveMax !== undefined && !histLoading && (
-              <span style={{ color: '#9A9891' }}> / {effectiveMax}</span>
+              <span style={{ color: '#6B6B66' }}> / {effectiveMax}</span>
             )}
             {effectiveMax === undefined && !histLoading && (
-              <span style={{ color: '#C4C3BD' }}> / ∞</span>
+              <span style={{ color: '#6B6B66' }}> / ∞</span>
             )}
           </p>
         </div>
@@ -1401,7 +1401,7 @@ function AttemptsPanel({
               border: `1px solid ${finished >= effectiveMax ? '#F2CECE' : '#B8E6C8'}`,
               borderRadius: 2,
             }}>
-            <p className="text-xs mb-0.5" style={{ color: '#9A9891' }}>Status</p>
+            <p className="text-xs mb-0.5" style={{ color: '#6B6B66' }}>Status</p>
             <p className="text-xs"
               style={{ color: finished >= effectiveMax ? '#9B2828' : '#1E7B3C' }}>
               {finished >= effectiveMax
@@ -1416,7 +1416,7 @@ function AttemptsPanel({
 
       {/* Global limit display */}
       <div className="flex items-center justify-between">
-        <p className="text-xs" style={{ color: '#9A9891' }}>
+        <p className="text-xs" style={{ color: '#6B6B66' }}>
           Global limit:{' '}
           <span style={{ color: '#4A4A45' }}>
             {globalMax !== undefined ? `${globalMax} attempt${globalMax !== 1 ? 's' : ''}` : 'Unlimited'}
@@ -1436,12 +1436,12 @@ function AttemptsPanel({
       {canManageAttempts && (
       <div>
         <p className="text-xs mb-1.5" style={{ color: '#6B6B66' }}>
-          Student override <span style={{ color: '#C4C3BD' }}>(blank = use global limit)</span>
+          Student override <span style={{ color: '#6B6B66' }}>(blank = use global limit)</span>
         </p>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 px-2.5 py-1.5 flex-1"
             style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-            <Hash size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+            <Hash size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
             <input
               type="number"
               min="1"
@@ -1471,7 +1471,7 @@ function AttemptsPanel({
               disabled={overrideSaving}
               className="text-xs px-2.5 py-1.5 transition-opacity flex items-center gap-1"
               style={{
-                border: '1px solid #E3E1DB', color: '#9A9891', borderRadius: 2,
+                border: '1px solid #E3E1DB', color: '#6B6B66', borderRadius: 2,
                 cursor: overrideSaving ? 'not-allowed' : 'pointer',
                 background: '#FFFFFF',
               }}
@@ -1494,7 +1494,7 @@ function AttemptsPanel({
       {/* Attempt history mini-list */}
       {!histLoading && allAttempts.length > 0 && (
         <div>
-          <p className="text-xs mb-2" style={{ color: '#9A9891', letterSpacing: '0.07em' }}>
+          <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.07em' }}>
             HISTORY ({allAttempts.length})
           </p>
           <div className="flex flex-col gap-1">
@@ -1518,7 +1518,7 @@ function AttemptsPanel({
                         width: 18, height: 18, borderRadius: 2, display: 'flex', alignItems: 'center',
                         justifyContent: 'center',
                         background: isDeleted ? '#F2CECE' : '#F0EFEB',
-                        color: isDeleted ? '#9B2828' : '#9A9891',
+                        color: isDeleted ? '#9B2828' : '#6B6B66',
                         fontSize: 10, flexShrink: 0,
                       }}>
                       {i + 1}
@@ -1539,7 +1539,7 @@ function AttemptsPanel({
                           </span>
                         )}
                       </div>
-                      <p className="text-xs" style={{ color: '#C4C3BD' }}>
+                      <p className="text-xs" style={{ color: '#6B6B66' }}>
                         {formatRelative(a.startedAt)}
                       </p>
                     </div>
@@ -1569,7 +1569,7 @@ function AttemptsPanel({
                         {scoreStr}
                       </span>
                     ) : done ? (
-                      <span className="text-xs" style={{ color: '#C4C3BD' }}>No score</span>
+                      <span className="text-xs" style={{ color: '#6B6B66' }}>No score</span>
                     ) : (
                       <span className="text-xs" style={{ color: '#1E7B3C' }}>Live</span>
                     )}
@@ -1585,7 +1585,7 @@ function AttemptsPanel({
                         onClick={() => onRequestDelete(a.id, i + 1)}
                         className="p-1 transition-opacity hover:opacity-70"
                         title="Delete attempt"
-                        style={{ color: '#C4C3BD' }}
+                        style={{ color: '#6B6B66' }}
                       >
                         <Trash2 size={10} strokeWidth={1.5} />
                       </button>
@@ -1599,7 +1599,7 @@ function AttemptsPanel({
       )}
 
       {!histLoading && allAttempts.length === 0 && (
-        <p className="text-xs" style={{ color: '#C4C3BD' }}>No attempts recorded yet.</p>
+        <p className="text-xs" style={{ color: '#6B6B66' }}>No attempts recorded yet.</p>
       )}
     </div>
   );
@@ -1717,9 +1717,9 @@ function AttemptDrawer({
               </div>
             )}
           </div>
-          <p className="text-xs mt-0.5 truncate" style={{ color: '#9A9891' }}>{student.email}</p>
+          <p className="text-xs mt-0.5 truncate" style={{ color: '#6B6B66' }}>{student.email}</p>
         </div>
-        <button onClick={onClose} className="p-1 flex-shrink-0" style={{ color: '#C4C3BD' }}>
+        <button onClick={onClose} className="p-1 flex-shrink-0" style={{ color: '#6B6B66' }}>
           <X size={14} strokeWidth={1.5} />
         </button>
       </div>
@@ -1801,19 +1801,19 @@ function AttemptDrawer({
         */}
         {provisional && rosterStatus === 'frozen' && (
           <div className="mt-3 px-3 py-2.5"
-            style={{ background: '#FAFAF8', border: '1px dashed #C4C3BD', borderRadius: 2 }}>
+            style={{ background: '#FAFAF8', border: '1px dashed #6B6B66', borderRadius: 2 }}>
             <div className="flex items-center justify-between mb-1">
               <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                 PROVISIONAL — NOT A SUBMISSION
               </p>
-              <p className="text-xs" style={{ color: '#9A9891' }}>
+              <p className="text-xs" style={{ color: '#6B6B66' }}>
                 {formatRelative(provisional.gradedAt)}
               </p>
             </div>
             <p className="text-sm" style={{ color: '#0C0C0B' }}>
               {provisional.scores?.percentage ?? 0}% · {provisional.answeredCount} answered
             </p>
-            <p className="text-xs mt-1" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+            <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
               Where this student had reached when the session was flagged. The
               student cannot see this, and it is discarded when the flag is cleared.
             </p>
@@ -1850,7 +1850,7 @@ function AttemptDrawer({
       {/* Block / Unblock section */}
       <div className="px-4 sm:px-5 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #F0EFEB' }}>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.07em' }}>EXAM ACCESS</p>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.07em' }}>EXAM ACCESS</p>
           {isBlocked ? (
             <button
               onClick={() => onRequestUnblock(student.id, student.name)}
@@ -1894,13 +1894,13 @@ function AttemptDrawer({
       <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4">
         {!attempt ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <BookOpen size={18} strokeWidth={1} style={{ color: '#C4C3BD' }} />
-            <p className="text-xs" style={{ color: '#C4C3BD' }}>Student hasn't started yet.</p>
+            <BookOpen size={18} strokeWidth={1} style={{ color: '#6B6B66' }} />
+            <p className="text-xs" style={{ color: '#6B6B66' }}>Student hasn't started yet.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-5">
             <div>
-              <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>PROGRESS</p>
+              <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>PROGRESS</p>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs" style={{ color: '#4A4A45' }}>Questions answered</span>
@@ -1932,7 +1932,7 @@ function AttemptDrawer({
 
             {attempt.scores && canSeeResults && (
               <div>
-                <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>SCORE</p>
+                <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>SCORE</p>
                 <div className="px-4 py-3" style={{ background: '#F7F6F3', borderRadius: 2 }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs" style={{ color: '#4A4A45' }}>Total marks</span>
@@ -1964,7 +1964,7 @@ function AttemptDrawer({
             {canReview && isReviewable(shownAttempt) && (
               <div>
                 <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-                  <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>RESPONSES</p>
+                  <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>RESPONSES</p>
 
                   {/* Latest | Best — only when they are different sittings. */}
                   {canSwitchResponses && (
@@ -1979,7 +1979,7 @@ function AttemptDrawer({
                             style={{
                               borderRadius: 2, cursor: 'pointer',
                               background: active ? '#F0EFEA' : 'transparent',
-                              color: active ? '#0C0C0B' : '#9A9891',
+                              color: active ? '#0C0C0B' : '#6B6B66',
                               border: `1px solid ${active ? '#D8D6CF' : 'transparent'}`,
                               fontVariantNumeric: 'tabular-nums',
                             }}>
@@ -1997,7 +1997,7 @@ function AttemptDrawer({
                     current one, and a mark read off the wrong sitting is
                     worse than no mark. */}
                 {canSwitchResponses && (
-                  <p className="text-xs mb-2" style={{ color: '#9A9891' }}>
+                  <p className="text-xs mb-2" style={{ color: '#6B6B66' }}>
                     {responseView === 'best' ? 'Best attempt' : 'Most recent attempt'}
                     {shownAttempt?.startedAt && ` · started ${formatRelative(shownAttempt.startedAt)}`}
                     {shownAttempt?.status === 'terminated' && (
@@ -2018,14 +2018,14 @@ function AttemptDrawer({
               </div>
             )}
             {!canReview && isReviewable(shownAttempt) && (
-              <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+              <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                 Question review is not enabled for your role on this exam — the
                 exam owner controls this in the assessment's visibility settings.
               </p>
             )}
 
             <div>
-              <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>INTEGRITY</p>
+              <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>INTEGRITY</p>
 
               {/* Anomaly score (Phase 1 timing analytics) — headline reviewer signal */}
               {attempt.timingAnalysis && (() => {
@@ -2102,7 +2102,7 @@ function AttemptDrawer({
 
             {attempt.integrityLog.violations.length > 0 && (
               <div>
-                <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>VIOLATION TIMELINE</p>
+                <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>VIOLATION TIMELINE</p>
                 <div className="flex flex-col gap-1">
                   {[...attempt.integrityLog.violations]
                     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -2113,7 +2113,7 @@ function AttemptDrawer({
                         <span className="text-xs" style={{ color: '#4A4A45', textTransform: 'capitalize' }}>
                           {v.type.replace(/_/g, ' ')}{v.warningNumber ? ` (warning ${v.warningNumber})` : ''}
                         </span>
-                        <span className="text-xs flex-shrink-0" style={{ color: '#C4C3BD' }}>
+                        <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>
                           {formatRelative(v.timestamp)}
                         </span>
                       </div>
@@ -2124,7 +2124,7 @@ function AttemptDrawer({
 
             {/* ── ATTEMPTS section ── */}
             <div>
-              <p className="text-xs mb-2.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>ATTEMPTS</p>
+              <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>ATTEMPTS</p>
               <AttemptsPanel
                 assessmentId={assessment.id}
                 studentId={student.id}
@@ -2211,7 +2211,7 @@ function RosterTableRow({
             </span>
           )}
         </div>
-        <p className="text-xs mt-0.5 truncate" style={{ color: '#C4C3BD' }}>{student.email}</p>
+        <p className="text-xs mt-0.5 truncate" style={{ color: '#6B6B66' }}>{student.email}</p>
       </div>
 
       <div className="sm:w-[130px] sm:flex-shrink-0">
@@ -2255,14 +2255,14 @@ function RosterTableRow({
                one still climbing, and neither is visible from a single mark. */
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs" style={{
-                color: scoreView === 'latest' ? '#0C0C0B' : '#9A9891',
+                color: scoreView === 'latest' ? '#0C0C0B' : '#6B6B66',
                 fontVariantNumeric: 'tabular-nums',
               }}>
                 Latest: {attempt.scores.percentage}%
               </span>
               <span className="text-xs" style={{ color: '#E3E1DB' }}>|</span>
               <span className="text-xs" style={{
-                color: scoreView === 'best' ? '#1E7B3C' : '#9A9891',
+                color: scoreView === 'best' ? '#1E7B3C' : '#6B6B66',
                 fontVariantNumeric: 'tabular-nums',
               }}>
                 Best: {bestAttempt!.scores!.percentage}%
@@ -2278,7 +2278,7 @@ function RosterTableRow({
           )
         )}
         {attempt && isDone && !attempt.scores && (
-          <p className="text-xs" style={{ color: '#C4C3BD' }}>
+          <p className="text-xs" style={{ color: '#6B6B66' }}>
             Awaiting score
             {/* An ungraded latest attempt would otherwise hide a graded earlier
                 one entirely — the row would read as if nothing was marked. */}
@@ -2289,7 +2289,7 @@ function RosterTableRow({
             )}
           </p>
         )}
-        {!attempt && <p className="text-xs" style={{ color: '#C4C3BD' }}>—</p>}
+        {!attempt && <p className="text-xs" style={{ color: '#6B6B66' }}>—</p>}
       </div>
 
       {/* Badges */}
@@ -2737,7 +2737,7 @@ export function AssessmentRosterCore({
     document.head.appendChild(s);
   }
 
-  const sc = assessment ? statusColor(assessment.status) : { bg: '#F7F6F3', text: '#9A9891', border: '#E3E1DB' };
+  const sc = assessment ? statusColor(assessment.status) : { bg: '#F7F6F3', text: '#6B6B66', border: '#E3E1DB' };
 
   const filterTabs: Array<{ value: RosterStatus | 'all' | 'blocked'; label: string; count: number }> = [
     { value: 'all',          label: 'All',         count: stats.total },
@@ -2753,8 +2753,8 @@ export function AssessmentRosterCore({
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-        <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Loading roster…</p>
+        <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading roster…</p>
       </div>
     );
   }
@@ -2780,7 +2780,7 @@ export function AssessmentRosterCore({
         <div className="px-4 py-4 sm:px-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
           {/* Breadcrumb + title */}
           <div className="flex items-center gap-2 sm:gap-3 mb-4 flex-wrap">
-            <button onClick={onBack} className="flex items-center gap-1.5 text-xs flex-shrink-0" style={{ color: '#9A9891', cursor: 'pointer' }}>
+            <button onClick={onBack} className="flex items-center gap-1.5 text-xs flex-shrink-0" style={{ color: '#6B6B66', cursor: 'pointer' }}>
               <ArrowLeft size={12} strokeWidth={1.5} /> Assessments
             </button>
             <span className="hidden sm:inline" style={{ color: '#E3E1DB' }}>·</span>
@@ -2798,8 +2798,8 @@ export function AssessmentRosterCore({
                 </>
               ) : (
                 <>
-                  <WifiOff size={11} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-                  <span className="text-xs" style={{ color: '#C4C3BD' }}>Connecting…</span>
+                  <WifiOff size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                  <span className="text-xs" style={{ color: '#6B6B66' }}>Connecting…</span>
                 </>
               )}
             </div>
@@ -2811,7 +2811,7 @@ export function AssessmentRosterCore({
           {!rosterExact && isRuleAllocated(assessment) && (
             <div className="flex items-start gap-2 px-3 py-2 mb-4"
               style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#9A9891', marginTop: 2, flexShrink: 0 }} />
+              <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 2, flexShrink: 0 }} />
               <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                 This exam is allocated by hierarchy. Showing all students in your institute —
                 the exact allocated list is visible to the Web Owner. Attempt data below is exact.
@@ -2832,8 +2832,8 @@ export function AssessmentRosterCore({
               ...(stats.terminated > 0 ? [{ label: 'Terminated', value: stats.terminated, icon: <AlertTriangle size={11} strokeWidth={1.5} />,    color: '#9B2828' }] : []),
             ].map((stat) => (
               <div key={stat.label} className="flex items-center gap-1.5">
-                <span style={{ color: stat.color ?? '#C4C3BD' }}>{stat.icon}</span>
-                <span className="text-xs" style={{ color: stat.color ?? '#9A9891' }}>
+                <span style={{ color: stat.color ?? '#6B6B66' }}>{stat.icon}</span>
+                <span className="text-xs" style={{ color: stat.color ?? '#6B6B66' }}>
                   <strong style={{ color: stat.color ?? '#0C0C0B' }}>{stat.value}</strong>{' '}{stat.label}
                 </span>
               </div>
@@ -2852,7 +2852,7 @@ export function AssessmentRosterCore({
               style={{
                 borderRadius: 2, cursor: 'pointer',
                 background: view === v ? '#0C0C0B' : 'transparent',
-                color: view === v ? '#FFFFFF' : '#9A9891',
+                color: view === v ? '#FFFFFF' : '#6B6B66',
                 border: view === v ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
               }}>
               {v === 'roster' ? 'Roster' : 'Reports'}
@@ -2866,7 +2866,7 @@ export function AssessmentRosterCore({
           {view === 'roster' && anyRetakes && (
             <div className="flex items-center gap-1 ml-3 pl-3"
               style={{ borderLeft: '1px solid #E3E1DB' }}>
-              <span className="text-xs mr-1" style={{ color: '#9A9891' }}>Show</span>
+              <span className="text-xs mr-1" style={{ color: '#6B6B66' }}>Show</span>
               {(['latest', 'best'] as const).map((sv) => (
                 <button key={sv} onClick={() => setScoreView(sv)}
                   title={sv === 'latest'
@@ -2876,7 +2876,7 @@ export function AssessmentRosterCore({
                   style={{
                     borderRadius: 2, cursor: 'pointer',
                     background: scoreView === sv ? '#F0EFEA' : 'transparent',
-                    color: scoreView === sv ? '#0C0C0B' : '#9A9891',
+                    color: scoreView === sv ? '#0C0C0B' : '#6B6B66',
                     border: `1px solid ${scoreView === sv ? '#D8D6CF' : 'transparent'}`,
                   }}>
                   {sv === 'latest' ? 'Latest' : 'Best'}
@@ -2915,7 +2915,7 @@ export function AssessmentRosterCore({
           className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 sm:px-6">
           <div className="flex items-center gap-2 px-3 py-2 w-full sm:w-[240px] sm:flex-shrink-0"
             style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-            <Search size={11} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+            <Search size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search students…" className="text-xs outline-none bg-transparent flex-1 min-w-0"
               style={{ color: '#0C0C0B' }} />
@@ -2927,13 +2927,13 @@ export function AssessmentRosterCore({
                 style={{
                   borderRadius: 2, cursor: 'pointer',
                   background: filterStatus === tab.value ? '#0C0C0B' : 'transparent',
-                  color: filterStatus === tab.value ? '#FFFFFF' : '#9A9891',
+                  color: filterStatus === tab.value ? '#FFFFFF' : '#6B6B66',
                   border: filterStatus === tab.value ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
                 }}>
                 {tab.label}
                 <span style={{
                   background: filterStatus === tab.value ? 'rgba(255,255,255,0.2)' : '#F0EFEB',
-                  color: filterStatus === tab.value ? '#FFFFFF' : '#9A9891',
+                  color: filterStatus === tab.value ? '#FFFFFF' : '#6B6B66',
                   borderRadius: 2, padding: '0 4px', fontSize: 10,
                 }}>{tab.count}</span>
               </button>
@@ -2945,19 +2945,19 @@ export function AssessmentRosterCore({
       {/* ── Roster table ── */}
       <div className="px-4 py-6 sm:p-6" style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
         <div className="hidden sm:flex items-center gap-4 px-5 pb-2 mb-1" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <div style={{ width: 200, flexShrink: 0 }}><span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>STUDENT</span></div>
-          <div style={{ width: 130, flexShrink: 0 }}><span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>STATUS</span></div>
-          <div style={{ flex: 1 }}><span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>PROGRESS / SCORE</span></div>
+          <div style={{ width: 200, flexShrink: 0 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STUDENT</span></div>
+          <div style={{ width: 130, flexShrink: 0 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STATUS</span></div>
+          <div style={{ flex: 1 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>PROGRESS / SCORE</span></div>
           <div style={{ width: 120, flexShrink: 0 }} />
-          <div style={{ width: 86, flexShrink: 0 }}><span className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>ACTION</span></div>
+          <div style={{ width: 86, flexShrink: 0 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>ACTION</span></div>
           <div style={{ width: 13, flexShrink: 0 }} />
         </div>
 
         <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <Users size={20} strokeWidth={1} style={{ color: '#C4C3BD' }} />
-              <p className="text-xs" style={{ color: '#C4C3BD' }}>
+              <Users size={20} strokeWidth={1} style={{ color: '#6B6B66' }} />
+              <p className="text-xs" style={{ color: '#6B6B66' }}>
                 {search || filterStatus !== 'all' ? 'No students match your filters.' : 'No students allocated to this assessment.'}
               </p>
             </div>

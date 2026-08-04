@@ -93,7 +93,7 @@ function CameraStep({
       </div>
       <div className="flex-1">
         <p className="text-xs mb-1" style={{ color: '#0C0C0B' }}>Webcam verification required</p>
-        <p className="text-xs mb-3" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+        <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
           This exam uses webcam monitoring to verify your identity and detect irregularities.
           Your camera feed is not recorded — only face count is analysed.
         </p>
@@ -116,7 +116,7 @@ function CameraStep({
             disabled={state === 'requesting'}
             className="text-xs px-4 py-2"
             style={{
-              color: '#9A9891',
+              color: '#6B6B66',
               border: '1px solid #E3E1DB',
               borderRadius: 2, background: '#FFFFFF', cursor: 'pointer',
             }}
@@ -134,7 +134,7 @@ function CameraStep({
 function RuleItem({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
     <div className="flex items-start gap-3 py-2.5" style={{ borderBottom: '1px solid #F0EFEB' }}>
-      <div style={{ color: '#9A9891', flexShrink: 0, marginTop: 1 }}>{icon}</div>
+      <div style={{ color: '#6B6B66', flexShrink: 0, marginTop: 1 }}>{icon}</div>
       <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>{text}</p>
     </div>
   );
@@ -422,13 +422,13 @@ export function ExamBriefingPage() {
         className="sticky top-0 z-10 flex items-center justify-between px-8 py-3"
         style={{ background: '#FFFFFF', borderBottom: '1px solid #E3E1DB' }}
       >
-        <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.12em' }}>
+        <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>
           STRATUM · EXAM BRIEFING
         </p>
         <button
           onClick={() => navigate('/student/assessments')}
           className="text-xs px-3 py-1.5"
-          style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
         >
           ← Back to assessments
         </button>
@@ -443,8 +443,8 @@ export function ExamBriefingPage() {
             {loading && (
               <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <div className="flex flex-col items-center py-24">
-                  <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-                  <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Loading assessment…</p>
+                  <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+                  <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading assessment…</p>
                 </div>
               </motion.div>
             )}
@@ -465,7 +465,7 @@ export function ExamBriefingPage() {
                       <p className="text-sm mb-2" style={{ color: '#0C0C0B', lineHeight: 1.7 }}>
                         You have been blocked from entering this exam.
                       </p>
-                      <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                      <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                         Please contact your invigilator or faculty member if you believe
                         this is an error.
                       </p>
@@ -493,7 +493,7 @@ export function ExamBriefingPage() {
                         This exam hasn't started yet.
                       </p>
                       {assessment?.startDate && (
-                        <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                        <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                           Opens {formatDateTime(assessment.startDate)}. This page will unlock
                           automatically once the exam is open.
                         </p>
@@ -512,7 +512,7 @@ export function ExamBriefingPage() {
                     <div className="flex items-center justify-center"
                       style={{ width: 52, height: 52, borderRadius: '50%',
                         background: '#F7F6F3', border: '1px solid #E3E1DB' }}>
-                      <ClipboardList size={22} strokeWidth={1} style={{ color: '#9A9891' }} />
+                      <ClipboardList size={22} strokeWidth={1} style={{ color: '#6B6B66' }} />
                     </div>
                     <div className="text-center" style={{ maxWidth: 380 }}>
                       <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
@@ -521,7 +521,7 @@ export function ExamBriefingPage() {
                       <p className="text-sm mb-2" style={{ color: '#0C0C0B', lineHeight: 1.7 }}>
                         You have used all {effectiveMax} allowed attempt{effectiveMax !== 1 ? 's' : ''} for this exam.
                       </p>
-                      <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                      <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                         {attemptsUsed} of {effectiveMax} attempt{effectiveMax !== 1 ? 's' : ''} completed.
                         Contact your faculty if you believe additional attempts should be granted.
                       </p>
@@ -567,7 +567,7 @@ export function ExamBriefingPage() {
                 {effectiveMax !== undefined && (
                   <div className="flex items-center gap-3 px-4 py-3 mb-5"
                     style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                    <ClipboardList size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+                    <ClipboardList size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
                     <p className="text-xs" style={{ color: '#6B6B66' }}>
                       Attempt <strong style={{ color: '#0C0C0B' }}>{attemptsUsed + 1}</strong> of{' '}
                       <strong style={{ color: '#0C0C0B' }}>{effectiveMax}</strong>
@@ -579,8 +579,8 @@ export function ExamBriefingPage() {
                 {/* Assessment header */}
                 <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 24 }}>
                   <div className="flex items-center gap-2 mb-2">
-                    <ClipboardList size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-                    <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                    <ClipboardList size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                    <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                       {assessment.subject || 'ASSESSMENT'}
                     </p>
                   </div>
@@ -598,17 +598,17 @@ export function ExamBriefingPage() {
                 <div className="grid grid-cols-3 gap-3 mb-8">
                   {[
                     {
-                      icon: <Layers size={14} strokeWidth={1.5} style={{ color: '#9A9891' }} />,
+                      icon: <Layers size={14} strokeWidth={1.5} style={{ color: '#6B6B66' }} />,
                       label: 'Sections',
                       value: assessment.sections?.length ?? 1,
                     },
                     {
-                      icon: <ClipboardList size={14} strokeWidth={1.5} style={{ color: '#9A9891' }} />,
+                      icon: <ClipboardList size={14} strokeWidth={1.5} style={{ color: '#6B6B66' }} />,
                       label: 'Questions',
                       value: assessment.questions.length,
                     },
                     {
-                      icon: <Award size={14} strokeWidth={1.5} style={{ color: '#9A9891' }} />,
+                      icon: <Award size={14} strokeWidth={1.5} style={{ color: '#6B6B66' }} />,
                       label: 'Total marks',
                       value: assessment.totalMarks,
                     },
@@ -618,7 +618,7 @@ export function ExamBriefingPage() {
                       style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
                       {stat.icon}
                       <p className="text-sm" style={{ color: '#0C0C0B' }}>{stat.value}</p>
-                      <p className="text-xs" style={{ color: '#9A9891' }}>{stat.label}</p>
+                      <p className="text-xs" style={{ color: '#6B6B66' }}>{stat.label}</p>
                     </div>
                   ))}
                 </div>
@@ -628,7 +628,7 @@ export function ExamBriefingPage() {
                   <div className="mb-8"
                     style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
                     <div className="px-4 py-3" style={{ borderBottom: '1px solid #F0EFEB' }}>
-                      <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>SECTIONS</p>
+                      <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>SECTIONS</p>
                     </div>
                     {assessment.sections.map((sec, idx) => {
                       const secMarks = sec.questions.reduce((s, q) => s + q.marks, 0);
@@ -637,16 +637,16 @@ export function ExamBriefingPage() {
                           className="flex items-center gap-4 px-4 py-3"
                           style={{ borderBottom: idx < assessment.sections!.length - 1 ? '1px solid #F0EFEB' : 'none' }}>
                           <div className="flex items-center justify-center flex-shrink-0"
-                            style={{ width: 22, height: 22, borderRadius: 2, background: '#F0EFEB', border: '1px solid #E3E1DB', fontSize: 10, color: '#9A9891' }}>
+                            style={{ width: 22, height: 22, borderRadius: 2, background: '#F0EFEB', border: '1px solid #E3E1DB', fontSize: 10, color: '#6B6B66' }}>
                             {idx + 1}
                           </div>
                           <p className="text-xs flex-1" style={{ color: '#0C0C0B' }}>{sec.name}</p>
                           <div className="flex items-center gap-4">
-                            <span className="text-xs" style={{ color: '#9A9891' }}>
+                            <span className="text-xs" style={{ color: '#6B6B66' }}>
                               {sec.questions.length} Q · {secMarks} mk
                             </span>
                             {sec.timeLimit && (
-                              <div className="flex items-center gap-1 text-xs" style={{ color: '#9A9891' }}>
+                              <div className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
                                 <Timer size={10} strokeWidth={1.5} />
                                 {formatDuration(sec.timeLimit)}
                               </div>
@@ -662,7 +662,7 @@ export function ExamBriefingPage() {
                 {(assessment.startDate || assessment.endDate) && (
                   <div className="flex items-center gap-4 px-4 py-3 mb-6"
                     style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                    <Calendar size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+                    <Calendar size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
                     {assessment.startDate && (
                       <span className="text-xs" style={{ color: '#6B6B66' }}>
                         {formatDateTime(assessment.startDate)}
@@ -670,7 +670,7 @@ export function ExamBriefingPage() {
                     )}
                     {assessment.endDate && (
                       <>
-                        <ArrowRight size={11} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+                        <ArrowRight size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
                         <span className="text-xs" style={{ color: '#6B6B66' }}>
                           {formatDateTime(assessment.endDate)}
                         </span>
@@ -683,7 +683,7 @@ export function ExamBriefingPage() {
                 <div className="mb-8"
                   style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
                   <div className="px-4 py-3" style={{ borderBottom: '1px solid #F0EFEB' }}>
-                    <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>EXAM RULES</p>
+                    <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>EXAM RULES</p>
                   </div>
                   <div className="px-4">
                     <RuleItem icon={<Shield size={12} strokeWidth={1.5} />}
@@ -711,7 +711,7 @@ export function ExamBriefingPage() {
 
                 {/* Camera setup */}
                 <div className="mb-6">
-                  <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>CAMERA SETUP</p>
+                  <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>CAMERA SETUP</p>
                   <CameraStep
                     state={cameraState}
                     onRequest={requestCamera}
@@ -721,13 +721,13 @@ export function ExamBriefingPage() {
 
                 {/* Fullscreen setup */}
                 <div className="mb-8">
-                  <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>FULLSCREEN</p>
+                  <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>FULLSCREEN</p>
                   <div className="flex items-center justify-between px-4 py-3"
                     style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                     <div className="flex items-center gap-3">
                       {isFullscreen
                         ? <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
-                        : <Maximize size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+                        : <Maximize size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
                       }
                       <p className="text-xs" style={{ color: '#4A4A45' }}>
                         {isFullscreen ? 'Fullscreen active' : 'Not in fullscreen — recommended before entering'}
@@ -748,7 +748,7 @@ export function ExamBriefingPage() {
                 {/* Safe Exam Browser gate (Phase 3, Stage 3) */}
                 {assessment?.requireSEB === true && (
                   <div className="mb-8">
-                    <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                    <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                       SAFE EXAM BROWSER
                     </p>
                     <div className="px-4 py-3"
@@ -759,10 +759,10 @@ export function ExamBriefingPage() {
                       }}>
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          {sebGate === 'checking' && <Loader2 size={13} className="animate-spin" style={{ color: '#9A9891' }} />}
+                          {sebGate === 'checking' && <Loader2 size={13} className="animate-spin" style={{ color: '#6B6B66' }} />}
                           {sebGate === 'verified' && <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />}
                           {sebGate === 'blocked' && <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />}
-                          {sebGate === 'na' && <Shield size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                          {sebGate === 'na' && <Shield size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                           <p className="text-xs" style={{ color: sebGate === 'blocked' ? '#9B2828' : sebGate === 'verified' ? '#1E7B3C' : '#4A4A45' }}>
                             {sebGate === 'checking' && 'Verifying Safe Exam Browser…'}
                             {sebGate === 'verified' && 'Safe Exam Browser verified'}
@@ -817,7 +817,7 @@ export function ExamBriefingPage() {
                 {/* Extension check (Phase 1c) — only for tiers that require it */}
                 {assessment?.requireExtensionCheck === true && (
                   <div className="mb-8">
-                    <p className="text-xs mb-3" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                    <p className="text-xs mb-3" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                       EXTENSION CHECK
                     </p>
                     <div className="px-4 py-3"
@@ -828,10 +828,10 @@ export function ExamBriefingPage() {
                       }}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          {extScanState === 'scanning' && <Loader2 size={13} className="animate-spin" style={{ color: '#9A9891' }} />}
+                          {extScanState === 'scanning' && <Loader2 size={13} className="animate-spin" style={{ color: '#6B6B66' }} />}
                           {extScanState === 'clean' && <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />}
                           {extScanState === 'dirty' && <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />}
-                          {(extScanState === 'idle') && <Shield size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                          {(extScanState === 'idle') && <Shield size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                           <p className="text-xs" style={{ color: extScanState === 'dirty' ? '#9B2828' : '#4A4A45' }}>
                             {extScanState === 'scanning' && 'Checking for browser extensions…'}
                             {extScanState === 'clean' && 'No conflicting extensions detected'}
@@ -886,7 +886,7 @@ export function ExamBriefingPage() {
                 </div>
 
                 {!readyToEnter && (
-                  <p className="text-xs mt-3 text-center" style={{ color: '#C4C3BD' }}>
+                  <p className="text-xs mt-3 text-center" style={{ color: '#6B6B66' }}>
                     {sebGate === 'blocked'
                       ? 'Open this exam in Safe Exam Browser to proceed.'
                       : sebGate === 'checking'

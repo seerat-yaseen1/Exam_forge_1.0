@@ -80,7 +80,7 @@ const TYPE_OPTIONS: TypeOption[] = [
 function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVariant) => void }) {
   return (
     <div>
-      <p className="text-xs mb-4" style={{ color: '#9A9891' }}>
+      <p className="text-xs mb-4" style={{ color: '#6B6B66' }}>
         Select a question type to continue.
       </p>
       <div className="grid grid-cols-2 gap-2">
@@ -109,7 +109,7 @@ function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVar
               </span>
               <span className="text-xs" style={{ color: '#0C0C0B' }}>{t.label}</span>
             </div>
-            <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.5 }}>{t.description}</p>
+            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{t.description}</p>
           </button>
         ))}
       </div>
@@ -126,7 +126,7 @@ function Field({ label, error, hint, children }: {
     <div className="mb-5">
       <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
       {children}
-      {hint  && <p className="text-xs mt-1.5" style={{ color: '#B0AEA8' }}>{hint}</p>}
+      {hint  && <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>{hint}</p>}
       {error && <p className="text-xs mt-1.5" style={{ color: '#9B2828' }}>{error}</p>}
     </div>
   );
@@ -276,14 +276,14 @@ function MCQEngine({
   return (
     <div>
       {variant === 'fillblank' && (
-        <p className="text-xs mb-3" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+        <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
           Use{' '}
           <code style={{ fontFamily: 'monospace', background: '#F0EFEB', padding: '1px 5px', borderRadius: 2 }}>___</code>
           {' '}in the stem to mark the blank. Options below are answer candidates.
         </p>
       )}
       {isMulti && (
-        <p className="text-xs mb-3" style={{ color: '#9A9891' }}>Mark all options that are correct.</p>
+        <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>Mark all options that are correct.</p>
       )}
 
       <div className="space-y-3">
@@ -302,7 +302,7 @@ function MCQEngine({
                   style={{
                     width: 18, height: 18,
                     borderRadius: isMulti ? 2 : '50%',
-                    border: `1.5px solid ${isCorrect ? '#0C0C0B' : '#C4C3BD'}`,
+                    border: `1.5px solid ${isCorrect ? '#0C0C0B' : '#6B6B66'}`,
                     background: isCorrect ? '#0C0C0B' : 'transparent',
                     cursor: 'pointer',
                   }}
@@ -341,7 +341,7 @@ function MCQEngine({
                     type="button"
                     onClick={() => removeOption(opt.id)}
                     className="flex-shrink-0 transition-opacity hover:opacity-60"
-                    style={{ color: '#C4C3BD' }}
+                    style={{ color: '#6B6B66' }}
                   >
                     <X size={13} strokeWidth={1.5} />
                   </button>
@@ -368,7 +368,7 @@ function MCQEngine({
           type="button"
           onClick={addOption}
           className="mt-3 flex items-center gap-1.5 text-xs transition-opacity hover:opacity-60"
-          style={{ color: '#9A9891' }}
+          style={{ color: '#6B6B66' }}
         >
           <Plus size={12} strokeWidth={1.5} /> Add option
         </button>
@@ -391,7 +391,7 @@ function TextEngine({
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs" style={{ color: '#B0AEA8' }}>Model answer</span>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>Model answer</span>
         <MathToolbar textareaRef={textareaRef} onChange={onChange} />
       </div>
       <textarea
@@ -445,7 +445,7 @@ function MatchEngine({
 
   return (
     <div>
-      <p className="text-xs mb-3" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+      <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
         Each left item maps to the right item in the same row. Right column is shuffled during the quiz.
       </p>
 
@@ -453,7 +453,7 @@ function MatchEngine({
         {pairs.map((pair, idx) => (
           <div key={pair.leftId} className="p-3" style={{ border: '1px solid #F0EFEB', borderRadius: 3 }}>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs select-none" style={{ color: '#C4C3BD', minWidth: 16 }}>{idx + 1}.</span>
+              <span className="text-xs select-none" style={{ color: '#6B6B66', minWidth: 16 }}>{idx + 1}.</span>
               {/* Left input */}
               <div className="flex items-center gap-1.5 flex-1">
                 <input
@@ -466,7 +466,7 @@ function MatchEngine({
                 />
                 <InlineMathButton onInsert={(m) => appendLeftMath(idx, m)} />
               </div>
-              <span style={{ color: '#C4C3BD', flexShrink: 0, fontSize: 12 }}>→</span>
+              <span style={{ color: '#6B6B66', flexShrink: 0, fontSize: 12 }}>→</span>
               {/* Right input */}
               <div className="flex items-center gap-1.5 flex-1">
                 <input
@@ -484,7 +484,7 @@ function MatchEngine({
                   type="button"
                   onClick={() => removePair(idx)}
                   className="flex-shrink-0 transition-opacity hover:opacity-60"
-                  style={{ color: '#C4C3BD' }}
+                  style={{ color: '#6B6B66' }}
                 >
                   <X size={13} strokeWidth={1.5} />
                 </button>
@@ -503,7 +503,7 @@ function MatchEngine({
         type="button"
         onClick={addPair}
         className="mt-3 flex items-center gap-1.5 text-xs transition-opacity hover:opacity-60"
-        style={{ color: '#9A9891' }}
+        style={{ color: '#6B6B66' }}
       >
         <Plus size={12} strokeWidth={1.5} /> Add pair
       </button>
@@ -535,7 +535,7 @@ function MetaSection(p: MetaProps) {
   return (
     <>
       <div style={{ borderTop: '1px solid #F0EFEB', margin: '0 0 20px' }} />
-      <p className="text-xs mb-4" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>METADATA</p>
+      <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>METADATA</p>
 
       <SubjectTopicSelect
         subjectId={p.subjectId}
@@ -581,7 +581,7 @@ function MetaSection(p: MetaProps) {
           style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }}
           onFocus={iFocus} onBlur={iBlur}
         />
-        <p className="text-xs mt-1.5" style={{ color: '#B0AEA8' }}>
+        <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>
           Faculty reference only — never shown to students.
         </p>
       </div>
@@ -753,7 +753,7 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
         <div className="flex-shrink-0 px-6 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
           <button type="button" onClick={onCancel}
             className="text-xs px-4 py-2.5 transition-colors"
-            style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
             onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}
           >
@@ -781,7 +781,7 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
             <span className="text-xs" style={{ color: '#0C0C0B' }}>{currentType.label}</span>
             <button type="button" onClick={() => setPhase('pick')}
               className="ml-auto flex items-center gap-1 text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#9A9891' }}
+              style={{ color: '#6B6B66' }}
             >
               <ChevronLeft size={11} strokeWidth={1.5} /> Change type
             </button>
@@ -890,7 +890,7 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
         <button
           type="button" onClick={onCancel} disabled={saving}
           className="text-xs px-4 py-2.5 transition-colors"
-          style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}
         >

@@ -93,16 +93,16 @@ export function SemesterDrawer({ open, editing, editingRaw, ancestry, instituteI
             {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div>
-                <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+                <p className="text-xs mb-0.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
                   {isEdit ? 'EDIT' : 'NEW'} SEMESTER / TRIMESTER
                 </p>
                 <h2 className="text-sm" style={{ color: '#0C0C0B' }}>
                   {isEdit ? `Editing "${editing!.name}"` : 'Add Semester or Trimester'}
                 </h2>
               </div>
-              <button onClick={onClose} style={{ color: '#9A9891' }}
+              <button onClick={onClose} style={{ color: '#6B6B66' }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#9A9891')}>
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                 <X size={16} strokeWidth={1.5} />
               </button>
             </div>
@@ -110,7 +110,7 @@ export function SemesterDrawer({ open, editing, editingRaw, ancestry, instituteI
             {/* Body */}
             <div className="flex-1 px-6 py-6 overflow-y-auto">
               {/* Type selector */}
-              <label className="block mb-2 text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>
+              <label className="block mb-2 text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                 TYPE *
               </label>
               <div className="flex gap-2 mb-5">
@@ -132,7 +132,7 @@ export function SemesterDrawer({ open, editing, editingRaw, ancestry, instituteI
               </div>
 
               {/* Number */}
-              <label className="block mb-1.5 text-xs" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>
+              <label className="block mb-1.5 text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
                 NUMBER *
               </label>
               <input
@@ -156,11 +156,11 @@ export function SemesterDrawer({ open, editing, editingRaw, ancestry, instituteI
 
               {/* Preview */}
               <div className="mt-5 px-4 py-3 rounded" style={{ background: '#F7F6F3', border: '1px solid #E3E1DB' }}>
-                <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Will be created as</p>
+                <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Will be created as</p>
                 <p className="text-sm" style={{ color: '#0C0C0B' }}>{derivedName}</p>
               </div>
 
-              <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>
+              <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>
                 Semesters and trimesters are optional. If no semesters are added under a year, courses can be assigned directly to that year.
               </p>
             </div>
@@ -169,7 +169,7 @@ export function SemesterDrawer({ open, editing, editingRaw, ancestry, instituteI
             <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: '1px solid #E3E1DB' }}>
               <button onClick={onClose} disabled={saving}
                 className="text-xs px-4 py-2"
-                style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                 Cancel
               </button>
               <button onClick={handleSave} disabled={saving}

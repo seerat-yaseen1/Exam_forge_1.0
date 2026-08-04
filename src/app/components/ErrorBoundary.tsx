@@ -116,7 +116,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             : 'Something went wrong and this page could not be displayed.'}
         </p>
 
-        <p className="text-xs mt-2 text-center" style={{ color: '#9A9891', maxWidth: 380 }}>
+        <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', maxWidth: 380 }}>
           {isExam
             // Honest about the gap rather than reassuring: in standard delivery
             // answers autosave on a 1.5s debounce, but in linear/adaptive the
@@ -143,7 +143,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <a
             href="/login"
             className="text-xs mt-3 px-4 py-2"
-            style={{ color: '#9A9891' }}
+            style={{ color: '#6B6B66' }}
           >
             Back to sign in
           </a>
@@ -169,7 +169,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <details className="mt-8" style={{ maxWidth: 560, width: '100%' }}>
           <summary
             className="text-xs text-center"
-            style={{ color: '#B0AEA8', cursor: 'pointer', listStyle: 'none' }}
+            style={{ color: '#6B6B66', cursor: 'pointer', listStyle: 'none' }}
           >
             Technical details
           </summary>

@@ -86,7 +86,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#9A9891' }}>
+      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
         <Loader2 size={12} className="animate-spin" /> Loading deleted records…
       </div>
     );
@@ -103,7 +103,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
       )}
 
       {records.length === 0 ? (
-        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#B0AEA8' }}>
+        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
           <Inbox size={13} strokeWidth={1.5} /> Nothing deleted.
         </div>
       ) : (
@@ -116,10 +116,10 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs" style={{ color: '#0C0C0B' }}>
-                    <span style={{ color: '#9A9891' }}>{roleLabel(rec.role)} · </span>
+                    <span style={{ color: '#6B6B66' }}>{roleLabel(rec.role)} · </span>
                     {rec.name ?? rec.email ?? rec.id}
                   </p>
-                  <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+                  <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
                     {retentionLabel(rec)}
                     {rec.deletedByRole ? ` · removed by ${rec.deletedByRole}` : ''}
                   </p>
@@ -146,7 +146,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
                       disabled={busy}
                       title="Permanently delete — cannot be undone"
                       className="p-1.5"
-                      style={{ color: '#C4C3BD', cursor: busy ? 'not-allowed' : 'pointer' }}
+                      style={{ color: '#6B6B66', cursor: busy ? 'not-allowed' : 'pointer' }}
                     >
                       <Trash2 size={12} strokeWidth={1.5} />
                     </button>

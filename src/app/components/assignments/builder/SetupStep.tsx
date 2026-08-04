@@ -217,18 +217,18 @@ export function SetupStep({
           <div className="flex items-center gap-2 mb-3">
             <div className="flex items-center justify-center"
               style={{ width: 28, height: 28, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA' }}>
-              <Layers size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+              <Layers size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
             </div>
-            <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.1em' }}>STEP 1 OF 3</p>
+            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>STEP 1 OF 3</p>
           </div>
           <h2 className="text-base mb-1" style={{ color: '#0C0C0B' }}>Assessment Setup</h2>
-          <p className="text-xs" style={{ color: '#B0AEA8', lineHeight: 1.6 }}>
+          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
             Define the basics and configure sections. Question rules are set in the next step.
           </p>
           {originalStatus && originalStatus !== 'draft' && (
             <div className="flex items-start gap-2.5 mt-4 px-3 py-3"
               style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <Lock size={11} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0, marginTop: 1 }} />
+              <Lock size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0, marginTop: 1 }} />
               <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                 {originalStatus === 'active'
                   ? <>Some fields are locked because this test is <strong>live</strong>.</>
@@ -303,7 +303,7 @@ export function SetupStep({
                       <div style={{
                         width: 18, height: 18, borderRadius: 9, fontSize: 9,
                         background: isActive ? '#0C0C0B' : isDone ? '#0C0C0B' : '#E3E1DB',
-                        color: (isActive || isDone) ? '#FFFFFF' : '#9A9891',
+                        color: (isActive || isDone) ? '#FFFFFF' : '#6B6B66',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                       }}>
                         {isDone
@@ -312,7 +312,7 @@ export function SetupStep({
                       </div>
                       <span style={{
                         fontSize: 11,
-                        color: isActive ? '#0C0C0B' : isDone ? '#6B6B66' : '#C4C3BD',
+                        color: isActive ? '#0C0C0B' : isDone ? '#6B6B66' : '#6B6B66',
                       }}>
                         {label}
                       </span>
@@ -397,7 +397,7 @@ export function SetupStep({
                           {/* Top row: index + name + time + topics toggle + remove */}
                           <div className="flex items-center" style={{ gap: 8, padding: '8px 10px', background: '#FFFFFF' }}>
                             <div className="flex-shrink-0 flex items-center justify-center"
-                              style={{ width: 26, height: 26, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA', fontSize: 10, color: '#9A9891' }}>
+                              style={{ width: 26, height: 26, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA', fontSize: 10, color: '#6B6B66' }}>
                               {(idx + 1).toString().padStart(2, '0')}
                             </div>
                             <input
@@ -417,7 +417,7 @@ export function SetupStep({
                                 onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                 onKeyDown={(e) => { if (['-', 'e', '+', '.'].includes(e.key)) e.preventDefault(); }}
                               />
-                              <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>min</span>
+                              <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>min</span>
                             </div>
                             {/* Per-question timer (Phase 2.5) — authority toggle.
                                 Only meaningful in sequential delivery; hidden in standard. */}
@@ -432,7 +432,7 @@ export function SetupStep({
                                   onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                   onKeyDown={(e) => { if (['-', 'e', '+', '.'].includes(e.key)) e.preventDefault(); }}
                                 />
-                                <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>s/q</span>
+                                <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>s/q</span>
                               </div>
                             )}
                             {/* Topics toggle button */}
@@ -444,7 +444,7 @@ export function SetupStep({
                                 borderRadius: 2,
                                 border: isPickerOpen ? '1px solid #0C0C0B' : (hasAssigned ? '1px solid #B8E6C8' : '1px solid #E3E1DB'),
                                 background: isPickerOpen ? '#0C0C0B' : (hasAssigned ? '#F0F9F4' : '#FAFAF8'),
-                                color: isPickerOpen ? '#FFFFFF' : (hasAssigned ? '#1E7B3C' : '#9A9891'),
+                                color: isPickerOpen ? '#FFFFFF' : (hasAssigned ? '#1E7B3C' : '#6B6B66'),
                               }}
                               title={isPickerOpen ? 'Close topic picker' : 'Assign topics to this section'}
                             >
@@ -456,7 +456,7 @@ export function SetupStep({
                               onClick={() => removeSection(idx)}
                               disabled={sections.length <= 1}
                               className="flex-shrink-0 flex items-center justify-center transition-opacity hover:opacity-60"
-                              style={{ width: 22, height: 22, borderRadius: 2, color: sections.length <= 1 ? '#E3E1DB' : '#C4C3BD', cursor: sections.length <= 1 ? 'not-allowed' : 'pointer' }}
+                              style={{ width: 22, height: 22, borderRadius: 2, color: sections.length <= 1 ? '#E3E1DB' : '#6B6B66', cursor: sections.length <= 1 ? 'not-allowed' : 'pointer' }}
                             >
                               <X size={12} strokeWidth={1.5} />
                             </button>
@@ -473,7 +473,7 @@ export function SetupStep({
                                 borderTop: '1px dashed #F0EFEB',
                               }}
                             >
-                              <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>
+                              <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>
                                 {/* Positional: this break applies after the (idx+1)th COMPLETED
                                     section, whichever section that turns out to be when the
                                     section order is Random or Student's choice. */}
@@ -494,11 +494,11 @@ export function SetupStep({
                                 onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                 onKeyDown={(e) => { if (['-', 'e', '+', '.'].includes(e.key)) e.preventDefault(); }}
                               />
-                              <span className="text-xs flex-shrink-0" style={{ color: '#9A9891' }}>min</span>
+                              <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>min</span>
                               <label
                                 className="flex items-center gap-1.5 text-xs ml-2"
                                 style={{
-                                  color: sec.breakAfterMinutes ? '#4A4A45' : '#C4C3BD',
+                                  color: sec.breakAfterMinutes ? '#4A4A45' : '#6B6B66',
                                   cursor: sec.breakAfterMinutes ? 'pointer' : 'not-allowed',
                                 }}
                               >
@@ -512,7 +512,7 @@ export function SetupStep({
                                 />
                                 Mandatory wait
                               </label>
-                              <span className="text-xs ml-auto" style={{ color: '#C4C3BD' }}>
+                              <span className="text-xs ml-auto" style={{ color: '#6B6B66' }}>
                                 {sec.breakAfterMinutes
                                   ? sec.breakMandatory
                                     ? 'Student must wait the full duration'
@@ -535,8 +535,8 @@ export function SetupStep({
                                     className="inline-flex items-center gap-1 px-2 py-0.5"
                                     style={{ background: '#F0F9F4', color: '#1E7B3C', border: '1px solid #B8E6C8', borderRadius: 2, fontSize: 10 }}
                                   >
-                                    <span style={{ color: '#9A9891', fontSize: 9 }}>{subj}</span>
-                                    <span style={{ color: '#C4C3BD', fontSize: 9 }}>›</span>
+                                    <span style={{ color: '#6B6B66', fontSize: 9 }}>{subj}</span>
+                                    <span style={{ color: '#6B6B66', fontSize: 9 }}>›</span>
                                     <span>{topic}</span>
                                     <button
                                       type="button"
@@ -584,7 +584,7 @@ export function SetupStep({
                   onClick={addSection}
                   disabled={sections.length >= 26 || !mut.sections}
                   className="w-full mt-3 flex items-center justify-center gap-1.5 py-2.5 text-xs transition-all hover:opacity-80"
-                  style={{ border: '1px dashed #DDDBD5', borderRadius: 3, color: '#9A9891', background: 'transparent', cursor: sections.length >= 26 || !mut.sections ? 'not-allowed' : 'pointer', opacity: !mut.sections ? 0.4 : 1 }}
+                  style={{ border: '1px dashed #DDDBD5', borderRadius: 3, color: '#6B6B66', background: 'transparent', cursor: sections.length >= 26 || !mut.sections ? 'not-allowed' : 'pointer', opacity: !mut.sections ? 0.4 : 1 }}
                 >
                   <Plus size={12} strokeWidth={1.5} /> Add Section
                 </button>
@@ -595,7 +595,7 @@ export function SetupStep({
                   return (
                     <div className="flex items-center gap-4 mt-4 px-4 py-3"
                       style={{ background: '#F7F6F3', border: '1px solid #EEECEA', borderRadius: 2 }}>
-                      <span className="text-xs" style={{ color: '#9A9891' }}>
+                      <span className="text-xs" style={{ color: '#6B6B66' }}>
                         {sections.length} section{sections.length !== 1 ? 's' : ''}
                       </span>
                       {totalAssigned > 0 && (

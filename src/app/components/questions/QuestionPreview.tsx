@@ -75,7 +75,7 @@ function MCQPreview({
   onImageClick:  (url: string) => void;
 }) {
   if (!options.length)
-    return <p className="text-xs mt-3 italic" style={{ color: '#B0AEA8' }}>No options defined.</p>;
+    return <p className="text-xs mt-3 italic" style={{ color: '#6B6B66' }}>No options defined.</p>;
 
   const isMulti  = variant === 'multi';
   const letters  = 'ABCDEFGHIJ';
@@ -108,7 +108,7 @@ function MCQPreview({
               >
                 {isCorrect
                   ? <Check size={10} strokeWidth={2.5} style={{ color: '#FFFFFF' }} />
-                  : <span style={{ color: '#9A9891' }}>{letters[idx]}</span>
+                  : <span style={{ color: '#6B6B66' }}>{letters[idx]}</span>
                 }
               </div>
 
@@ -119,7 +119,7 @@ function MCQPreview({
                     className="text-xs"
                     style={{ color: isCorrect ? '#0C0C0B' : '#4A4A45', lineHeight: 1.6 }}
                   />
-                  {!opt.text && <em className="text-xs" style={{ color: '#B0AEA8' }}>Empty option</em>}
+                  {!opt.text && <em className="text-xs" style={{ color: '#6B6B66' }}>Empty option</em>}
                   {isCorrect && (
                     <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: '#2A6B3A', letterSpacing: '0.06em' }}>
                       CORRECT
@@ -149,14 +149,14 @@ function MCQPreview({
 
 function TextPreview({ modelAnswer, variant }: { modelAnswer: string; variant: Question['variant'] }) {
   if (!modelAnswer)
-    return <p className="text-xs mt-3 italic" style={{ color: '#B0AEA8' }}>No model answer provided.</p>;
+    return <p className="text-xs mt-3 italic" style={{ color: '#6B6B66' }}>No model answer provided.</p>;
 
   return (
     <div
       className="mt-3 px-4 py-3"
       style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}
     >
-      <p className="text-xs mb-1.5" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>
+      <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
         {variant === 'long' ? 'RUBRIC / KEY POINTS' : 'EXPECTED ANSWER'}
       </p>
       <RichText text={modelAnswer} className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.7, display: 'block' }} />
@@ -175,7 +175,7 @@ function MatchPreview({
   onImageClick: (url: string) => void;
 }) {
   if (!pairs.length)
-    return <p className="text-xs mt-3 italic" style={{ color: '#B0AEA8' }}>No pairs defined.</p>;
+    return <p className="text-xs mt-3 italic" style={{ color: '#6B6B66' }}>No pairs defined.</p>;
 
   const rightById = Object.fromEntries(pairs.map((p) => [p.rightId, p]));
   const pairMap   = Object.fromEntries(correctPairs.map((cp) => [cp.leftId, cp.rightId]));
@@ -184,8 +184,8 @@ function MatchPreview({
   return (
     <div className="mt-3">
       <div className="grid grid-cols-2 gap-2 mb-2 px-1">
-        <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>COLUMN A</p>
-        <p className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>
+        <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>COLUMN A</p>
+        <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
           {showAnswers ? 'COLUMN B (ANSWER KEY)' : 'COLUMN B'}
         </p>
       </div>
@@ -198,10 +198,10 @@ function MatchPreview({
               {/* Left */}
               <div className="px-3 py-2" style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                 <div className="flex items-start gap-2">
-                  <span className="text-xs flex-shrink-0 select-none mt-0.5" style={{ color: '#C4C3BD' }}>{idx + 1}.</span>
+                  <span className="text-xs flex-shrink-0 select-none mt-0.5" style={{ color: '#6B6B66' }}>{idx + 1}.</span>
                   <div>
                     <RichText text={pair.leftText || ''} className="text-xs" style={{ color: '#0C0C0B' }} />
-                    {!pair.leftText && <em className="text-xs" style={{ color: '#B0AEA8' }}>Empty</em>}
+                    {!pair.leftText && <em className="text-xs" style={{ color: '#6B6B66' }}>Empty</em>}
                     {pair.leftImage && (
                       <img src={pair.leftImage} alt="" className="mt-1.5 max-h-20 max-w-full object-contain cursor-zoom-in"
                         style={{ border: '1px solid #E3E1DB', borderRadius: 2 }} onClick={() => onImageClick(pair.leftImage!)} />
@@ -219,7 +219,7 @@ function MatchPreview({
               >
                 <div className="flex items-start gap-2">
                   {showAnswers && (
-                    <span className="text-xs flex-shrink-0 select-none mt-0.5" style={{ color: '#C4C3BD' }}>{letters[idx]}.</span>
+                    <span className="text-xs flex-shrink-0 select-none mt-0.5" style={{ color: '#6B6B66' }}>{letters[idx]}.</span>
                   )}
                   <div>
                     {showAnswers ? (
@@ -231,11 +231,11 @@ function MatchPreview({
                               style={{ border: '1px solid #C3E8CE', borderRadius: 2 }} onClick={() => onImageClick(matchedRight.rightImage!)} />
                           )}
                         </>
-                      ) : <span className="text-xs" style={{ color: '#B0AEA8' }}>—</span>
+                      ) : <span className="text-xs" style={{ color: '#6B6B66' }}>—</span>
                     ) : (
                       <>
                         <RichText text={pair.rightText || ''} className="text-xs" style={{ color: '#4A4A45' }} />
-                        {!pair.rightText && <em className="text-xs" style={{ color: '#B0AEA8' }}>Empty</em>}
+                        {!pair.rightText && <em className="text-xs" style={{ color: '#6B6B66' }}>Empty</em>}
                         {pair.rightImage && (
                           <img src={pair.rightImage} alt="" className="mt-1.5 max-h-20 max-w-full object-contain cursor-zoom-in"
                             style={{ border: '1px solid #E3E1DB', borderRadius: 2 }} onClick={() => onImageClick(pair.rightImage!)} />
@@ -293,7 +293,7 @@ export function QuestionPreview({
 
       {/* ── Type label ── */}
       {effectiveShowMeta && (
-        <p className="text-xs mb-2" style={{ color: '#B0AEA8' }}>
+        <p className="text-xs mb-2" style={{ color: '#6B6B66' }}>
           {questionTypeLabel(engine, variant)}
         </p>
       )}
@@ -301,7 +301,7 @@ export function QuestionPreview({
       {/* ── Stem ── */}
       {stem
         ? <RichText text={stem} image={stemImage} className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.7, display: 'block' }} onImageClick={setLightboxUrl} />
-        : <em className="text-sm" style={{ color: '#B0AEA8' }}>No question stem defined.</em>
+        : <em className="text-sm" style={{ color: '#6B6B66' }}>No question stem defined.</em>
       }
 
       {/* ── Engine-specific ── */}
@@ -331,7 +331,7 @@ export function QuestionPreview({
               {subject}
             </span>
           )}
-          {topic && <span className="text-xs" style={{ color: '#9A9891' }}>· {topic}</span>}
+          {topic && <span className="text-xs" style={{ color: '#6B6B66' }}>· {topic}</span>}
           {tags.map((tag) => (
             <span key={tag} className="text-xs px-2 py-0.5" style={{ background: '#F0EFEB', borderRadius: 2, color: '#6B6B66' }}>
               #{tag}

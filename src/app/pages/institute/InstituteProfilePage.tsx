@@ -9,9 +9,9 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
       className="flex items-start gap-4 py-4"
       style={{ borderBottom: '1px solid #F0EFEB' }}
     >
-      <div style={{ color: '#C4C3BD', marginTop: 1, flexShrink: 0 }}>{icon}</div>
+      <div style={{ color: '#6B6B66', marginTop: 1, flexShrink: 0 }}>{icon}</div>
       <div>
-        <p className="text-xs mb-0.5" style={{ color: '#9A9891', letterSpacing: '0.06em' }}>
+        <p className="text-xs mb-0.5" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
           {label}
         </p>
         <p className="text-sm" style={{ color: '#0C0C0B' }}>
@@ -63,7 +63,7 @@ export function InstituteProfilePage() {
     >
       {/* ── Page header ── */}
       <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
-        <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+        <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
           INSTITUTE ADMIN
         </p>
         <h1 className="text-base" style={{ color: '#0C0C0B' }}>Profile</h1>
@@ -86,12 +86,12 @@ export function InstituteProfilePage() {
           }}
         >
           {logoLoading ? (
-            <Loader2 size={20} strokeWidth={1.5} className="animate-spin" style={{ color: '#9A9891' }} />
+            <Loader2 size={20} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
           ) : logo ? (
             <img src={logo} alt={session.instituteName}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <Building2 size={28} strokeWidth={1} style={{ color: '#C4C3BD' }} />
+            <Building2 size={28} strokeWidth={1} style={{ color: '#6B6B66' }} />
           )}
         </div>
 
@@ -99,7 +99,7 @@ export function InstituteProfilePage() {
           <p className="text-sm font-medium mb-0.5 break-words" style={{ color: '#0C0C0B' }}>
             Institute Logo
           </p>
-          <p className="text-xs mb-3" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+          <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
             {logo ? 'Displayed across all institute screens.' : 'No logo uploaded yet.'}
             {' '}PNG or JPG, max 2 MB.
           </p>

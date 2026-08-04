@@ -24,28 +24,28 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
 
   const meta = (
     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-      {assessment.subject && <span className="text-xs" style={{ color: '#9A9891' }}>{assessment.subject}</span>}
-      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+      {assessment.subject && <span className="text-xs" style={{ color: '#6B6B66' }}>{assessment.subject}</span>}
+      <span className="text-xs" style={{ color: '#6B6B66' }}>
         · {assessment.questions.length} Q · {assessment.totalMarks} marks
       </span>
       {sectionCount && (
-        <span className="text-xs" style={{ color: '#C4C3BD' }}>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>
           · {sectionCount} section{sectionCount !== 1 ? 's' : ''}
         </span>
       )}
-      <span className="text-xs" style={{ color: '#C4C3BD' }}>· {describeAssignment(assessment)}</span>
+      <span className="text-xs" style={{ color: '#6B6B66' }}>· {describeAssignment(assessment)}</span>
     </div>
   );
 
   const dateBlock = assessment.startDate || assessment.endDate ? (
     <div className="flex items-center gap-1.5 md:justify-end">
-      <span className="text-xs" style={{ color: '#9A9891' }}>{formatDateShort(assessment.startDate)}</span>
+      <span className="text-xs" style={{ color: '#6B6B66' }}>{formatDateShort(assessment.startDate)}</span>
       {assessment.endDate && (
-        <><ArrowRight size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-        <span className="text-xs" style={{ color: '#9A9891' }}>{formatDateShort(assessment.endDate)}</span></>
+        <><ArrowRight size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+        <span className="text-xs" style={{ color: '#6B6B66' }}>{formatDateShort(assessment.endDate)}</span></>
       )}
     </div>
-  ) : <span className="text-xs" style={{ color: '#C4C3BD' }}>No date set</span>;
+  ) : <span className="text-xs" style={{ color: '#6B6B66' }}>No date set</span>;
 
   const actions = (
     <div className="flex items-center gap-1 flex-shrink-0">
@@ -58,10 +58,10 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
           <Users size={11} strokeWidth={1.5} /> Roster
         </button>
       )}
-      <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}><Eye size={13} strokeWidth={1.5} /></button>
+      <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}><Eye size={13} strokeWidth={1.5} /></button>
       <EditMenu assessment={assessment} onPatched={onPatched} onOpenLegacyEditor={onOpenLegacyEditor} />
-      <button onClick={onDuplicate} title="Duplicate" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}><Copy size={13} strokeWidth={1.5} /></button>
-      <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#C4C3BD' }}><Trash2 size={13} strokeWidth={1.5} /></button>
+      <button onClick={onDuplicate} title="Duplicate" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}><Copy size={13} strokeWidth={1.5} /></button>
+      <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}><Trash2 size={13} strokeWidth={1.5} /></button>
     </div>
   );
 
@@ -76,7 +76,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
         <div className="flex-shrink-0"><StatusBadgeChip status={assessment.status} /></div>
         <div className="flex-1 min-w-0">
           <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-            {truncate(assessment.title, 80) || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
+            {truncate(assessment.title, 80) || <em style={{ color: '#6B6B66' }}>Untitled Assessment</em>}
           </p>
           {meta}
         </div>
@@ -99,7 +99,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
             overflow: 'hidden',
           }}
         >
-          {assessment.title || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
+          {assessment.title || <em style={{ color: '#6B6B66' }}>Untitled Assessment</em>}
         </p>
 
         {/* Pill strip: status + subject + target */}
@@ -115,7 +115,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
           )}
           <span
             className="text-xs px-2 py-0.5"
-            style={{ background: '#F7F6F3', color: '#9A9891', border: '1px solid #EEECEA', borderRadius: 2 }}
+            style={{ background: '#F7F6F3', color: '#6B6B66', border: '1px solid #EEECEA', borderRadius: 2 }}
           >
             {describeAssignment(assessment)}
           </span>
@@ -123,35 +123,35 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
 
         {/* Stats line — numbers + units */}
         <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-xs mb-2.5">
-          <span><span style={{ color: '#0C0C0B' }}>{assessment.questions.length}</span> <span style={{ color: '#9A9891' }}>Q</span></span>
+          <span><span style={{ color: '#0C0C0B' }}>{assessment.questions.length}</span> <span style={{ color: '#6B6B66' }}>Q</span></span>
           <span style={{ color: '#DDDBD5' }}>·</span>
-          <span><span style={{ color: '#0C0C0B' }}>{assessment.totalMarks}</span> <span style={{ color: '#9A9891' }}>marks</span></span>
+          <span><span style={{ color: '#0C0C0B' }}>{assessment.totalMarks}</span> <span style={{ color: '#6B6B66' }}>marks</span></span>
           {sectionCount ? (
             <>
               <span style={{ color: '#DDDBD5' }}>·</span>
               <span>
                 <span style={{ color: '#0C0C0B' }}>{sectionCount}</span>{' '}
-                <span style={{ color: '#9A9891' }}>section{sectionCount !== 1 ? 's' : ''}</span>
+                <span style={{ color: '#6B6B66' }}>section{sectionCount !== 1 ? 's' : ''}</span>
               </span>
             </>
           ) : null}
         </div>
 
         {/* Schedule */}
-        <div className="flex items-center gap-1.5 flex-wrap text-xs mb-3" style={{ color: '#9A9891' }}>
-          <Calendar size={11} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+        <div className="flex items-center gap-1.5 flex-wrap text-xs mb-3" style={{ color: '#6B6B66' }}>
+          <Calendar size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
           {assessment.startDate || assessment.endDate ? (
             <>
               <span>{formatDateShort(assessment.startDate)}</span>
               {assessment.endDate && (
                 <>
-                  <ArrowRight size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
+                  <ArrowRight size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
                   <span>{formatDateShort(assessment.endDate)}</span>
                 </>
               )}
             </>
           ) : (
-            <span style={{ color: '#C4C3BD' }}>No schedule set</span>
+            <span style={{ color: '#6B6B66' }}>No schedule set</span>
           )}
         </div>
 
@@ -186,7 +186,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
             onClick={onDelete}
             aria-label="Delete"
             className="flex items-center justify-center transition-opacity hover:opacity-60"
-            style={{ width: 36, height: 36, color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+            style={{ width: 36, height: 36, color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
           >
             <Trash2 size={14} strokeWidth={1.5} />
           </button>

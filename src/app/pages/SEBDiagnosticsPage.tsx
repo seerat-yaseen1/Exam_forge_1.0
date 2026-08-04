@@ -168,14 +168,14 @@ export function SEBDiagnosticsPage() {
               )}
             </div>
           </div>
-          <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>GET RESULT</p>
+          <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>GET RESULT</p>
           <pre className="text-xs p-3 overflow-auto mb-3"
             style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 260, fontFamily: 'monospace', lineHeight: 1.5 }}>
             {JSON.stringify(echo, null, 2)}
           </pre>
           {echoPost && (
             <>
-              <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>POST RESULT</p>
+              <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>POST RESULT</p>
               <pre className="text-xs p-3 overflow-auto"
                 style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 260, fontFamily: 'monospace', lineHeight: 1.5 }}>
                 {JSON.stringify(echoPost, null, 2)}
@@ -233,7 +233,7 @@ export function SEBDiagnosticsPage() {
 
           {/* Raw JSON — copy this back */}
           <div>
-            <p className="text-xs mb-1.5" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>FULL RESULT (copy all of this)</p>
+            <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>FULL RESULT (copy all of this)</p>
             <pre className="text-xs p-3 overflow-auto"
               style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 460, fontFamily: 'monospace', lineHeight: 1.5 }}>
               {JSON.stringify(result, null, 2)}

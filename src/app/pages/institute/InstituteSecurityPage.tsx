@@ -69,7 +69,7 @@ export function InstituteSecurityPage() {
       className="px-8 py-10"
       style={{ maxWidth: 520, margin: '0 auto' }}
     >
-      <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>SECURITY</p>
+      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>SECURITY</p>
       <h1 className="text-base mb-8" style={{ color: '#0C0C0B', borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
         Change Password
       </h1>
@@ -96,9 +96,9 @@ export function InstituteSecurityPage() {
                 style={{ ...inputStyle, paddingRight: 40 }} onFocus={onFocus} onBlur={onBlur} />
               <button type="button" tabIndex={-1} onClick={() => setShowNew((v) => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                style={{ color: '#B0AEA8' }}
+                style={{ color: '#6B6B66' }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#B0AEA8')}>
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                 {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
               </button>
             </div>
@@ -116,9 +116,9 @@ export function InstituteSecurityPage() {
                 style={{ ...inputStyle, paddingRight: 40 }} onFocus={onFocus} onBlur={onBlur} />
               <button type="button" tabIndex={-1} onClick={() => setShowConfirm((v) => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                style={{ color: '#B0AEA8' }}
+                style={{ color: '#6B6B66' }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#B0AEA8')}>
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                 {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
               </button>
             </div>
@@ -151,7 +151,7 @@ export function InstituteSecurityPage() {
           </button>
         </form>
 
-        <p className="text-xs mt-4 pt-4" style={{ color: '#9A9891', borderTop: '1px solid #F0EFEB', lineHeight: 1.6 }}>
+        <p className="text-xs mt-4 pt-4" style={{ color: '#6B6B66', borderTop: '1px solid #F0EFEB', lineHeight: 1.6 }}>
           Choose a strong password with at least 8 characters, including uppercase, lowercase, numbers, and symbols.
         </p>
       </div>

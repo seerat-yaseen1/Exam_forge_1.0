@@ -126,7 +126,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#9A9891' }}>
+      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
         <Loader2 size={12} className="animate-spin" /> Loading requests…
       </div>
     );
@@ -146,7 +146,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
       )}
 
       {open.length === 0 && closed.length === 0 && (
-        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#B0AEA8' }}>
+        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
           <Inbox size={13} strokeWidth={1.5} /> No access or erasure requests.
         </div>
       )}
@@ -163,7 +163,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                   {typeLabel(r.type)} request —{' '}
                   <span style={{ color: '#6B6B66' }}>{r.subjectLabel ?? r.subjectId}</span>
                 </p>
-                <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: '#9A9891' }}>
+                <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: '#6B6B66' }}>
                   <Clock size={10} strokeWidth={1.5} />
                   Asked {ageLabel(r)}
                   {r.basis ? ` · “${r.basis}”` : ''}
@@ -269,7 +269,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                   </div>
                 )}
                 {r.type === 'erasure' && !canErase && (
-                  <p className="text-xs" style={{ color: '#B0AEA8', lineHeight: 1.5 }}>
+                  <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
                     Erasure is carried out by the Web Owner. Leave this open for
                     them, or refuse it with a reason.
                   </p>
@@ -282,7 +282,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
 
       {closed.length > 0 && (
         <>
-          <p className="text-xs mb-2 mt-4" style={{ color: '#9A9891', letterSpacing: '0.05em' }}>
+          <p className="text-xs mb-2 mt-4" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>
             DECIDED
           </p>
           {closed.map((r) => (
@@ -298,7 +298,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                 </span>
               </div>
               {r.decision && (
-                <p className="text-xs mt-0.5" style={{ color: '#B0AEA8' }}>{r.decision}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{r.decision}</p>
               )}
             </div>
           ))}

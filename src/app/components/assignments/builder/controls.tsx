@@ -20,7 +20,7 @@ export function Field({ label, hint, required, children }: {
         <label className="text-xs" style={{ color: '#6B6B66' }}>
           {label}{required && <span style={{ color: '#9B2828' }}> *</span>}
         </label>
-        {hint && <span style={{ color: '#C4C3BD', fontSize: 10 }}>{hint}</span>}
+        {hint && <span style={{ color: '#6B6B66', fontSize: 10 }}>{hint}</span>}
       </div>
       {children}
     </div>
@@ -31,7 +31,7 @@ export function SectionLabel({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2 pt-1">
       <div style={{ flex: 1, height: 1, background: '#F0EFEB' }} />
-      <span style={{ color: '#C4C3BD', letterSpacing: '0.1em', fontSize: 10, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: '#6B6B66', letterSpacing: '0.1em', fontSize: 10, flexShrink: 0 }}>{label}</span>
       <div style={{ flex: 1, height: 1, background: '#F0EFEB' }} />
     </div>
   );
@@ -166,7 +166,7 @@ export function StartScheduleControl({
         />
 
         {isImmediate ? (
-          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
             <Zap size={10} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
             Students can begin as soon as the assessment is published.
           </p>
@@ -174,7 +174,7 @@ export function StartScheduleControl({
           <>
             <div className="flex items-center gap-2 px-3 py-2"
               style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-              <Calendar size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+              <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
               <input type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)}
                 className="flex-1 outline-none"
                 style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
@@ -226,7 +226,7 @@ export function EndScheduleControl({
         />
 
         {!hasDeadline ? (
-          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
             <InfinityIcon size={10} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
             The assessment stays open until you close it manually.
           </p>
@@ -234,7 +234,7 @@ export function EndScheduleControl({
           <>
             <div className="flex items-center gap-2 px-3 py-2"
               style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-              <Calendar size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+              <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
               <input type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)}
                 className="flex-1 outline-none"
                 style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }}
@@ -246,7 +246,7 @@ export function EndScheduleControl({
               <PresetChip label="+2 hr" onClick={() => setRelative(120)} />
               <PresetChip label="+1 day" onClick={() => setRelative(60 * 24)} />
             </div>
-            <p className="text-xs px-1" style={{ color: '#C4C3BD', lineHeight: 1.5 }}>
+            <p className="text-xs px-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
               Presets are relative to {startDate ? 'the start time' : 'now'}.
             </p>
           </>
@@ -264,10 +264,10 @@ export function LockedFieldWrapper({ label, reason, children }: {
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-xs" style={{ color: '#B0AEA8' }}>{label}</span>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>{label}</span>
         <div className="flex items-center gap-1">
-          <Lock size={9} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-          <span style={{ color: '#C4C3BD', fontSize: 10 }}>{reason}</span>
+          <Lock size={9} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          <span style={{ color: '#6B6B66', fontSize: 10 }}>{reason}</span>
         </div>
       </div>
       <div style={{ opacity: 0.4, pointerEvents: 'none', userSelect: 'none' }}>
@@ -336,7 +336,7 @@ export function PenaltyInput({
             background: 'transparent', color: '#0C0C0B',
           }}
         />
-        <span style={{ color: '#C4C3BD', fontSize: 10 }}>{type === 'percent' ? '%' : 'mk'}</span>
+        <span style={{ color: '#6B6B66', fontSize: 10 }}>{type === 'percent' ? '%' : 'mk'}</span>
       </div>
     </div>
   );
@@ -392,13 +392,13 @@ export function DifficultyRow({
       </span>
 
       {/* Available count */}
-      <span className="flex-shrink-0 text-xs" style={{ color: available === 0 ? '#C4C3BD' : '#9A9891', minWidth: 62 }}>
+      <span className="flex-shrink-0 text-xs" style={{ color: available === 0 ? '#6B6B66' : '#6B6B66', minWidth: 62 }}>
         {isEmpty ? 'none in bank' : `${available} avail.`}
       </span>
 
       {/* Pick count */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <span style={{ color: '#C4C3BD', fontSize: 11 }}>pick</span>
+        <span style={{ color: '#6B6B66', fontSize: 11 }}>pick</span>
         <input
           type="number"
           disabled={isEmpty}
@@ -435,7 +435,7 @@ export function DifficultyRow({
             cursor: isEmpty ? 'not-allowed' : 'text',
           }}
         />
-        <span style={{ color: '#C4C3BD', fontSize: 10 }}>mk/Q</span>
+        <span style={{ color: '#6B6B66', fontSize: 10 }}>mk/Q</span>
       </div>
 
       {/* Per-level negative-marking override (Standard/Linear, gate open) */}
@@ -448,7 +448,7 @@ export function DifficultyRow({
                 type="button"
                 onClick={() => onRowPolicyChange(null)}
                 title="Reset to inherited penalty"
-                style={{ fontSize: 10, color: '#9A9891', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ fontSize: 10, color: '#6B6B66', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}
               >
                 reset
               </button>
@@ -460,11 +460,11 @@ export function DifficultyRow({
               title="Override the penalty for this difficulty"
               className="flex items-center gap-1"
               style={{
-                fontSize: 10, color: '#9A9891', padding: '2px 7px',
+                fontSize: 10, color: '#6B6B66', padding: '2px 7px',
                 border: '1px dashed #E3E1DB', borderRadius: 2, background: 'transparent', cursor: 'pointer',
               }}
             >
-              <span style={{ color: '#C4C3BD' }}>−penalty:</span>
+              <span style={{ color: '#6B6B66' }}>−penalty:</span>
               <span>{inheritedPenaltyLabel ?? 'inherited'}</span>
             </button>
           )}
@@ -474,7 +474,7 @@ export function DifficultyRow({
       {/* Subtotal + status */}
       <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
         {hasValue && !isOver && (
-          <span style={{ color: '#B0AEA8', fontSize: 10 }}>
+          <span style={{ color: '#6B6B66', fontSize: 10 }}>
             {count * (parseFloat(rule?.marksPerQuestion ?? '') || 1)} mk
           </span>
         )}
@@ -526,14 +526,14 @@ export function SettingsToggle({ icon, label, hint, value, onChange, locked, loc
       {/* Label + hint */}
       <div className="flex-1 min-w-0">
         <p className="text-xs" style={{ color: '#0C0C0B' }}>{label}</p>
-        <p className="text-xs mt-0.5" style={{ color: '#B0AEA8', lineHeight: 1.5 }}>{hint}</p>
+        <p className="text-xs mt-0.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{hint}</p>
       </div>
 
       {/* Lock indicator or toggle track */}
       {locked ? (
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Lock size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-          {lockReason && <span style={{ color: '#C4C3BD', fontSize: 10 }}>{lockReason}</span>}
+          <Lock size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          {lockReason && <span style={{ color: '#6B6B66', fontSize: 10 }}>{lockReason}</span>}
         </div>
       ) : (
         <div

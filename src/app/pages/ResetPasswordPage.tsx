@@ -122,7 +122,7 @@ export function ResetPasswordPage() {
         >
           <p
             className="text-xs mb-1"
-            style={{ color: '#9A9891', letterSpacing: '0.08em' }}
+            style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
           >
             SET NEW PASSWORD
           </p>
@@ -176,7 +176,7 @@ export function ResetPasswordPage() {
                 style={{ color: '#4A4A45', letterSpacing: '0.04em' }}
               >
                 Reset code{' '}
-                <span style={{ color: '#9A9891' }}>(10 characters)</span>
+                <span style={{ color: '#6B6B66' }}>(10 characters)</span>
               </label>
               <input
                 id="r-code"
@@ -208,7 +208,7 @@ export function ResetPasswordPage() {
                 }}
               />
               {code.length > 0 && code.length < 10 && (
-                <p className="mt-1 text-xs" style={{ color: '#9A9891' }}>
+                <p className="mt-1 text-xs" style={{ color: '#6B6B66' }}>
                   {10 - code.length} character{10 - code.length !== 1 ? 's' : ''} remaining
                 </p>
               )}
@@ -222,7 +222,7 @@ export function ResetPasswordPage() {
                 style={{ color: '#4A4A45', letterSpacing: '0.04em' }}
               >
                 New password{' '}
-                <span style={{ color: '#9A9891' }}>(min. 8 characters)</span>
+                <span style={{ color: '#6B6B66' }}>(min. 8 characters)</span>
               </label>
               <div className="relative">
                 <input
@@ -256,7 +256,7 @@ export function ResetPasswordPage() {
                   tabIndex={-1}
                   onClick={() => setShowNew((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: '#B0AEA8' }}
+                  style={{ color: '#6B6B66' }}
                 >
                   {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
@@ -304,7 +304,7 @@ export function ResetPasswordPage() {
                   tabIndex={-1}
                   onClick={() => setShowConfirm((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: '#B0AEA8' }}
+                  style={{ color: '#6B6B66' }}
                 >
                   {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
@@ -353,12 +353,12 @@ export function ResetPasswordPage() {
           <Link
             to="/forgot-password"
             className="flex items-center gap-1.5 text-xs transition-colors"
-            style={{ color: '#9A9891', textDecoration: 'none' }}
+            style={{ color: '#6B6B66', textDecoration: 'none' }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLElement).style.color = '#0C0C0B';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#9A9891';
+              (e.currentTarget as HTMLElement).style.color = '#6B6B66';
             }}
           >
             <ArrowLeft size={12} strokeWidth={1.5} />

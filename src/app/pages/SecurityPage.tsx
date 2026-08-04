@@ -64,7 +64,7 @@ export function SecurityPage() {
       <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
         <p
           className="text-xs mb-1"
-          style={{ color: '#9A9891', letterSpacing: '0.1em' }}
+          style={{ color: '#6B6B66', letterSpacing: '0.1em' }}
         >
           WEB OWNER
         </p>
@@ -75,7 +75,7 @@ export function SecurityPage() {
 
       <p
         className="text-xs mb-6"
-        style={{ color: '#9A9891', letterSpacing: '0.08em' }}
+        style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
       >
         CHANGE PASSWORD
       </p>
@@ -136,7 +136,7 @@ export function SecurityPage() {
               tabIndex={-1}
               onClick={() => setShowCurrent((v) => !v)}
               className="absolute right-3 top-1/2 -translate-y-1/2"
-              style={{ color: '#B0AEA8' }}
+              style={{ color: '#6B6B66' }}
             >
               {showCurrent ? (
                 <EyeOff size={14} strokeWidth={1.5} />
@@ -158,7 +158,7 @@ export function SecurityPage() {
             style={{ color: '#4A4A45' }}
           >
             New password{' '}
-            <span style={{ color: '#9A9891' }}>(min. 8 characters)</span>
+            <span style={{ color: '#6B6B66' }}>(min. 8 characters)</span>
           </label>
           <div className="relative">
             <input
@@ -187,7 +187,7 @@ export function SecurityPage() {
               tabIndex={-1}
               onClick={() => setShowNew((v) => !v)}
               className="absolute right-3 top-1/2 -translate-y-1/2"
-              style={{ color: '#B0AEA8' }}
+              style={{ color: '#6B6B66' }}
             >
               {showNew ? (
                 <EyeOff size={14} strokeWidth={1.5} />
@@ -234,7 +234,7 @@ export function SecurityPage() {
               tabIndex={-1}
               onClick={() => setShowConfirm((v) => !v)}
               className="absolute right-3 top-1/2 -translate-y-1/2"
-              style={{ color: '#B0AEA8' }}
+              style={{ color: '#6B6B66' }}
             >
               {showConfirm ? (
                 <EyeOff size={14} strokeWidth={1.5} />
@@ -372,10 +372,10 @@ function TwoFactorSection() {
   return (
     <div className="mt-12" style={{ borderTop: '1px solid #E3E1DB', paddingTop: 28 }}>
       <div className="flex items-start gap-3 mb-2">
-        <ShieldCheck size={18} strokeWidth={1.5} style={{ color: enrolled ? '#2A6B3A' : '#9A9891', marginTop: 1 }} />
+        <ShieldCheck size={18} strokeWidth={1.5} style={{ color: enrolled ? '#2A6B3A' : '#6B6B66', marginTop: 1 }} />
         <div>
           <h2 className="text-sm" style={{ color: '#0C0C0B' }}>Two-factor authentication</h2>
-          <p className="text-xs mt-1" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+          <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
             {enrolled
               ? 'Your account is protected with an authenticator app. You\u2019ll enter a 6-digit code at each sign-in.'
               : 'Add a second layer of security. You\u2019ll enter a code from an authenticator app (Google Authenticator, Authy) at sign-in.'}
@@ -420,7 +420,7 @@ function TwoFactorSection() {
               style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}>
               {loading ? <><Loader2 size={12} className="animate-spin" /> Continue…</> : 'Continue'}
             </button>
-            <button onClick={reset} className="px-4 py-2 text-xs" style={{ color: '#9A9891', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={reset} className="px-4 py-2 text-xs" style={{ color: '#6B6B66', cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}
@@ -429,7 +429,7 @@ function TwoFactorSection() {
       {step === 'show_qr' && (
         <div className="mt-4">
           <div className="flex items-start gap-2 mb-3">
-            <Smartphone size={14} strokeWidth={1.5} style={{ color: '#9A9891', marginTop: 2 }} />
+            <Smartphone size={14} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 2 }} />
             <p className="text-xs" style={{ color: '#6B6B65', lineHeight: 1.6 }}>
               Scan this QR code with your authenticator app, then enter the 6-digit code it shows.
             </p>
@@ -442,7 +442,7 @@ function TwoFactorSection() {
           )}
           {secretKey && (
             <div className="mb-4 px-3 py-2 text-center" style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-1" style={{ color: '#9A9891' }}>Or enter this key manually:</p>
+              <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Or enter this key manually:</p>
               <code className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.05em', wordBreak: 'break-all' }}>{secretKey}</code>
             </div>
           )}
@@ -458,7 +458,7 @@ function TwoFactorSection() {
               style={{ background: code.length === 6 && !loading ? '#0C0C0B' : '#C8C7C2', color: '#FFFFFF', borderRadius: 2, cursor: code.length === 6 && !loading ? 'pointer' : 'not-allowed' }}>
               {loading ? <><Loader2 size={12} className="animate-spin" /> Verifying…</> : 'Verify & enable'}
             </button>
-            <button onClick={reset} className="px-4 py-2 text-xs" style={{ color: '#9A9891', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={reset} className="px-4 py-2 text-xs" style={{ color: '#6B6B66', cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}

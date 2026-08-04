@@ -85,8 +85,8 @@ function FacultyList({ instituteId }: { instituteId: string }) {
   if (loading) {
     return (
       <div className="py-12 flex flex-col items-center gap-3">
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-        <p className="text-xs" style={{ color: '#C4C3BD' }}>Loading faculty…</p>
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <p className="text-xs" style={{ color: '#6B6B66' }}>Loading faculty…</p>
       </div>
     );
   }
@@ -115,7 +115,7 @@ function FacultyList({ instituteId }: { instituteId: string }) {
         className="flex flex-col items-center justify-center py-24"
       >
         <Users size={28} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-        <p className="text-xs mt-4" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>
+        <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
           No faculty registered
         </p>
         <p className="text-xs mt-1.5" style={{ color: '#DDDBD5', maxWidth: 260, textAlign: 'center', lineHeight: 1.6 }}>
@@ -131,7 +131,7 @@ function FacultyList({ instituteId }: { instituteId: string }) {
       {/* Stats + sync strip */}
       <div className="flex items-center gap-3 px-5 py-3"
         style={{ borderBottom: '1px solid #F0EFEB', background: '#FAFAF8' }}>
-        <span className="text-xs" style={{ color: '#9A9891' }}>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>
           {faculties.length} {faculties.length === 1 ? 'member' : 'members'}
         </span>
         <span style={{ color: '#E3E1DB' }}>·</span>
@@ -139,7 +139,7 @@ function FacultyList({ instituteId }: { instituteId: string }) {
         {disabled > 0 && (
           <>
             <span style={{ color: '#E3E1DB' }}>·</span>
-            <span className="text-xs" style={{ color: '#9A9891' }}>{disabled} disabled</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>{disabled} disabled</span>
           </>
         )}
         {/* Live indicator */}
@@ -150,7 +150,7 @@ function FacultyList({ instituteId }: { instituteId: string }) {
                 style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
               <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
             </div>
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>{syncDisplay}</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>{syncDisplay}</span>
           </div>
         )}
       </div>
@@ -161,7 +161,7 @@ function FacultyList({ instituteId }: { instituteId: string }) {
             {['FACULTY', 'ROLE', 'STATUS', 'REGISTERED'].map((col, i) => (
               <th key={i} className="text-left px-5 py-3 text-xs"
                 style={{
-                  color: '#9A9891', letterSpacing: '0.08em', fontWeight: 400,
+                  color: '#6B6B66', letterSpacing: '0.08em', fontWeight: 400,
                   width: i === 0 ? '40%' : i === 1 ? '16%' : i === 2 ? '16%' : '28%',
                 }}>
                 {col}
@@ -176,7 +176,7 @@ function FacultyList({ instituteId }: { instituteId: string }) {
               {/* Name + email */}
               <td className="px-5 py-3.5">
                 <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.4 }}>{faculty.name}</p>
-                <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{faculty.email}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{faculty.email}</p>
               </td>
 
               {/* Role */}
@@ -192,10 +192,10 @@ function FacultyList({ instituteId }: { instituteId: string }) {
                 <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                   style={faculty.status === 'active'
                     ? { background: '#F0F7F2', color: '#2A6B3A', border: '1px solid #C6DECE', borderRadius: 2 }
-                    : { background: '#F5F5F3', color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                    : { background: '#F5F5F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                   <span style={{
                     width: 5, height: 5, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
-                    background: faculty.status === 'active' ? '#2A6B3A' : '#C4C3BD',
+                    background: faculty.status === 'active' ? '#2A6B3A' : '#6B6B66',
                   }} />
                   {faculty.status === 'active' ? 'Active' : 'Disabled'}
                 </span>
@@ -203,9 +203,9 @@ function FacultyList({ instituteId }: { instituteId: string }) {
 
               {/* Created date */}
               <td className="px-5 py-3.5">
-                <p className="text-xs" style={{ color: '#9A9891' }}>{formatDate(faculty.createdAt)}</p>
+                <p className="text-xs" style={{ color: '#6B6B66' }}>{formatDate(faculty.createdAt)}</p>
                 {faculty.firstLoginRequired && (
-                  <p className="text-xs mt-0.5" style={{ color: '#B0AEA8', fontStyle: 'italic' }}>
+                  <p className="text-xs mt-0.5" style={{ color: '#6B6B66', fontStyle: 'italic' }}>
                     Awaiting first login
                   </p>
                 )}
@@ -215,7 +215,7 @@ function FacultyList({ instituteId }: { instituteId: string }) {
         </tbody>
       </table>
 
-      <p className="text-xs px-5 py-3" style={{ color: '#C4C3BD', borderTop: '1px solid #F0EFEB' }}>
+      <p className="text-xs px-5 py-3" style={{ color: '#6B6B66', borderTop: '1px solid #F0EFEB' }}>
         Data refreshes automatically every 5 seconds.
       </p>
     </div>
@@ -264,8 +264,8 @@ function StudentList({ instituteId }: { instituteId: string }) {
   if (loading) {
     return (
       <div className="py-12 flex flex-col items-center gap-3">
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-        <p className="text-xs" style={{ color: '#C4C3BD' }}>Loading students…</p>
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <p className="text-xs" style={{ color: '#6B6B66' }}>Loading students…</p>
       </div>
     );
   }
@@ -288,7 +288,7 @@ function StudentList({ instituteId }: { instituteId: string }) {
         transition={{ duration: 0.25 }}
         className="flex flex-col items-center justify-center py-24">
         <GraduationCap size={28} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-        <p className="text-xs mt-4" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>No students enrolled</p>
+        <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>No students enrolled</p>
         <p className="text-xs mt-1.5" style={{ color: '#DDDBD5', maxWidth: 260, textAlign: 'center', lineHeight: 1.6 }}>
           Student accounts are provisioned by the platform administrator.
         </p>
@@ -301,7 +301,7 @@ function StudentList({ instituteId }: { instituteId: string }) {
       {/* Stats + sync */}
       <div className="flex items-center gap-3 px-5 py-3"
         style={{ borderBottom: '1px solid #F0EFEB', background: '#FAFAF8' }}>
-        <span className="text-xs" style={{ color: '#9A9891' }}>
+        <span className="text-xs" style={{ color: '#6B6B66' }}>
           {students.length} {students.length === 1 ? 'student' : 'students'}
         </span>
         <span style={{ color: '#E3E1DB' }}>·</span>
@@ -309,7 +309,7 @@ function StudentList({ instituteId }: { instituteId: string }) {
         {disabled > 0 && (
           <>
             <span style={{ color: '#E3E1DB' }}>·</span>
-            <span className="text-xs" style={{ color: '#9A9891' }}>{disabled} disabled</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>{disabled} disabled</span>
           </>
         )}
         {lastSynced && (
@@ -319,7 +319,7 @@ function StudentList({ instituteId }: { instituteId: string }) {
                 style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
               <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
             </div>
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>{syncDisplay}</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>{syncDisplay}</span>
           </div>
         )}
       </div>
@@ -329,7 +329,7 @@ function StudentList({ instituteId }: { instituteId: string }) {
           <tr style={{ borderBottom: '1px solid #F0EFEB', background: '#FAFAF8' }}>
             {['STUDENT', 'ROLE', 'STATUS', 'PROGRAM', 'REGISTERED'].map((col, i) => (
               <th key={i} className="text-left px-5 py-3 text-xs"
-                style={{ color: '#9A9891', letterSpacing: '0.08em', fontWeight: 400 }}>
+                style={{ color: '#6B6B66', letterSpacing: '0.08em', fontWeight: 400 }}>
                 {col}
               </th>
             ))}
@@ -341,7 +341,7 @@ function StudentList({ instituteId }: { instituteId: string }) {
               style={{ borderBottom: '1px solid #F0EFEB' }}>
               <td className="px-5 py-3.5">
                 <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.4 }}>{student.name}</p>
-                <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>{student.email}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{student.email}</p>
               </td>
               <td className="px-5 py-3.5">
                 <span className="inline-block text-xs px-2 py-0.5"
@@ -351,10 +351,10 @@ function StudentList({ instituteId }: { instituteId: string }) {
                 <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                   style={student.status === 'active'
                     ? { background: '#F0F7F2', color: '#2A6B3A', border: '1px solid #C6DECE', borderRadius: 2 }
-                    : { background: '#F5F5F3', color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                    : { background: '#F5F5F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
                   <span style={{
                     width: 5, height: 5, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
-                    background: student.status === 'active' ? '#2A6B3A' : '#C4C3BD',
+                    background: student.status === 'active' ? '#2A6B3A' : '#6B6B66',
                   }} />
                   {student.status === 'active' ? 'Active' : 'Disabled'}
                 </span>
@@ -368,13 +368,13 @@ function StudentList({ instituteId }: { instituteId: string }) {
                     ))}
                   </div>
                 ) : (
-                  <span className="text-xs" style={{ color: '#C4C3BD' }}>—</span>
+                  <span className="text-xs" style={{ color: '#6B6B66' }}>—</span>
                 )}
               </td>
               <td className="px-5 py-3.5">
-                <p className="text-xs" style={{ color: '#9A9891' }}>{formatDate(student.createdAt)}</p>
+                <p className="text-xs" style={{ color: '#6B6B66' }}>{formatDate(student.createdAt)}</p>
                 {student.firstLoginRequired && (
-                  <p className="text-xs mt-0.5" style={{ color: '#B0AEA8', fontStyle: 'italic' }}>Awaiting first login</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#6B6B66', fontStyle: 'italic' }}>Awaiting first login</p>
                 )}
               </td>
             </motion.tr>
@@ -382,7 +382,7 @@ function StudentList({ instituteId }: { instituteId: string }) {
         </tbody>
       </table>
 
-      <p className="text-xs px-5 py-3" style={{ color: '#C4C3BD', borderTop: '1px solid #F0EFEB' }}>
+      <p className="text-xs px-5 py-3" style={{ color: '#6B6B66', borderTop: '1px solid #F0EFEB' }}>
         Data refreshes automatically every 5 seconds.
       </p>
     </div>
@@ -479,11 +479,11 @@ export function InstituteLandingPage() {
     >
       {/* Page header */}
       <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
-        <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>INSTITUTE ADMIN</p>
+        <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>INSTITUTE ADMIN</p>
         <h1 className="text-base" style={{ color: '#0C0C0B' }}>{session?.instituteName}</h1>
-        <p className="text-xs mt-1" style={{ color: '#B0AEA8' }}>
+        <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
           Institute ID:&nbsp;
-          <span style={{ fontFamily: 'monospace', letterSpacing: '0.1em', color: '#9A9891' }}>
+          <span style={{ fontFamily: 'monospace', letterSpacing: '0.1em', color: '#6B6B66' }}>
             {session?.instituteCode}
           </span>
         </p>
@@ -497,18 +497,18 @@ export function InstituteLandingPage() {
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className="relative flex items-center gap-1.5 px-5 py-3 text-xs transition-colors select-none"
               style={{
-                color: isActive ? '#0C0C0B' : '#9A9891',
+                color: isActive ? '#0C0C0B' : '#6B6B66',
                 background: 'transparent', letterSpacing: '0.04em',
                 fontWeight: isActive ? 500 : 400,
               }}
               onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-              onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#9A9891'; }}
+              onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}
             >
-              <span style={{ color: isActive ? '#0C0C0B' : '#C4C3BD' }}>{tab.icon}</span>
+              <span style={{ color: isActive ? '#0C0C0B' : '#6B6B66' }}>{tab.icon}</span>
               {tab.label}
               {/* Schools tab: show lock badge when view-only */}
               {tab.key === 'schools' && !permissionLoading && !canManageSchools && (
-                <span className="ml-0.5" style={{ color: '#C4C3BD' }}>
+                <span className="ml-0.5" style={{ color: '#6B6B66' }}>
                   <Lock size={9} strokeWidth={1.5} />
                 </span>
               )}
@@ -605,7 +605,7 @@ export function InstituteLandingPage() {
 
               {permissionLoading ? (
                 <div className="flex items-center justify-center py-16">
-                  <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
+                  <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
                 </div>
               ) : (
                 <SchoolsTab

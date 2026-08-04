@@ -107,7 +107,7 @@ export function ApprovalsInbox({
                   border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
                   borderRadius: 2,
                   background: on ? '#F0F7F2' : '#FFFFFF',
-                  color: on ? '#2A6B3A' : '#9A9891',
+                  color: on ? '#2A6B3A' : '#6B6B66',
                 }}
               >
                 {f.label}{count > 0 ? ` (${count})` : ''}
@@ -115,7 +115,7 @@ export function ApprovalsInbox({
             );
           })}
         </div>
-        <button onClick={load} disabled={loading} className="flex items-center gap-1 text-xs px-2 py-1" style={{ color: '#9A9891' }}>
+        <button onClick={load} disabled={loading} className="flex items-center gap-1 text-xs px-2 py-1" style={{ color: '#6B6B66' }}>
           <RefreshCw size={11} strokeWidth={1.5} className={loading ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
@@ -123,11 +123,11 @@ export function ApprovalsInbox({
       {error && <p className="text-xs mb-3" style={{ color: '#9B2828' }}>{error}</p>}
 
       {loading ? (
-        <div className="flex items-center gap-2 py-10 justify-center text-xs" style={{ color: '#9A9891' }}>
+        <div className="flex items-center gap-2 py-10 justify-center text-xs" style={{ color: '#6B6B66' }}>
           <Loader2 size={14} className="animate-spin" /> Loading requests…
         </div>
       ) : visible.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-12" style={{ color: '#C4C3BD' }}>
+        <div className="flex flex-col items-center gap-2 py-12" style={{ color: '#6B6B66' }}>
           <Inbox size={20} strokeWidth={1.25} />
           <p className="text-xs" style={{ letterSpacing: '0.08em' }}>
             {filter === 'pending' ? 'NO PENDING REQUESTS' : 'NOTHING HERE'}
@@ -147,9 +147,9 @@ export function ApprovalsInbox({
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>
-                {r.questionStem || <em style={{ color: '#B0AEA8' }}>New question</em>}
+                {r.questionStem || <em style={{ color: '#6B6B66' }}>New question</em>}
               </p>
-              <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
                 by {r.facultyName}
               </p>
             </div>

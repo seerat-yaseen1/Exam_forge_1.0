@@ -99,7 +99,7 @@ function QuestionRow({
           borderRadius: 2,
           marginTop: 1,
           background: selected ? '#0C0C0B' : '#FFFFFF',
-          border: selected ? '1px solid #0C0C0B' : '1px solid #C4C3BD',
+          border: selected ? '1px solid #0C0C0B' : '1px solid #6B6B66',
         }}
       >
         {selected && <Check size={9} strokeWidth={2.5} style={{ color: '#FFFFFF' }} />}
@@ -108,12 +108,12 @@ function QuestionRow({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <p className="text-xs leading-relaxed" style={{ color: '#0C0C0B' }}>
-          {truncateStem(question.stem) || <em style={{ color: '#B0AEA8' }}>No question text</em>}
+          {truncateStem(question.stem) || <em style={{ color: '#6B6B66' }}>No question text</em>}
         </p>
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           <EngineBadge engine={question.engine} />
           {question.variant && (
-            <span className="text-xs" style={{ color: '#B0AEA8', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10 }}>
               {question.variant}
             </span>
           )}
@@ -121,12 +121,12 @@ function QuestionRow({
             {diff.label}
           </span>
           {question.subject && (
-            <span className="text-xs" style={{ color: '#9A9891', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10 }}>
               {question.subject}
             </span>
           )}
           {question.topic && (
-            <span className="text-xs" style={{ color: '#C4C3BD', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10 }}>
               · {question.topic}
             </span>
           )}
@@ -145,7 +145,7 @@ function QuestionRow({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col items-end gap-0.5">
-              <label style={{ color: '#B0AEA8', fontSize: 9, letterSpacing: '0.06em' }}>MARKS</label>
+              <label style={{ color: '#6B6B66', fontSize: 9, letterSpacing: '0.06em' }}>MARKS</label>
               <input
                 type="number"
                 min="0.5"
@@ -316,8 +316,8 @@ export function QuestionPickerModal({
           style={{ borderBottom: '1px solid #E3E1DB' }}
         >
           <div className="flex items-center gap-3">
-            <BookOpen size={14} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-            <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+            <BookOpen size={14} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
               BROWSE QUESTION BANK
             </p>
           </div>
@@ -338,7 +338,7 @@ export function QuestionPickerModal({
             <button
               onClick={onClose}
               className="p-1 transition-opacity hover:opacity-60"
-              style={{ color: '#9A9891' }}
+              style={{ color: '#6B6B66' }}
             >
               <X size={14} strokeWidth={1.5} />
             </button>
@@ -355,7 +355,7 @@ export function QuestionPickerModal({
             className="flex items-center gap-2 px-3 py-2"
             style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}
           >
-            <Search size={12} strokeWidth={1.5} style={{ color: '#9A9891', flexShrink: 0 }} />
+            <Search size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
             <input
               type="text"
               value={search}
@@ -366,14 +366,14 @@ export function QuestionPickerModal({
             />
             {search && (
               <button onClick={() => setSearch('')} className="hover:opacity-60 transition-opacity">
-                <X size={11} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+                <X size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
               </button>
             )}
           </div>
 
           {/* Filter row */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs" style={{ color: '#C4C3BD', fontSize: 10, letterSpacing: '0.05em' }}>
+            <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.05em' }}>
               TYPE:
             </span>
             <FilterChip label="All" active={!engineFilter} onClick={() => setEngineFilter('')} />
@@ -381,7 +381,7 @@ export function QuestionPickerModal({
             <FilterChip label="Text" active={engineFilter === 'text'} onClick={() => setEngineFilter(engineFilter === 'text' ? '' : 'text')} />
             <FilterChip label="Match" active={engineFilter === 'match'} onClick={() => setEngineFilter(engineFilter === 'match' ? '' : 'match')} />
 
-            <span className="text-xs ml-2" style={{ color: '#C4C3BD', fontSize: 10, letterSpacing: '0.05em' }}>
+            <span className="text-xs ml-2" style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.05em' }}>
               DIFF:
             </span>
             <FilterChip label="Easy" active={diffFilter === 'easy'} onClick={() => setDiffFilter(diffFilter === 'easy' ? '' : 'easy')} />
@@ -449,7 +449,7 @@ export function QuestionPickerModal({
               <button
                 onClick={clearFilters}
                 className="ml-auto text-xs transition-opacity hover:opacity-60"
-                style={{ color: '#9A9891' }}
+                style={{ color: '#6B6B66' }}
               >
                 Clear
               </button>
@@ -460,7 +460,7 @@ export function QuestionPickerModal({
         {/* ── Question list ── */}
         <div className="flex-1 overflow-y-auto">
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12" style={{ color: '#C4C3BD' }}>
+            <div className="flex flex-col items-center justify-center py-12" style={{ color: '#6B6B66' }}>
               <div style={{ width: 1, height: 24, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 12 }} />
               <p className="text-xs" style={{ letterSpacing: '0.1em' }}>
                 {hasFilters ? 'NO QUESTIONS MATCH' : 'NO QUESTIONS IN BANK'}
@@ -473,7 +473,7 @@ export function QuestionPickerModal({
                 className="sticky top-0 px-4 py-2 flex items-center justify-between"
                 style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB', zIndex: 2 }}
               >
-                <span className="text-xs" style={{ color: '#C4C3BD', fontSize: 10, letterSpacing: '0.08em' }}>
+                <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.08em' }}>
                   {filtered.length} QUESTION{filtered.length !== 1 ? 'S' : ''}{hasFilters ? ' MATCHING' : ''}
                 </span>
                 <button
@@ -496,7 +496,7 @@ export function QuestionPickerModal({
                     }
                   }}
                   className="text-xs transition-opacity hover:opacity-60"
-                  style={{ color: '#9A9891' }}
+                  style={{ color: '#6B6B66' }}
                 >
                   {filtered.every((q) => selected[q.id] !== undefined) ? 'Deselect all' : 'Select all'}
                 </button>
@@ -523,7 +523,7 @@ export function QuestionPickerModal({
           className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 flex-shrink-0"
           style={{ borderTop: '1px solid #E3E1DB' }}
         >
-          <p className="text-xs" style={{ color: '#B0AEA8' }}>
+          <p className="text-xs" style={{ color: '#6B6B66' }}>
             {newlySelectedCount > 0
               ? `${newlySelectedCount} question${newlySelectedCount !== 1 ? 's' : ''} will be added`
               : selectedIds.length === 0
@@ -534,7 +534,7 @@ export function QuestionPickerModal({
             <button
               onClick={onClose}
               className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-              style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891' }}
+              style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}
             >
               Cancel
             </button>

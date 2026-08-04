@@ -182,14 +182,14 @@ function AttemptStatusBadge({ status, autoTerminated }: { status: AttemptStatus;
 function ScoreDisplay({ attempt, assessment }: { attempt: Attempt; assessment: Assessment }) {
   if (!assessment.showResults) {
     return (
-      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+      <span className="text-xs" style={{ color: '#6B6B66' }}>
         Results not shown
       </span>
     );
   }
   if (!attempt.scores) {
     return (
-      <span className="text-xs" style={{ color: '#C4C3BD' }}>
+      <span className="text-xs" style={{ color: '#6B6B66' }}>
         Score pending
       </span>
     );
@@ -315,7 +315,7 @@ function AssessmentCard({
   // ── Status bar left side ───────────────────────────────────────
   const statusLeft = useMemo(() => {
     if (!attempt) {
-      return <span className="text-xs" style={{ color: '#C4C3BD' }}>Not started</span>;
+      return <span className="text-xs" style={{ color: '#6B6B66' }}>Not started</span>;
     }
     return (
       <AttemptStatusBadge
@@ -329,7 +329,7 @@ function AssessmentCard({
   const leftBarColor =
     availability === 'available'     ? '#1E7B3C' :
     availability === 'upcoming'      ? '#4A6FA5' :
-    availability === 'window_closed' ? '#9A9891' :
+    availability === 'window_closed' ? '#6B6B66' :
     '#6B6B66';
 
   return (
@@ -357,7 +357,7 @@ function AssessmentCard({
         {/* Top row: title + time indicator */}
         <div className="flex items-start justify-between gap-3 mb-2">
           <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.5, flex: 1 }}>
-            {a.title || <em style={{ color: '#B0AEA8' }}>Untitled Assessment</em>}
+            {a.title || <em style={{ color: '#6B6B66' }}>Untitled Assessment</em>}
           </p>
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Reattempt badge — only when prior submission exists + chances left */}
@@ -427,32 +427,32 @@ function AssessmentCard({
         <div className="flex items-center gap-3 flex-wrap mb-3">
           {a.subject && (
             <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
-              <BookOpen size={10} strokeWidth={1.5} style={{ color: '#9A9891' }} />
+              <BookOpen size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
               {a.subject}
             </span>
           )}
           {sectionCount > 0 && (
-            <span className="flex items-center gap-1 text-xs" style={{ color: '#9A9891' }}>
+            <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
               <Layers size={10} strokeWidth={1.5} />
               {sectionCount} section{sectionCount !== 1 ? 's' : ''}
             </span>
           )}
-          <span className="flex items-center gap-1 text-xs" style={{ color: '#9A9891' }}>
+          <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
             <ClipboardList size={10} strokeWidth={1.5} />
             {questionCount} question{questionCount !== 1 ? 's' : ''}
           </span>
-          <span className="flex items-center gap-1 text-xs" style={{ color: '#9A9891' }}>
+          <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
             <Award size={10} strokeWidth={1.5} />
             {a.totalMarks} marks
           </span>
           {totalSectionTime > 0 && (
-            <span className="flex items-center gap-1 text-xs" style={{ color: '#9A9891' }}>
+            <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
               <Timer size={10} strokeWidth={1.5} />
               {totalSectionTime}m
             </span>
           )}
           {a.passingScore !== undefined && (
-            <span className="text-xs" style={{ color: '#9A9891' }}>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>
               · Pass: {a.passingScore}%
             </span>
           )}
@@ -461,14 +461,14 @@ function AssessmentCard({
         {/* Date range */}
         {(a.startDate || a.endDate) && (
           <div className="flex items-center gap-1.5 mb-3">
-            <Calendar size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-            <span className="text-xs" style={{ color: '#C4C3BD' }}>
+            <Calendar size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <span className="text-xs" style={{ color: '#6B6B66' }}>
               {a.startDate ? formatDateTime(a.startDate) : 'Open'}
             </span>
             {a.endDate && (
               <>
                 <ArrowRight size={9} strokeWidth={1.5} style={{ color: '#DDDBD5' }} />
-                <span className="text-xs" style={{ color: '#C4C3BD' }}>
+                <span className="text-xs" style={{ color: '#6B6B66' }}>
                   {formatDateTime(a.endDate)}
                 </span>
               </>
@@ -485,7 +485,7 @@ function AssessmentCard({
                 className="text-xs px-2 py-0.5"
                 style={{
                   background: '#F7F6F3',
-                  color: '#9A9891',
+                  color: '#6B6B66',
                   border: '1px solid #E3E1DB',
                   borderRadius: 2,
                 }}
@@ -522,8 +522,8 @@ function AssessmentCard({
             )}
             {attempt && attempt.integrityLog && attempt.integrityLog.totalViolations > 0 && (
               <div className="flex items-center gap-1" title={`${attempt.integrityLog.totalViolations} integrity violation(s) logged`}>
-                <Shield size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-                <span className="text-xs" style={{ color: '#C4C3BD' }}>
+                <Shield size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                <span className="text-xs" style={{ color: '#6B6B66' }}>
                   {attempt.integrityLog.totalViolations}v
                 </span>
               </div>
@@ -592,7 +592,7 @@ function EmptyState({ category }: { category: 'available' | 'missed' | 'submitte
       style={{ background: '#FAFAF8', border: '1px solid #F0EFEB', borderRadius: 3 }}
     >
       {m.icon}
-      <p className="text-xs mt-3" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>{m.title}</p>
+      <p className="text-xs mt-3" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>{m.title}</p>
       {m.body && (
         <p className="text-xs mt-1 text-center" style={{ color: '#DDDBD5', maxWidth: 300, lineHeight: 1.7 }}>
           {m.body}
@@ -755,7 +755,7 @@ export function StudentAssessmentsPage() {
       <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
         <div className="flex items-center gap-2 mb-2">
           <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#4A6FA5' }} />
-          <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
             ASSESSMENTS · {session.instituteName.toUpperCase()}
           </p>
         </div>
@@ -764,7 +764,7 @@ export function StudentAssessmentsPage() {
             <h1 className="text-2xl font-light" style={{ color: '#0C0C0B', letterSpacing: '0.02em' }}>
               Your Assessments
             </h1>
-            <p className="text-xs mt-1" style={{ color: '#9A9891' }}>
+            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
               Tests and exams assigned to you will appear here.
             </p>
           </div>
@@ -779,7 +779,7 @@ export function StudentAssessmentsPage() {
                   />
                   <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A', margin: '1px' }} />
                 </div>
-                <span className="text-xs" style={{ color: '#C4C3BD' }}>{syncAge}</span>
+                <span className="text-xs" style={{ color: '#6B6B66' }}>{syncAge}</span>
               </div>
             )}
             <button
@@ -807,8 +807,8 @@ export function StudentAssessmentsPage() {
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="flex flex-col items-center py-24">
-              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-              <p className="text-xs mt-4" style={{ color: '#C4C3BD' }}>Loading assessments…</p>
+              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+              <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading assessments…</p>
             </div>
           </motion.div>
         )}
@@ -853,7 +853,7 @@ export function StudentAssessmentsPage() {
                     onClick={() => setActiveTab(key)}
                     className="flex items-center gap-1.5 text-xs px-3 py-2 transition-colors"
                     style={{
-                      color: isActive ? '#0C0C0B' : '#9A9891',
+                      color: isActive ? '#0C0C0B' : '#6B6B66',
                       borderBottom: isActive ? '2px solid #0C0C0B' : '2px solid transparent',
                       marginBottom: -1,
                       background: 'transparent',
@@ -865,7 +865,7 @@ export function StudentAssessmentsPage() {
                       className="text-xs px-1.5"
                       style={{
                         background: isActive ? '#0C0C0B' : '#F0EFEB',
-                        color: isActive ? '#FFFFFF' : '#9A9891',
+                        color: isActive ? '#FFFFFF' : '#6B6B66',
                         borderRadius: 2,
                         fontSize: 10,
                       }}
@@ -891,7 +891,7 @@ export function StudentAssessmentsPage() {
             })()}
 
             {/* Footer note */}
-            <p className="text-xs mt-6 text-center" style={{ color: '#C4C3BD' }}>
+            <p className="text-xs mt-6 text-center" style={{ color: '#6B6B66' }}>
               {total} assessment{total !== 1 ? 's' : ''} assigned to your account
             </p>
           </motion.div>

@@ -142,7 +142,7 @@ export function InstituteChangePasswordPage() {
             <p className="text-xs font-medium" style={{ color: '#0C0C0B', letterSpacing: '0.04em' }}>
               Password change required
             </p>
-            <p className="text-xs mt-0.5" style={{ color: '#9A9891', lineHeight: 1.5 }}>
+            <p className="text-xs mt-0.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
               You are signed in with a temporary password. Set a permanent password to continue.
             </p>
           </div>
@@ -153,7 +153,7 @@ export function InstituteChangePasswordPage() {
           className="bg-white px-5 py-7 sm:px-8 sm:py-8"
           style={{ border: '1px solid #E3E1DB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
         >
-          <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.08em' }}>
+          <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             SET NEW PASSWORD
           </p>
           <p className="text-sm mb-6" style={{ color: '#0C0C0B' }}>
@@ -182,9 +182,9 @@ export function InstituteChangePasswordPage() {
                 <button type="button" tabIndex={-1}
                   onClick={() => setShowNew((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: '#B0AEA8' }}
+                  style={{ color: '#6B6B66' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#B0AEA8')}>
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                   {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
               </div>
@@ -211,9 +211,9 @@ export function InstituteChangePasswordPage() {
                 <button type="button" tabIndex={-1}
                   onClick={() => setShowConfirm((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: '#B0AEA8' }}
+                  style={{ color: '#6B6B66' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#B0AEA8')}>
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
                   {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
               </div>

@@ -57,7 +57,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <div className="mb-5">
       <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
       {children}
-      {hint && <p className="mt-1.5 text-xs" style={{ color: '#B0AEA8' }}>{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs" style={{ color: '#6B6B66' }}>{hint}</p>}
     </div>
   );
 }
@@ -166,10 +166,10 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
             <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0"
               style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div>
-                <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>ADD FACULTY</p>
-                <p className="text-xs mt-0.5" style={{ color: '#C4C3BD' }}>Single member onboarding</p>
+                <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>ADD FACULTY</p>
+                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>Single member onboarding</p>
               </div>
-              <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+              <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
                 <X size={15} strokeWidth={1.5} />
               </button>
             </div>
@@ -179,9 +179,9 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
 
               {/* Authority notice */}
               <div className="flex items-start gap-2.5 px-3 py-3 mb-6"
-                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderLeft: '2px solid #C4C3BD', borderRadius: 2 }}>
-                <UserCheck size={12} strokeWidth={1.5} style={{ color: '#9A9891', marginTop: 1, flexShrink: 0 }} />
-                <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderLeft: '2px solid #6B6B66', borderRadius: 2 }}>
+                <UserCheck size={12} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 1, flexShrink: 0 }} />
+                <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                   A password-setup link will be emailed directly to the faculty member. They set their own password before first login.
                 </p>
               </div>
@@ -208,7 +208,7 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
                     style={{ background: '#EEECEA', color: '#4A4A45', borderRadius: 2, letterSpacing: '0.04em' }}>
                     Faculty
                   </span>
-                  <span className="text-xs ml-auto" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>FIXED</span>
+                  <span className="text-xs ml-auto" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>FIXED</span>
                 </div>
               </Field>
 
@@ -257,7 +257,7 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
                 </button>
                 <button onClick={onClose} disabled={saving}
                   className="text-xs px-4 py-2.5 transition-colors"
-                  style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
                   onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}>
                   Cancel

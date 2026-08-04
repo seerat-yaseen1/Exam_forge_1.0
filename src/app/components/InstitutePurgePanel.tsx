@@ -71,7 +71,7 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs" style={{ color: '#9A9891' }}>
+      <div className="flex items-center gap-2 text-xs" style={{ color: '#6B6B66' }}>
         <Loader2 size={11} className="animate-spin" />
         Checking platform exams this institute sat…
       </div>
@@ -118,7 +118,7 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
               <p className="text-xs" style={{ color: '#0C0C0B' }}>
                 {r.title ?? r.assessmentId}
               </p>
-              <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
                 {r.ownAttempts.toLocaleString()} attempt{r.ownAttempts === 1 ? '' : 's'} from this institute
                 {r.exclusive
                   ? ' — no other institute sat it'
@@ -134,7 +134,7 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
                 border: `1px solid ${on ? '#E8CFCF' : '#E3E1DB'}`,
                 borderRadius: 2,
                 background: on ? '#FBF3F3' : '#FFFFFF',
-                color: on ? '#9B2828' : '#9A9891',
+                color: on ? '#9B2828' : '#6B6B66',
                 cursor: 'pointer',
               }}
               title={r.exclusive

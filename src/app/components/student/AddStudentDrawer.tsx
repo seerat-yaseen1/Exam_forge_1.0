@@ -58,7 +58,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <div className="mb-5">
       <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
       {children}
-      {hint && <p className="mt-1.5 text-xs" style={{ color: '#B0AEA8' }}>{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs" style={{ color: '#6B6B66' }}>{hint}</p>}
     </div>
   );
 }
@@ -87,7 +87,7 @@ function TagInput({
     <div className="mb-5">
       <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>
         {label}
-        <span className="ml-1.5 text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.04em' }}>OPTIONAL</span>
+        <span className="ml-1.5 text-xs" style={{ color: '#6B6B66', letterSpacing: '0.04em' }}>OPTIONAL</span>
       </label>
       <div
         className="flex flex-wrap gap-1.5 items-center min-h-9 px-2.5 py-2 cursor-text"
@@ -99,7 +99,7 @@ function TagInput({
             style={{ background: '#EEECEA', color: '#2C2C2A', borderRadius: 2 }}>
             {t}
             <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(i); }}
-              style={{ color: '#9A9891', lineHeight: 1 }}>
+              style={{ color: '#6B6B66', lineHeight: 1 }}>
               <X size={9} strokeWidth={2} />
             </button>
           </span>
@@ -116,7 +116,7 @@ function TagInput({
           style={{ background: 'transparent', color: '#0C0C0B', border: 'none', padding: '1px 0' }}
         />
       </div>
-      {hint && <p className="mt-1.5 text-xs" style={{ color: '#B0AEA8' }}>{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs" style={{ color: '#6B6B66' }}>{hint}</p>}
     </div>
   );
 }
@@ -236,10 +236,10 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
             <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0"
               style={{ borderBottom: '1px solid #E3E1DB' }}>
               <div>
-                <p className="text-xs" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>ADD STUDENT</p>
-                <p className="text-xs mt-0.5" style={{ color: '#C4C3BD' }}>Single member onboarding</p>
+                <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>ADD STUDENT</p>
+                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>Single member onboarding</p>
               </div>
-              <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#9A9891' }}>
+              <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
                 <X size={15} strokeWidth={1.5} />
               </button>
             </div>
@@ -249,9 +249,9 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
 
               {/* Authority notice */}
               <div className="flex items-start gap-2.5 px-3 py-3 mb-6"
-                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderLeft: '2px solid #C4C3BD', borderRadius: 2 }}>
-                <UserCheck size={12} strokeWidth={1.5} style={{ color: '#9A9891', marginTop: 1, flexShrink: 0 }} />
-                <p className="text-xs" style={{ color: '#9A9891', lineHeight: 1.6 }}>
+                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderLeft: '2px solid #6B6B66', borderRadius: 2 }}>
+                <UserCheck size={12} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 1, flexShrink: 0 }} />
+                <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
                   A password-setup link will be emailed directly to the student. They set their own password before first login.
                 </p>
               </div>
@@ -279,7 +279,7 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
                     style={{ background: '#EEECEA', color: '#4A4A45', borderRadius: 2, letterSpacing: '0.04em' }}>
                     Student
                   </span>
-                  <span className="text-xs ml-auto" style={{ color: '#C4C3BD', letterSpacing: '0.06em' }}>FIXED</span>
+                  <span className="text-xs ml-auto" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>FIXED</span>
                 </div>
               </Field>
 
@@ -312,16 +312,16 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
                     <span className="text-xs">Academic metadata</span>
                     {hasMetadata && (
                       <span className="text-xs px-1.5 py-0.5"
-                        style={{ background: '#F0EFEB', color: '#9A9891', borderRadius: 2 }}>
+                        style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 2 }}>
                         {group.length + section.length + specialisation.length + program.length + degreeLevel.length + school.length} tag{group.length + section.length + specialisation.length + program.length + degreeLevel.length + school.length !== 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs" style={{ color: '#C4C3BD' }}>All optional</span>
+                    <span className="text-xs" style={{ color: '#6B6B66' }}>All optional</span>
                     {metaOpen
-                      ? <ChevronUp size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />
-                      : <ChevronDown size={12} strokeWidth={1.5} style={{ color: '#9A9891' }} />}
+                      ? <ChevronUp size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                      : <ChevronDown size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
                   </div>
                 </button>
 
@@ -379,7 +379,7 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
                 </button>
                 <button onClick={onClose} disabled={saving}
                   className="text-xs px-4 py-2.5 transition-colors"
-                  style={{ color: '#9A9891', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
                   onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}>
                   Cancel

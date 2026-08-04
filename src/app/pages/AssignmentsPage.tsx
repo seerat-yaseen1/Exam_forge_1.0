@@ -227,9 +227,9 @@ export function AssignmentsPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-8"
           style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>WEB OWNER</p>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>WEB OWNER</p>
             <h1 className="text-base" style={{ color: '#0C0C0B' }}>Assessments</h1>
-            <p className="text-xs mt-1" style={{ color: '#B0AEA8' }}>
+            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
               Create and manage assessments for institutes and students.
             </p>
           </div>
@@ -253,16 +253,16 @@ export function AssignmentsPage() {
             </p>
             <button onClick={() => setDuplicateNotice(null)}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#9A9891' }}>Dismiss</button>
+              style={{ color: '#6B6B66' }}>Dismiss</button>
           </div>
         )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-          <StatPill icon={<ClipboardList size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Total Assessments" value={loading ? '…' : String(assessments.length)} />
-          <StatPill icon={<FileText size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Drafts" value={loading ? '…' : String(draftCount)} />
-          <StatPill icon={<Target size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Active" value={loading ? '…' : String(activeCount)} />
-          <StatPill icon={<Clock size={13} strokeWidth={1.5} style={{ color: '#9A9891' }} />} label="Closed" value={loading ? '…' : String(closedCount)} />
+          <StatPill icon={<ClipboardList size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Total Assessments" value={loading ? '…' : String(assessments.length)} />
+          <StatPill icon={<FileText size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Drafts" value={loading ? '…' : String(draftCount)} />
+          <StatPill icon={<Target size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Active" value={loading ? '…' : String(activeCount)} />
+          <StatPill icon={<Clock size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Closed" value={loading ? '…' : String(closedCount)} />
         </div>
 
         {/* List */}
@@ -270,9 +270,9 @@ export function AssignmentsPage() {
           <FilterBar search={search} setSearch={setSearch} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />
           {!loading && filtered.length > 0 && (
             <div className="hidden md:flex items-center gap-4 px-5 py-2" style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
-              <div className="flex-shrink-0 w-16"><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>STATUS</span></div>
-              <div className="flex-1"><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>ASSESSMENT</span></div>
-              <div className="flex-shrink-0 text-right" style={{ minWidth: 148 }}><span className="text-xs" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>DATE RANGE</span></div>
+              <div className="flex-shrink-0 w-16"><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STATUS</span></div>
+              <div className="flex-1"><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>ASSESSMENT</span></div>
+              <div className="flex-shrink-0 text-right" style={{ minWidth: 148 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>DATE RANGE</span></div>
               <div className="flex-shrink-0 w-20" />
             </div>
           )}
@@ -289,13 +289,13 @@ export function AssignmentsPage() {
           {!loading && filtered.length === 0 && <EmptyState filtered={!!(search || statusFilter)} onAdd={openCreate} />}
           {!loading && filtered.length > 0 && (
             <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid #F0EFEB' }}>
-              <span className="text-xs" style={{ color: '#C4C3BD' }}>
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 {filtered.length} {filtered.length === 1 ? 'assessment' : 'assessments'}
                 {(search || statusFilter) && ' matching filters'}
               </span>
               {(search || statusFilter) && (
                 <button onClick={() => { setSearch(''); setStatusFilter(''); }}
-                  className="text-xs transition-opacity hover:opacity-60" style={{ color: '#9A9891' }}>
+                  className="text-xs transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
                   Clear filters
                 </button>
               )}

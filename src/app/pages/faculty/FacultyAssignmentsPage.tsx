@@ -72,7 +72,7 @@ function AssessmentCard({
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)';
-        (e.currentTarget as HTMLElement).style.borderColor = '#C4C3BD';
+        (e.currentTarget as HTMLElement).style.borderColor = '#6B6B66';
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLElement).style.boxShadow = 'none';
@@ -86,7 +86,7 @@ function AssessmentCard({
             {assessment.title}
           </p>
           {assessment.subject && (
-            <p className="text-xs mt-0.5" style={{ color: '#9A9891' }}>
+            <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
               {assessment.subject}
             </p>
           )}
@@ -106,29 +106,29 @@ function AssessmentCard({
       <div className="flex items-center gap-3 flex-wrap">
         {sectionCount > 0 && (
           <div className="flex items-center gap-1">
-            <Layers size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-            <span className="text-xs" style={{ color: '#9A9891' }}>
+            <Layers size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <span className="text-xs" style={{ color: '#6B6B66' }}>
               {sectionCount} section{sectionCount !== 1 ? 's' : ''}
             </span>
           </div>
         )}
         {questionCount > 0 && (
           <div className="flex items-center gap-1">
-            <BookOpen size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-            <span className="text-xs" style={{ color: '#9A9891' }}>
+            <BookOpen size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <span className="text-xs" style={{ color: '#6B6B66' }}>
               {questionCount} question{questionCount !== 1 ? 's' : ''}
             </span>
           </div>
         )}
         <div className="flex items-center gap-1">
-          <Users size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-          <span className="text-xs" style={{ color: '#9A9891' }}>
+          <Users size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          <span className="text-xs" style={{ color: '#6B6B66' }}>
             {describeAssignment(assessment)}
           </span>
         </div>
         {assessment.totalMarks > 0 && (
           <div className="flex items-center gap-1">
-            <span className="text-xs" style={{ color: '#9A9891' }}>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>
               {assessment.totalMarks} marks
             </span>
           </div>
@@ -141,30 +141,30 @@ function AssessmentCard({
         <div className="flex items-center gap-3">
           {assessment.startDate && (
             <div className="flex items-center gap-1">
-              <Calendar size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <Calendar size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 {formatDateShort(assessment.startDate)}
               </span>
             </div>
           )}
           {assessment.endDate && (
             <div className="flex items-center gap-1">
-              <Clock size={10} strokeWidth={1.5} style={{ color: '#C4C3BD' }} />
-              <span className="text-xs" style={{ color: '#9A9891' }}>
+              <Clock size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+              <span className="text-xs" style={{ color: '#6B6B66' }}>
                 ends {formatDateShort(assessment.endDate)}
               </span>
             </div>
           )}
         </div>
         {assessment.status !== 'draft' && rosterAllowed ? (
-          <div className="flex items-center gap-1" style={{ color: '#C4C3BD' }}>
+          <div className="flex items-center gap-1" style={{ color: '#6B6B66' }}>
             <span className="text-xs">View roster</span>
             <ChevronRight size={11} strokeWidth={1.5} />
           </div>
         ) : assessment.status === 'draft' ? (
-          <span className="text-xs" style={{ color: '#C4C3BD' }}>Draft — no roster</span>
+          <span className="text-xs" style={{ color: '#6B6B66' }}>Draft — no roster</span>
         ) : (
-          <div className="flex items-center gap-1" style={{ color: '#C4C3BD' }}>
+          <div className="flex items-center gap-1" style={{ color: '#6B6B66' }}>
             <Lock size={10} strokeWidth={1.5} />
             <span className="text-xs">Roster access restricted</span>
           </div>
@@ -227,7 +227,7 @@ export function FacultyAssignmentsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-xs mb-1" style={{ color: '#9A9891', letterSpacing: '0.1em' }}>
+            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
               ASSIGNMENTS
             </p>
             <h1 className="text-sm" style={{ color: '#0C0C0B' }}>
@@ -235,7 +235,7 @@ export function FacultyAssignmentsPage() {
             </h1>
           </div>
           <div className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-            style={{ background: '#F0EFEB', border: '1px solid #E3E1DB', borderRadius: 2, color: '#9A9891' }}>
+            style={{ background: '#F0EFEB', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}>
             <ClipboardList size={11} strokeWidth={1.5} />
             {assessments.length} total
           </div>
@@ -245,7 +245,7 @@ export function FacultyAssignmentsPage() {
         <div className="flex items-center gap-3 mb-6">
           <div className="flex items-center gap-2 flex-1 px-3 py-2"
             style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-            <Search size={12} strokeWidth={1.5} style={{ color: '#C4C3BD', flexShrink: 0 }} />
+            <Search size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -263,7 +263,7 @@ export function FacultyAssignmentsPage() {
                 style={{
                   borderRadius: 2,
                   background: filterStatus === tab.value ? '#0C0C0B' : 'transparent',
-                  color: filterStatus === tab.value ? '#FFFFFF' : '#9A9891',
+                  color: filterStatus === tab.value ? '#FFFFFF' : '#6B6B66',
                   border: filterStatus === tab.value ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
                 }}
               >
@@ -276,13 +276,13 @@ export function FacultyAssignmentsPage() {
         {/* Content */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#C4C3BD' }} />
-            <p className="text-xs" style={{ color: '#C4C3BD' }}>Loading assessments…</p>
+            <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+            <p className="text-xs" style={{ color: '#6B6B66' }}>Loading assessments…</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <ClipboardList size={24} strokeWidth={1} style={{ color: '#C4C3BD' }} />
-            <p className="text-xs" style={{ color: '#C4C3BD' }}>
+            <ClipboardList size={24} strokeWidth={1} style={{ color: '#6B6B66' }} />
+            <p className="text-xs" style={{ color: '#6B6B66' }}>
               {search || filterStatus !== 'all' ? 'No assessments match your filters.' : 'No assessments created yet.'}
             </p>
           </div>

@@ -1,0 +1,56 @@
+/*
+  Accessibility baseline.
+
+  ── Why this file exists ──────────────────────────────────────────────────────
+  The UI is styled with inline `style={{ }}` objects, and 35 of those set
+  `outline: 'none'` on focusable elements (buttons, inputs, the sidebar
+  hamburger, the profile trigger). That removed the ONLY visible affordance a
+  keyboard user has for "where am I", making the console unnavigable without a
+  mouse — a hard WCAG 2.4.7 failure on a platform used to administer regulated
+  exams.
+
+  Inline styles beat ordinary stylesheet rules on specificity, so the ring is
+  declared `!important` here. That is the point: it is a floor that individual
+  components are deliberately not allowed to opt out of. Fixing the 35 call
+  sites individually would work too, but nothing would stop the 36th.
+
+  `:focus-visible` (not `:focus`) means the ring appears for keyboard and
+  programmatic focus but NOT on mouse click, so the visual design is unchanged
+  for pointer users.
+*/
+
+:root {
+  /* Near-black ring matches the #0C0C0B type colour rather than a browser blue,
+     so the indicator reads as part of the design system. */
+  --focus-ring: #0C0C0B;
+  --focus-ring-contrast: #FFFFFF;
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 2px !important;
+  /* Second, light ring: keeps the indicator visible when the element sits on a
+     dark surface (primary buttons are #0C0C0B on #0C0C0B otherwise). */
+  box-shadow: 0 0 0 4px var(--focus-ring-contrast) !important;
+  border-radius: 2px;
+}
+
+/* Inputs sit flush inside bordered containers where an offset ring would be
+   clipped; draw it inset instead. */
+:where(input, select, textarea):focus-visible {
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Respect users who have asked the OS to reduce motion. The dropdown/backdrop
+   transitions are decorative, so they are safe to drop entirely. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

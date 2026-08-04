@@ -87,7 +87,7 @@ export function QuestionNavigator({
         style={{ borderBottom: '1px solid #E3E1DB' }}
       >
         {totalSections > 1 && (
-          <p className="text-xs mb-1" style={{ color: '#C4C3BD', letterSpacing: '0.08em' }}>
+          <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
             SECTION {currentSectionNumber} OF {totalSections}
           </p>
         )}
@@ -108,7 +108,7 @@ export function QuestionNavigator({
             }}
           />
         </div>
-        <p className="text-xs mt-1.5" style={{ color: '#9A9891' }}>
+        <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>
           {answered}/{total} answered
         </p>
       </div>
@@ -148,7 +148,7 @@ export function QuestionNavigator({
                     ? '#FFFFFF'
                     : answered
                       ? '#1E7B3C'
-                      : '#9A9891',
+                      : '#6B6B66',
                 }}
               >
                 {idx + 1}
@@ -173,15 +173,15 @@ export function QuestionNavigator({
         <div className="mt-4 space-y-1.5">
           <div className="flex items-center gap-2">
             <div style={{ width: 12, height: 12, borderRadius: 2, background: '#0C0C0B', flexShrink: 0 }} />
-            <span className="text-xs" style={{ color: '#9A9891' }}>Current</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>Current</span>
           </div>
           <div className="flex items-center gap-2">
             <div style={{ width: 12, height: 12, borderRadius: 2, background: '#F0F9F4', border: '1px solid #B8E6C8', flexShrink: 0 }} />
-            <span className="text-xs" style={{ color: '#9A9891' }}>Answered</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>Answered</span>
           </div>
           <div className="flex items-center gap-2">
             <div style={{ width: 12, height: 12, borderRadius: 2, background: '#FFFFFF', border: '1px solid #E3E1DB', flexShrink: 0 }} />
-            <span className="text-xs" style={{ color: '#9A9891' }}>Unanswered</span>
+            <span className="text-xs" style={{ color: '#6B6B66' }}>Unanswered</span>
           </div>
         </div>
       </div>

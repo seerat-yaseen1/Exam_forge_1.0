@@ -42,7 +42,7 @@ export function EditPanelShell({
           <SheetHeader className="px-4 sm:px-6 pt-5 sm:pt-6 pb-4 pr-12" style={{ borderBottom: '1px solid #F0EFEB' }}>
             <SheetTitle className="text-base break-words" style={{ color: '#0C0C0B' }}>{title}</SheetTitle>
             {description && (
-              <SheetDescription className="text-xs" style={{ color: '#9A9891' }}>
+              <SheetDescription className="text-xs" style={{ color: '#6B6B66' }}>
                 {description}
               </SheetDescription>
             )}
@@ -102,7 +102,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
     <div className="mb-5">
       <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
       {children}
-      {hint && <p className="text-xs mt-1" style={{ color: '#9A9891' }}>{hint}</p>}
+      {hint && <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>{hint}</p>}
     </div>
   );
 }

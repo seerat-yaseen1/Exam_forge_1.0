@@ -1563,7 +1563,9 @@ function AttemptsPanel({
                     )}
                     {scoreStr ? (
                       <span className="text-xs"
-                        style={{ color: a.scores?.passed ? '#1E7B3C' : '#9B2828' }}>
+                        style={{ color: a.scores?.passed === true ? '#1E7B3C'
+                          : a.scores?.passed === false ? '#9B2828'
+                          : '#92680A' }}>
                         {scoreStr}
                       </span>
                     ) : done ? (
@@ -1938,12 +1940,21 @@ function AttemptDrawer({
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs" style={{ color: '#4A4A45' }}>Percentage</span>
-                    <span className="text-xs" style={{ color: attempt.scores.passed ? '#1E7B3C' : '#9B2828' }}>
-                      {attempt.scores.percentage}%{attempt.scores.passed ? ' ✓ Passed' : ' ✗ Failed'}
+                    <span className="text-xs" style={{
+                      color: attempt.scores.passed === true ? '#1E7B3C'
+                        : attempt.scores.passed === false ? '#9B2828'
+                        : '#92680A' }}>
+                      {attempt.scores.percentage}%
+                      {attempt.scores.passed === true ? ' ✓ Passed'
+                        : attempt.scores.passed === false ? ' ✗ Failed'
+                        : ' — marking incomplete'}
                     </span>
                   </div>
                   {attempt.scores.requiresManualReview && (
-                    <p className="text-xs mt-2" style={{ color: '#92680A' }}>⚠ Contains text answers requiring manual review</p>
+                    <p className="text-xs mt-2" style={{ color: '#92680A' }}>
+                      ⚠ Awaiting manual marking — the percentage above counts unmarked
+                      answers as zero, so it is a floor, not a final score.
+                    </p>
                   )}
                 </div>
               </div>

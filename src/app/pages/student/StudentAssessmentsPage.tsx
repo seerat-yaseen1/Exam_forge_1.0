@@ -200,19 +200,22 @@ function ScoreDisplay({ attempt, assessment }: { attempt: Attempt; assessment: A
       <span className="text-xs" style={{ color: '#0C0C0B' }}>
         {total}/{available}
       </span>
+      {/* G-02: amber while `passed` is null — the paper is scored but not
+          finished being marked, so the red "fail" styling would be a verdict
+          nobody has reached. */}
       <span
         className="text-xs px-1.5 py-0.5"
         style={{
-          background: passed ? '#F0F9F4' : '#FDF5F5',
-          color: passed ? '#1E7B3C' : '#9B2828',
-          border: `1px solid ${passed ? '#B8E6C8' : '#F2CECE'}`,
+          background: passed === true ? '#F0F9F4' : passed === false ? '#FDF5F5' : '#FDF8EC',
+          color: passed === true ? '#1E7B3C' : passed === false ? '#9B2828' : '#92680A',
+          border: `1px solid ${passed === true ? '#B8E6C8' : passed === false ? '#F2CECE' : '#EBD9A8'}`,
           borderRadius: 2,
         }}
       >
         {percentage}%
       </span>
       {attempt.scores.requiresManualReview && (
-        <span className="text-xs" style={{ color: '#C4C3BD' }}>· partial</span>
+        <span className="text-xs" style={{ color: '#92680A' }}>· awaiting marking</span>
       )}
     </div>
   );

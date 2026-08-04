@@ -3693,6 +3693,8 @@ async function loadQuestionAndAnswerMaps(
 interface GradedAnswerOut {
   isCorrect: boolean | null;
   marksAwarded: number;
+  /** G-04: the question document no longer exists; excluded from the paper. */
+  unavailable?: boolean;
   correctIds?: string[];
   correctPairs?: CorrectPair[];
   modelAnswer?: string;
@@ -3702,7 +3704,21 @@ interface ScoresOut {
   total: number;
   available: number;
   percentage: number;
-  passed: boolean;
+  /**
+   * Pass verdict, or NULL while the paper is not finished being marked (G-02).
+   *
+   * `false` used to be returned for a paper carrying unmarked essay questions,
+   * because `percentage` counts them as zero. A student who answered every
+   * machine-markable question correctly was told "✗ Failed" next to a badge
+   * saying the paper still needed manual review — two statements that cannot
+   * both be true, on the screen that matters most to them.
+   *
+   * Null is the honest third state, and it is set HERE rather than left for
+   * each UI to infer from requiresManualReview: making it structural is the
+   * same reasoning that put provisional grades in their own collection instead
+   * of trusting every reader to remember.
+   */
+  passed: boolean | null;
   bySection: Array<{
     sectionId: string;
     sectionName: string;
@@ -3754,12 +3770,34 @@ function scoreAttemptAnswers(params: {
     let answered = 0;
 
     for (const aq of sec.questions) {
-      sectionAvailable += aq.marks;
-      totalAvailable   += aq.marks;
-
       const q   = questionMap.get(aq.questionId);
       const ans = answerMap.get(aq.questionId);
       const studentAnswer = answers?.[aq.questionId];
+
+      // ── G-04: the question document is gone ───────────────────────
+      //
+      // Questions are soft-deletable and purgeable, so a paper can outlive one
+      // of its own questions. The marks used to be added to the denominator
+      // regardless, and the answered branch then could not run — so a student
+      // who had answered it lost those marks silently, with nothing anywhere
+      // saying why. Measured at 10 of 20 marks on a two-question paper.
+      //
+      // A mark nobody can award is not a mark the student failed to earn. It
+      // leaves the denominator entirely, and the paper is flagged so a human
+      // sees that it shrank rather than discovering it from a suspiciously
+      // round percentage.
+      if (!q) {
+        requiresManualReview = true;
+        gradedAnswers[aq.questionId] = {
+          isCorrect: null,
+          marksAwarded: 0,
+          unavailable: true,
+        };
+        continue;
+      }
+
+      sectionAvailable += aq.marks;
+      totalAvailable   += aq.marks;
 
       // Resolve the grading policy for THIS question (exam → section → row).
       // Difficulty is read from the server-fetched question doc (trustworthy),
@@ -3838,9 +3876,14 @@ function scoreAttemptAnswers(params: {
   const percentage = totalAvailable > 0
     ? Math.round((flooredTotal / totalAvailable) * 100 * 10) / 10
     : 0;
-  const passed = passingScore !== undefined
-    ? percentage >= passingScore
-    : true;
+  // G-02: no verdict until every mark that CAN be awarded has been.
+  // requiresManualReview means a human still owes this paper marks, so any
+  // pass/fail statement now is a statement about marking that has not happened.
+  const passed = requiresManualReview
+    ? null
+    : passingScore !== undefined
+      ? percentage >= passingScore
+      : true;
 
   return {
     scores: {

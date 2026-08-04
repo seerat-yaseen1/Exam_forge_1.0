@@ -199,7 +199,10 @@ function buildSummaryRows(
       'Marks': s ? round2(s.total) : '',
       'Out Of': s ? round2(s.available) : '',
       'Percentage': s ? round2(s.percentage) : '',
-      'Passed': s ? (s.passed ? 'Yes' : 'No') : '',
+      // G-02: three states. An empty cell means "no score"; "Pending" means the
+      // paper is scored but not finished being marked. Collapsing the second
+      // into "No" would export a fail verdict nobody reached.
+      'Passed': s ? (s.passed === true ? 'Yes' : s.passed === false ? 'No' : 'Pending') : '',
       'Needs Manual Review': s?.requiresManualReview ? 'Yes' : '',
       'Time Used (min)': totalTimeUsedMinutes(attempt),
       'Violations': attempt.integrityLog?.totalViolations ?? 0,

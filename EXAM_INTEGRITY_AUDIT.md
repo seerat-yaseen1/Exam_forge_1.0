@@ -41,32 +41,7 @@
 >
 > New suite `functions/test/audit.round3.cjs`, 15 probes / 52 checks. `npm test` now runs all five suites and is green: **13,446 timing states · 84,062 assertions · 64 freeze · 85 e2e · 93 round-2 · 52 round-3.**
 >
-> ## 🎯 ROUND 4 (2026-08-03) — grading
->
-> Rounds 2 and 3 went at TIME and at *which* paper is marked. Round 4 went at the **mark itself**. New suite `functions/test/audit.grading.cjs`, 10 probes / 40 checks.
->
-> | # | Defect | Measured | Status |
-> |---|---|---|:---:|
-> | **G-02** | a student was told **"✗ Failed"** on a paper nobody had finished marking | 50% against a 60% pass mark, with the unmarked essay worth 50% — shown in red, beside a badge saying the paper needed review | **fixed** |
-> | **G-04** | a purged question silently cost the student its marks | 10 of 20 lost on a two-question paper, with nothing saying why | **fixed** |
->
-> **G-02** is the one that reached the student. `passed` is now three-state and `null` while `requiresManualReview` is true, set on the **server** rather than left for each UI to infer — the same reasoning that put provisional grades in their own collection. Six consumers were updated to render three states, because every one of them did `passed ? 'Passed' : 'Failed'` and would otherwise have shown `null` as a failure: the results-page `ScoreRing` (amber **PENDING**), the results-page verdict banner, the roster score colour, the roster percentage line, the student list badge, and the CSV export (`Pending`, distinct from the empty cell meaning *no score*).
->
-> **G-04**: a mark nobody can award is not a mark the student failed to earn. It now leaves the denominator entirely and the paper is flagged.
->
-> ### ⚠️ KNOWN GAP — deliberately not closed
->
-> **There is no manual-marking path for text/essay answers anywhere.** No callable awards them, and `firestore.rules` restricts staff attempt writes to `['updatedAt']`, so no client route exists either. A paper containing an essay question can be sat and scored but **never completed**.
->
-> This was left open on purpose. Building the workflow needs decisions that belong to the product — who may mark, whether marking needs a second approver, what the audit trail records — and inventing answers to those inside an audit would be worse than naming the gap. The suite reports it under a **KNOWN GAPS** banner and stays green, so it remains a usable regression gate; what it now holds is that the system behaves *honestly* in the meantime (G-02 and G-04).
->
-> **Two probe errors of mine were corrected rather than reported:** G-06 asserted a section total of −12 where −8 is correct (my arithmetic, not the system's), and G-02 originally used a pass mark equal to the percentage, so it passed by coincidence and proved nothing.
->
-> Verified green under attack: invalidation coherence (G-03), marks frozen against live re-weighting (G-05), net-negative sections with a floored headline (G-06), partial credit and percent penalties exact to 1e-9 (G-07), out-of-paper answers ignored (G-08), blank papers never negative (G-09), and student-submit / termination / sweep reaching an identical mark (G-10).
->
-> `npm test` runs **six** suites: **13,446 timing states · 84,062 assertions · 64 freeze · 85 e2e · 93 round-2 · 52 round-3 · 40 grading.** All green.
->
-> Deployment: see **[DEPLOY.md](./DEPLOY.md)** — functions only, no rules, no indexes, no migration. **Round 4 changed five client files**, so the Vercel deploy matters this time: functions-new + client-old would render a `null` verdict as "Failed", which is the bug being fixed.
+> Deployment: see **[DEPLOY.md](./DEPLOY.md)** — functions only, no rules, no indexes, no migration.
 
 ---
 

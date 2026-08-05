@@ -1,6 +1,6 @@
 {
   "storage": {
-    "rules": "storage.rules.tsx"
+    "rules": "storage.rules"
   },
   "firestore": {
     "rules": "firestore.rules",

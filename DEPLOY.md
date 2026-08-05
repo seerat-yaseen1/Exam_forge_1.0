@@ -28,13 +28,13 @@ That is the whole deployment. Everything below is the reasoning, and the things 
 | **Cloud Functions** | ✅ **YES** | `functions/src/index.ts` changed in every fix |
 | `firestore.rules` | ❌ no | `git diff 62bf880..HEAD -- firestore.rules` → **empty** |
 | `firestore.indexes.json` | ❌ no | unchanged, and see §3 |
-| `storage.rules.tsx` | ❌ no | unchanged |
+| `storage.rules` | ❌ no | unchanged |
 | Hosting / frontend | ⚠️ separate | two client files changed — see §6 |
 
 Verify this yourself before deploying:
 
 ```bash
-git diff --stat 62bf880..HEAD -- firestore.rules firestore.indexes.json storage.rules.tsx
+git diff --stat 62bf880..HEAD -- firestore.rules firestore.indexes.json storage.rules
 # empty output = nothing to deploy for these
 ```
 

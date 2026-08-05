@@ -5,7 +5,7 @@
  * Shows a drag-over zone → progress bar → thumbnail with remove button.
  * Accepts JPEG, PNG, GIF, WebP. Max 5 MB.
  *
- * EVERY constant below mirrors storage.rules.tsx `match /question-images/`.
+ * EVERY constant below mirrors storage.rules `match /question-images/`.
  * They are a contract, not defaults: the rules are the enforcement and this
  * file only exists to fail early with a readable message. Audit 2026-07-26
  * B-01 was four separate drifts between the two (path, size, type, help
@@ -18,9 +18,9 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebas
 import { storage } from '../../../lib/firebase';
 import { ImageIcon, X, Loader2, Upload } from 'lucide-react';
 
-// storage.rules.tsx: request.resource.size < 5 * 1024 * 1024
+// storage.rules: request.resource.size < 5 * 1024 * 1024
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-// storage.rules.tsx: contentType.matches('image/(png|jpe?g|gif|webp)')
+// storage.rules: contentType.matches('image/(png|jpe?g|gif|webp)')
 // SVG dropped (external review #4): scriptable format, and the storage rules
 // reject it server-side. Existing uploaded SVGs keep rendering (rules gate
 // writes, not reads).
@@ -37,7 +37,7 @@ const SIZE_LABEL    = '5 MB';
 function randomPath(file: File): string {
   const ext = file.name.split('.').pop() ?? 'jpg';
   const rand = Math.random().toString(36).slice(2, 9);
-  // MUST stay under question-images/ — storage.rules.tsx grants write to
+  // MUST stay under question-images/ — storage.rules grants write to
   // exactly this prefix (plus seb-configs/), and everything else falls to
   // the deny-all catch-all at the bottom of the rules file.
   return `question-images/${Date.now()}-${rand}.${ext}`;

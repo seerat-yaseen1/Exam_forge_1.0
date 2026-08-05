@@ -1,7 +1,7 @@
 # 🔍 STRATUM / Exam Forge — Fresh Full-Codebase Audit
 
 > **Date:** 2026-08-04
-> **Scope:** whole repository — `src/` (React SPA), `functions/` (Cloud Functions), `firestore.rules`, `storage.rules.tsx`, `api/` (Vercel SEB endpoint), build config, and repo hygiene. Every role flow traced end to end: **web owner, institute, faculty, student, and the assessment engine**.
+> **Scope:** whole repository — `src/` (React SPA), `functions/` (Cloud Functions), `firestore.rules`, `storage.rules`, `api/` (Vercel SEB endpoint), build config, and repo hygiene. Every role flow traced end to end: **web owner, institute, faculty, student, and the assessment engine**.
 > **Method:** code-derived. Backend verified by compiling the functions and running all six test suites; frontend verified by a production Vite build **and** a full `tsc --noEmit` type-check (which the project's `vite build` never performs). Findings traced to `file:line`.
 > **Actions taken this pass:** one broken test gate and three repo-hygiene regressions were **fixed** (all introduced by the most recent *"Update files from Figma Make"* commits). The frontend type findings are **documented, not mass-edited** — see each entry for why.
 
@@ -102,6 +102,16 @@ Both read `session.logoUrl`, a field that doesn't exist on `StudentSession` / `F
 ### L5 · Stray root file
 
 `new-file.tsx` — an empty 0-byte file at the repo root, nothing imports it. Safe to delete.
+
+### L6 · Storage rules carried a `.tsx` extension — *fixed*
+
+**Where:** `storage.rules.tsx` → `storage.rules`; referenced by `firebase.json:3`
+
+The Firebase **Storage** rules file was named `storage.rules.tsx`, but its contents are Firebase rules syntax (`rules_version = '2'; service firebase.storage { … }`) — not TSX, and not parseable as TSX. Its sibling `firestore.rules` has always been correctly named, so the two were inconsistent in the same directory. Almost certainly a Figma Make artifact, since Make favours recognised source extensions.
+
+Harmless while it lasted — `firebase.json` pointed at the misnamed path, so deploys resolved it, and `tsconfig.json` only includes `src/`, so the compiler never tried to parse it as TSX. The risk was that any tool globbing `*.tsx` (a linter, a formatter, a future type-check over the repo root) would choke on it.
+
+**Fix applied:** renamed to `storage.rules` and updated all six references — `firebase.json:3` (the functional one), two in `DEPLOY.md`, four comment references in `ImageUploader.tsx` that document the rule constants it mirrors, and this report's scope line. Verified no `storage.rules.tsx` reference remains, the build still succeeds, and real-code type errors stay at zero.
 
 ---
 

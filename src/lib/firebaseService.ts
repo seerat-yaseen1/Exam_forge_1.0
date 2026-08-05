@@ -96,9 +96,16 @@ export type InstituteCredentials = {
   firstLoginRequired: boolean;
 };
 
+// Audit L2 (2026-08-04): this said `{ instituteId, logoUrl }` and the stored
+// document has never had either field. Every reader and the single writer use
+// `dataUrl` (InstituteAuthContext.uploadLogo writes { dataUrl, updatedAt }, and
+// firestore.rules:192 validates exactly those two), so the logo worked — but
+// the type described a shape that does not exist, which meant the compiler
+// could not check either side and reported the correct code as the error.
+// Corrected to match the document and the rule.
 export type InstituteLogo = {
-  instituteId: string;
-  logoUrl: string;
+  dataUrl: string;
+  updatedAt: string;
 };
 
 export type InstituteConfig = {
@@ -161,7 +168,20 @@ export type Student = {
   instituteId: string;
   name: string;
   email: string;
-  role: 'Student';
+  // BOTH CASINGS ARE REAL, and the union documents that rather than hiding it
+  // (audit L4, 2026-08-04). The two creation paths disagree: AddStudentDrawer
+  // writes 'student' and BulkStudentModal writes 'Student', so the collection
+  // genuinely contains a mix depending on how each student was added.
+  //
+  // Inert today — nothing authorises on this field. Role checks everywhere read
+  // the Firebase custom claim (see the four auth contexts and firestore.rules),
+  // and the only `.role ===` comparisons in src/ are TrashPanel testing
+  // lifecycle records for 'institute'. It is display metadata.
+  //
+  // Deliberately NOT "fixed" by aligning one writer: that would leave existing
+  // documents split while making the split invisible to the compiler, which is
+  // worse than stating it. Normalising needs a backfill, not a type edit.
+  role: 'Student' | 'student';
   status: 'active' | 'disabled';
   firstLoginRequired: boolean;
   group?: string[];

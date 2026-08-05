@@ -47,6 +47,13 @@ const VIOLATION_LABELS: Record<ViolationType, string> = {
   devtools_open:   'DevTools detected',
   reload_attempt:  'Reload attempt blocked',
   keyboard_block:  'Blocked key combination',
+  // Audit L4 (2026-08-04). Both maps are typed Record<ViolationType, …>, and
+  // this member was missing from each — so the maps did not actually cover the
+  // union they claimed to. Safe only by accident today: 'extension_detected'
+  // is not in ExamShell's WARNING_VIOLATION_TYPES, so handleViolation returns
+  // before this overlay is ever asked to render it. Adding it makes the maps
+  // total, so promoting it to a warning type later cannot ship a blank overlay.
+  extension_detected: 'Browser extension detected',
 };
 
 const VIOLATION_ICONS: Record<ViolationType, React.ReactNode> = {
@@ -61,6 +68,7 @@ const VIOLATION_ICONS: Record<ViolationType, React.ReactNode> = {
   devtools_open:   <ShieldOff size={18} strokeWidth={1.5} />,
   reload_attempt:  <AlertTriangle size={18} strokeWidth={1.5} />,
   keyboard_block:  <AlertTriangle size={18} strokeWidth={1.5} />,
+  extension_detected: <ShieldOff size={18} strokeWidth={1.5} />,
 };
 
 // ── Card shell ────────────────────────────────────────────────────

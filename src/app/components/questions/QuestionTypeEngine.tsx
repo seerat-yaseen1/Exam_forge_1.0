@@ -854,7 +854,11 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
           row={{
             sheet: engine === 'text' ? 'Text' : engine === 'match' ? 'Match' : 'MCQ',
             rowIndex: 0,
-            status: 'ok',
+            // 'ok' is not a RowStatus — the union is valid|warning|error, and
+            // the `as ParsedRow` cast below was silencing that. Inert (the
+            // modal never reads .status), but an invalid literal in a synthetic
+            // row is exactly what a cast should not be used to hide.
+            status: 'valid',
             errors: [],
             warnings: [],
             raw: {},

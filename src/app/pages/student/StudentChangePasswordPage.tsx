@@ -54,7 +54,11 @@ function StrengthBar({ password }: { password: string }) {
 
 export function StudentChangePasswordPage() {
   const navigate = useNavigate();
-  const { session, changePassword } = useStudentAuth();
+  // Audit L3 (2026-08-04): the logo comes from the CONTEXT, not the session.
+  // This page read `session.logoUrl`, a field StudentSession has never had, so
+  // it was always undefined and the institute's uploaded logo silently never
+  // appeared here — the generic LogoMark fallback rendered every time.
+  const { session, changePassword, instituteLogo } = useStudentAuth();
 
   const [newPassword, setNewPassword]         = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -93,8 +97,8 @@ export function StudentChangePasswordPage() {
         {/* Platform identity */}
         <div className="flex flex-col items-center mb-10">
           <div className="mb-4" style={{ color: '#0C0C0B' }}>
-            {session.logoUrl
-              ? <img src={session.logoUrl} alt={session.name}
+            {instituteLogo
+              ? <img src={instituteLogo} alt={session.instituteName}
                   style={{ width: 36, height: 36, objectFit: 'contain' }} />
               : <LogoMark px={36} />}
           </div>

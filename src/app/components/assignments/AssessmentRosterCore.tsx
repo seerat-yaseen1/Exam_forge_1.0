@@ -2739,7 +2739,10 @@ export function AssessmentRosterCore({
 
   const sc = assessment ? statusColor(assessment.status) : { bg: '#F7F6F3', text: '#6B6B66', border: '#E3E1DB' };
 
-  const filterTabs: Array<{ value: RosterStatus | 'all' | 'blocked'; label: string; count: number }> = [
+  // The annotation has to sit on the ARRAY LITERAL, not on the result of
+  // .filter() — a trailing .filter() breaks the contextual typing, so each
+  // `value` inferred as plain `string` and no longer matched the union.
+  const allFilterTabs: Array<{ value: RosterStatus | 'all' | 'blocked'; label: string; count: number }> = [
     { value: 'all',          label: 'All',         count: stats.total },
     { value: 'in_progress',  label: 'Live',        count: stats.live },
     { value: 'frozen',       label: 'Flagged',     count: stats.frozen },
@@ -2747,7 +2750,8 @@ export function AssessmentRosterCore({
     { value: 'not_started',  label: 'Not started', count: stats.notStarted },
     { value: 'submitted',    label: 'Submitted',   count: stats.submitted },
     { value: 'terminated',   label: 'Terminated',  count: stats.terminated },
-  ].filter((t) => t.value === 'all' || t.count > 0);
+  ];
+  const filterTabs = allFilterTabs.filter((t) => t.value === 'all' || t.count > 0);
 
   // ── Loading / error states ─────────────────────────────────────
   if (loading) {

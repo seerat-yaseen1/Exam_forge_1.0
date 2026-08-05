@@ -13,23 +13,14 @@ import { auth, functions } from '../../../lib/firebase';
 
 // ── Types ─────────────────────────────────────────────────────────
 
-export interface Student {
-  id: string;
-  instituteId: string;
-  name: string;
-  email: string;
-  role: 'student';
-  status: 'active' | 'disabled';
-  firstLoginRequired: boolean;
-  group?: string[];
-  section?: string[];
-  specialisation?: string[];
-  program?: string[];
-  degreeLevel?: string[];
-  school?: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+// Audit L4 (2026-08-04): this was a SECOND, near-identical declaration of the
+// student shape whose only difference was `role: 'student'` where the canonical
+// type says 'Student'. Because StudentTab holds its list in this type while
+// firebaseService returns the other, the two were structurally incompatible and
+// every hand-off needed a cast — casts that would have silently survived a real
+// field divergence later. Re-exported as an alias so there is one shape, and
+// the name stays importable for the components that already use it.
+export type Student = FirebaseStudent;
 
 interface Props {
   open: boolean;
@@ -201,10 +192,10 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
         console.warn('[AddStudentDrawer] reset email failed:', mailErr);
       }
 
-      const created = (await getStudent(result.data.uid)) as FirebaseStudent | null;
+      const created = await getStudent(result.data.uid);
       if (!created) throw new Error('Student created but profile not found.');
 
-      onCreated(created as Student, emailSent);
+      onCreated(created, emailSent);
     } catch (e: any) {
       setError(e?.message || 'An unexpected error occurred.');
     } finally {

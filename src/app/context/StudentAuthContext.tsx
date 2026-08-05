@@ -25,6 +25,45 @@ export interface StudentSession {
   instituteName: string;
   instituteCode: string;
   createdAt: string;
+  // ── Program metadata (audit L1, 2026-08-04) ────────────────────
+  // The flat tag arrays written on the student doc at creation time by
+  // AddStudentDrawer / BulkStudentModal. StudentProfilePage renders these in
+  // its "Program Details" panel — and could never show it, because the panel
+  // reads them off the SESSION and the session never carried them. Every term
+  // of its guard was `undefined`, so the panel was permanently dead and the
+  // tags an admin had typed were invisible to the student.
+  //
+  // Carried here rather than re-fetched: the student doc is already read a few
+  // lines below to build this session, so this costs no extra document read.
+  //
+  // Distinct from the academicMappings hierarchy that AcademicStructure
+  // renders on the same page. That component returns null when a student has
+  // no mappings, so for institutes not using the nine-level hierarchy these
+  // tags are the ONLY placement information available — which is why the panel
+  // is fixed rather than deleted as redundant.
+  group?: string[];
+  section?: string[];
+  specialisation?: string[];
+  program?: string[];
+  degreeLevel?: string[];
+  school?: string[];
+}
+
+/**
+ * Read a flat tag array off a Firestore document.
+ *
+ * Tolerant by construction: the field is optional on the student doc (only
+ * written when an admin actually entered tags), and a legacy doc may hold a
+ * bare string where an array is expected. Anything unreadable becomes
+ * undefined, which the profile panel's `?.length` guard already handles.
+ */
+function tagArray(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const out = value.filter((v): v is string => typeof v === 'string' && v.length > 0);
+    return out.length > 0 ? out : undefined;
+  }
+  if (typeof value === 'string' && value.length > 0) return [value];
+  return undefined;
 }
 
 interface StudentAuthContextType {
@@ -121,6 +160,13 @@ async function buildSessionFromAuthUser(
     instituteName: String(inst.name ?? ''),
     instituteCode: String(inst.code ?? ''),
     createdAt: String(stu.createdAt ?? ''),
+    // L1: from the student doc already fetched above — no extra read.
+    group: tagArray(stu.group),
+    section: tagArray(stu.section),
+    specialisation: tagArray(stu.specialisation),
+    program: tagArray(stu.program),
+    degreeLevel: tagArray(stu.degreeLevel),
+    school: tagArray(stu.school),
   };
 
   return { session, firstLoginRequired };

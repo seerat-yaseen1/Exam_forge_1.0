@@ -153,7 +153,18 @@ export function StudentTab({ instituteId, instituteName }: Props) {
     setStatusLoadingId(id);
     try {
       const data = await getStudent(id);
-      const updatedStudent = { ...data, status: data.status === 'active' ? 'disabled' : 'active' };
+      // getStudent returns Student | null. The null case was unhandled, so a
+      // student deleted (or made unreadable) between the list render and this
+      // click threw a TypeError on `data.status` — swallowed by the catch below
+      // as a console error, leaving the row spinner to just stop with no
+      // explanation. Returning early keeps the list truthful instead.
+      if (!data) throw new Error('Student profile not found.');
+      // `as const` keeps the union narrow; without it the ternary widens to
+      // `string` and no longer satisfies Student['status'].
+      const updatedStudent = {
+        ...data,
+        status: (data.status === 'active' ? 'disabled' : 'active') as 'active' | 'disabled',
+      };
       await setStudent(id, updatedStudent);
       setStudents((prev) => prev.map((s) => s.id === id ? updatedStudent : s));
       setLastSynced(new Date());

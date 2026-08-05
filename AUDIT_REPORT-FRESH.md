@@ -115,7 +115,38 @@ Both read `session.logoUrl`, a field that doesn't exist on `StudentSession` / `F
 
 ---
 
-## What was changed in this commit
+---
+
+## 🔧 Follow-up pass — all LOW findings fixed (2026-08-04, second commit)
+
+The `src/` findings were subsequently fixed. **Real-code `tsc` errors: 35 → 0.** The 33 dead `ui/` boilerplate errors remain (see M2 — they need a delete-or-install decision, not a code fix). `vite build` succeeds and all six backend suites stayed green.
+
+Two of the fixes turned out to be **live user-facing bugs**, not merely type noise:
+
+| Finding | What it actually was | Fix |
+|---|---|---|
+| **L1** | Student "Program Details" panel could never render — the six fields it reads were never on the session, so admin-entered tags (group, section, program, degree level, specialisation, school) were **invisible to every student**. The data *is* written, by `AddStudentDrawer` and `BulkStudentModal`. | Hydrated the six fields onto `StudentSession` from the student doc already fetched — zero extra reads. Panel now works as authored. |
+| **L3** | The institute's uploaded logo **never appeared** on either change-password screen (student + faculty) — both read `session.logoUrl`, which does not exist; the generic mark rendered every time. | Read `instituteLogo` from the auth context instead. |
+| **L2** | `InstituteLogo` type described `{ instituteId, logoUrl }`; the stored document is `{ dataUrl, updatedAt }`. Logos worked, but the compiler could check neither side. | Type corrected to match the document and `firestore.rules:192`. |
+| **L4** | `ViolationOverlay`'s two `Record<ViolationType, …>` maps were missing `extension_detected` — total by declaration, partial in fact. Safe only because that type is not a warning type today. | Added to both maps. |
+| **L4** | `readOnly` on a `<select>` is ignored by the DOM; the control was locked only by being controlled with no `onChange` (which also logs a React warning). | Changed to `disabled`. |
+| **L4** | Duplicate `Student` interface in `AddStudentDrawer` forced casts on every hand-off to/from `firebaseService`. | Re-exported as an alias of the canonical type; casts removed. |
+| **L4** | `status: 'ok'` in a synthetic `ParsedRow` is not a member of `RowStatus` (`valid\|warning\|error`); an `as ParsedRow` cast hid it. Inert — the modal never reads it. | Corrected to `'valid'`. |
+| **L4** | Filter-tab array widened to `string` because a trailing `.filter()` broke contextual typing. | Annotation moved onto the array literal. |
+
+### 🆕 Two findings surfaced *by* the fixes
+
+**N1 · `StudentTab.handleToggleStatus` had an unhandled null.** `getStudent()` returns `Student | null` and the result was used directly (`data.status`). A student deleted or made unreadable between the list rendering and the toggle click threw a `TypeError`, which the surrounding `catch` swallowed into a console log — the row spinner simply stopped, with nothing shown to the admin. Now throws a stated error so the failure is visible. (`StudentTab.tsx:155`)
+
+**N2 · The two student-creation paths disagree on stored `role` casing.** `AddStudentDrawer:171` writes `role: 'student'`; `BulkStudentModal:202` writes `role: 'Student'`. The `students` collection therefore holds a genuine mix, depending on how each student was added.
+
+**Inert, and deliberately left alone.** Nothing authorises on this field — every role check reads the Firebase custom claim (the four auth contexts, `firestore.rules`), and the only `.role ===` comparisons in `src/` are `TrashPanel` testing lifecycle records for `'institute'`. The type is now the honest union `'Student' | 'student'` so the split is visible to the compiler. **Normalising it needs a backfill of existing documents, not a type edit** — aligning one writer alone would leave old data split while making the split invisible, which is worse than stating it. Flagged for a product decision.
+
+---
+
+## What was changed
+
+**First commit (`42b75f6`):**
 
 | Change | Type | Finding |
 |---|---|---|
@@ -123,6 +154,16 @@ Both read `session.logoUrl`, a field that doesn't exist on `StudentSession` / `F
 | Restored `.gitignore`; untracked `functions/lib/`; ignored `dist/` | fix | M1 |
 | This report | doc | — |
 
-Everything under **LOW** and the M2 recommendation is left for a decision — the type-check adoption and the dead-UI/type cleanups are worth doing but are product-shaped edits, not audit fixes, and are called out here so they're tracked rather than silently patched.
+**Second commit:**
+
+| Change | Type | Finding |
+|---|---|---|
+| `StudentAuthContext.tsx` — six program fields hydrated onto the session | fix | L1 |
+| `firebaseService.ts` — `InstituteLogo` corrected; `Student.role` union | fix | L2, N2 |
+| `Student`/`FacultyChangePasswordPage.tsx` — logo from context | fix | L3 |
+| `ViolationOverlay.tsx`, `DetailsStep.tsx`, `AddStudentDrawer.tsx`, `QuestionTypeEngine.tsx`, `AssessmentRosterCore.tsx` | fix | L4 |
+| `StudentTab.tsx` — null guard + narrowed status union | fix | N1, L4 |
+
+**Still open, by decision:** the M2 type-check adoption. Adding `"typecheck": "tsc --noEmit"` is now worthwhile — real code is at zero errors, so the gate would be meaningful — but it stays red until the 33 unused `ui/` components are either deleted or have their dependencies installed. That is a product call, so it is flagged rather than made here.
 
 <sub>Backend verified green: `npm test` → 13,446 timing states · 84,062 assertions · 64 freeze · 85 e2e · 93 probe · 52 round-3 · 40 grading. Frontend verified: `vite build` succeeds; `tsc --noEmit` reports the 68 errors catalogued above.</sub>

@@ -1394,7 +1394,11 @@ export function DetailsStep({
               ) : (
                 <LockedFieldWrapper label="Assign To" reason={lockReason}>
                   <div>
-                    <select value={targetType} readOnly style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}>
+                    {/* Audit L4: `readOnly` is not a valid attribute on <select> —
+                        the DOM ignores it, so the control was locked only by being
+                        a controlled value with no onChange, which also logs a React
+                        warning. `disabled` is the attribute that actually locks it. */}
+                    <select value={targetType} disabled style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}>
                       <option value="all">All Students</option>
                       <option value="institutes">Specific Institutes</option>
                       <option value="students">Specific Students</option>

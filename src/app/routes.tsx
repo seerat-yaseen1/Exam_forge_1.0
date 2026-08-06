@@ -40,7 +40,6 @@ const UserManagementPage = lazy(() => import('./pages/UserManagementPage').then(
 const QuestionsPage = lazy(() => import('./pages/QuestionsPage').then((m) => ({ default: m.QuestionsPage })));
 const SubjectsPage = lazy(() => import('./pages/SubjectsPage').then((m) => ({ default: m.SubjectsPage })));
 const AssignmentsPage = lazy(() => import('./pages/AssignmentsPage').then((m) => ({ default: m.AssignmentsPage })));
-const SEBDiagnosticsPage = lazy(() => import('./pages/SEBDiagnosticsPage').then((m) => ({ default: m.SEBDiagnosticsPage })));
 const SEBSettingsPage = lazy(() => import('./pages/SEBSettingsPage').then((m) => ({ default: m.SEBSettingsPage })));
 const AssessmentRosterPage = lazy(() => import('./pages/AssessmentRosterPage').then((m) => ({ default: m.AssessmentRosterPage })));
 const ReportsInboxPage = lazy(() => import('./pages/ReportsInboxPage').then((m) => ({ default: m.ReportsInboxPage })));
@@ -103,7 +102,6 @@ export const router = createBrowserRouter([
           { path: 'assignments/:assessmentId/roster',        element: <AssessmentRosterPage /> },
           { path: 'reports',                                 element: <ReportsInboxPage /> },
           { path: 'seb',                                     element: <SEBSettingsPage /> },
-          { path: 'seb-diagnostics',                         element: <SEBDiagnosticsPage /> },
         ],
       },
 

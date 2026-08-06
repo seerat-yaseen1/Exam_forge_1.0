@@ -7489,6 +7489,20 @@ exports.resolveQuestionRequest = (0, https_1.onCall)({ region: 'us-central1' }, 
     // Re-check the institute still has this right (ceiling could have been
     // revoked between submission and approval).
     const instSnap = await db.collection('institutes').doc(req.instituteId).get();
+    // N1 (audit 2026-08-06): THE FIFTH GOVERNANCE READ, and the one C1 missed.
+    //
+    // C1 wired assertInstituteActiveS into the four sites that read a ceiling
+    // off institutes/{id} — assertQuestionRight and the three deletion gates —
+    // and this one was not among them. A request sitting in the queue is
+    // exactly the case where the tenant's status is most likely to have
+    // changed since the request was raised, so of the five it is the one that
+    // most needed the check.
+    //
+    // Without it, a disabled or expired institute admin could still approve
+    // pending requests and execute create / edit / delete / share against
+    // their question bank, because disabling an institute never revokes its
+    // token — the same root cause C1 turned on.
+    assertInstituteActiveS(instSnap);
     const ceiling = instSnap.get('questionRightsCeiling');
     if (!ceiling?.[req.type]?.allowed) {
         throw new https_1.HttpsError('failed-precondition', `The institute no longer has the "${req.type}" right — cannot approve.`);

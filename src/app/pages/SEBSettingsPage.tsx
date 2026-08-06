@@ -421,15 +421,6 @@ export function SEBSettingsPage() {
             </div>
           </div>
 
-          {/* Diagnostics link */}
-          <button
-            onClick={() => navigate('/dashboard/seb-diagnostics')}
-            className="flex items-center gap-2 text-xs px-4 py-2"
-            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)', cursor: 'pointer' }}
-          >
-            Run SEB diagnostics
-            <ArrowRight size={11} strokeWidth={1.5} />
-          </button>
         </>
       )}
     </motion.div>

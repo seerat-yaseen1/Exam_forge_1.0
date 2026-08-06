@@ -4,7 +4,35 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     match /question-images/{allPaths=**} {
-      allow read: if request.auth != null;
+      // N3 (audit 2026-08-06): STAFF ONLY. This was `request.auth != null`,
+      // which let any signed-in student — from any tenant — read the whole
+      // prefix. In rules_version 2 `read` also governs LIST, so a student
+      // could enumerate every object under question-images/ and pull a
+      // download URL for each: the question bank, as pictures, before the
+      // exam.
+      //
+      // That directly contradicted firestore.rules, which denies students
+      // direct reads of `questions` and says why — "published assessments
+      // expose question ids, so signedIn() reads let any student dump the
+      // whole bank's content from the console". Same content, second door,
+      // opposite policy.
+      //
+      // STUDENTS ARE UNAFFECTED BY THIS TIGHTENING. They never touch the
+      // Storage SDK: ImageUploader is the only caller that does, it is a
+      // staff surface, and it stores the result of getDownloadURL() on the
+      // question. That URL carries its own access token and does NOT consult
+      // these rules, so an <img src> in a live sitting keeps working exactly
+      // as before. Verified: no student-facing module imports firebase/storage.
+      //
+      // WHAT THIS DOES NOT FIX. Storage has no tenancy at all — the path is
+      // question-images/{timestamp}-{random}.{ext}, with no instituteId — so
+      // faculty at one institute can still list another's images. Closing
+      // that needs the prefix to carry the tenant and a migration of existing
+      // objects, which is a bigger change than this rule; it is not pretended
+      // away here. Staff-only is the containment available without moving
+      // every file.
+      allow read: if request.auth != null
+                  && request.auth.token.role in ['webOwner', 'institute', 'faculty'];
       // Content-type tightened (external review #4): SVG dropped — it's a
       // scriptable format and the declared type is client-controlled anyway,
       // so the least we do is refuse the dangerous label. Existing SVG

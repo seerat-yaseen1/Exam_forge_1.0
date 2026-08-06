@@ -35,6 +35,7 @@ const {
   assertSucceeds,
 } = require('@firebase/rules-unit-testing');
 const { doc, getDoc, setDoc, updateDoc } = require('firebase/firestore');
+const { ref: storageRef, getBytes, listAll, uploadBytes } = require('firebase/storage');
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   console.error(
@@ -45,6 +46,7 @@ if (!process.env.FIRESTORE_EMULATOR_HOST) {
 }
 
 const RULES_PATH = path.resolve(__dirname, '..', '..', 'firestore.rules');
+const STORAGE_RULES_PATH = path.resolve(__dirname, '..', '..', 'storage.rules');
 
 // ── Reporting, matching the other suites in this directory ───────
 const results = [];
@@ -84,6 +86,14 @@ const asFaculty = (fid = 'fac_1', inst = 'inst_1') =>
   env.authenticatedContext(fid, { role: 'faculty', facultyId: fid, instituteId: inst }).firestore();
 const asStudent = (sid = 'stu_1', inst = 'inst_1') =>
   env.authenticatedContext(`uid_${sid}`, { role: 'student', studentId: sid, instituteId: inst }).firestore();
+
+// Storage counterparts of the actors above.
+const stAsWebOwner = () => env.authenticatedContext('wo_1', { role: 'webOwner' }).storage();
+const stAsFaculty = (fid = 'fac_1', inst = 'inst_1') =>
+  env.authenticatedContext(fid, { role: 'faculty', facultyId: fid, instituteId: inst }).storage();
+const stAsStudent = (sid = 'stu_1', inst = 'inst_1') =>
+  env.authenticatedContext(`uid_${sid}`, { role: 'student', studentId: sid, instituteId: inst }).storage();
+const stUnauth = () => env.unauthenticatedContext().storage();
 
 /** Seed with rules DISABLED — fixtures are not the thing under test. */
 async function seed(fn) {
@@ -247,11 +257,56 @@ async function R04() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// R-05 · storage.rules — the question bank's second door
+//
+// N3 (audit 2026-08-06). question-images read was `request.auth != null`, so
+// any signed-in student could read AND — rules_version 2 governs list under
+// read — ENUMERATE the whole prefix. That contradicted firestore.rules, which
+// denies students direct `questions` reads for exactly this reason.
+//
+// storage.rules had no test at all until now, which is how a rule that
+// contradicted its Firestore counterpart survived. Students losing SDK read
+// costs them nothing: images reach them as download URLs carrying their own
+// token, which never consult these rules.
+// ═══════════════════════════════════════════════════════════════════
+async function R05() {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const b = ctx.storage().ref('question-images/1700000000-abc123.png');
+    await uploadBytes(b, new Uint8Array([1, 2, 3]), { contentType: 'image/png' });
+  });
+
+  const IMG = 'question-images/1700000000-abc123.png';
+
+  await denied('a student cannot read a question image through the SDK',
+    () => getBytes(storageRef(stAsStudent(), IMG)));
+  await denied('and cannot ENUMERATE the bank — list is governed by read',
+    () => listAll(storageRef(stAsStudent(), 'question-images')));
+  await denied('an unauthenticated caller gets nothing',
+    () => getBytes(storageRef(stUnauth(), IMG)));
+
+  await allowed('faculty CAN read one — they author the questions',
+    () => getBytes(storageRef(stAsFaculty(), IMG)));
+  await allowed('and the Web Owner can',
+    () => getBytes(storageRef(stAsWebOwner(), IMG)));
+
+  await denied('a student cannot upload into the bank',
+    () => uploadBytes(storageRef(stAsStudent(), 'question-images/evil.png'),
+      new Uint8Array([1]), { contentType: 'image/png' }));
+  await denied('staff cannot upload a scriptable content type',
+    () => uploadBytes(storageRef(stAsFaculty(), 'question-images/x.svg'),
+      new Uint8Array([1]), { contentType: 'image/svg+xml' }));
+  await denied('nothing outside the two known prefixes is writable at all',
+    () => uploadBytes(storageRef(stAsWebOwner(), 'anything-else/x.png'),
+      new Uint8Array([1]), { contentType: 'image/png' }));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['R-01', 'C1 — an institute cannot rewrite its own governance document', R01],
   ['R-02', 'H1 — instituteCredentials is whitelisted, both directions', R02],
   ['R-03', 'the tenancy boundary around both collections', R03],
   ['R-04', 'attempts — answers writable, authority fields not', R04],
+  ['R-05', 'storage.rules — the question bank\'s second door', R05],
 ];
 
 (async () => {
@@ -262,17 +317,23 @@ const SCENARIOS = [
       host: process.env.FIRESTORE_EMULATOR_HOST.split(':')[0],
       port: Number(process.env.FIRESTORE_EMULATOR_HOST.split(':')[1]),
     },
+    storage: {
+      rules: fs.readFileSync(STORAGE_RULES_PATH, 'utf8'),
+      host: (process.env.FIREBASE_STORAGE_EMULATOR_HOST || '127.0.0.1:9199').split(':')[0],
+      port: Number((process.env.FIREBASE_STORAGE_EMULATOR_HOST || '127.0.0.1:9199').split(':')[1]),
+    },
   });
 
   for (const [id, title, fn] of SCENARIOS) {
     await env.clearFirestore();
+    await env.clearStorage();
     await scenario(id, title, fn);
   }
   await env.cleanup();
 
   const C = { r: '\x1b[31m', g: '\x1b[32m', d: '\x1b[2m', b: '\x1b[1m', x: '\x1b[0m' };
   let pass = 0, fail = 0;
-  console.log(`\n${C.b}FIRESTORE RULES SUITE${C.x}  —  real firestore.rules, real rules engine, emulator\n`);
+  console.log(`\n${C.b}FIRESTORE RULES SUITE${C.x}  —  real firestore.rules + storage.rules, real rules engine, emulator\n`);
   for (const r of results) {
     const bad = r.checks.filter((c) => !c.pass);
     const status = r.error ? `${C.r}ERROR${C.x}` : bad.length ? `${C.r}FAIL${C.x}` : `${C.g}PASS${C.x}`;

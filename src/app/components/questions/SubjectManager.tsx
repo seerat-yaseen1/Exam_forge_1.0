@@ -14,12 +14,12 @@ import { invalidateSubjectCache } from './SubjectCombobox';
 
 // ── Shared input style ────────────────────────────────────────────────────────
 const inp: React.CSSProperties = {
-  background: '#FAFAF8', border: '1px solid #E3E1DB', color: '#0C0C0B',
+  background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', color: 'var(--ef-ink)',
   borderRadius: 2, outline: 'none', fontSize: 13,
   padding: '8px 12px', width: '100%',
 };
-function iFocus(e: React.FocusEvent<HTMLInputElement>) { e.target.style.borderColor = '#0C0C0B'; e.target.style.background = '#FFFFFF'; }
-function iBlur (e: React.FocusEvent<HTMLInputElement>) { e.target.style.borderColor = '#E3E1DB'; e.target.style.background = '#FAFAF8'; }
+function iFocus(e: React.FocusEvent<HTMLInputElement>) { e.target.style.borderColor = 'var(--ef-ink)'; e.target.style.background = 'var(--ef-surface)'; }
+function iBlur (e: React.FocusEvent<HTMLInputElement>) { e.target.style.borderColor = 'var(--ef-border)'; e.target.style.background = 'var(--ef-canvas-raised)'; }
 
 // ── Alias tag input ───────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ function AliasRow({
   return (
     <span
       className="flex items-center gap-1 px-2 py-0.5 text-xs select-none"
-      style={{ background: '#F0EFEB', borderRadius: 2, color: '#4A4A45' }}
+      style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)' }}
     >
       {alias}
       <button
@@ -37,7 +37,7 @@ function AliasRow({
         onClick={onRemove}
         disabled={removing}
         className="transition-opacity hover:opacity-60 ml-0.5"
-        style={{ color: '#6B6B66', cursor: removing ? 'not-allowed' : 'pointer' }}
+        style={{ color: 'var(--ef-text-muted)', cursor: removing ? 'not-allowed' : 'pointer' }}
       >
         {removing ? <Loader2 size={9} className="animate-spin" /> : <X size={9} strokeWidth={2} />}
       </button>
@@ -107,7 +107,7 @@ function SubjectCard({
   };
 
   return (
-    <div style={{ border: '1px solid #E3E1DB', borderRadius: 3, background: '#FFFFFF', marginBottom: 8 }}>
+    <div style={{ border: '1px solid var(--ef-border)', borderRadius: 3, background: 'var(--ef-surface)', marginBottom: 8 }}>
       {/* Card header */}
       <div className="flex items-center gap-3 px-4 py-3">
         {/* Name / rename inline */}
@@ -125,44 +125,44 @@ function SubjectCard({
               />
               <button type="button" onClick={submitRename} disabled={renameSaving}
                 className="flex items-center gap-1 text-xs px-2.5 py-1.5 transition-opacity"
-                style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2 }}
+                style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2 }}
               >
                 {renameSaving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
               </button>
               <button type="button" onClick={() => { setRenaming(false); setNewName(subject.name); }}
-                className="text-xs px-2.5 py-1.5" style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+                className="text-xs px-2.5 py-1.5" style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
               >
                 <X size={10} strokeWidth={2} />
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="text-sm" style={{ color: '#0C0C0B' }}>{subject.name}</span>
+              <span className="text-sm" style={{ color: 'var(--ef-ink)' }}>{subject.name}</span>
               {canEdit && (
               <button
                 type="button" onClick={() => { setRenaming(true); setNewName(subject.name); }}
                 className="transition-opacity hover:opacity-60" title="Rename"
-                style={{ color: '#6B6B66' }}
+                style={{ color: 'var(--ef-text-muted)' }}
               >
                 <Pencil size={11} strokeWidth={1.5} />
               </button>
               )}
             </div>
           )}
-          {renameErr && <p className="text-xs mt-1" style={{ color: '#9B2828' }}>{renameErr}</p>}
+          {renameErr && <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)' }}>{renameErr}</p>}
         </div>
 
         {/* Question count */}
         <span
           className="text-xs px-2 py-0.5 select-none flex-shrink-0"
-          style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}
+          style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}
         >
           {subject.questionCount} {subject.questionCount === 1 ? 'question' : 'questions'}
         </span>
 
         {/* Alias count pill */}
         {subject.aliases.length > 0 && (
-          <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>
+          <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
             {subject.aliases.length} alias{subject.aliases.length > 1 ? 'es' : ''}
           </span>
         )}
@@ -170,7 +170,7 @@ function SubjectCard({
         {/* Expand toggle */}
         <button
           type="button" onClick={() => setExpanded((v) => !v)}
-          className="transition-opacity hover:opacity-60 flex-shrink-0" style={{ color: '#6B6B66' }}
+          className="transition-opacity hover:opacity-60 flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}
         >
           {expanded ? <ChevronUp size={14} strokeWidth={1.5} /> : <ChevronDown size={14} strokeWidth={1.5} />}
         </button>
@@ -178,14 +178,14 @@ function SubjectCard({
 
       {/* Expanded alias management */}
       {expanded && (
-        <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid #F0EFEB' }}>
-          <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>ALIASES</p>
-          <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+        <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>ALIASES</p>
+          <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
             Aliases are alternate names that resolve to this subject. When a question or bulk-upload uses an alias, it is automatically mapped to <strong>{subject.name}</strong>.
           </p>
           <div className="flex flex-wrap gap-1.5 mb-3">
             {subject.aliases.length === 0 && (
-              <span className="text-xs" style={{ color: '#6B6B66' }}>No aliases yet.</span>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>No aliases yet.</span>
             )}
             {subject.aliases.map((a) => (
               canEdit ? (
@@ -195,7 +195,7 @@ function SubjectCard({
                   removing={removingAlias === a}
                 />
               ) : (
-                <span key={a} className="text-xs px-2 py-0.5" style={{ background: '#F0EFEB', color: '#6B6A64', borderRadius: 2 }}>
+                <span key={a} className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-border-subtle)', color: '#6B6A64', borderRadius: 2 }}>
                   {a}
                 </span>
               )
@@ -218,8 +218,8 @@ function SubjectCard({
               type="button" onClick={submitAddAlias} disabled={addingAlias || !newAlias.trim()}
               className="flex items-center gap-1.5 text-xs px-3 py-2 transition-opacity"
               style={{
-                background: newAlias.trim() ? '#0C0C0B' : '#C8C7C2',
-                color: '#FFFFFF', borderRadius: 2,
+                background: newAlias.trim() ? 'var(--ef-ink)' : 'var(--ef-track)',
+                color: 'var(--ef-surface)', borderRadius: 2,
                 cursor: newAlias.trim() ? 'pointer' : 'not-allowed',
               }}
             >
@@ -293,16 +293,16 @@ function MergeModal({
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
-        style={{ maxWidth: 480, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 480, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div>
-            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>SUBJECT MANAGER</p>
-            <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>Merge Subjects</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>SUBJECT MANAGER</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--ef-ink)' }}>Merge Subjects</p>
           </div>
           {phase !== 'merging' && (
-            <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+            <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
               <X size={14} strokeWidth={1.5} />
             </button>
           )}
@@ -312,16 +312,16 @@ function MergeModal({
           {(phase === 'pick' || phase === 'preview') && (
             <>
               {/* Destructive warning */}
-              <div className="flex items-start gap-2.5 px-3 py-3 mb-5" style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-                <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
-                <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.7 }}>
+              <div className="flex items-start gap-2.5 px-3 py-3 mb-5" style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+                <AlertTriangle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
+                <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.7 }}>
                   Merge is <strong>permanent and cannot be undone</strong>. All questions with the source subject will be updated to the target. The source subject will be deleted and its name will become an alias of the target.
                 </p>
               </div>
 
               {/* Source */}
               <div className="mb-4">
-                <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>Replace this subject (source)</label>
+                <label className="block text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>Replace this subject (source)</label>
                 <select
                   value={sourceId} onChange={(e) => setSourceId(e.target.value)}
                   style={{ ...inp, appearance: 'none', cursor: 'pointer' }}
@@ -337,7 +337,7 @@ function MergeModal({
 
               {/* Target */}
               <div className="mb-5">
-                <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>…with this subject (target)</label>
+                <label className="block text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>…with this subject (target)</label>
                 <select
                   value={targetId} onChange={(e) => setTargetId(e.target.value)}
                   style={{ ...inp, appearance: 'none', cursor: 'pointer' }}
@@ -353,15 +353,15 @@ function MergeModal({
 
               {/* Preview */}
               {canPreview && source && target && (
-                <div className="px-4 py-4 mb-5" style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                  <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>IMPACT PREVIEW</p>
-                  <p className="text-xs mb-1" style={{ color: '#0C0C0B', lineHeight: 1.7 }}>
+                <div className="px-4 py-4 mb-5" style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                  <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>IMPACT PREVIEW</p>
+                  <p className="text-xs mb-1" style={{ color: 'var(--ef-ink)', lineHeight: 1.7 }}>
                     <strong>{source.questionCount}</strong> questions tagged <strong>"{source.name}"</strong> will be updated to <strong>"{target.name}"</strong>.
                   </p>
-                  <p className="text-xs mb-1" style={{ color: '#0C0C0B', lineHeight: 1.7 }}>
+                  <p className="text-xs mb-1" style={{ color: 'var(--ef-ink)', lineHeight: 1.7 }}>
                     <strong>"{source.name}"</strong> will be removed from the registry.
                   </p>
-                  <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.7 }}>
+                  <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.7 }}>
                     <strong>"{source.name}"</strong> will become an alias of <strong>"{target.name}"</strong> — future uploads using this name will auto-map to the target.
                   </p>
                 </div>
@@ -370,8 +370,8 @@ function MergeModal({
               {/* Typed confirmation */}
               {canPreview && (
                 <div className="mb-5">
-                  <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>
-                    Type <code style={{ fontFamily: 'monospace', background: '#F0EFEB', padding: '1px 5px', borderRadius: 2, letterSpacing: '0.08em' }}>MERGE</code> to confirm
+                  <label className="block text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>
+                    Type <code style={{ fontFamily: 'monospace', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2, letterSpacing: '0.08em' }}>MERGE</code> to confirm
                   </label>
                   <input
                     type="text"
@@ -384,14 +384,14 @@ function MergeModal({
                 </div>
               )}
 
-              {err && <p className="text-xs mb-3" style={{ color: '#9B2828' }}>{err}</p>}
+              {err && <p className="text-xs mb-3" style={{ color: 'var(--ef-danger)' }}>{err}</p>}
             </>
           )}
 
           {phase === 'merging' && progress && (
             <div className="flex flex-col items-center py-8">
-              <Loader2 size={22} className="animate-spin mb-4" style={{ color: '#6B6B66' }} />
-              <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>
+              <Loader2 size={22} className="animate-spin mb-4" style={{ color: 'var(--ef-text-muted)' }} />
+              <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>
                 {progress.phase === 'counting' ? 'Counting affected questions…' :
                  progress.phase === 'updating' ? `Updating questions… ${progress.done} / ${progress.total}` :
                  progress.phase === 'cleanup'  ? 'Cleaning up registry…' :
@@ -399,11 +399,11 @@ function MergeModal({
               </p>
               {progress.total > 0 && (
                 <div className="w-full mt-4" style={{ maxWidth: 240 }}>
-                  <div style={{ height: 3, background: '#E3E1DB', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: 3, background: 'var(--ef-border)', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{
                       height: '100%',
                       width: `${Math.round((progress.done / progress.total) * 100)}%`,
-                      background: '#0C0C0B', borderRadius: 2, transition: 'width 0.3s',
+                      background: 'var(--ef-ink)', borderRadius: 2, transition: 'width 0.3s',
                     }} />
                   </div>
                 </div>
@@ -414,11 +414,11 @@ function MergeModal({
           {phase === 'done' && result && (
             <div className="flex flex-col items-center py-8">
               <div className="flex items-center justify-center mb-4" style={{ width: 44, height: 44, borderRadius: '50%', background: '#F0FBF4', border: '1px solid #C3E8CE' }}>
-                <CheckCircle2 size={20} strokeWidth={1.5} style={{ color: '#2A6B3A' }} />
+                <CheckCircle2 size={20} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
               </div>
-              <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>Merge complete</p>
-              <p className="text-xs" style={{ color: '#2A6B3A' }}>{result.updatedCount} questions updated.</p>
-              <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
+              <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>Merge complete</p>
+              <p className="text-xs" style={{ color: 'var(--ef-success)' }}>{result.updatedCount} questions updated.</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
                 "{source?.name}" is now an alias of "{target?.name}".
               </p>
             </div>
@@ -426,29 +426,29 @@ function MergeModal({
         </div>
 
         {(phase === 'pick' || phase === 'preview') && (
-          <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+          <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
             <button
               type="button"
               onClick={executeMerge}
               disabled={!canMerge || !canPreview}
               className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
               style={{
-                background: canMerge && canPreview ? '#9B2828' : '#C8C7C2',
-                color: '#FFFFFF', borderRadius: 2,
+                background: canMerge && canPreview ? 'var(--ef-danger)' : 'var(--ef-track)',
+                color: 'var(--ef-surface)', borderRadius: 2,
                 cursor: canMerge && canPreview ? 'pointer' : 'not-allowed',
               }}
             >
               <Merge size={11} strokeWidth={1.5} /> Confirm Merge
             </button>
-            <button type="button" onClick={onClose} className="text-xs px-4 py-2.5" style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            <button type="button" onClick={onClose} className="text-xs px-4 py-2.5" style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
               Cancel
             </button>
           </div>
         )}
 
         {phase === 'done' && (
-          <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
-            <button type="button" onClick={onClose} className="text-xs px-4 py-2.5" style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2 }}>
+          <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
+            <button type="button" onClick={onClose} className="text-xs px-4 py-2.5" style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2 }}>
               Close
             </button>
           </div>
@@ -532,14 +532,14 @@ export function SubjectManager({
         {/* Search */}
         <div
           className="flex items-center gap-2 px-3 py-2 flex-1"
-          style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2, minWidth: 180 }}
+          style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, minWidth: 180 }}
         >
-          <Tag size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+          <Tag size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
           <input
             type="text" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search subjects or aliases…"
             className="flex-1 text-xs outline-none"
-            style={{ background: 'transparent', color: '#0C0C0B', fontSize: 13 }}
+            style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
           />
         </div>
 
@@ -549,11 +549,11 @@ export function SubjectManager({
           type="button" onClick={handleRefresh} disabled={refreshing}
           title="Refresh question counts from Firestore"
           className="flex items-center gap-1.5 text-xs px-3 py-2 transition-opacity hover:opacity-70"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FAFAF8' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-canvas-raised)' }}
         >
           {refreshing
-            ? <Loader2 size={12} className="animate-spin" style={{ color: '#6B6B66' }} />
-            : <RefreshCw size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            ? <Loader2 size={12} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+            : <RefreshCw size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           }
           Refresh counts
         </button>
@@ -564,7 +564,7 @@ export function SubjectManager({
         <button
           type="button" onClick={() => setShowMerge(true)}
           className="flex items-center gap-1.5 text-xs px-3 py-2 transition-opacity hover:opacity-70"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FAFAF8' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-canvas-raised)' }}
         >
           <Merge size={12} strokeWidth={1.5} /> Merge subjects
         </button>
@@ -587,8 +587,8 @@ export function SubjectManager({
           type="button" onClick={handleAdd} disabled={adding || !newSubjectName.trim()}
           className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
           style={{
-            background: newSubjectName.trim() ? '#0C0C0B' : '#C8C7C2',
-            color: '#FFFFFF', borderRadius: 2, flexShrink: 0,
+            background: newSubjectName.trim() ? 'var(--ef-ink)' : 'var(--ef-track)',
+            color: 'var(--ef-surface)', borderRadius: 2, flexShrink: 0,
             cursor: newSubjectName.trim() ? 'pointer' : 'not-allowed',
           }}
         >
@@ -597,10 +597,10 @@ export function SubjectManager({
         </button>
       </div>
       )}
-      {addErr && <p className="text-xs mb-3" style={{ color: '#9B2828' }}>{addErr}</p>}
+      {addErr && <p className="text-xs mb-3" style={{ color: 'var(--ef-danger)' }}>{addErr}</p>}
 
       {/* Stats row */}
-      <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
+      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>
         {subjects.length} subjects · {subjects.reduce((acc, s) => acc + s.questionCount, 0)} questions total
         {search && <span> · showing {filtered.length} results</span>}
       </p>
@@ -608,11 +608,11 @@ export function SubjectManager({
       {/* List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 size={18} className="animate-spin" style={{ color: '#6B6B66' }} />
+          <Loader2 size={18} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center py-12" style={{ color: '#6B6B66' }}>
-          <div style={{ width: 1, height: 24, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 12 }} />
+        <div className="flex flex-col items-center py-12" style={{ color: 'var(--ef-text-muted)' }}>
+          <div style={{ width: 1, height: 24, background: 'linear-gradient(to bottom, transparent, var(--ef-border-muted))', marginBottom: 12 }} />
           <p className="text-xs" style={{ letterSpacing: '0.1em' }}>
             {search ? 'NO SUBJECTS MATCH' : 'NO SUBJECTS YET'}
           </p>

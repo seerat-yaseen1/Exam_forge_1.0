@@ -36,10 +36,10 @@ function PillToggle({
       style={{
         borderRadius: 2,
         border: active
-          ? `1px solid ${color?.border ?? '#0C0C0B'}`
-          : '1px solid #E3E1DB',
-        background: active ? (color?.bg ?? '#0C0C0B') : '#FAFAF8',
-        color: active ? (color?.text ?? '#FFFFFF') : '#6B6B66',
+          ? `1px solid ${color?.border ?? 'var(--ef-ink)'}`
+          : '1px solid var(--ef-border)',
+        background: active ? (color?.bg ?? 'var(--ef-ink)') : 'var(--ef-canvas-raised)',
+        color: active ? (color?.text ?? 'var(--ef-surface)') : 'var(--ef-text-muted)',
       }}
     >
       {label}
@@ -67,9 +67,9 @@ function SubjectMultiSelect({
         className="text-xs px-2.5 py-1 transition-all"
         style={{
           borderRadius: 2,
-          border: selected.length === 0 ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-          background: selected.length === 0 ? '#0C0C0B' : '#FAFAF8',
-          color: selected.length === 0 ? '#FFFFFF' : '#6B6B66',
+          border: selected.length === 0 ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+          background: selected.length === 0 ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+          color: selected.length === 0 ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
         }}
       >
         All
@@ -84,9 +84,9 @@ function SubjectMultiSelect({
             className="text-xs px-2.5 py-1 transition-all flex items-center gap-1.5"
             style={{
               borderRadius: 2,
-              border: isActive ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-              background: isActive ? '#0C0C0B' : '#FAFAF8',
-              color: isActive ? '#FFFFFF' : '#6B6B66',
+              border: isActive ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+              background: isActive ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+              color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
             }}
           >
             {s.name}
@@ -117,10 +117,10 @@ function TagFilterInput({
   return (
     <div
       className="flex flex-wrap gap-1.5 items-center p-2 min-h-9"
-      style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FAFAF8' }}
+      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-canvas-raised)' }}
     >
       {tags.map((tag) => (
-        <span key={tag} className="flex items-center gap-1 px-2 py-0.5 text-xs select-none" style={{ background: '#F0EFEB', borderRadius: 2, color: '#4A4A45' }}>
+        <span key={tag} className="flex items-center gap-1 px-2 py-0.5 text-xs select-none" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)' }}>
           #{tag}
           <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))} className="hover:opacity-60 transition-opacity">
             <X size={9} strokeWidth={2} />
@@ -134,7 +134,7 @@ function TagFilterInput({
         onBlur={() => { if (input.trim()) commit(input); }}
         placeholder={tags.length === 0 ? 'Filter by tags (Enter to add)…' : ''}
         className="flex-1 text-xs outline-none min-w-20"
-        style={{ background: 'transparent', color: '#0C0C0B', fontSize: 13 }}
+        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
       />
     </div>
   );
@@ -282,7 +282,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
   });
 
   const inp: React.CSSProperties = {
-    background: '#FAFAF8', border: '1px solid #E3E1DB', color: '#0C0C0B',
+    background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', color: 'var(--ef-ink)',
     borderRadius: 2, outline: 'none', fontSize: 12, padding: '7px 10px', width: '100%',
   };
 
@@ -343,16 +343,16 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="w-full flex flex-col"
-        style={{ maxWidth: 560, maxHeight: '90vh', background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 560, maxHeight: '90vh', background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div>
-            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>QUESTION POOL</p>
-            <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>Export Questions</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>QUESTION POOL</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--ef-ink)' }}>Export Questions</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -362,17 +362,17 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
           {done ? (
             <div className="flex flex-col items-center py-12">
               <div className="flex items-center justify-center mb-4" style={{ width: 44, height: 44, borderRadius: '50%', background: '#F0FBF4', border: '1px solid #C3E8CE' }}>
-                <CheckCircle2 size={20} strokeWidth={1.5} style={{ color: '#2A6B3A' }} />
+                <CheckCircle2 size={20} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
               </div>
-              <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>Export ready</p>
-              <p className="text-xs" style={{ color: '#2A6B3A' }}>{filtered.length} questions exported.</p>
+              <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>Export ready</p>
+              <p className="text-xs" style={{ color: 'var(--ef-success)' }}>{filtered.length} questions exported.</p>
             </div>
           ) : (
             <>
               {/* Subject */}
               <div className="mb-5">
-                <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>
-                  Subject <span style={{ color: '#6B6B66' }}>(all if none selected)</span>
+                <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)' }}>
+                  Subject <span style={{ color: 'var(--ef-text-muted)' }}>(all if none selected)</span>
                 </label>
                 <SubjectMultiSelect
                   subjects={subjects}
@@ -383,8 +383,8 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
 
               {/* Difficulty */}
               <div className="mb-5">
-                <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>
-                  Difficulty <span style={{ color: '#6B6B66' }}>(all if none selected)</span>
+                <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)' }}>
+                  Difficulty <span style={{ color: 'var(--ef-text-muted)' }}>(all if none selected)</span>
                 </label>
                 <div className="flex gap-2">
                   {DIFFICULTIES.map((d) => (
@@ -400,8 +400,8 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
 
               {/* Engine */}
               <div className="mb-5">
-                <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>
-                  Question type <span style={{ color: '#6B6B66' }}>(all if none selected)</span>
+                <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)' }}>
+                  Question type <span style={{ color: 'var(--ef-text-muted)' }}>(all if none selected)</span>
                 </label>
                 <div className="flex gap-2">
                   {ENGINES.map((e) => (
@@ -416,8 +416,8 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
 
               {/* Tags */}
               <div className="mb-5">
-                <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>
-                  Tags <span style={{ color: '#6B6B66' }}>(any match — blank = all)</span>
+                <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)' }}>
+                  Tags <span style={{ color: 'var(--ef-text-muted)' }}>(any match — blank = all)</span>
                 </label>
                 <TagFilterInput
                   tags={filters.tags}
@@ -427,10 +427,10 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
 
               {/* Date range */}
               <div className="mb-5">
-                <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>Date created</label>
+                <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)' }}>Date created</label>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>From</p>
+                    <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>From</p>
                     <input
                       type="date"
                       value={filters.dateFrom}
@@ -439,7 +439,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
                     />
                   </div>
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>To</p>
+                    <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>To</p>
                     <input
                       type="date"
                       value={filters.dateTo}
@@ -452,7 +452,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
 
               {/* Format */}
               <div className="mb-5">
-                <label className="block text-xs mb-2" style={{ color: '#4A4A45' }}>Export format</label>
+                <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)' }}>Export format</label>
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { v: 'xlsx' as ExportFormat, label: 'XLSX Spreadsheet', sub: 'Re-importable — 3 sheets (MCQ, Text, Match)', icon: <FileDown size={14} strokeWidth={1.5} /> },
@@ -464,15 +464,15 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
                       onClick={() => setFormat(f.v)}
                       className="flex items-start gap-3 p-3 text-left transition-all"
                       style={{
-                        border: format === f.v ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                        border: format === f.v ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
                         borderRadius: 2,
-                        background: format === f.v ? '#F7F6F3' : '#FFFFFF',
+                        background: format === f.v ? 'var(--ef-canvas)' : 'var(--ef-surface)',
                       }}
                     >
-                      <span style={{ color: format === f.v ? '#0C0C0B' : '#6B6B66', marginTop: 1, flexShrink: 0 }}>{f.icon}</span>
+                      <span style={{ color: format === f.v ? 'var(--ef-ink)' : 'var(--ef-text-muted)', marginTop: 1, flexShrink: 0 }}>{f.icon}</span>
                       <div>
-                        <p className="text-xs" style={{ color: '#0C0C0B' }}>{f.label}</p>
-                        <p className="text-xs mt-0.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{f.sub}</p>
+                        <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{f.label}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>{f.sub}</p>
                       </div>
                     </button>
                   ))}
@@ -484,15 +484,15 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
 
         {/* Footer */}
         {!done && (
-          <div className="flex-shrink-0 px-5 py-4 flex items-center gap-3" style={{ borderTop: '1px solid #E3E1DB' }}>
+          <div className="flex-shrink-0 px-5 py-4 flex items-center gap-3" style={{ borderTop: '1px solid var(--ef-border)' }}>
             <button
               type="button"
               onClick={handleExport}
               disabled={exporting || filtered.length === 0}
               className="flex items-center gap-2 text-xs px-4 py-2.5 transition-opacity"
               style={{
-                background: filtered.length > 0 ? '#0C0C0B' : '#C8C7C2',
-                color: '#FFFFFF', borderRadius: 2,
+                background: filtered.length > 0 ? 'var(--ef-ink)' : 'var(--ef-track)',
+                color: 'var(--ef-surface)', borderRadius: 2,
                 cursor: filtered.length > 0 ? 'pointer' : 'not-allowed',
               }}
             >
@@ -501,10 +501,10 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
                 : <><Download size={11} strokeWidth={1.5} /> Export {filtered.length} question{filtered.length !== 1 ? 's' : ''}</>
               }
             </button>
-            <p className="text-xs" style={{ color: '#6B6B66' }}>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               {filtered.length} of {questions.length} questions match
             </p>
-            <button type="button" onClick={onClose} className="ml-auto text-xs" style={{ color: '#6B6B66' }}>
+            <button type="button" onClick={onClose} className="ml-auto text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               Cancel
             </button>
           </div>

@@ -35,9 +35,9 @@ const ENGINE_META: Record<QuestionEngine, { label: string; color: string; bg: st
 };
 
 const DIFFICULTY_META: Record<Difficulty, { label: string; color: string }> = {
-  easy: { label: 'Easy', color: '#1E7B3C' },
+  easy: { label: 'Easy', color: 'var(--ef-success-strong)' },
   medium: { label: 'Medium', color: '#8B5A00' },
-  hard: { label: 'Hard', color: '#9B2828' },
+  hard: { label: 'Hard', color: 'var(--ef-danger)' },
 };
 
 function EngineBadge({ engine }: { engine: QuestionEngine }) {
@@ -82,8 +82,8 @@ function QuestionRow({
     <div
       className="flex items-start gap-3 px-4 py-3 transition-colors"
       style={{
-        borderBottom: '1px solid #F0EFEB',
-        background: selected ? '#FAFAF8' : hovered ? '#FDFCFB' : '#FFFFFF',
+        borderBottom: '1px solid var(--ef-border-subtle)',
+        background: selected ? 'var(--ef-canvas-raised)' : hovered ? '#FDFCFB' : 'var(--ef-surface)',
         cursor: 'pointer',
       }}
       onMouseEnter={() => setHovered(true)}
@@ -98,22 +98,22 @@ function QuestionRow({
           height: 16,
           borderRadius: 2,
           marginTop: 1,
-          background: selected ? '#0C0C0B' : '#FFFFFF',
-          border: selected ? '1px solid #0C0C0B' : '1px solid #6B6B66',
+          background: selected ? 'var(--ef-ink)' : 'var(--ef-surface)',
+          border: selected ? '1px solid var(--ef-ink)' : '1px solid var(--ef-text-muted)',
         }}
       >
-        {selected && <Check size={9} strokeWidth={2.5} style={{ color: '#FFFFFF' }} />}
+        {selected && <Check size={9} strokeWidth={2.5} style={{ color: 'var(--ef-surface)' }} />}
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs leading-relaxed" style={{ color: '#0C0C0B' }}>
-          {truncateStem(question.stem) || <em style={{ color: '#6B6B66' }}>No question text</em>}
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--ef-ink)' }}>
+          {truncateStem(question.stem) || <em style={{ color: 'var(--ef-text-muted)' }}>No question text</em>}
         </p>
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           <EngineBadge engine={question.engine} />
           {question.variant && (
-            <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
               {question.variant}
             </span>
           )}
@@ -121,12 +121,12 @@ function QuestionRow({
             {diff.label}
           </span>
           {question.subject && (
-            <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
               {question.subject}
             </span>
           )}
           {question.topic && (
-            <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
               · {question.topic}
             </span>
           )}
@@ -145,7 +145,7 @@ function QuestionRow({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col items-end gap-0.5">
-              <label style={{ color: '#6B6B66', fontSize: 9, letterSpacing: '0.06em' }}>MARKS</label>
+              <label style={{ color: 'var(--ef-text-muted)', fontSize: 9, letterSpacing: '0.06em' }}>MARKS</label>
               <input
                 type="number"
                 min="0.5"
@@ -155,10 +155,10 @@ function QuestionRow({
                 className="text-xs px-2 py-1 outline-none text-center"
                 style={{
                   width: 56,
-                  border: '1px solid #E3E1DB',
+                  border: '1px solid var(--ef-border)',
                   borderRadius: 2,
-                  color: '#0C0C0B',
-                  background: '#FFFFFF',
+                  color: 'var(--ef-ink)',
+                  background: 'var(--ef-surface)',
                 }}
               />
             </div>
@@ -186,9 +186,9 @@ function FilterChip({
       className="text-xs px-2.5 py-1 transition-all"
       style={{
         borderRadius: 2,
-        border: active ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-        background: active ? '#0C0C0B' : '#FAFAF8',
-        color: active ? '#FFFFFF' : '#6B6B66',
+        border: active ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+        background: active ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+        color: active ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
       }}
     >
       {label}
@@ -304,8 +304,8 @@ export function QuestionPickerModal({
         style={{
           maxWidth: 680,
           maxHeight: '82vh',
-          background: '#FFFFFF',
-          border: '1px solid #E3E1DB',
+          background: 'var(--ef-surface)',
+          border: '1px solid var(--ef-border)',
           borderRadius: 3,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -313,11 +313,11 @@ export function QuestionPickerModal({
         {/* ── Header ── */}
         <div
           className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 flex-shrink-0"
-          style={{ borderBottom: '1px solid #E3E1DB' }}
+          style={{ borderBottom: '1px solid var(--ef-border)' }}
         >
           <div className="flex items-center gap-3">
-            <BookOpen size={14} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+            <BookOpen size={14} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
               BROWSE QUESTION BANK
             </p>
           </div>
@@ -326,9 +326,9 @@ export function QuestionPickerModal({
               <span
                 className="text-xs px-2 py-0.5"
                 style={{
-                  background: '#F0F9F4',
-                  color: '#1E7B3C',
-                  border: '1px solid #B8E6C8',
+                  background: 'var(--ef-success-bg)',
+                  color: 'var(--ef-success-strong)',
+                  border: '1px solid var(--ef-success-border)',
                   borderRadius: 2,
                 }}
               >
@@ -338,7 +338,7 @@ export function QuestionPickerModal({
             <button
               onClick={onClose}
               className="p-1 transition-opacity hover:opacity-60"
-              style={{ color: '#6B6B66' }}
+              style={{ color: 'var(--ef-text-muted)' }}
             >
               <X size={14} strokeWidth={1.5} />
             </button>
@@ -348,32 +348,32 @@ export function QuestionPickerModal({
         {/* ── Filters ── */}
         <div
           className="px-5 py-3 flex-shrink-0 space-y-2.5"
-          style={{ borderBottom: '1px solid #F0EFEB' }}
+          style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}
         >
           {/* Search */}
           <div
             className="flex items-center gap-2 px-3 py-2"
-            style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
           >
-            <Search size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+            <Search size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by stem, subject, topic, or tag…"
               className="flex-1 text-xs outline-none"
-              style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12 }}
+              style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12 }}
             />
             {search && (
               <button onClick={() => setSearch('')} className="hover:opacity-60 transition-opacity">
-                <X size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                <X size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
               </button>
             )}
           </div>
 
           {/* Filter row */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.05em' }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.05em' }}>
               TYPE:
             </span>
             <FilterChip label="All" active={!engineFilter} onClick={() => setEngineFilter('')} />
@@ -381,7 +381,7 @@ export function QuestionPickerModal({
             <FilterChip label="Text" active={engineFilter === 'text'} onClick={() => setEngineFilter(engineFilter === 'text' ? '' : 'text')} />
             <FilterChip label="Match" active={engineFilter === 'match'} onClick={() => setEngineFilter(engineFilter === 'match' ? '' : 'match')} />
 
-            <span className="text-xs ml-2" style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.05em' }}>
+            <span className="text-xs ml-2" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.05em' }}>
               DIFF:
             </span>
             <FilterChip label="Easy" active={diffFilter === 'easy'} onClick={() => setDiffFilter(diffFilter === 'easy' ? '' : 'easy')} />
@@ -396,9 +396,9 @@ export function QuestionPickerModal({
                   className="flex items-center gap-1 text-xs px-2.5 py-1 transition-all"
                   style={{
                     borderRadius: 2,
-                    border: subjectFilter ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-                    background: subjectFilter ? '#0C0C0B' : '#FAFAF8',
-                    color: subjectFilter ? '#FFFFFF' : '#6B6B66',
+                    border: subjectFilter ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+                    background: subjectFilter ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+                    color: subjectFilter ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                   }}
                 >
                   {subjectFilter || 'Subject'}
@@ -413,8 +413,8 @@ export function QuestionPickerModal({
                       transition={{ duration: 0.14 }}
                       className="absolute top-full left-0 mt-1 z-10 py-1"
                       style={{
-                        background: '#FFFFFF',
-                        border: '1px solid #E3E1DB',
+                        background: 'var(--ef-surface)',
+                        border: '1px solid var(--ef-border)',
                         borderRadius: 2,
                         minWidth: 160,
                         maxHeight: 200,
@@ -425,7 +425,7 @@ export function QuestionPickerModal({
                       <button
                         onClick={() => { setSubjectFilter(''); setShowSubjectMenu(false); }}
                         className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
-                        style={{ color: '#6B6B66' }}
+                        style={{ color: 'var(--ef-text-muted)' }}
                       >
                         All Subjects
                       </button>
@@ -434,7 +434,7 @@ export function QuestionPickerModal({
                           key={s}
                           onClick={() => { setSubjectFilter(s); setShowSubjectMenu(false); }}
                           className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
-                          style={{ color: subjectFilter === s ? '#0C0C0B' : '#6B6B66' }}
+                          style={{ color: subjectFilter === s ? 'var(--ef-ink)' : 'var(--ef-text-muted)' }}
                         >
                           {s}
                         </button>
@@ -449,7 +449,7 @@ export function QuestionPickerModal({
               <button
                 onClick={clearFilters}
                 className="ml-auto text-xs transition-opacity hover:opacity-60"
-                style={{ color: '#6B6B66' }}
+                style={{ color: 'var(--ef-text-muted)' }}
               >
                 Clear
               </button>
@@ -460,20 +460,20 @@ export function QuestionPickerModal({
         {/* ── Question list ── */}
         <div className="flex-1 overflow-y-auto">
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12" style={{ color: '#6B6B66' }}>
-              <div style={{ width: 1, height: 24, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 12 }} />
+            <div className="flex flex-col items-center justify-center py-12" style={{ color: 'var(--ef-text-muted)' }}>
+              <div style={{ width: 1, height: 24, background: 'linear-gradient(to bottom, transparent, var(--ef-border-muted))', marginBottom: 12 }} />
               <p className="text-xs" style={{ letterSpacing: '0.1em' }}>
                 {hasFilters ? 'NO QUESTIONS MATCH' : 'NO QUESTIONS IN BANK'}
               </p>
-              <div style={{ width: 1, height: 24, background: 'linear-gradient(to top, transparent, #DDDBD5)', marginTop: 12 }} />
+              <div style={{ width: 1, height: 24, background: 'linear-gradient(to top, transparent, var(--ef-border-muted))', marginTop: 12 }} />
             </div>
           ) : (
             <>
               <div
                 className="sticky top-0 px-4 py-2 flex items-center justify-between"
-                style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB', zIndex: 2 }}
+                style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border-subtle)', zIndex: 2 }}
               >
-                <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.08em' }}>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.08em' }}>
                   {filtered.length} QUESTION{filtered.length !== 1 ? 'S' : ''}{hasFilters ? ' MATCHING' : ''}
                 </span>
                 <button
@@ -496,7 +496,7 @@ export function QuestionPickerModal({
                     }
                   }}
                   className="text-xs transition-opacity hover:opacity-60"
-                  style={{ color: '#6B6B66' }}
+                  style={{ color: 'var(--ef-text-muted)' }}
                 >
                   {filtered.every((q) => selected[q.id] !== undefined) ? 'Deselect all' : 'Select all'}
                 </button>
@@ -521,9 +521,9 @@ export function QuestionPickerModal({
         {/* ── Footer ── */}
         <div
           className="flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 flex-shrink-0"
-          style={{ borderTop: '1px solid #E3E1DB' }}
+          style={{ borderTop: '1px solid var(--ef-border)' }}
         >
-          <p className="text-xs" style={{ color: '#6B6B66' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             {newlySelectedCount > 0
               ? `${newlySelectedCount} question${newlySelectedCount !== 1 ? 's' : ''} will be added`
               : selectedIds.length === 0
@@ -534,7 +534,7 @@ export function QuestionPickerModal({
             <button
               onClick={onClose}
               className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-              style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}
+              style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}
             >
               Cancel
             </button>
@@ -543,8 +543,8 @@ export function QuestionPickerModal({
               disabled={newlySelectedCount === 0}
               className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
               style={{
-                background: newlySelectedCount === 0 ? '#C8C7C2' : '#0C0C0B',
-                color: '#FFFFFF',
+                background: newlySelectedCount === 0 ? 'var(--ef-track)' : 'var(--ef-ink)',
+                color: 'var(--ef-surface)',
                 borderRadius: 2,
                 cursor: newlySelectedCount === 0 ? 'not-allowed' : 'pointer',
               }}

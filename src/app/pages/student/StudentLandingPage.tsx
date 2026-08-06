@@ -37,13 +37,13 @@ function formatShortDate(iso: string): string {
 const LEVEL_CONFIG: Record<NodeLevel, { label: string; icon: React.ReactNode; color: string; bg: string; border: string }> = {
   school:          { label: 'School',          icon: <School size={12} strokeWidth={1.5} />,      color: '#4A6FA5', bg: '#EEF3FB', border: '#C8D8F0' },
   academicLevel:   { label: 'Level',           icon: <GraduationCap size={12} strokeWidth={1.5} />, color: '#6B4A9B', bg: '#F3EEFB', border: '#D8C8F0' },
-  program:         { label: 'Program',         icon: <BookOpen size={12} strokeWidth={1.5} />,    color: '#2A6B3A', bg: '#F0F7F2', border: '#C6DECE' },
+  program:         { label: 'Program',         icon: <BookOpen size={12} strokeWidth={1.5} />,    color: 'var(--ef-success)', bg: 'var(--ef-success-bg-alt)', border: 'var(--ef-success-border-alt)' },
   academicSession: { label: 'Session',         icon: <Calendar size={12} strokeWidth={1.5} />,    color: '#7A5A2A', bg: '#FAF5EE', border: '#E8D8B8' },
   academicYear:    { label: 'Year',            icon: <Hash size={12} strokeWidth={1.5} />,        color: '#5A7A2A', bg: '#F2F7EE', border: '#CCDAB8' },
   semester:        { label: 'Semester',        icon: <Layers size={12} strokeWidth={1.5} />,      color: '#2A6A7A', bg: '#EEF6F8', border: '#B8D8DE' },
   course:          { label: 'Course',          icon: <BookMarked size={12} strokeWidth={1.5} />,  color: '#6A2A3A', bg: '#F8EEF1', border: '#E0B8C4' },
-  section:         { label: 'Section',         icon: <Users size={12} strokeWidth={1.5} />,       color: '#4A4A45', bg: '#F3F2EF', border: '#DDDBD5' },
-  group:           { label: 'Group',           icon: <Group size={12} strokeWidth={1.5} />,       color: '#2A6B3A', bg: '#F0F7F2', border: '#C6DECE' },
+  section:         { label: 'Section',         icon: <Users size={12} strokeWidth={1.5} />,       color: 'var(--ef-text-subtle)', bg: '#F3F2EF', border: 'var(--ef-border-muted)' },
+  group:           { label: 'Group',           icon: <Group size={12} strokeWidth={1.5} />,       color: 'var(--ef-success)', bg: 'var(--ef-success-bg-alt)', border: 'var(--ef-success-border-alt)' },
 };
 
 // ── Assignment card ────────────────────────────────────────────────
@@ -58,8 +58,8 @@ function AssignmentCard({ mapping, index }: { mapping: AcademicMapping; index: n
       transition={{ duration: 0.25, delay: index * 0.04 }}
       className="p-4"
       style={{
-        background: '#FFFFFF',
-        border: '1px solid #E3E1DB',
+        background: 'var(--ef-surface)',
+        border: '1px solid var(--ef-border)',
         borderRadius: 3,
       }}
     >
@@ -74,12 +74,12 @@ function AssignmentCard({ mapping, index }: { mapping: AcademicMapping; index: n
             {cfg.label}
           </span>
         </div>
-        <span className="text-xs" style={{ color: '#6B6B66', flexShrink: 0 }}>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }}>
           {formatShortDate(mapping.createdAt)}
         </span>
       </div>
 
-      <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.5, marginBottom: 8 }}>
+      <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.5, marginBottom: 8 }}>
         {mapping.nodeName}
       </p>
 
@@ -90,14 +90,14 @@ function AssignmentCard({ mapping, index }: { mapping: AcademicMapping; index: n
             <span
               className="text-xs"
               style={{
-                color: i === arr.length - 1 ? '#4A4A45' : '#6B6B66',
+                color: i === arr.length - 1 ? 'var(--ef-text-subtle)' : 'var(--ef-text-muted)',
                 fontWeight: i === arr.length - 1 ? 500 : 400,
               }}
             >
               {crumb}
             </span>
             {i < arr.length - 1 && (
-              <ChevronRight size={10} strokeWidth={1.5} style={{ color: '#DDDBD5', flexShrink: 0 }} />
+              <ChevronRight size={10} strokeWidth={1.5} style={{ color: 'var(--ef-border-muted)', flexShrink: 0 }} />
             )}
           </span>
         ))}
@@ -181,37 +181,37 @@ export function StudentLandingPage() {
       style={{ maxWidth: 960, margin: '0 auto' }}
     >
       {/* Page header */}
-      <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
+      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
         <div className="flex items-center gap-2 mb-2">
-          <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#2A6B3A' }} />
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+          <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ef-success)' }} />
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
             STUDENT · {session.instituteName.toUpperCase()}
           </p>
         </div>
-        <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+        <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
           {formatDate()}
         </p>
-        <h1 className="text-2xl font-light" style={{ color: '#0C0C0B', letterSpacing: '0.02em' }}>
+        <h1 className="text-2xl font-light" style={{ color: 'var(--ef-ink)', letterSpacing: '0.02em' }}>
           {getGreeting()}, {firstName}.
         </h1>
         <div className="flex items-center gap-3 mt-2">
           <span className="inline-block text-xs px-2 py-0.5"
-            style={{ background: '#F0EFEB', color: '#4A4A45', borderRadius: 2 }}>
+            style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-subtle)', borderRadius: 2 }}>
             Student
           </span>
-          <span className="text-xs" style={{ color: '#6B6B66' }}>
-            <span style={{ fontFamily: 'monospace', letterSpacing: '0.08em', color: '#6B6B66' }}>
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+            <span style={{ fontFamily: 'monospace', letterSpacing: '0.08em', color: 'var(--ef-text-muted)' }}>
               {session.email}
             </span>
           </span>
-          <span style={{ color: '#E3E1DB' }}>·</span>
+          <span style={{ color: 'var(--ef-border)' }}>·</span>
           <span className="inline-flex items-center gap-1.5 text-xs"
             style={session.status === 'active'
-              ? { color: '#2A6B3A' }
-              : { color: '#6B6B66' }}>
+              ? { color: 'var(--ef-success)' }
+              : { color: 'var(--ef-text-muted)' }}>
             <span style={{
               width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
-              background: session.status === 'active' ? '#2A6B3A' : '#6B6B66',
+              background: session.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
             }} />
             {session.status === 'active' ? 'Active' : 'Disabled'}
           </span>
@@ -221,12 +221,12 @@ export function StudentLandingPage() {
       {/* Assignments section */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
             ACADEMIC ASSIGNMENTS
           </span>
           {!loading && mappings.length > 0 && (
             <span className="text-xs px-1.5 py-0.5"
-              style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 10 }}>
+              style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 10 }}>
               {mappings.length}
             </span>
           )}
@@ -238,19 +238,19 @@ export function StudentLandingPage() {
             <div className="flex items-center gap-1.5 select-none">
               <div className="relative w-2 h-2 flex items-center justify-center">
                 <span className="absolute inline-flex w-2 h-2 rounded-full opacity-60"
-                  style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
+                  style={{ background: 'var(--ef-success)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
+                <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-success)' }} />
               </div>
-              <span className="text-xs" style={{ color: '#6B6B66' }}>{syncAge}</span>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{syncAge}</span>
             </div>
           )}
           <button
             onClick={fetchMappings}
             disabled={loading}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
-            style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}
+            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}
           >
             <RefreshCw size={10} strokeWidth={1.5} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -263,8 +263,8 @@ export function StudentLandingPage() {
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="flex flex-col items-center py-20">
-              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
-              <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading assignments…</p>
+              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+              <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Loading assignments…</p>
             </div>
           </motion.div>
         )}
@@ -272,11 +272,11 @@ export function StudentLandingPage() {
         {!loading && error && (
           <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="flex items-center gap-2.5 px-4 py-3"
-              style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-              <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />
-              <p className="text-xs flex-1" style={{ color: '#9B2828' }}>{error}</p>
+              style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+              <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
+              <p className="text-xs flex-1" style={{ color: 'var(--ef-danger)' }}>{error}</p>
               <button onClick={fetchMappings} className="text-xs"
-                style={{ color: '#9B2828', textDecoration: 'underline' }}>Retry</button>
+                style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>Retry</button>
             </div>
           </motion.div>
         )}
@@ -285,12 +285,12 @@ export function StudentLandingPage() {
           <motion.div key="empty" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
             <div className="flex flex-col items-center py-24"
-              style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
-              <GraduationCap size={32} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-              <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+              style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
+              <GraduationCap size={32} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
+              <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
                 No assignments yet
               </p>
-              <p className="text-xs mt-2" style={{ color: '#DDDBD5', maxWidth: 280, textAlign: 'center', lineHeight: 1.7 }}>
+              <p className="text-xs mt-2" style={{ color: 'var(--ef-border-muted)', maxWidth: 280, textAlign: 'center', lineHeight: 1.7 }}>
                 You haven't been assigned to any courses, sections, or groups. Your institute administrator will set this up.
               </p>
             </div>
@@ -308,7 +308,7 @@ export function StudentLandingPage() {
                     <div key={nodeType}>
                       {/* Group header */}
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+                        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
                           {label.toUpperCase()}S
                         </span>
                         <span className="text-xs px-1.5 py-0.5"
@@ -335,7 +335,7 @@ export function StudentLandingPage() {
             )}
 
             {/* Footer note */}
-            <p className="text-xs mt-6" style={{ color: '#6B6B66', textAlign: 'center' }}>
+            <p className="text-xs mt-6" style={{ color: 'var(--ef-text-muted)', textAlign: 'center' }}>
               Your assignments are managed by your institute administrator.
             </p>
           </motion.div>

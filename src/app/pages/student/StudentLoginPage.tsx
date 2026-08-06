@@ -6,9 +6,9 @@ import { useStudentAuth } from '../../context/StudentAuthContext';
 import { LogoMark } from '../../components/PlatformLogo';
 
 const inputStyle: React.CSSProperties = {
-  background: '#FAFAF8',
-  border: '1px solid #E3E1DB',
-  color: '#0C0C0B',
+  background: 'var(--ef-canvas-raised)',
+  border: '1px solid var(--ef-border)',
+  color: 'var(--ef-ink)',
   borderRadius: 2,
   width: '100%',
   outline: 'none',
@@ -16,12 +16,12 @@ const inputStyle: React.CSSProperties = {
   padding: '10px 14px',
 };
 const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#0C0C0B';
-  e.target.style.background = '#FFFFFF';
+  e.target.style.borderColor = 'var(--ef-ink)';
+  e.target.style.background = 'var(--ef-surface)';
 };
 const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#E3E1DB';
-  e.target.style.background = '#FAFAF8';
+  e.target.style.borderColor = 'var(--ef-border)';
+  e.target.style.background = 'var(--ef-canvas-raised)';
 };
 
 export function StudentLoginPage() {
@@ -64,7 +64,7 @@ export function StudentLoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: '#F7F6F3' }}>
+      style={{ background: 'var(--ef-canvas)' }}>
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -73,29 +73,29 @@ export function StudentLoginPage() {
       >
         {/* Platform identity */}
         <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: '#0C0C0B' }}>
+          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
             <LogoMark px={36} />
           </div>
-          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: '#0C0C0B' }}>
+          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}>
             STRATUM
           </span>
-          <div className="mt-5 w-8" style={{ height: 1, background: '#DDDBD5' }} />
+          <div className="mt-5 w-8" style={{ height: 1, background: 'var(--ef-border-muted)' }} />
         </div>
 
         {/* Form card */}
         <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
-          style={{ border: '1px solid #E3E1DB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+          style={{ border: '1px solid var(--ef-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
             STUDENT ACCESS
           </p>
-          <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+          <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
             Your Institute Code was provided in your registration email.
           </p>
 
           <form onSubmit={handleSubmit} noValidate>
             {/* Institute Code */}
             <div className="mb-4">
-              <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+              <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
                 Institute Code
               </label>
               <input
@@ -115,7 +115,7 @@ export function StudentLoginPage() {
 
             {/* Email */}
             <div className="mb-4">
-              <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+              <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
                 Email address
               </label>
               <input
@@ -134,14 +134,14 @@ export function StudentLoginPage() {
             {/* Password */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+                <label className="text-xs" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
                   Password
                 </label>
                 <Link to="/student/forgot-password"
                   className="text-xs transition-colors"
-                  style={{ color: '#6B6B66', textDecoration: 'none' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+                  style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
                   Forgot password?
                 </Link>
               </div>
@@ -160,9 +160,9 @@ export function StudentLoginPage() {
                 <button type="button" tabIndex={-1}
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: '#6B6B66' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+                  style={{ color: 'var(--ef-text-muted)' }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
                   {showPassword ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
               </div>
@@ -171,7 +171,7 @@ export function StudentLoginPage() {
             <AnimatePresence>
               {error && (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="text-xs mb-4 -mt-2" style={{ color: '#9B2828' }}>
+                  className="text-xs mb-4 -mt-2" style={{ color: 'var(--ef-danger)' }}>
                   {error}
                 </motion.p>
               )}
@@ -182,8 +182,8 @@ export function StudentLoginPage() {
               disabled={!canSubmit}
               className="w-full py-2.5 text-sm flex items-center justify-center gap-2 transition-opacity"
               style={{
-                background: canSubmit ? '#0C0C0B' : '#C8C7C2',
-                color: '#FFFFFF',
+                background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
+                color: 'var(--ef-surface)',
                 borderRadius: 2,
                 letterSpacing: '0.04em',
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
@@ -198,23 +198,23 @@ export function StudentLoginPage() {
         {/* Role links */}
         <div className="flex items-center justify-center gap-4 mt-6">
           <Link to="/login" className="text-xs transition-colors"
-            style={{ color: '#6B6B66', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
             Web Owner
           </Link>
-          <span style={{ color: '#E3E1DB' }}>·</span>
+          <span style={{ color: 'var(--ef-border)' }}>·</span>
           <Link to="/institute/login" className="text-xs transition-colors"
-            style={{ color: '#6B6B66', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
             Institute Admin
           </Link>
-          <span style={{ color: '#E3E1DB' }}>·</span>
+          <span style={{ color: 'var(--ef-border)' }}>·</span>
           <Link to="/faculty/login" className="text-xs transition-colors"
-            style={{ color: '#6B6B66', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
             Faculty
           </Link>
         </div>

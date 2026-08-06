@@ -67,7 +67,7 @@ export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props)
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs" style={{ color: '#6B6B66' }}>
+      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={11} className="animate-spin" />
         Checking what this affects…
       </div>
@@ -99,7 +99,7 @@ export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props)
 
   if (rows.length === 0) {
     return (
-      <div className="text-xs" style={{ color: '#6B6B66' }}>
+      <div className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         No dependent records found.
       </div>
     );
@@ -112,7 +112,7 @@ export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props)
           className="px-2.5 py-2"
           style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2 }}
         >
-          <p className="text-xs mb-1.5" style={{ color: '#9B2828', fontWeight: 500 }}>
+          <p className="text-xs mb-1.5" style={{ color: 'var(--ef-danger)', fontWeight: 500 }}>
             This will affect:
           </p>
           <div className="flex flex-col gap-0.5">

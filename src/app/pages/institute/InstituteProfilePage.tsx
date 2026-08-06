@@ -7,14 +7,14 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   return (
     <div
       className="flex items-start gap-4 py-4"
-      style={{ borderBottom: '1px solid #F0EFEB' }}
+      style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}
     >
-      <div style={{ color: '#6B6B66', marginTop: 1, flexShrink: 0 }}>{icon}</div>
+      <div style={{ color: 'var(--ef-text-muted)', marginTop: 1, flexShrink: 0 }}>{icon}</div>
       <div>
-        <p className="text-xs mb-0.5" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+        <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
           {label}
         </p>
-        <p className="text-sm" style={{ color: '#0C0C0B' }}>
+        <p className="text-sm" style={{ color: 'var(--ef-ink)' }}>
           {value}
         </p>
       </div>
@@ -62,44 +62,44 @@ export function InstituteProfilePage() {
       style={{ maxWidth: 680, margin: '0 auto' }}
     >
       {/* ── Page header ── */}
-      <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
-        <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
+        <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
           INSTITUTE ADMIN
         </p>
-        <h1 className="text-base" style={{ color: '#0C0C0B' }}>Profile</h1>
+        <h1 className="text-base" style={{ color: 'var(--ef-ink)' }}>Profile</h1>
       </div>
 
       {/* ── Logo section ── */}
       <div
         className="flex flex-wrap sm:flex-nowrap items-center gap-4 sm:gap-5 p-4 sm:p-5 mb-6"
-        style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
       >
         {/* Logo preview */}
         <div
           style={{
             width: 72, height: 72, borderRadius: '50%',
-            border: '1px solid #E3E1DB',
+            border: '1px solid var(--ef-border)',
             overflow: 'hidden',
             flexShrink: 0,
-            background: '#F0EFEB',
+            background: 'var(--ef-border-subtle)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
           {logoLoading ? (
-            <Loader2 size={20} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
+            <Loader2 size={20} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
           ) : logo ? (
             <img src={logo} alt={session.instituteName}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <Building2 size={28} strokeWidth={1} style={{ color: '#6B6B66' }} />
+            <Building2 size={28} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
           )}
         </div>
 
         <div className="min-w-0">
-          <p className="text-sm font-medium mb-0.5 break-words" style={{ color: '#0C0C0B' }}>
+          <p className="text-sm font-medium mb-0.5 break-words" style={{ color: 'var(--ef-ink)' }}>
             Institute Logo
           </p>
-          <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+          <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
             {logo ? 'Displayed across all institute screens.' : 'No logo uploaded yet.'}
             {' '}PNG or JPG, max 2 MB.
           </p>
@@ -107,13 +107,13 @@ export function InstituteProfilePage() {
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-1.5 text-xs px-3 py-2 transition-colors"
             style={{
-              border: '1px solid #E3E1DB',
-              color: '#4A4A45',
+              border: '1px solid var(--ef-border)',
+              color: 'var(--ef-text-subtle)',
               borderRadius: 2,
-              background: '#FFFFFF',
+              background: 'var(--ef-surface)',
             }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}
           >
             <Upload size={12} strokeWidth={1.5} />
             {logo ? 'Change logo' : 'Upload logo'}
@@ -131,7 +131,7 @@ export function InstituteProfilePage() {
       {/* ── Info rows ── */}
       <div
         className="px-5"
-        style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
       >
         <InfoRow
           icon={<Building2 size={14} strokeWidth={1.5} />}

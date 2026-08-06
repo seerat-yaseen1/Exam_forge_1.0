@@ -71,7 +71,7 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs" style={{ color: '#6B6B66' }}>
+      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={11} className="animate-spin" />
         Checking platform exams this institute sat…
       </div>
@@ -98,7 +98,7 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
 
   return (
     <div className="px-2.5 py-2"
-      style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+      style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
       <div className="flex items-start gap-1.5 mb-2">
         <Database size={11} strokeWidth={1.5} style={{ marginTop: 2, flexShrink: 0, color: '#6B6862' }} />
         <p className="text-xs" style={{ color: '#6B6862', lineHeight: 1.5 }}>
@@ -115,10 +115,10 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
             className="flex items-start justify-between gap-3 py-1.5"
             style={{ borderTop: '1px solid #EDEBE5' }}>
             <div className="min-w-0">
-              <p className="text-xs" style={{ color: '#0C0C0B' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>
                 {r.title ?? r.assessmentId}
               </p>
-              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                 {r.ownAttempts.toLocaleString()} attempt{r.ownAttempts === 1 ? '' : 's'} from this institute
                 {r.exclusive
                   ? ' — no other institute sat it'
@@ -131,10 +131,10 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
               onClick={() => toggle(r.assessmentId)}
               className="text-xs px-2 py-0.5 flex-shrink-0 select-none"
               style={{
-                border: `1px solid ${on ? '#E8CFCF' : '#E3E1DB'}`,
+                border: `1px solid ${on ? '#E8CFCF' : 'var(--ef-border)'}`,
                 borderRadius: 2,
-                background: on ? '#FBF3F3' : '#FFFFFF',
-                color: on ? '#9B2828' : '#6B6B66',
+                background: on ? '#FBF3F3' : 'var(--ef-surface)',
+                color: on ? 'var(--ef-danger)' : 'var(--ef-text-muted)',
                 cursor: 'pointer',
               }}
               title={r.exclusive

@@ -19,9 +19,9 @@ export function HierarchyBreadcrumb({ stack, onRoot, onCrumb }: Props) {
       <button
         onClick={onRoot}
         className="text-xs transition-colors px-1 py-0.5 rounded"
-        style={{ color: stack.length === 0 ? '#0C0C0B' : '#6B6B66', fontWeight: stack.length === 0 ? 500 : 400 }}
-        onMouseEnter={(e) => { if (stack.length > 0) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-        onMouseLeave={(e) => { if (stack.length > 0) (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}
+        style={{ color: stack.length === 0 ? 'var(--ef-ink)' : 'var(--ef-text-muted)', fontWeight: stack.length === 0 ? 500 : 400 }}
+        onMouseEnter={(e) => { if (stack.length > 0) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)'; }}
+        onMouseLeave={(e) => { if (stack.length > 0) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)'; }}
       >
         Schools
       </button>
@@ -35,12 +35,12 @@ export function HierarchyBreadcrumb({ stack, onRoot, onCrumb }: Props) {
               onClick={() => { if (!isLast) onCrumb(index); }}
               className="text-xs px-1 py-0.5 rounded transition-colors"
               style={{
-                color: isLast ? '#0C0C0B' : '#6B6B66',
+                color: isLast ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
                 fontWeight: isLast ? 500 : 400,
                 cursor: isLast ? 'default' : 'pointer',
               }}
-              onMouseEnter={(e) => { if (!isLast) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-              onMouseLeave={(e) => { if (!isLast) (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}
+              onMouseEnter={(e) => { if (!isLast) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)'; }}
+              onMouseLeave={(e) => { if (!isLast) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)'; }}
             >
               {node.name}
             </button>

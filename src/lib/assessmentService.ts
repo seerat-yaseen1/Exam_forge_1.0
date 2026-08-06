@@ -1412,11 +1412,11 @@ export function statusColor(status: AssessmentStatus): {
 } {
   switch (status) {
     case 'draft':
-      return { bg: '#F7F6F3', text: '#6B6B66', border: '#E3E1DB' };
+      return { bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border)' };
     case 'active':
-      return { bg: '#F0F9F4', text: '#1E7B3C', border: '#B8E6C8' };
+      return { bg: 'var(--ef-success-bg)', text: 'var(--ef-success-strong)', border: 'var(--ef-success-border)' };
     case 'closed':
-      return { bg: '#F5F5F5', text: '#6B6B66', border: '#DDDBD5' };
+      return { bg: '#F5F5F5', text: 'var(--ef-text-muted)', border: 'var(--ef-border-muted)' };
   }
 }
 

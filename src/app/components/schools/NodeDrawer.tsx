@@ -90,28 +90,28 @@ export function NodeDrawer({ open, level, editing, ancestry, instituteId, onClos
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:w-[400px] sm:max-w-full"
-            style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB', boxShadow: '-8px 0 32px rgba(12,12,11,0.06)' }}
+            style={{ background: 'var(--ef-surface)', borderLeft: '1px solid var(--ef-border)', boxShadow: '-8px 0 32px rgba(12,12,11,0.06)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5" style={{ borderBottom: '1px solid var(--ef-border)' }}>
               <div>
-                <p className="text-xs mb-0.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+                <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
                   {isEdit ? 'EDIT' : 'NEW'} {levelLabel.toUpperCase()}
                 </p>
-                <h2 className="text-sm" style={{ color: '#0C0C0B' }}>
+                <h2 className="text-sm" style={{ color: 'var(--ef-ink)' }}>
                   {isEdit ? `Editing "${editing!.name}"` : `Add ${levelLabel}`}
                 </h2>
               </div>
-              <button onClick={onClose} style={{ color: '#6B6B66' }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+              <button onClick={onClose} style={{ color: 'var(--ef-text-muted)' }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)')}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
                 <X size={16} strokeWidth={1.5} />
               </button>
             </div>
 
             {/* Body */}
             <div className="flex-1 px-6 py-6 overflow-y-auto">
-              <label className="block mb-1.5 text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+              <label className="block mb-1.5 text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
                 {levelLabel.toUpperCase()} NAME *
               </label>
               <input
@@ -122,32 +122,32 @@ export function NodeDrawer({ open, level, editing, ancestry, instituteId, onClos
                 placeholder={getPlaceholder(level)}
                 className="w-full px-3 py-2.5 text-sm outline-none transition-colors"
                 style={{
-                  border: `1px solid ${error ? '#E5A5A5' : '#E3E1DB'}`,
+                  border: `1px solid ${error ? '#E5A5A5' : 'var(--ef-border)'}`,
                   borderRadius: 2,
-                  background: '#FAFAF8',
-                  color: '#0C0C0B',
+                  background: 'var(--ef-canvas-raised)',
+                  color: 'var(--ef-ink)',
                 }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = error ? '#E5A5A5' : '#0C0C0B')}
-                onBlur={(e) => (e.currentTarget.style.borderColor = error ? '#E5A5A5' : '#E3E1DB')}
+                onFocus={(e) => (e.currentTarget.style.borderColor = error ? '#E5A5A5' : 'var(--ef-ink)')}
+                onBlur={(e) => (e.currentTarget.style.borderColor = error ? '#E5A5A5' : 'var(--ef-border)')}
               />
               {error && (
-                <p className="text-xs mt-1.5" style={{ color: '#9B2828' }}>{error}</p>
+                <p className="text-xs mt-1.5" style={{ color: 'var(--ef-danger)' }}>{error}</p>
               )}
-              <p className="text-xs mt-3" style={{ color: '#6B6B66' }}>
+              <p className="text-xs mt-3" style={{ color: 'var(--ef-text-muted)' }}>
                 {getHint(level)}
               </p>
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: '1px solid #E3E1DB' }}>
+            <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: '1px solid var(--ef-border)' }}>
               <button onClick={onClose} disabled={saving}
                 className="text-xs px-4 py-2"
-                style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                 Cancel
               </button>
               <button onClick={handleSave} disabled={saving}
                 className="flex items-center gap-2 text-xs px-4 py-2 transition-opacity"
-                style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, opacity: saving ? 0.7 : 1 }}>
+                style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, opacity: saving ? 0.7 : 1 }}>
                 {saving
                   ? <Loader2 size={12} className="animate-spin" />
                   : <Check size={12} strokeWidth={2} />}

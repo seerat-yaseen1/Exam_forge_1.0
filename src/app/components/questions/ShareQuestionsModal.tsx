@@ -112,24 +112,24 @@ export function ShareQuestionsModal({
     >
       <div
         className="w-full max-w-md mx-4"
-        style={{ background: '#FFFFFF', borderRadius: 4, border: '1px solid #E3E1DB', maxHeight: '80vh', overflow: 'auto' }}
+        style={{ background: 'var(--ef-surface)', borderRadius: 4, border: '1px solid var(--ef-border)', maxHeight: '80vh', overflow: 'auto' }}
         role="dialog"
         aria-modal="true"
         aria-label={`Share ${questionIds.length} question${questionIds.length !== 1 ? 's' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #F0EFEB' }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
           <div className="flex items-center gap-2">
-            <Share2 size={14} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-            <p className="text-sm" style={{ color: '#0C0C0B' }}>
+            <Share2 size={14} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+            <p className="text-sm" style={{ color: 'var(--ef-ink)' }}>
               Share {questionIds.length} question{questionIds.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button onClick={onClose} className="p-1" style={{ color: '#6B6B66' }}><X size={15} strokeWidth={1.5} /></button>
+          <button onClick={onClose} className="p-1" style={{ color: 'var(--ef-text-muted)' }}><X size={15} strokeWidth={1.5} /></button>
         </div>
 
         <div className="px-5 py-4">
-          <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
+          <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>
             Recipients inside your institute. Shared questions are read-only for them.
           </p>
 
@@ -137,22 +137,22 @@ export function ShareQuestionsModal({
           <button
             onClick={() => setShareAdmin((v) => !v)}
             className="w-full flex items-center justify-between gap-3 px-3 py-2.5 mb-2 transition-colors"
-            style={{ border: `1px solid ${shareAdmin ? '#C6DECE' : '#E3E1DB'}`, borderRadius: 2, background: shareAdmin ? '#F0F7F2' : '#FFFFFF' }}
+            style={{ border: `1px solid ${shareAdmin ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`, borderRadius: 2, background: shareAdmin ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)' }}
           >
             <div className="flex items-center gap-2">
-              <Users size={13} strokeWidth={1.5} style={{ color: shareAdmin ? '#2A6B3A' : '#6B6B66' }} />
-              <span className="text-xs" style={{ color: '#0C0C0B' }}>Institute Admin</span>
+              <Users size={13} strokeWidth={1.5} style={{ color: shareAdmin ? 'var(--ef-success)' : 'var(--ef-text-muted)' }} />
+              <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>Institute Admin</span>
             </div>
-            {shareAdmin && <Check size={13} strokeWidth={2} style={{ color: '#2A6B3A' }} />}
+            {shareAdmin && <Check size={13} strokeWidth={2} style={{ color: 'var(--ef-success)' }} />}
           </button>
 
           {/* Peer faculty */}
           {loading ? (
-            <div className="flex items-center gap-2 py-3 text-xs" style={{ color: '#6B6B66' }}>
+            <div className="flex items-center gap-2 py-3 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               <Loader2 size={12} className="animate-spin" /> Loading faculty…
             </div>
           ) : peers.length === 0 ? (
-            <p className="text-xs py-2" style={{ color: '#6B6B66' }}>No other faculty in your institute.</p>
+            <p className="text-xs py-2" style={{ color: 'var(--ef-text-muted)' }}>No other faculty in your institute.</p>
           ) : (
             peers.map((f) => {
               const on = !!selected[f.id];
@@ -161,13 +161,13 @@ export function ShareQuestionsModal({
                   key={f.id}
                   onClick={() => togglePeer(f.id)}
                   className="w-full flex items-center justify-between gap-3 px-3 py-2.5 mb-2 transition-colors"
-                  style={{ border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`, borderRadius: 2, background: on ? '#F0F7F2' : '#FFFFFF' }}
+                  style={{ border: `1px solid ${on ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`, borderRadius: 2, background: on ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)' }}
                 >
                   <div className="min-w-0 text-left">
-                    <p className="text-xs" style={{ color: '#0C0C0B' }}>{f.name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{f.email}</p>
+                    <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{f.name}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{f.email}</p>
                   </div>
-                  {on && <Check size={13} strokeWidth={2} style={{ color: '#2A6B3A', flexShrink: 0 }} />}
+                  {on && <Check size={13} strokeWidth={2} style={{ color: 'var(--ef-success)', flexShrink: 0 }} />}
                 </button>
               );
             })
@@ -179,21 +179,21 @@ export function ShareQuestionsModal({
             onChange={(e) => setNote(e.target.value)}
             placeholder="Add a note (optional)"
             className="w-full text-xs px-3 py-2 mt-2"
-            style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FAFAF8', color: '#0C0C0B', outline: 'none' }}
+            style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-canvas-raised)', color: 'var(--ef-ink)', outline: 'none' }}
           />
 
-          {error && <p className="text-xs mt-2" style={{ color: '#9B2828' }}>{error}</p>}
+          {error && <p className="text-xs mt-2" style={{ color: 'var(--ef-danger)' }}>{error}</p>}
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid #F0EFEB' }}>
-          <button onClick={onClose} disabled={saving} className="text-xs px-3 py-2" style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+        <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
+          <button onClick={onClose} disabled={saving} className="text-xs px-3 py-2" style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
             Cancel
           </button>
           <button
             onClick={submit}
             disabled={saving || recipientCount === 0}
             className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-80"
-            style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, opacity: saving || recipientCount === 0 ? 0.5 : 1, cursor: saving || recipientCount === 0 ? 'not-allowed' : 'pointer' }}
+            style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, opacity: saving || recipientCount === 0 ? 0.5 : 1, cursor: saving || recipientCount === 0 ? 'not-allowed' : 'pointer' }}
           >
             {saving ? <Loader2 size={11} className="animate-spin" /> : <Share2 size={11} strokeWidth={2} />}
             {isRequest

@@ -7,7 +7,7 @@ export function LandingPage() {
   return (
     <div
       className="flex flex-col items-center justify-center"
-      style={{ minHeight: 'calc(100vh - 56px)', background: '#F7F6F3' }}
+      style={{ minHeight: 'calc(100vh - 56px)', background: 'var(--ef-canvas)' }}
     >
       {/* Intentionally empty — a system at rest is a system in control */}
       <motion.div
@@ -20,19 +20,19 @@ export function LandingPage() {
           style={{
             width: 1,
             height: 40,
-            background: 'linear-gradient(to bottom, transparent, #DDDBD5)',
+            background: 'linear-gradient(to bottom, transparent, var(--ef-border-muted))',
             marginBottom: 16,
           }}
         />
         <p
           className="text-xs"
-          style={{ color: '#6B6B66', letterSpacing: '0.14em' }}
+          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.14em' }}
         >
           COMMAND CENTER
         </p>
         <p
           className="text-xs"
-          style={{ color: '#DDDBD5', letterSpacing: '0.06em' }}
+          style={{ color: 'var(--ef-border-muted)', letterSpacing: '0.06em' }}
         >
           Modules will appear here
         </p>
@@ -40,7 +40,7 @@ export function LandingPage() {
           style={{
             width: 1,
             height: 40,
-            background: 'linear-gradient(to top, transparent, #DDDBD5)',
+            background: 'linear-gradient(to top, transparent, var(--ef-border-muted))',
             marginTop: 16,
           }}
         />

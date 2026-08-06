@@ -34,10 +34,10 @@ const STATUS_LABEL: Record<ReportStatus, string> = {
 };
 
 const STATUS_COLOR: Record<ReportStatus, { bg: string; border: string; text: string }> = {
-  open:      { bg: '#FEF9EC', border: '#F5DFA0', text: '#92680A' },
-  reviewed:  { bg: '#F7F6F3', border: '#E3E1DB', text: '#4A4A45' },
-  dismissed: { bg: '#F7F6F3', border: '#E3E1DB', text: '#6B6B66' },
-  fixed:     { bg: '#EAF6EE', border: '#B5D9C0', text: '#1E7B3C' },
+  open:      { bg: '#FEF9EC', border: 'var(--ef-warning-border)', text: 'var(--ef-warning)' },
+  reviewed:  { bg: 'var(--ef-canvas)', border: 'var(--ef-border)', text: 'var(--ef-text-subtle)' },
+  dismissed: { bg: 'var(--ef-canvas)', border: 'var(--ef-border)', text: 'var(--ef-text-muted)' },
+  fixed:     { bg: '#EAF6EE', border: '#B5D9C0', text: 'var(--ef-success-strong)' },
 };
 
 type Scope =
@@ -106,15 +106,15 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={16} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <Loader2 size={16} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
       </div>
     );
   }
   if (errorMsg) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-2">
-        <AlertTriangle size={16} strokeWidth={1} style={{ color: '#9B2828' }} />
-        <p className="text-xs" style={{ color: '#9B2828' }}>{errorMsg}</p>
+        <AlertTriangle size={16} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
+        <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{errorMsg}</p>
       </div>
     );
   }
@@ -122,9 +122,9 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%', padding: '24px' }}>
       <div className="flex items-center gap-3 mb-5">
-        <Flag size={14} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-        <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.08em' }}>QUESTION REPORTS</p>
-        <span className="text-xs ml-auto" style={{ color: '#6B6B66' }}>
+        <Flag size={14} strokeWidth={1.5} style={{ color: 'var(--ef-ink)' }} />
+        <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.08em' }}>QUESTION REPORTS</p>
+        <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
           {counts.open} open · {counts.fixed} fixed · {counts.dismissed} dismissed
         </span>
       </div>
@@ -138,14 +138,14 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
               className="flex items-center gap-1.5 text-xs px-3 py-1.5"
               style={{
                 borderRadius: 2, cursor: 'pointer',
-                background: isActive ? '#0C0C0B' : 'transparent',
-                color: isActive ? '#FFFFFF' : '#6B6B66',
-                border: isActive ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                background: isActive ? 'var(--ef-ink)' : 'transparent',
+                color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
+                border: isActive ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
               }}>
               {tab === 'all' ? 'All' : STATUS_LABEL[tab]}
               <span style={{
-                background: isActive ? 'rgba(255,255,255,0.2)' : '#F0EFEB',
-                color: isActive ? '#FFFFFF' : '#6B6B66',
+                background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--ef-border-subtle)',
+                color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                 borderRadius: 2, padding: '0 4px', fontSize: 10,
               }}>{count}</span>
             </button>
@@ -155,14 +155,14 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
 
       {byAssessment.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3"
-          style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
-          <Flag size={20} strokeWidth={1} style={{ color: '#6B6B66' }} />
-          <p className="text-xs" style={{ color: '#6B6B66' }}>
+          style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
+          <Flag size={20} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             No reports {filter !== 'all' ? `with status "${STATUS_LABEL[filter]}"` : 'visible to you'}.
           </p>
         </div>
       ) : (
-        <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
+        <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
           {byAssessment.map((entry, idx) => {
             const reasonCounts = entry.reports.reduce<Record<ReportReason, number>>((acc, r) => {
               acc[r.reason] = (acc[r.reason] ?? 0) + 1;
@@ -172,18 +172,18 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
               <Link key={entry.assessmentId} to={rosterPathFor(entry.assessmentId)}
                 className="flex items-start gap-3 px-5 py-4"
                 style={{
-                  borderTop: idx === 0 ? 'none' : '1px solid #F0EFEB',
+                  borderTop: idx === 0 ? 'none' : '1px solid var(--ef-border-subtle)',
                   textDecoration: 'none',
                 }}>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs" style={{ color: '#0C0C0B' }}>{entry.title}</p>
+                  <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{entry.title}</p>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-xs" style={{ color: '#6B6B66' }}>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                       {entry.reports.length} report{entry.reports.length !== 1 ? 's' : ''}
                     </span>
                     {Object.entries(reasonCounts).map(([reason, count]) => (
                       <span key={reason} className="text-xs px-2 py-0.5"
-                        style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}>
+                        style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}>
                         {REASON_LABEL[reason as ReportReason]} · {count}
                       </span>
                     ))}
@@ -200,7 +200,7 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
                     )}
                   </div>
                 </div>
-                <ChevronRight size={13} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 4 }} />
+                <ChevronRight size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', marginTop: 4 }} />
               </Link>
             );
           })}

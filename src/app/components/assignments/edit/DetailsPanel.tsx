@@ -67,7 +67,7 @@ export function DetailsPanel({ assessment, open, onOpenChange, onSaved }: Props)
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full text-xs px-3 py-2"
-            style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+            style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
           />
         </Field>
       )}
@@ -79,7 +79,7 @@ export function DetailsPanel({ assessment, open, onOpenChange, onSaved }: Props)
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
             className="w-full text-xs px-3 py-2"
-            style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+            style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
           />
         </Field>
       )}
@@ -90,7 +90,7 @@ export function DetailsPanel({ assessment, open, onOpenChange, onSaved }: Props)
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="w-full text-xs px-3 py-2"
-            style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+            style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
           />
         </Field>
       )}

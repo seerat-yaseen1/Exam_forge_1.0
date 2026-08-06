@@ -67,7 +67,7 @@ export function SuccessorPicker({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-1.5 text-xs" style={{ color: '#6B6B66' }}>
+      <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={10} className="animate-spin" /> Loading colleagues…
       </div>
     );
@@ -85,10 +85,10 @@ export function SuccessorPicker({
         disabled={disabled}
         className="text-xs px-2 py-1.5 w-full"
         style={{
-          border: '1px solid #E3E1DB',
+          border: '1px solid var(--ef-border)',
           borderRadius: 2,
-          background: '#FFFFFF',
-          color: '#0C0C0B',
+          background: 'var(--ef-surface)',
+          color: 'var(--ef-ink)',
           cursor: disabled ? 'not-allowed' : 'pointer',
         }}
       >
@@ -98,7 +98,7 @@ export function SuccessorPicker({
         ))}
       </select>
       {options.length === 0 && (
-        <span className="text-xs" style={{ color: '#6B6B66' }}>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           No other active faculty — the institute administrator will inherit.
         </span>
       )}

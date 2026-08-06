@@ -172,12 +172,12 @@ function totalQuestions(attempt: Attempt): number {
 // ── Status chip ───────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<RosterStatus, { label: string; bg: string; text: string; border: string; dot: string }> = {
-  not_started:   { label: 'Not started',     bg: '#F7F6F3', text: '#6B6B66', border: '#E3E1DB', dot: '#6B6B66' },
-  in_progress:   { label: 'Live',            bg: '#F0F9F4', text: '#1E7B3C', border: '#B8E6C8', dot: '#1E7B3C' },
-  frozen:        { label: 'Flagged',         bg: '#FFFBF0', text: '#92680A', border: '#F5DFA0', dot: '#D4A017' },
-  submitted:     { label: 'Submitted',       bg: '#F7F6F3', text: '#6B6B66', border: '#DDDBD5', dot: '#6B6B66' },
-  auto_submitted:{ label: 'Auto-submitted',  bg: '#FEF9EC', text: '#92680A', border: '#F5DFA0', dot: '#92680A' },
-  terminated:    { label: 'Terminated',      bg: '#FDF5F5', text: '#9B2828', border: '#F2CECE', dot: '#9B2828' },
+  not_started:   { label: 'Not started',     bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border)', dot: 'var(--ef-text-muted)' },
+  in_progress:   { label: 'Live',            bg: 'var(--ef-success-bg)', text: 'var(--ef-success-strong)', border: 'var(--ef-success-border)', dot: 'var(--ef-success-strong)' },
+  frozen:        { label: 'Flagged',         bg: '#FFFBF0', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: '#D4A017' },
+  submitted:     { label: 'Submitted',       bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border-muted)', dot: 'var(--ef-text-muted)' },
+  auto_submitted:{ label: 'Auto-submitted',  bg: '#FEF9EC', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: 'var(--ef-warning)' },
+  terminated:    { label: 'Terminated',      bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)', dot: 'var(--ef-danger)' },
 };
 
 function StatusChip({ status }: { status: RosterStatus }) {
@@ -221,17 +221,17 @@ function FreezeConfirmModal({
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
-        style={{ maxWidth: 400, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 400, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: '1px solid #E3E1DB' }}>
+          style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-center gap-2">
             <PauseCircle size={13} strokeWidth={1.5} style={{ color: '#1D4ED8' }} />
-            <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>FREEZE SESSION</p>
+            <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>FREEZE SESSION</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -248,9 +248,9 @@ function FreezeConfirmModal({
           </div>
 
           <div>
-            <label className="text-xs mb-1.5 block" style={{ color: '#6B6B66' }}>
+            <label className="text-xs mb-1.5 block" style={{ color: 'var(--ef-text-muted)' }}>
               Reason{' '}
-              <span style={{ color: '#6B6B66' }}>(optional — visible in the audit log)</span>
+              <span style={{ color: 'var(--ef-text-muted)' }}>(optional — visible in the audit log)</span>
             </label>
             <textarea
               value={reason}
@@ -259,8 +259,8 @@ function FreezeConfirmModal({
               rows={3}
               className="w-full outline-none resize-none text-xs"
               style={{
-                border: '1px solid #E3E1DB', borderRadius: 2,
-                background: '#FAFAF8', color: '#0C0C0B',
+                border: '1px solid var(--ef-border)', borderRadius: 2,
+                background: 'var(--ef-canvas-raised)', color: 'var(--ef-ink)',
                 padding: '8px 10px', lineHeight: 1.6,
               }}
             />
@@ -268,14 +268,14 @@ function FreezeConfirmModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button
             onClick={() => onConfirm(reason.trim())}
             disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
               background: loading ? '#93C5FD' : '#1D4ED8',
-              color: '#FFFFFF', borderRadius: 2,
+              color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer',
               opacity: loading ? 0.7 : 1,
             }}
@@ -288,7 +288,7 @@ function FreezeConfirmModal({
             onClick={onCancel}
             disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
           >
             Cancel
           </button>
@@ -465,17 +465,17 @@ function UnfreezeConfirmModal({
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
-        style={{ maxWidth: 400, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 400, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: '1px solid #E3E1DB' }}>
+          style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-center gap-2">
-            <PlayCircle size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
-            <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>UNFREEZE SESSION</p>
+            <PlayCircle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
+            <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>UNFREEZE SESSION</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -497,13 +497,13 @@ function UnfreezeConfirmModal({
           */}
           <div className="px-3 py-3 flex items-start gap-2.5"
             style={{
-              background: givingLess ? '#FFFBF0' : '#F0F9F4',
-              border: `1px solid ${givingLess ? '#F5DFA0' : '#B8E6C8'}`,
+              background: givingLess ? '#FFFBF0' : 'var(--ef-success-bg)',
+              border: `1px solid ${givingLess ? 'var(--ef-warning-border)' : 'var(--ef-success-border)'}`,
               borderRadius: 2,
             }}>
             <PlayCircle size={12} strokeWidth={1.5}
-              style={{ color: givingLess ? '#92680A' : '#1E7B3C', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: givingLess ? '#92680A' : '#1E7B3C', lineHeight: 1.6 }}>
+              style={{ color: givingLess ? 'var(--ef-warning)' : 'var(--ef-success-strong)', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: givingLess ? 'var(--ef-warning)' : 'var(--ef-success-strong)', lineHeight: 1.6 }}>
               {givingLess ? (
                 <>
                   Resuming <strong>{studentName}</strong>'s session. Only{' '}
@@ -523,31 +523,31 @@ function UnfreezeConfirmModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="px-3 py-3"
-              style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>This freeze</p>
+              style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+              <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>This freeze</p>
               <p className="text-xs" style={{ color: '#1D4ED8' }}>{thisFreeze}</p>
             </div>
             <div className="px-3 py-3"
-              style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>
+              style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+              <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>
                 Already credited{priorFreezes > 0 ? ` (${priorFreezes} earlier ${priorFreezes === 1 ? 'pause' : 'pauses'})` : ''}
               </p>
-              <p className="text-xs" style={{ color: '#0C0C0B' }}>{creditedLabel}</p>
+              <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{creditedLabel}</p>
             </div>
           </div>
 
           {attempt.frozenReason && (
             <div className="px-3 py-2.5"
-              style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-0.5" style={{ color: '#6B6B66' }}>Freeze reason on record</p>
-              <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.5 }}>{attempt.frozenReason}</p>
+              style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+              <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)' }}>Freeze reason on record</p>
+              <p className="text-xs" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.5 }}>{attempt.frozenReason}</p>
             </div>
           )}
 
           {/* ── Time to give back ────────────────────────────────── */}
           <div className="px-3 py-3"
-            style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-            <p className="text-xs mb-2" style={{ color: '#0C0C0B' }}>
+            style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+            <p className="text-xs mb-2" style={{ color: 'var(--ef-ink)' }}>
               Time to give back
             </p>
             <div className="flex items-center gap-2">
@@ -556,9 +556,9 @@ function UnfreezeConfirmModal({
                 onChange={(e) => setGrantSecs(e.target.value)}
                 disabled={loading}
                 className="text-xs px-2 py-1.5 w-24"
-                style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: '#0C0C0B' }}
+                style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: 'var(--ef-ink)' }}
               />
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 seconds of {thisFreeze}
               </span>
               {givingLess && (
@@ -571,7 +571,7 @@ function UnfreezeConfirmModal({
                 </button>
               )}
             </div>
-            <p className="text-xs mt-2" style={{ color: givingLess ? '#92680A' : '#6B6B66', lineHeight: 1.5 }}>
+            <p className="text-xs mt-2" style={{ color: givingLess ? 'var(--ef-warning)' : 'var(--ef-text-muted)', lineHeight: 1.5 }}>
               {givingLess
                 ? `${secsToLabel(frozenSecs - grantNum)} of this pause will NOT be returned. The student is told either way.`
                 : 'The full pause is returned to their clocks.'}
@@ -580,18 +580,18 @@ function UnfreezeConfirmModal({
               type="text" value={note} onChange={(e) => setNote(e.target.value)}
               disabled={loading} placeholder="Note (optional) — recorded in the audit trail"
               className="text-xs px-2 py-1.5 w-full mt-2"
-              style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: '#0C0C0B' }}
+              style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: 'var(--ef-ink)' }}
             />
           </div>
 
           {/* ── §4: take time from a clock ────────────────────────── */}
           {snap ? (
             <div className="px-3 py-3"
-              style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <p className="text-xs mb-0.5" style={{ color: '#0C0C0B' }}>
+              style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+              <p className="text-xs mb-0.5" style={{ color: 'var(--ef-ink)' }}>
                 Take time away (optional)
               </p>
-              <p className="text-xs mb-2.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+              <p className="text-xs mb-2.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
                 Each is capped at what that clock will have. Taking the maximum ends that unit.
               </p>
 
@@ -605,8 +605,8 @@ function UnfreezeConfirmModal({
                 if (cap === null) {
                   return (
                     <div key={key} className="flex items-center gap-2 mb-1.5">
-                      <span className="text-xs w-16" style={{ color: '#6B6B66' }}>{label}</span>
-                      <span className="text-xs" style={{ color: '#6B6B66' }}>
+                      <span className="text-xs w-16" style={{ color: 'var(--ef-text-muted)' }}>{label}</span>
+                      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                         not running — nothing to take
                       </span>
                     </div>
@@ -616,7 +616,7 @@ function UnfreezeConfirmModal({
                 const rem = leftAfter[key];
                 return (
                   <div key={key} className="flex items-center gap-2 mb-1.5">
-                    <span className="text-xs w-16" style={{ color: '#4A4A45' }}>{label}</span>
+                    <span className="text-xs w-16" style={{ color: 'var(--ef-text-subtle)' }}>{label}</span>
                     <input
                       type="number" min={0} max={cap} value={val}
                       onChange={(e) => setVal(e.target.value)}
@@ -624,15 +624,15 @@ function UnfreezeConfirmModal({
                       className="text-xs px-2 py-1 w-20"
                       style={{
                         border: '1px solid #D8D6CF', borderRadius: 2,
-                        color: cap === 0 ? '#6B6B66' : '#0C0C0B',
-                        background: cap === 0 ? '#F0EFEB' : '#FFFFFF',
+                        color: cap === 0 ? 'var(--ef-text-muted)' : 'var(--ef-ink)',
+                        background: cap === 0 ? 'var(--ef-border-subtle)' : 'var(--ef-surface)',
                       }}
                     />
-                    <span className="text-xs" style={{ color: '#6B6B66' }}>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                       of {secsToLabel(cap)}
                     </span>
                     {taken > 0 && (
-                      <span className="text-xs" style={{ color: rem === 0 ? '#9B2828' : '#92680A' }}>
+                      <span className="text-xs" style={{ color: rem === 0 ? 'var(--ef-danger)' : 'var(--ef-warning)' }}>
                         → {rem === 0 ? 'ends' : `${secsToLabel(rem ?? 0)} left`}
                       </span>
                     )}
@@ -643,7 +643,7 @@ function UnfreezeConfirmModal({
           ) : (
             // Pre-Phase-4.5 freezes have no snapshot. Say so rather than
             // showing three inputs whose caps would be guesses.
-            <p className="text-xs px-3" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+            <p className="text-xs px-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
               This pause was recorded before per-clock deductions were available,
               so only the time-to-give-back decision applies.
             </p>
@@ -659,8 +659,8 @@ function UnfreezeConfirmModal({
             <div className="flex items-start gap-2.5 px-3 py-3"
               style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
               <AlertCircle size={12} strokeWidth={1.5}
-                style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
-              <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+                style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
+              <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
                 This ends <strong>{willEnd[0]}</strong> for {studentName}.
                 {cascadeNote ? ` ${cascadeNote}` : ''} This cannot be undone.
               </p>
@@ -669,7 +669,7 @@ function UnfreezeConfirmModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button
             onClick={() => onConfirm(grantNum * 1000, note.trim() || undefined, {
               questionMs: takes.question * 1000,
@@ -679,8 +679,8 @@ function UnfreezeConfirmModal({
             disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
-              background: loading ? '#86EFAC' : '#1E7B3C',
-              color: '#FFFFFF', borderRadius: 2,
+              background: loading ? '#86EFAC' : 'var(--ef-success-strong)',
+              color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer',
               opacity: loading ? 0.7 : 1,
             }}
@@ -695,7 +695,7 @@ function UnfreezeConfirmModal({
             onClick={onCancel}
             disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
           >
             Cancel
           </button>
@@ -724,15 +724,15 @@ function BlockConfirmModal({
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
-        style={{ maxWidth: 400, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 400, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-center gap-2">
             <Ban size={13} strokeWidth={1.5} style={{ color: '#9A3412' }} />
-            <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>BLOCK STUDENT</p>
+            <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>BLOCK STUDENT</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -746,22 +746,22 @@ function BlockConfirmModal({
               they can still complete and submit their current session.
             </p>
           </div>
-          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
             You can unblock this student at any time to restore their access.
           </p>
         </div>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button
             onClick={onConfirm} disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
-            style={{ background: loading ? '#FDBA74' : '#9A3412', color: '#FFFFFF', borderRadius: 2,
+            style={{ background: loading ? '#FDBA74' : '#9A3412', color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
           >
             {loading ? <><Loader2 size={10} className="animate-spin" /> Blocking…</> : <><Ban size={10} strokeWidth={1.5} /> Block student</>}
           </button>
           <button onClick={onCancel} disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -789,41 +789,41 @@ function UnblockConfirmModal({
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
-        style={{ maxWidth: 400, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 400, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-center gap-2">
-            <CircleSlash size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
-            <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>UNBLOCK STUDENT</p>
+            <CircleSlash size={13} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
+            <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>UNBLOCK STUDENT</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
         <div className="px-5 py-5">
           <div className="px-3 py-3 flex items-start gap-2.5"
-            style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}>
-            <CircleSlash size={12} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#1E7B3C', lineHeight: 1.6 }}>
+            style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
+            <CircleSlash size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: 'var(--ef-success-strong)', lineHeight: 1.6 }}>
               Unblocking <strong>{studentName}</strong> will immediately restore their
               ability to enter this exam. If the assessment window is still open,
               they can enter and start a new attempt.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button
             onClick={onConfirm} disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
-            style={{ background: loading ? '#86EFAC' : '#1E7B3C', color: '#FFFFFF', borderRadius: 2,
+            style={{ background: loading ? '#86EFAC' : 'var(--ef-success-strong)', color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
           >
             {loading ? <><Loader2 size={10} className="animate-spin" /> Unblocking…</> : <><CircleSlash size={10} strokeWidth={1.5} /> Unblock student</>}
           </button>
           <button onClick={onCancel} disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -920,11 +920,11 @@ const CATEGORY_CONFIG: Record<AnswerCategory, {
   label: string; bg: string; text: string; border: string; dot: string;
   icon: React.ReactNode;
 }> = {
-  correct:     { label: 'Correct',     bg: '#F0F9F4', text: '#1E7B3C', border: '#B8E6C8', dot: '#1E7B3C',  icon: <CheckCircle2 size={11} strokeWidth={1.5} /> },
-  wrong:       { label: 'Wrong',       bg: '#FDF5F5', text: '#9B2828', border: '#F2CECE', dot: '#9B2828',  icon: <XCircle size={11} strokeWidth={1.5} /> },
+  correct:     { label: 'Correct',     bg: 'var(--ef-success-bg)', text: 'var(--ef-success-strong)', border: 'var(--ef-success-border)', dot: 'var(--ef-success-strong)',  icon: <CheckCircle2 size={11} strokeWidth={1.5} /> },
+  wrong:       { label: 'Wrong',       bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)', dot: 'var(--ef-danger)',  icon: <XCircle size={11} strokeWidth={1.5} /> },
   penalized:   { label: 'Penalized',   bg: '#FBEFEF', text: '#7F1D1D', border: '#E9B8B8', dot: '#7F1D1D',  icon: <XCircle size={11} strokeWidth={1.5} /> },
-  partial:     { label: 'Partial',     bg: '#FFFBF0', text: '#92680A', border: '#F5DFA0', dot: '#D4A017',  icon: <AlertCircle size={11} strokeWidth={1.5} /> },
-  unattempted: { label: 'Unattempted', bg: '#F7F6F3', text: '#6B6B66', border: '#E3E1DB', dot: '#6B6B66',  icon: <Minus size={11} strokeWidth={1.5} /> },
+  partial:     { label: 'Partial',     bg: '#FFFBF0', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: '#D4A017',  icon: <AlertCircle size={11} strokeWidth={1.5} /> },
+  unattempted: { label: 'Unattempted', bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border)', dot: 'var(--ef-text-muted)',  icon: <Minus size={11} strokeWidth={1.5} /> },
   text:        { label: 'Text',        bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8',  icon: <FileText size={11} strokeWidth={1.5} /> },
 };
 
@@ -1010,14 +1010,14 @@ function ResponseViewer({
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4">
-        <Loader2 size={12} className="animate-spin" style={{ color: '#6B6B66' }} />
-        <span className="text-xs" style={{ color: '#6B6B66' }}>Loading questions…</span>
+        <Loader2 size={12} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Loading questions…</span>
       </div>
     );
   }
 
   if (questions.length === 0) {
-    return <p className="text-xs py-2" style={{ color: '#6B6B66' }}>No question data available.</p>;
+    return <p className="text-xs py-2" style={{ color: 'var(--ef-text-muted)' }}>No question data available.</p>;
   }
 
   return (
@@ -1034,19 +1034,19 @@ function ResponseViewer({
               className="flex items-center gap-1 text-xs px-2.5 py-1 transition-all"
               style={{
                 borderRadius: 2,
-                background: isActive ? (cfg?.bg ?? '#0C0C0B') : 'transparent',
-                color: isActive ? (cfg?.text ?? '#FFFFFF') : '#6B6B66',
+                background: isActive ? (cfg?.bg ?? 'var(--ef-ink)') : 'transparent',
+                color: isActive ? (cfg?.text ?? 'var(--ef-surface)') : 'var(--ef-text-muted)',
                 border: isActive
-                  ? `1px solid ${cfg?.border ?? '#0C0C0B'}`
-                  : '1px solid #E3E1DB',
+                  ? `1px solid ${cfg?.border ?? 'var(--ef-ink)'}`
+                  : '1px solid var(--ef-border)',
                 cursor: 'pointer',
               }}
             >
               {cfg && isActive && <span style={{ color: cfg.text }}>{cfg.icon}</span>}
               {tab.label}
               <span style={{
-                background: isActive ? (cfg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)') : '#F0EFEB',
-                color: isActive ? (cfg?.text ?? '#FFFFFF') : '#6B6B66',
+                background: isActive ? (cfg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)') : 'var(--ef-border-subtle)',
+                color: isActive ? (cfg?.text ?? 'var(--ef-surface)') : 'var(--ef-text-muted)',
                 borderRadius: 2, padding: '0 4px', fontSize: 10,
               }}>{tab.count}</span>
             </button>
@@ -1116,11 +1116,11 @@ function ResponseViewer({
               >
                 <span style={{ color: cfg.text, flexShrink: 0, marginTop: 1 }}>{cfg.icon}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-                    <span style={{ color: '#6B6B66', marginRight: 6 }}>Q{idx + 1}</span>
+                  <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.5 }}>
+                    <span style={{ color: 'var(--ef-text-muted)', marginRight: 6 }}>Q{idx + 1}</span>
                     {q.stem.length > 80 ? q.stem.slice(0, 80) + '…' : q.stem}
                   </p>
-                  <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                     {item.sectionName} · {item.marks} mark{item.marks !== 1 ? 's' : ''}
                     {item.awarded > 0 && item.awarded < item.marks && (
                       <span style={{ color: cfg.text }}> · {item.awarded} awarded</span>
@@ -1138,32 +1138,32 @@ function ResponseViewer({
                 </span>
                 <Eye
                   size={11} strokeWidth={1.5}
-                  style={{ color: '#6B6B66', flexShrink: 0, marginTop: 2, transform: isOpen ? 'rotate(0deg)' : 'rotate(0deg)', opacity: isOpen ? 0.8 : 0.4 }}
+                  style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 2, transform: isOpen ? 'rotate(0deg)' : 'rotate(0deg)', opacity: isOpen ? 0.8 : 0.4 }}
                 />
               </button>
 
               {/* Expanded detail */}
               {isOpen && (
                 <div className="px-3 py-3 flex flex-col gap-2.5"
-                  style={{ background: '#FFFFFF', borderTop: `1px solid ${cfg.border}` }}>
+                  style={{ background: 'var(--ef-surface)', borderTop: `1px solid ${cfg.border}` }}>
 
                   {/* Full stem */}
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Question</p>
-                    <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.6 }}>{q.stem}</p>
+                    <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>Question</p>
+                    <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.6 }}>{q.stem}</p>
                   </div>
 
                   {/* Student answer */}
                   <div>
-                    <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Student's answer</p>
+                    <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>Student's answer</p>
                     <p className="text-xs px-2.5 py-2"
                       style={{
-                        background: item.category === 'unattempted' ? '#F7F6F3' : cfg.bg,
-                        border: `1px solid ${item.category === 'unattempted' ? '#E3E1DB' : cfg.border}`,
-                        borderRadius: 2, color: '#0C0C0B', lineHeight: 1.6,
+                        background: item.category === 'unattempted' ? 'var(--ef-canvas)' : cfg.bg,
+                        border: `1px solid ${item.category === 'unattempted' ? 'var(--ef-border)' : cfg.border}`,
+                        borderRadius: 2, color: 'var(--ef-ink)', lineHeight: 1.6,
                       }}>
                       {item.category === 'unattempted'
-                        ? <span style={{ color: '#6B6B66' }}>Not answered</span>
+                        ? <span style={{ color: 'var(--ef-text-muted)' }}>Not answered</span>
                         : studentAnswerText}
                     </p>
                   </div>
@@ -1171,13 +1171,13 @@ function ResponseViewer({
                   {/* Correct answer (MCQ / match / text model) */}
                   {correctAnswerText && item.category !== 'correct' && (
                     <div>
-                      <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>
+                      <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>
                         {q.engine === 'text' ? 'Model answer' : 'Correct answer'}
                       </p>
                       <p className="text-xs px-2.5 py-2"
                         style={{
-                          background: '#F0F9F4', border: '1px solid #B8E6C8',
-                          borderRadius: 2, color: '#1E7B3C', lineHeight: 1.6,
+                          background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)',
+                          borderRadius: 2, color: 'var(--ef-success-strong)', lineHeight: 1.6,
                         }}>
                         {correctAnswerText}
                       </p>
@@ -1187,8 +1187,8 @@ function ResponseViewer({
                   {/* Explanation */}
                   {q.explanation && (
                     <div>
-                      <p className="text-xs mb-1" style={{ color: '#6B6B66' }}>Explanation</p>
-                      <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>{q.explanation}</p>
+                      <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>Explanation</p>
+                      <p className="text-xs" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.6 }}>{q.explanation}</p>
                     </div>
                   )}
 
@@ -1239,35 +1239,35 @@ function SoftDeleteConfirmModal({
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
-        style={{ maxWidth: 380, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 380, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-center gap-2">
-            <Trash2 size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-            <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>DELETE ATTEMPT</p>
+            <Trash2 size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+            <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>DELETE ATTEMPT</p>
           </div>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
         <div className="px-5 py-5 space-y-4">
           <div className="px-3 py-3 flex items-start gap-2.5"
-            style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-            <Trash2 size={12} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+            <Trash2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
               Attempt #{attemptNumber} will be hidden from the live roster. The record is
               preserved and will appear in this student's history with a "Deleted" label.
               This cannot be undone from the UI.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button
             onClick={onConfirm} disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
-              background: loading ? '#FCA5A5' : '#9B2828', color: '#FFFFFF', borderRadius: 2,
+              background: loading ? '#FCA5A5' : 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
             }}
           >
@@ -1275,7 +1275,7 @@ function SoftDeleteConfirmModal({
           </button>
           <button onClick={onCancel} disabled={loading}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -1382,28 +1382,28 @@ function AttemptsPanel({
       {/* Attempt count summary */}
       <div className="flex items-center gap-4">
         <div className="flex-1 px-3 py-3"
-          style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-          <p className="text-xs mb-0.5" style={{ color: '#6B6B66' }}>Attempts used</p>
-          <p className="text-xs" style={{ color: '#0C0C0B' }}>
+          style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+          <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)' }}>Attempts used</p>
+          <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>
             {histLoading ? '…' : finished}
             {effectiveMax !== undefined && !histLoading && (
-              <span style={{ color: '#6B6B66' }}> / {effectiveMax}</span>
+              <span style={{ color: 'var(--ef-text-muted)' }}> / {effectiveMax}</span>
             )}
             {effectiveMax === undefined && !histLoading && (
-              <span style={{ color: '#6B6B66' }}> / ∞</span>
+              <span style={{ color: 'var(--ef-text-muted)' }}> / ∞</span>
             )}
           </p>
         </div>
         {effectiveMax !== undefined && !histLoading && (
           <div className="flex-1 px-3 py-3"
             style={{
-              background: finished >= effectiveMax ? '#FDF5F5' : '#F0F9F4',
-              border: `1px solid ${finished >= effectiveMax ? '#F2CECE' : '#B8E6C8'}`,
+              background: finished >= effectiveMax ? 'var(--ef-danger-bg)' : 'var(--ef-success-bg)',
+              border: `1px solid ${finished >= effectiveMax ? 'var(--ef-danger-border)' : 'var(--ef-success-border)'}`,
               borderRadius: 2,
             }}>
-            <p className="text-xs mb-0.5" style={{ color: '#6B6B66' }}>Status</p>
+            <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)' }}>Status</p>
             <p className="text-xs"
-              style={{ color: finished >= effectiveMax ? '#9B2828' : '#1E7B3C' }}>
+              style={{ color: finished >= effectiveMax ? 'var(--ef-danger)' : 'var(--ef-success-strong)' }}>
               {finished >= effectiveMax
                 ? 'Limit reached'
                 : inProgress
@@ -1416,9 +1416,9 @@ function AttemptsPanel({
 
       {/* Global limit display */}
       <div className="flex items-center justify-between">
-        <p className="text-xs" style={{ color: '#6B6B66' }}>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           Global limit:{' '}
-          <span style={{ color: '#4A4A45' }}>
+          <span style={{ color: 'var(--ef-text-subtle)' }}>
             {globalMax !== undefined ? `${globalMax} attempt${globalMax !== 1 ? 's' : ''}` : 'Unlimited'}
           </span>
         </p>
@@ -1435,13 +1435,13 @@ function AttemptsPanel({
           rules for non-owners; don't render a control that can only fail) */}
       {canManageAttempts && (
       <div>
-        <p className="text-xs mb-1.5" style={{ color: '#6B6B66' }}>
-          Student override <span style={{ color: '#6B6B66' }}>(blank = use global limit)</span>
+        <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)' }}>
+          Student override <span style={{ color: 'var(--ef-text-muted)' }}>(blank = use global limit)</span>
         </p>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 px-2.5 py-1.5 flex-1"
-            style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-            <Hash size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+            <Hash size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
             <input
               type="number"
               min="1"
@@ -1449,7 +1449,7 @@ function AttemptsPanel({
               onChange={(e) => setOverrideInput(e.target.value)}
               placeholder={globalMax !== undefined ? String(globalMax) : 'unlimited'}
               className="flex-1 outline-none text-xs"
-              style={{ background: 'transparent', color: '#0C0C0B' }}
+              style={{ background: 'transparent', color: 'var(--ef-ink)' }}
             />
           </div>
           <button
@@ -1457,7 +1457,7 @@ function AttemptsPanel({
             disabled={overrideSaving}
             className="text-xs px-3 py-1.5 transition-opacity flex items-center gap-1"
             style={{
-              background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2,
+              background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2,
               cursor: overrideSaving ? 'not-allowed' : 'pointer',
               opacity: overrideSaving ? 0.6 : 1,
             }}
@@ -1471,9 +1471,9 @@ function AttemptsPanel({
               disabled={overrideSaving}
               className="text-xs px-2.5 py-1.5 transition-opacity flex items-center gap-1"
               style={{
-                border: '1px solid #E3E1DB', color: '#6B6B66', borderRadius: 2,
+                border: '1px solid var(--ef-border)', color: 'var(--ef-text-muted)', borderRadius: 2,
                 cursor: overrideSaving ? 'not-allowed' : 'pointer',
-                background: '#FFFFFF',
+                background: 'var(--ef-surface)',
               }}
               title="Clear override"
             >
@@ -1484,7 +1484,7 @@ function AttemptsPanel({
         </div>
         {overrideFeedback && (
           <p className="text-xs mt-1"
-            style={{ color: overrideFeedback === 'Saved' || overrideFeedback === 'Cleared' ? '#1E7B3C' : '#9B2828' }}>
+            style={{ color: overrideFeedback === 'Saved' || overrideFeedback === 'Cleared' ? 'var(--ef-success-strong)' : 'var(--ef-danger)' }}>
             {overrideFeedback}
           </p>
         )}
@@ -1494,7 +1494,7 @@ function AttemptsPanel({
       {/* Attempt history mini-list */}
       {!histLoading && allAttempts.length > 0 && (
         <div>
-          <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.07em' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.07em' }}>
             HISTORY ({allAttempts.length})
           </p>
           <div className="flex flex-col gap-1">
@@ -1508,8 +1508,8 @@ function AttemptsPanel({
                 <div key={a.id}
                   className="flex items-center justify-between gap-3 px-3 py-2"
                   style={{
-                    background: isDeleted ? '#FAFAF8' : '#FAFAF8',
-                    border: `1px solid ${isDeleted ? '#F2CECE' : '#F0EFEB'}`,
+                    background: isDeleted ? 'var(--ef-canvas-raised)' : 'var(--ef-canvas-raised)',
+                    border: `1px solid ${isDeleted ? 'var(--ef-danger-border)' : 'var(--ef-border-subtle)'}`,
                     borderRadius: 2, opacity: isDeleted ? 0.65 : 1,
                   }}>
                   <div className="flex items-center gap-2">
@@ -1517,8 +1517,8 @@ function AttemptsPanel({
                       style={{
                         width: 18, height: 18, borderRadius: 2, display: 'flex', alignItems: 'center',
                         justifyContent: 'center',
-                        background: isDeleted ? '#F2CECE' : '#F0EFEB',
-                        color: isDeleted ? '#9B2828' : '#6B6B66',
+                        background: isDeleted ? 'var(--ef-danger-border)' : 'var(--ef-border-subtle)',
+                        color: isDeleted ? 'var(--ef-danger)' : 'var(--ef-text-muted)',
                         fontSize: 10, flexShrink: 0,
                       }}>
                       {i + 1}
@@ -1526,7 +1526,7 @@ function AttemptsPanel({
                     <div>
                       <div className="flex items-center gap-1.5">
                         <p className="text-xs" style={{
-                          color: isDeleted ? '#9B2828' : '#4A4A45',
+                          color: isDeleted ? 'var(--ef-danger)' : 'var(--ef-text-subtle)',
                           textTransform: 'capitalize',
                           textDecoration: isDeleted ? 'line-through' : 'none',
                         }}>
@@ -1534,12 +1534,12 @@ function AttemptsPanel({
                         </p>
                         {isDeleted && (
                           <span className="text-xs px-1.5 py-0.5"
-                            style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2, color: '#9B2828', fontSize: 9 }}>
+                            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, color: 'var(--ef-danger)', fontSize: 9 }}>
                             Deleted
                           </span>
                         )}
                       </div>
-                      <p className="text-xs" style={{ color: '#6B6B66' }}>
+                      <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                         {formatRelative(a.startedAt)}
                       </p>
                     </div>
@@ -1552,9 +1552,9 @@ function AttemptsPanel({
                         className="flex items-center gap-1 text-xs px-1.5 py-0.5"
                         style={{
                           background: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#FBF3F3' : '#FEF9EC',
-                          border: `1px solid ${(a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#E3C9C9' : '#F5DFA0'}`,
+                          border: `1px solid ${(a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#E3C9C9' : 'var(--ef-warning-border)'}`,
                           borderRadius: 2,
-                          color: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#9B2828' : '#92680A',
+                          color: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? 'var(--ef-danger)' : 'var(--ef-warning)',
                           fontSize: 9,
                         }}>
                         <Flag size={9} strokeWidth={1.5} />
@@ -1563,15 +1563,15 @@ function AttemptsPanel({
                     )}
                     {scoreStr ? (
                       <span className="text-xs"
-                        style={{ color: a.scores?.passed === true ? '#1E7B3C'
-                          : a.scores?.passed === false ? '#9B2828'
-                          : '#92680A' }}>
+                        style={{ color: a.scores?.passed === true ? 'var(--ef-success-strong)'
+                          : a.scores?.passed === false ? 'var(--ef-danger)'
+                          : 'var(--ef-warning)' }}>
                         {scoreStr}
                       </span>
                     ) : done ? (
-                      <span className="text-xs" style={{ color: '#6B6B66' }}>No score</span>
+                      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>No score</span>
                     ) : (
-                      <span className="text-xs" style={{ color: '#1E7B3C' }}>Live</span>
+                      <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>Live</span>
                     )}
                     {/* Soft-delete button — completed, non-deleted attempts, and
                         webOwner ONLY (audit S-03). Attempts are the evidence of
@@ -1585,7 +1585,7 @@ function AttemptsPanel({
                         onClick={() => onRequestDelete(a.id, i + 1)}
                         className="p-1 transition-opacity hover:opacity-70"
                         title="Delete attempt"
-                        style={{ color: '#6B6B66' }}
+                        style={{ color: 'var(--ef-text-muted)' }}
                       >
                         <Trash2 size={10} strokeWidth={1.5} />
                       </button>
@@ -1599,7 +1599,7 @@ function AttemptsPanel({
       )}
 
       {!histLoading && allAttempts.length === 0 && (
-        <p className="text-xs" style={{ color: '#6B6B66' }}>No attempts recorded yet.</p>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>No attempts recorded yet.</p>
       )}
     </div>
   );
@@ -1701,14 +1701,14 @@ function AttemptDrawer({
       exit={{ x: 380, opacity: 0 }}
       transition={{ type: 'spring', damping: 28, stiffness: 260 }}
       className="fixed top-0 right-0 bottom-0 z-40 flex flex-col overflow-hidden w-full sm:w-[380px] sm:max-w-full"
-      style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
+      style={{ background: 'var(--ef-surface)', borderLeft: '1px solid var(--ef-border)' }}
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-4 flex-shrink-0"
-        style={{ borderBottom: '1px solid #E3E1DB' }}>
+        style={{ borderBottom: '1px solid var(--ef-border)' }}>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-xs" style={{ color: '#0C0C0B' }}>{student.name}</p>
+            <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{student.name}</p>
             {isBlocked && (
               <div className="flex items-center gap-1 px-1.5 py-0.5"
                 style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 2 }}>
@@ -1717,15 +1717,15 @@ function AttemptDrawer({
               </div>
             )}
           </div>
-          <p className="text-xs mt-0.5 truncate" style={{ color: '#6B6B66' }}>{student.email}</p>
+          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ef-text-muted)' }}>{student.email}</p>
         </div>
-        <button onClick={onClose} className="p-1 flex-shrink-0" style={{ color: '#6B6B66' }}>
+        <button onClick={onClose} className="p-1 flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
           <X size={14} strokeWidth={1.5} />
         </button>
       </div>
 
       {/* Status + flag action */}
-      <div className="px-4 sm:px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid #F0EFEB' }}>
+      <div className="px-4 sm:px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
         <div className="flex items-center justify-between">
           <StatusChip status={rosterStatus} />
           {canFreeze && (
@@ -1734,8 +1734,8 @@ function AttemptDrawer({
               disabled={freezeLoading}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity"
               style={{
-                background: '#FFFBF0', border: '1px solid #F5DFA0',
-                color: '#92680A', borderRadius: 2,
+                background: '#FFFBF0', border: '1px solid var(--ef-warning-border)',
+                color: 'var(--ef-warning)', borderRadius: 2,
                 cursor: freezeLoading ? 'not-allowed' : 'pointer',
                 opacity: freezeLoading ? 0.5 : 1,
               }}
@@ -1756,8 +1756,8 @@ function AttemptDrawer({
               disabled={provisionalBusy}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity"
               style={{
-                background: '#FFFFFF', border: '1px solid #DDDBD5',
-                color: '#4A4A45', borderRadius: 2,
+                background: 'var(--ef-surface)', border: '1px solid var(--ef-border-muted)',
+                color: 'var(--ef-text-subtle)', borderRadius: 2,
                 cursor: provisionalBusy ? 'not-allowed' : 'pointer',
                 opacity: provisionalBusy ? 0.5 : 1,
               }}
@@ -1774,8 +1774,8 @@ function AttemptDrawer({
               disabled={freezeLoading}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity"
               style={{
-                background: '#F0F9F4', border: '1px solid #B8E6C8',
-                color: '#1E7B3C', borderRadius: 2,
+                background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)',
+                color: 'var(--ef-success-strong)', borderRadius: 2,
                 cursor: freezeLoading ? 'not-allowed' : 'pointer',
                 opacity: freezeLoading ? 0.5 : 1,
               }}
@@ -1801,19 +1801,19 @@ function AttemptDrawer({
         */}
         {provisional && rosterStatus === 'frozen' && (
           <div className="mt-3 px-3 py-2.5"
-            style={{ background: '#FAFAF8', border: '1px dashed #6B6B66', borderRadius: 2 }}>
+            style={{ background: 'var(--ef-canvas-raised)', border: '1px dashed var(--ef-text-muted)', borderRadius: 2 }}>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
                 PROVISIONAL — NOT A SUBMISSION
               </p>
-              <p className="text-xs" style={{ color: '#6B6B66' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 {formatRelative(provisional.gradedAt)}
               </p>
             </div>
-            <p className="text-sm" style={{ color: '#0C0C0B' }}>
+            <p className="text-sm" style={{ color: 'var(--ef-ink)' }}>
               {provisional.scores?.percentage ?? 0}% · {provisional.answeredCount} answered
             </p>
-            <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
               Where this student had reached when the session was flagged. The
               student cannot see this, and it is discarded when the flag is cleared.
             </p>
@@ -1822,12 +1822,12 @@ function AttemptDrawer({
 
         {rosterStatus === 'frozen' && attempt?.frozenAt && (
           <div className="flex items-start gap-2 mt-3 px-3 py-2.5"
-            style={{ background: '#FFFBF0', border: '1px solid #F5DFA0', borderRadius: 2 }}>
-            <PauseCircle size={12} strokeWidth={1.5} style={{ color: '#92680A', flexShrink: 0, marginTop: 1 }} />
+            style={{ background: '#FFFBF0', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+            <PauseCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0, marginTop: 1 }} />
             <div>
-              <p className="text-xs" style={{ color: '#92680A' }}>Flagged {formatRelative(attempt.frozenAt)}</p>
+              <p className="text-xs" style={{ color: 'var(--ef-warning)' }}>Flagged {formatRelative(attempt.frozenAt)}</p>
               {attempt.frozenReason && (
-                <p className="text-xs mt-0.5" style={{ color: '#92680A', opacity: 0.7 }}>{attempt.frozenReason}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--ef-warning)', opacity: 0.7 }}>{attempt.frozenReason}</p>
               )}
             </div>
           </div>
@@ -1835,11 +1835,11 @@ function AttemptDrawer({
 
         {attempt?.sessionConflictAt && (
           <div className="flex items-start gap-2 mt-3 px-3 py-2.5"
-            style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-            <MonitorSmartphone size={12} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
+            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+            <MonitorSmartphone size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
             <div>
-              <p className="text-xs" style={{ color: '#9B2828' }}>Multi-device conflict detected</p>
-              <p className="text-xs mt-0.5" style={{ color: '#9B2828', opacity: 0.7 }}>
+              <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>Multi-device conflict detected</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ef-danger)', opacity: 0.7 }}>
                 {formatRelative(attempt.sessionConflictAt)}
               </p>
             </div>
@@ -1848,17 +1848,17 @@ function AttemptDrawer({
       </div>
 
       {/* Block / Unblock section */}
-      <div className="px-4 sm:px-5 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #F0EFEB' }}>
+      <div className="px-4 sm:px-5 py-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.07em' }}>EXAM ACCESS</p>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.07em' }}>EXAM ACCESS</p>
           {isBlocked ? (
             <button
               onClick={() => onRequestUnblock(student.id, student.name)}
               disabled={blockLoading}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity"
               style={{
-                background: '#F0F9F4', border: '1px solid #B8E6C8',
-                color: '#1E7B3C', borderRadius: 2,
+                background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)',
+                color: 'var(--ef-success-strong)', borderRadius: 2,
                 cursor: blockLoading ? 'not-allowed' : 'pointer',
                 opacity: blockLoading ? 0.5 : 1,
               }}
@@ -1894,37 +1894,37 @@ function AttemptDrawer({
       <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4">
         {!attempt ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <BookOpen size={18} strokeWidth={1} style={{ color: '#6B6B66' }} />
-            <p className="text-xs" style={{ color: '#6B6B66' }}>Student hasn't started yet.</p>
+            <BookOpen size={18} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Student hasn't started yet.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-5">
             <div>
-              <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>PROGRESS</p>
+              <p className="text-xs mb-2.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>PROGRESS</p>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs" style={{ color: '#4A4A45' }}>Questions answered</span>
-                  <span className="text-xs" style={{ color: '#0C0C0B' }}>{totalAnswered(attempt)} / {totalQuestions(attempt)}</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Questions answered</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{totalAnswered(attempt)} / {totalQuestions(attempt)}</span>
                 </div>
-                <div style={{ height: 3, background: '#F0EFEB', borderRadius: 2 }}>
+                <div style={{ height: 3, background: 'var(--ef-border-subtle)', borderRadius: 2 }}>
                   <div style={{
-                    height: '100%', borderRadius: 2, background: '#0C0C0B',
+                    height: '100%', borderRadius: 2, background: 'var(--ef-ink)',
                     width: `${totalQuestions(attempt) > 0 ? Math.round((totalAnswered(attempt) / totalQuestions(attempt)) * 100) : 0}%`,
                     transition: 'width 0.4s',
                   }} />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs" style={{ color: '#4A4A45' }}>Current section</span>
-                  <span className="text-xs" style={{ color: '#0C0C0B' }}>{attempt.currentSectionIdx + 1} / {attempt.sectionIds.length}</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Current section</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{attempt.currentSectionIdx + 1} / {attempt.sectionIds.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs" style={{ color: '#4A4A45' }}>Started</span>
-                  <span className="text-xs" style={{ color: '#0C0C0B' }}>{formatRelative(attempt.startedAt)}</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Started</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{formatRelative(attempt.startedAt)}</span>
                 </div>
                 {attempt.submittedAt && (
                   <div className="flex items-center justify-between">
-                    <span className="text-xs" style={{ color: '#4A4A45' }}>Submitted</span>
-                    <span className="text-xs" style={{ color: '#0C0C0B' }}>{formatRelative(attempt.submittedAt)}</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Submitted</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{formatRelative(attempt.submittedAt)}</span>
                   </div>
                 )}
               </div>
@@ -1932,18 +1932,18 @@ function AttemptDrawer({
 
             {attempt.scores && canSeeResults && (
               <div>
-                <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>SCORE</p>
-                <div className="px-4 py-3" style={{ background: '#F7F6F3', borderRadius: 2 }}>
+                <p className="text-xs mb-2.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>SCORE</p>
+                <div className="px-4 py-3" style={{ background: 'var(--ef-canvas)', borderRadius: 2 }}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs" style={{ color: '#4A4A45' }}>Total marks</span>
-                    <span className="text-xs" style={{ color: '#0C0C0B' }}>{attempt.scores.total} / {attempt.scores.available}</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Total marks</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{attempt.scores.total} / {attempt.scores.available}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs" style={{ color: '#4A4A45' }}>Percentage</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Percentage</span>
                     <span className="text-xs" style={{
-                      color: attempt.scores.passed === true ? '#1E7B3C'
-                        : attempt.scores.passed === false ? '#9B2828'
-                        : '#92680A' }}>
+                      color: attempt.scores.passed === true ? 'var(--ef-success-strong)'
+                        : attempt.scores.passed === false ? 'var(--ef-danger)'
+                        : 'var(--ef-warning)' }}>
                       {attempt.scores.percentage}%
                       {attempt.scores.passed === true ? ' ✓ Passed'
                         : attempt.scores.passed === false ? ' ✗ Failed'
@@ -1951,7 +1951,7 @@ function AttemptDrawer({
                     </span>
                   </div>
                   {attempt.scores.requiresManualReview && (
-                    <p className="text-xs mt-2" style={{ color: '#92680A' }}>
+                    <p className="text-xs mt-2" style={{ color: 'var(--ef-warning)' }}>
                       ⚠ Awaiting manual marking — the percentage above counts unmarked
                       answers as zero, so it is a floor, not a final score.
                     </p>
@@ -1964,7 +1964,7 @@ function AttemptDrawer({
             {canReview && isReviewable(shownAttempt) && (
               <div>
                 <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-                  <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>RESPONSES</p>
+                  <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>RESPONSES</p>
 
                   {/* Latest | Best — only when they are different sittings. */}
                   {canSwitchResponses && (
@@ -1979,7 +1979,7 @@ function AttemptDrawer({
                             style={{
                               borderRadius: 2, cursor: 'pointer',
                               background: active ? '#F0EFEA' : 'transparent',
-                              color: active ? '#0C0C0B' : '#6B6B66',
+                              color: active ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
                               border: `1px solid ${active ? '#D8D6CF' : 'transparent'}`,
                               fontVariantNumeric: 'tabular-nums',
                             }}>
@@ -1997,11 +1997,11 @@ function AttemptDrawer({
                     current one, and a mark read off the wrong sitting is
                     worse than no mark. */}
                 {canSwitchResponses && (
-                  <p className="text-xs mb-2" style={{ color: '#6B6B66' }}>
+                  <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)' }}>
                     {responseView === 'best' ? 'Best attempt' : 'Most recent attempt'}
                     {shownAttempt?.startedAt && ` · started ${formatRelative(shownAttempt.startedAt)}`}
                     {shownAttempt?.status === 'terminated' && (
-                      <span style={{ color: '#9B2828' }}> · voided</span>
+                      <span style={{ color: 'var(--ef-danger)' }}> · voided</span>
                     )}
                   </p>
                 )}
@@ -2009,7 +2009,7 @@ function AttemptDrawer({
                 {/* Latest is still running: the reviewer is looking at an
                     earlier sitting, and should know that. */}
                 {!isReviewable(attempt) && responseView === 'best' && (
-                  <p className="text-xs mb-2" style={{ color: '#92680A' }}>
+                  <p className="text-xs mb-2" style={{ color: 'var(--ef-warning)' }}>
                     Their current sitting is still in progress — this is an earlier attempt.
                   </p>
                 )}
@@ -2018,23 +2018,23 @@ function AttemptDrawer({
               </div>
             )}
             {!canReview && isReviewable(shownAttempt) && (
-              <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                 Question review is not enabled for your role on this exam — the
                 exam owner controls this in the assessment's visibility settings.
               </p>
             )}
 
             <div>
-              <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>INTEGRITY</p>
+              <p className="text-xs mb-2.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>INTEGRITY</p>
 
               {/* Anomaly score (Phase 1 timing analytics) — headline reviewer signal */}
               {attempt.timingAnalysis && (() => {
                 const a = attempt.timingAnalysis;
                 const score = a.anomalyScore ?? 0;
                 const band =
-                  score >= 70 ? { bg: '#FBF3F3', bd: '#E3C9C9', fg: '#9B2828', label: 'High anomaly' }
-                  : score >= 40 ? { bg: '#FEF9EC', bd: '#F5DFA0', fg: '#92680A', label: 'Some anomaly' }
-                  : { bg: '#F0F9F4', bd: '#B8E6C8', fg: '#1E7B3C', label: 'Low anomaly' };
+                  score >= 70 ? { bg: '#FBF3F3', bd: '#E3C9C9', fg: 'var(--ef-danger)', label: 'High anomaly' }
+                  : score >= 40 ? { bg: '#FEF9EC', bd: 'var(--ef-warning-border)', fg: 'var(--ef-warning)', label: 'Some anomaly' }
+                  : { bg: 'var(--ef-success-bg)', bd: 'var(--ef-success-border)', fg: 'var(--ef-success-strong)', label: 'Low anomaly' };
                 return (
                   <div className="mb-2.5">
                     <div className="flex items-center justify-between px-3 py-2.5 mb-1.5"
@@ -2053,9 +2053,9 @@ function AttemptDrawer({
                           : []),
                       ].map((item) => (
                         <div key={item.label} className="flex items-center justify-between px-3 py-1.5"
-                          style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                          <span className="text-xs" style={{ color: '#6B6B66' }}>{item.label}</span>
-                          <span className="text-xs" style={{ color: '#4A4A45' }}>{item.value}</span>
+                          style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{item.label}</span>
+                          <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>{item.value}</span>
                         </div>
                       ))}
                     </div>
@@ -2067,8 +2067,8 @@ function AttemptDrawer({
               {(attempt.integrityLog as { finalizedWhileFrozen?: boolean }).finalizedWhileFrozen && (
                 <div className="flex items-center gap-2 px-3 py-2 mb-2.5"
                   style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
-                  <Flag size={11} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-                  <span className="text-xs" style={{ color: '#9B2828' }}>
+                  <Flag size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+                  <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>
                     Submitted while frozen (unresolved extension freeze)
                   </span>
                 </div>
@@ -2085,16 +2085,16 @@ function AttemptDrawer({
                   { label: 'Extension events', value: attempt.integrityLog.extensionEvents },
                 ].map((item) => item.value > 0 ? (
                   <div key={item.label} className="flex items-center justify-between px-3 py-2"
-                    style={{ background: '#FEF9EC', border: '1px solid #F5DFA0', borderRadius: 2 }}>
-                    <span className="text-xs" style={{ color: '#92680A' }}>{item.label}</span>
-                    <span className="text-xs" style={{ color: '#92680A' }}>{item.value}</span>
+                    style={{ background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+                    <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>{item.label}</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>{item.value}</span>
                   </div>
                 ) : null)}
                 {attempt.integrityLog.totalViolations === 0 && (
                   <div className="flex items-center gap-2 px-3 py-2"
-                    style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}>
-                    <Shield size={11} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
-                    <span className="text-xs" style={{ color: '#1E7B3C' }}>No violations recorded</span>
+                    style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
+                    <Shield size={11} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
+                    <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>No violations recorded</span>
                   </div>
                 )}
               </div>
@@ -2102,18 +2102,18 @@ function AttemptDrawer({
 
             {attempt.integrityLog.violations.length > 0 && (
               <div>
-                <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>VIOLATION TIMELINE</p>
+                <p className="text-xs mb-2.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>VIOLATION TIMELINE</p>
                 <div className="flex flex-col gap-1">
                   {[...attempt.integrityLog.violations]
                     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                     .slice(0, 15)
                     .map((v, i) => (
                       <div key={i} className="flex items-start justify-between gap-2 py-1.5"
-                        style={{ borderBottom: '1px solid #F0EFEB' }}>
-                        <span className="text-xs" style={{ color: '#4A4A45', textTransform: 'capitalize' }}>
+                        style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
+                        <span className="text-xs" style={{ color: 'var(--ef-text-subtle)', textTransform: 'capitalize' }}>
                           {v.type.replace(/_/g, ' ')}{v.warningNumber ? ` (warning ${v.warningNumber})` : ''}
                         </span>
-                        <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>
+                        <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
                           {formatRelative(v.timestamp)}
                         </span>
                       </div>
@@ -2124,7 +2124,7 @@ function AttemptDrawer({
 
             {/* ── ATTEMPTS section ── */}
             <div>
-              <p className="text-xs mb-2.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>ATTEMPTS</p>
+              <p className="text-xs mb-2.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>ATTEMPTS</p>
               <AttemptsPanel
                 assessmentId={assessment.id}
                 studentId={student.id}
@@ -2187,14 +2187,14 @@ function RosterTableRow({
   return (
     <div
       className="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-3 gap-y-2 sm:gap-4 px-4 sm:px-5 py-3 sm:py-3.5 cursor-pointer transition-colors"
-      style={{ borderBottom: '1px solid #F7F6F3' }}
+      style={{ borderBottom: '1px solid var(--ef-canvas)' }}
       onClick={onSelect}
       onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFAF9')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <div className="w-full sm:w-[200px] sm:flex-shrink-0 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
-          <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{student.name}</p>
+          <p className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>{student.name}</p>
           {/* Multiple sittings: the row shows only the LATEST. Without this
               badge a second attempt is invisible from the list, and staff have
               no cue that the score they are reading is one of several. */}
@@ -2203,7 +2203,7 @@ function RosterTableRow({
               className="text-xs px-1.5 flex-shrink-0"
               title={`${attemptCount} attempts — showing the most recent. Open to see all.`}
               style={{
-                background: '#F0EFEA', border: '1px solid #E3E1DB', borderRadius: 2,
+                background: '#F0EFEA', border: '1px solid var(--ef-border)', borderRadius: 2,
                 color: '#6B6A64', fontVariantNumeric: 'tabular-nums', lineHeight: '16px',
               }}
             >
@@ -2211,15 +2211,15 @@ function RosterTableRow({
             </span>
           )}
         </div>
-        <p className="text-xs mt-0.5 truncate" style={{ color: '#6B6B66' }}>{student.email}</p>
+        <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ef-text-muted)' }}>{student.email}</p>
       </div>
 
       <div className="sm:w-[130px] sm:flex-shrink-0">
         {breakInfo ? (
           <div className="flex items-center gap-1.5 px-2 py-0.5"
-            style={{ background: '#FEF9EC', border: '1px dashed #F5DFA0', borderRadius: 2 }}>
+            style={{ background: '#FEF9EC', border: '1px dashed var(--ef-warning-border)', borderRadius: 2 }}>
             <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#D4A017' }} />
-            <span className="text-xs" style={{ color: '#92680A', fontVariantNumeric: 'tabular-nums' }}>
+            <span className="text-xs" style={{ color: 'var(--ef-warning)', fontVariantNumeric: 'tabular-nums' }}>
               {breakInfo.expired
                 ? 'Break ended'
                 : `On break · ${Math.floor(breakInfo.secondsRemaining / 60)}:${(breakInfo.secondsRemaining % 60).toString().padStart(2, '0')}`}
@@ -2232,12 +2232,12 @@ function RosterTableRow({
 
       <div className="w-full sm:flex-1 sm:min-w-0">
         {attempt && isLive && breakInfo && (
-          <p className="text-xs" style={{ color: '#92680A' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-warning)' }}>
             After: {breakInfo.nextSectionName}
           </p>
         )}
         {attempt && isLive && !breakInfo && (
-          <p className="text-xs" style={{ color: '#4A4A45' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>
             Section {attempt.currentSectionIdx + 1}/{attempt.sectionIds.length}
             {' · '}{totalAnswered(attempt)}/{totalQuestions(attempt)} answered
           </p>
@@ -2255,41 +2255,41 @@ function RosterTableRow({
                one still climbing, and neither is visible from a single mark. */
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs" style={{
-                color: scoreView === 'latest' ? '#0C0C0B' : '#6B6B66',
+                color: scoreView === 'latest' ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
                 fontVariantNumeric: 'tabular-nums',
               }}>
                 Latest: {attempt.scores.percentage}%
               </span>
-              <span className="text-xs" style={{ color: '#E3E1DB' }}>|</span>
+              <span className="text-xs" style={{ color: 'var(--ef-border)' }}>|</span>
               <span className="text-xs" style={{
-                color: scoreView === 'best' ? '#1E7B3C' : '#6B6B66',
+                color: scoreView === 'best' ? 'var(--ef-success-strong)' : 'var(--ef-text-muted)',
                 fontVariantNumeric: 'tabular-nums',
               }}>
                 Best: {bestAttempt!.scores!.percentage}%
               </span>
             </div>
           ) : (
-            <p className="text-xs" style={{ color: '#4A4A45' }}>
+            <p className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>
               {attempt.scores.total}/{attempt.scores.available} marks · {attempt.scores.percentage}%
               {/* Their most recent sitting IS their best — worth saying, so a
                   ×3 badge with no second figure isn't read as missing data. */}
-              {attemptCount > 1 && <span style={{ color: '#1E7B3C' }}> · best</span>}
+              {attemptCount > 1 && <span style={{ color: 'var(--ef-success-strong)' }}> · best</span>}
             </p>
           )
         )}
         {attempt && isDone && !attempt.scores && (
-          <p className="text-xs" style={{ color: '#6B6B66' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             Awaiting score
             {/* An ungraded latest attempt would otherwise hide a graded earlier
                 one entirely — the row would read as if nothing was marked. */}
             {bestAttempt?.scores && (
-              <span style={{ color: '#4A4A45' }}>
+              <span style={{ color: 'var(--ef-text-subtle)' }}>
                 {' · '}Best: {bestAttempt.scores.percentage}%
               </span>
             )}
           </p>
         )}
-        {!attempt && <p className="text-xs" style={{ color: '#6B6B66' }}>—</p>}
+        {!attempt && <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>—</p>}
       </div>
 
       {/* Badges */}
@@ -2313,19 +2313,19 @@ function RosterTableRow({
         )}
         {hasConflict && (
           <div className="flex items-center gap-1 px-2 py-1"
-            style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-            <MonitorSmartphone size={10} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-            <span className="text-xs" style={{ color: '#9B2828' }}>Conflict</span>
+            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+            <MonitorSmartphone size={10} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>Conflict</span>
           </div>
         )}
         {violations > 0 && (
           <div className="flex items-center gap-1 px-2 py-1"
             style={{
-              background: violations >= 3 ? '#FDF5F5' : '#FEF9EC',
-              border: `1px solid ${violations >= 3 ? '#F2CECE' : '#F5DFA0'}`, borderRadius: 2,
+              background: violations >= 3 ? 'var(--ef-danger-bg)' : '#FEF9EC',
+              border: `1px solid ${violations >= 3 ? 'var(--ef-danger-border)' : 'var(--ef-warning-border)'}`, borderRadius: 2,
             }}>
-            <Shield size={10} strokeWidth={1.5} style={{ color: violations >= 3 ? '#9B2828' : '#92680A' }} />
-            <span className="text-xs" style={{ color: violations >= 3 ? '#9B2828' : '#92680A' }}>{violations}</span>
+            <Shield size={10} strokeWidth={1.5} style={{ color: violations >= 3 ? 'var(--ef-danger)' : 'var(--ef-warning)' }} />
+            <span className="text-xs" style={{ color: violations >= 3 ? 'var(--ef-danger)' : 'var(--ef-warning)' }}>{violations}</span>
           </div>
         )}
       </div>
@@ -2338,7 +2338,7 @@ function RosterTableRow({
             disabled={freezeLoading}
             className="flex items-center gap-1 text-xs px-3 py-1.5 transition-opacity"
             style={{
-              border: '1px solid #F5DFA0', color: '#92680A', background: '#FFFBF0', borderRadius: 2,
+              border: '1px solid var(--ef-warning-border)', color: 'var(--ef-warning)', background: '#FFFBF0', borderRadius: 2,
               cursor: freezeLoading ? 'not-allowed' : 'pointer',
               opacity: freezeLoading ? 0.5 : 1,
             }}
@@ -2353,7 +2353,7 @@ function RosterTableRow({
             disabled={freezeLoading}
             className="flex items-center gap-1 text-xs px-3 py-1.5 transition-opacity"
             style={{
-              border: '1px solid #B8E6C8', color: '#1E7B3C', background: '#F0F9F4', borderRadius: 2,
+              border: '1px solid var(--ef-success-border)', color: 'var(--ef-success-strong)', background: 'var(--ef-success-bg)', borderRadius: 2,
               cursor: freezeLoading ? 'not-allowed' : 'pointer',
               opacity: freezeLoading ? 0.5 : 1,
             }}
@@ -2368,7 +2368,7 @@ function RosterTableRow({
             disabled={blockLoading}
             className="flex items-center gap-1 text-xs px-3 py-1.5 transition-opacity"
             style={{
-              border: '1px solid #B8E6C8', color: '#1E7B3C', background: '#F0F9F4', borderRadius: 2,
+              border: '1px solid var(--ef-success-border)', color: 'var(--ef-success-strong)', background: 'var(--ef-success-bg)', borderRadius: 2,
               cursor: blockLoading ? 'not-allowed' : 'pointer',
               opacity: blockLoading ? 0.5 : 1,
             }}
@@ -2394,7 +2394,7 @@ function RosterTableRow({
         )}
       </div>
 
-      <ChevronRight size={13} strokeWidth={1.5} className="hidden sm:block" style={{ color: '#E3E1DB', flexShrink: 0 }} />
+      <ChevronRight size={13} strokeWidth={1.5} className="hidden sm:block" style={{ color: 'var(--ef-border)', flexShrink: 0 }} />
     </div>
   );
 }
@@ -2737,7 +2737,7 @@ export function AssessmentRosterCore({
     document.head.appendChild(s);
   }
 
-  const sc = assessment ? statusColor(assessment.status) : { bg: '#F7F6F3', text: '#6B6B66', border: '#E3E1DB' };
+  const sc = assessment ? statusColor(assessment.status) : { bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border)' };
 
   // The annotation has to sit on the ARRAY LITERAL, not on the result of
   // .filter() — a trailing .filter() breaks the contextual typing, so each
@@ -2756,20 +2756,20 @@ export function AssessmentRosterCore({
   // ── Loading / error states ─────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
-        <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading roster…</p>
+      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'var(--ef-canvas)' }}>
+        <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+        <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Loading roster…</p>
       </div>
     );
   }
 
   if (errorMsg || !assessment) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3" style={{ background: '#F7F6F3' }}>
-        <AlertTriangle size={18} strokeWidth={1} style={{ color: '#9B2828' }} />
-        <p className="text-xs" style={{ color: '#9B2828' }}>{errorMsg || 'Assessment not found.'}</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3" style={{ background: 'var(--ef-canvas)' }}>
+        <AlertTriangle size={18} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
+        <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{errorMsg || 'Assessment not found.'}</p>
         <button onClick={onBack} className="text-xs px-4 py-2 mt-2"
-          style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, cursor: 'pointer' }}>
+          style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, cursor: 'pointer' }}>
           Back to Assessments
         </button>
       </div>
@@ -2777,18 +2777,18 @@ export function AssessmentRosterCore({
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#F7F6F3' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--ef-canvas)' }}>
 
       {/* ── Page header ── */}
-      <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E3E1DB' }}>
+      <div style={{ background: 'var(--ef-surface)', borderBottom: '1px solid var(--ef-border)' }}>
         <div className="px-4 py-4 sm:px-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
           {/* Breadcrumb + title */}
           <div className="flex items-center gap-2 sm:gap-3 mb-4 flex-wrap">
-            <button onClick={onBack} className="flex items-center gap-1.5 text-xs flex-shrink-0" style={{ color: '#6B6B66', cursor: 'pointer' }}>
+            <button onClick={onBack} className="flex items-center gap-1.5 text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', cursor: 'pointer' }}>
               <ArrowLeft size={12} strokeWidth={1.5} /> Assessments
             </button>
-            <span className="hidden sm:inline" style={{ color: '#E3E1DB' }}>·</span>
-            <p className="text-xs min-w-0 truncate" style={{ color: '#0C0C0B' }}>{assessment.title}</p>
+            <span className="hidden sm:inline" style={{ color: 'var(--ef-border)' }}>·</span>
+            <p className="text-xs min-w-0 truncate" style={{ color: 'var(--ef-ink)' }}>{assessment.title}</p>
             <span className="text-xs px-2 py-0.5 flex-shrink-0"
               style={{ background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, borderRadius: 2 }}>
               {assessment.status}
@@ -2796,14 +2796,14 @@ export function AssessmentRosterCore({
             <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
               {liveConnected ? (
                 <>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E7B3C',
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ef-success-strong)',
                     animation: 'rosterBlip 1.4s ease-in-out infinite' }} />
-                  <span className="text-xs" style={{ color: '#1E7B3C' }}>Live</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>Live</span>
                 </>
               ) : (
                 <>
-                  <WifiOff size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-                  <span className="text-xs" style={{ color: '#6B6B66' }}>Connecting…</span>
+                  <WifiOff size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Connecting…</span>
                 </>
               )}
             </div>
@@ -2814,9 +2814,9 @@ export function AssessmentRosterCore({
               so than to present a superset as if it were the allocation. */}
           {!rosterExact && isRuleAllocated(assessment) && (
             <div className="flex items-start gap-2 px-3 py-2 mb-4"
-              style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 2, flexShrink: 0 }} />
-              <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+              style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+              <AlertCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', marginTop: 2, flexShrink: 0 }} />
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                 This exam is allocated by hierarchy. Showing all students in your institute —
                 the exact allocated list is visible to the Web Owner. Attempt data below is exact.
               </p>
@@ -2827,18 +2827,18 @@ export function AssessmentRosterCore({
           <div className="flex items-center gap-x-4 gap-y-2 sm:gap-5 flex-wrap">
             {[
               { label: 'Total allocated', value: stats.total,      icon: <Users size={11} strokeWidth={1.5} /> },
-              { label: 'Live now',        value: stats.live,       icon: <Activity size={11} strokeWidth={1.5} />,      color: stats.live > 0 ? '#1E7B3C' : undefined },
-              { label: 'Flagged',         value: stats.frozen,     icon: <PauseCircle size={11} strokeWidth={1.5} />,   color: stats.frozen > 0 ? '#92680A' : undefined },
+              { label: 'Live now',        value: stats.live,       icon: <Activity size={11} strokeWidth={1.5} />,      color: stats.live > 0 ? 'var(--ef-success-strong)' : undefined },
+              { label: 'Flagged',         value: stats.frozen,     icon: <PauseCircle size={11} strokeWidth={1.5} />,   color: stats.frozen > 0 ? 'var(--ef-warning)' : undefined },
               { label: 'Blocked',         value: stats.blocked,    icon: <Ban size={11} strokeWidth={1.5} />,           color: stats.blocked > 0 ? '#9A3412' : undefined },
               { label: 'Submitted',       value: stats.submitted,  icon: <CheckCircle2 size={11} strokeWidth={1.5} /> },
               { label: 'Not started',     value: stats.notStarted, icon: <Clock size={11} strokeWidth={1.5} /> },
-              ...(stats.conflicts > 0 ? [{ label: 'Conflicts',  value: stats.conflicts,  icon: <MonitorSmartphone size={11} strokeWidth={1.5} />, color: '#9B2828' }] : []),
-              ...(stats.terminated > 0 ? [{ label: 'Terminated', value: stats.terminated, icon: <AlertTriangle size={11} strokeWidth={1.5} />,    color: '#9B2828' }] : []),
+              ...(stats.conflicts > 0 ? [{ label: 'Conflicts',  value: stats.conflicts,  icon: <MonitorSmartphone size={11} strokeWidth={1.5} />, color: 'var(--ef-danger)' }] : []),
+              ...(stats.terminated > 0 ? [{ label: 'Terminated', value: stats.terminated, icon: <AlertTriangle size={11} strokeWidth={1.5} />,    color: 'var(--ef-danger)' }] : []),
             ].map((stat) => (
               <div key={stat.label} className="flex items-center gap-1.5">
-                <span style={{ color: stat.color ?? '#6B6B66' }}>{stat.icon}</span>
-                <span className="text-xs" style={{ color: stat.color ?? '#6B6B66' }}>
-                  <strong style={{ color: stat.color ?? '#0C0C0B' }}>{stat.value}</strong>{' '}{stat.label}
+                <span style={{ color: stat.color ?? 'var(--ef-text-muted)' }}>{stat.icon}</span>
+                <span className="text-xs" style={{ color: stat.color ?? 'var(--ef-text-muted)' }}>
+                  <strong style={{ color: stat.color ?? 'var(--ef-ink)' }}>{stat.value}</strong>{' '}{stat.label}
                 </span>
               </div>
             ))}
@@ -2847,7 +2847,7 @@ export function AssessmentRosterCore({
       </div>
 
       {/* ── View toggle: Roster | Reports ── */}
-      <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E3E1DB' }}>
+      <div style={{ background: 'var(--ef-surface)', borderBottom: '1px solid var(--ef-border)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}
           className="flex items-center gap-2 px-4 py-2 sm:px-6">
           {(canReview ? (['roster', 'reports'] as const) : (['roster'] as const)).map((v) => (
@@ -2855,9 +2855,9 @@ export function AssessmentRosterCore({
               className="text-xs px-3 py-1.5"
               style={{
                 borderRadius: 2, cursor: 'pointer',
-                background: view === v ? '#0C0C0B' : 'transparent',
-                color: view === v ? '#FFFFFF' : '#6B6B66',
-                border: view === v ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                background: view === v ? 'var(--ef-ink)' : 'transparent',
+                color: view === v ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
+                border: view === v ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
               }}>
               {v === 'roster' ? 'Roster' : 'Reports'}
             </button>
@@ -2869,8 +2869,8 @@ export function AssessmentRosterCore({
               nothing, and the toolbar is busy enough. */}
           {view === 'roster' && anyRetakes && (
             <div className="flex items-center gap-1 ml-3 pl-3"
-              style={{ borderLeft: '1px solid #E3E1DB' }}>
-              <span className="text-xs mr-1" style={{ color: '#6B6B66' }}>Show</span>
+              style={{ borderLeft: '1px solid var(--ef-border)' }}>
+              <span className="text-xs mr-1" style={{ color: 'var(--ef-text-muted)' }}>Show</span>
               {(['latest', 'best'] as const).map((sv) => (
                 <button key={sv} onClick={() => setScoreView(sv)}
                   title={sv === 'latest'
@@ -2880,7 +2880,7 @@ export function AssessmentRosterCore({
                   style={{
                     borderRadius: 2, cursor: 'pointer',
                     background: scoreView === sv ? '#F0EFEA' : 'transparent',
-                    color: scoreView === sv ? '#0C0C0B' : '#6B6B66',
+                    color: scoreView === sv ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
                     border: `1px solid ${scoreView === sv ? '#D8D6CF' : 'transparent'}`,
                   }}>
                   {sv === 'latest' ? 'Latest' : 'Best'}
@@ -2894,7 +2894,7 @@ export function AssessmentRosterCore({
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 ml-auto transition-opacity hover:opacity-70"
             style={{
               borderRadius: 2, cursor: 'pointer',
-              color: '#4A4A45', border: '1px solid #E3E1DB', background: 'transparent',
+              color: 'var(--ef-text-subtle)', border: '1px solid var(--ef-border)', background: 'transparent',
             }}
           >
             <Download size={11} strokeWidth={1.5} /> Export
@@ -2914,15 +2914,15 @@ export function AssessmentRosterCore({
       ) : (
       <>
       {/* ── Toolbar ── */}
-      <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E3E1DB' }}>
+      <div style={{ background: 'var(--ef-surface)', borderBottom: '1px solid var(--ef-border)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}
           className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 sm:px-6">
           <div className="flex items-center gap-2 px-3 py-2 w-full sm:w-[240px] sm:flex-shrink-0"
-            style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-            <Search size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+            style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+            <Search size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search students…" className="text-xs outline-none bg-transparent flex-1 min-w-0"
-              style={{ color: '#0C0C0B' }} />
+              style={{ color: 'var(--ef-ink)' }} />
           </div>
           <div className="flex items-center gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
             {filterTabs.map((tab) => (
@@ -2930,14 +2930,14 @@ export function AssessmentRosterCore({
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 flex-shrink-0 whitespace-nowrap"
                 style={{
                   borderRadius: 2, cursor: 'pointer',
-                  background: filterStatus === tab.value ? '#0C0C0B' : 'transparent',
-                  color: filterStatus === tab.value ? '#FFFFFF' : '#6B6B66',
-                  border: filterStatus === tab.value ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                  background: filterStatus === tab.value ? 'var(--ef-ink)' : 'transparent',
+                  color: filterStatus === tab.value ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
+                  border: filterStatus === tab.value ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
                 }}>
                 {tab.label}
                 <span style={{
-                  background: filterStatus === tab.value ? 'rgba(255,255,255,0.2)' : '#F0EFEB',
-                  color: filterStatus === tab.value ? '#FFFFFF' : '#6B6B66',
+                  background: filterStatus === tab.value ? 'rgba(255,255,255,0.2)' : 'var(--ef-border-subtle)',
+                  color: filterStatus === tab.value ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                   borderRadius: 2, padding: '0 4px', fontSize: 10,
                 }}>{tab.count}</span>
               </button>
@@ -2948,20 +2948,20 @@ export function AssessmentRosterCore({
 
       {/* ── Roster table ── */}
       <div className="px-4 py-6 sm:p-6" style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-        <div className="hidden sm:flex items-center gap-4 px-5 pb-2 mb-1" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <div style={{ width: 200, flexShrink: 0 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STUDENT</span></div>
-          <div style={{ width: 130, flexShrink: 0 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STATUS</span></div>
-          <div style={{ flex: 1 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>PROGRESS / SCORE</span></div>
+        <div className="hidden sm:flex items-center gap-4 px-5 pb-2 mb-1" style={{ borderBottom: '1px solid var(--ef-border)' }}>
+          <div style={{ width: 200, flexShrink: 0 }}><span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>STUDENT</span></div>
+          <div style={{ width: 130, flexShrink: 0 }}><span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>STATUS</span></div>
+          <div style={{ flex: 1 }}><span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>PROGRESS / SCORE</span></div>
           <div style={{ width: 120, flexShrink: 0 }} />
-          <div style={{ width: 86, flexShrink: 0 }}><span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>ACTION</span></div>
+          <div style={{ width: 86, flexShrink: 0 }}><span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>ACTION</span></div>
           <div style={{ width: 13, flexShrink: 0 }} />
         </div>
 
-        <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3, overflow: 'hidden' }}>
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <Users size={20} strokeWidth={1} style={{ color: '#6B6B66' }} />
-              <p className="text-xs" style={{ color: '#6B6B66' }}>
+              <Users size={20} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 {search || filterStatus !== 'all' ? 'No students match your filters.' : 'No students allocated to this assessment.'}
               </p>
             </div>
@@ -3028,12 +3028,12 @@ export function AssessmentRosterCore({
         <div className="flex items-start gap-2.5 px-4 py-3 mx-1 mb-3"
           style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
           <AlertCircle size={13} strokeWidth={1.5}
-            style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
-          <p className="text-xs flex-1" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+            style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
+          <p className="text-xs flex-1" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
             {freezeError}
           </p>
           <button onClick={() => setFreezeError(null)}
-            className="text-xs px-2" style={{ color: '#9B2828', cursor: 'pointer', background: 'transparent' }}>
+            className="text-xs px-2" style={{ color: 'var(--ef-danger)', cursor: 'pointer', background: 'transparent' }}>
             Dismiss
           </button>
         </div>

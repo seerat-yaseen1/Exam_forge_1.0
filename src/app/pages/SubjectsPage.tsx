@@ -100,7 +100,7 @@ export function SubjectsPage() {
         <h1 style={{ margin: 0 }}>Subjects</h1>
       </div>
 
-      <div style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderRadius: 4, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--ef-surface)', border: '1px solid #E8E7E1', borderRadius: 4, overflow: 'hidden' }}>
         {selectedSubject && selectedTopic ? (
           <TopicQuestionsView
             key={selectedTopic.id}
@@ -125,9 +125,9 @@ export function SubjectsPage() {
         ) : (
           <>
             <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, letterSpacing: '0.04em', color: '#6B6B66' }}>
+              <span style={{ fontSize: 13, letterSpacing: '0.04em', color: 'var(--ef-text-muted)' }}>
                 ALL SUBJECTS
-                {topics.length > 0 && <span style={{ color: '#6B6B66' }}> · {topics.length} topics</span>}
+                {topics.length > 0 && <span style={{ color: 'var(--ef-text-muted)' }}> · {topics.length} topics</span>}
               </span>
               <div className="flex items-center gap-2">
                 <Button
@@ -199,8 +199,8 @@ function SlugChip({ id }: { id: string }) {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        background: '#0C0C0B',
-        color: '#FFFFFF',
+        background: 'var(--ef-ink)',
+        color: 'var(--ef-surface)',
         fontSize: 10,
         padding: '2px 6px',
         borderRadius: 2,
@@ -286,9 +286,9 @@ function SubjectCard({
   return (
     <button
       onClick={onOpen}
-      className="flex flex-col gap-3 p-4 text-left w-full cursor-pointer transition-colors hover:bg-[#FAFAF8]"
+      className="flex flex-col gap-3 p-4 text-left w-full cursor-pointer transition-colors hover:bg-[var(--ef-canvas-raised)]"
       style={{
-        background: '#FFFFFF',
+        background: 'var(--ef-surface)',
         border: '1px solid #E8E7E1',
         borderRadius: 3,
         touchAction: 'manipulation',
@@ -297,25 +297,25 @@ function SubjectCard({
       {/* Header: slug + drill affordance */}
       <div className="flex items-center justify-between gap-2">
         <SlugChip id={subject.id} />
-        <ChevronRight size={16} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+        <ChevronRight size={16} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
       </div>
 
       {/* Name */}
-      <p className="break-words" style={{ color: '#0C0C0B', fontSize: 14, lineHeight: 1.4 }}>
+      <p className="break-words" style={{ color: 'var(--ef-ink)', fontSize: 14, lineHeight: 1.4 }}>
         {subject.name}
       </p>
 
       {/* Stats footer */}
       <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid #F2F1EC' }}>
-        <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+        <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
+          <BookOpen size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           <span style={{ fontSize: 12 }}>{subject.questionCount}</span>
-          <span style={{ fontSize: 11, color: '#6B6B66' }}>questions</span>
+          <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>questions</span>
         </span>
-        <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-          <Layers size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+        <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
+          <Layers size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           <span style={{ fontSize: 12 }}>{topicCount}</span>
-          <span style={{ fontSize: 11, color: '#6B6B66' }}>topics</span>
+          <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>topics</span>
         </span>
       </div>
     </button>
@@ -347,7 +347,7 @@ function SubjectDetail({
           onClick={onBack}
           aria-label="Back to all subjects"
           className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[#F2F1EC]"
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#6B6B66', fontSize: 12, touchAction: 'manipulation' }}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ef-text-muted)', fontSize: 12, touchAction: 'manipulation' }}
         >
           <ArrowLeft size={14} strokeWidth={1.5} /> All subjects
         </button>
@@ -389,19 +389,19 @@ function SubjectDetail({
               </IconBtn>
             </div>
           </div>
-          <p className="break-words" style={{ color: '#0C0C0B', fontSize: 16, lineHeight: 1.3, marginBottom: 10 }}>
+          <p className="break-words" style={{ color: 'var(--ef-ink)', fontSize: 16, lineHeight: 1.3, marginBottom: 10 }}>
             {subject.name}
           </p>
           <div className="flex items-center gap-4">
-            <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-              <BookOpen size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
+              <BookOpen size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
               <span style={{ fontSize: 12 }}>{subject.questionCount}</span>
-              <span style={{ fontSize: 11, color: '#6B6B66' }}>questions</span>
+              <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>questions</span>
             </span>
-            <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-              <Layers size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
+              <Layers size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
               <span style={{ fontSize: 12 }}>{topics.length}</span>
-              <span style={{ fontSize: 11, color: '#6B6B66' }}>topics</span>
+              <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>topics</span>
             </span>
           </div>
         </div>
@@ -409,7 +409,7 @@ function SubjectDetail({
 
       {/* Topics list */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderBottom: '1px solid #F2F1EC' }}>
-        <span style={{ fontSize: 12, letterSpacing: '0.04em', color: '#6B6B66' }}>TOPICS</span>
+        <span style={{ fontSize: 12, letterSpacing: '0.04em', color: 'var(--ef-text-muted)' }}>TOPICS</span>
         <Button
           size="sm"
           variant="outline"
@@ -484,25 +484,25 @@ function TopicCard({
   return (
     <div
       className="flex flex-col"
-      style={{ background: '#FFFFFF', border: '1px solid #E8E7E1', borderRadius: 3 }}
+      style={{ background: 'var(--ef-surface)', border: '1px solid #E8E7E1', borderRadius: 3 }}
     >
       {/* Clickable region → drill into this topic's questions */}
       <button
         onClick={onOpen}
-        className="flex flex-col gap-3 p-4 text-left w-full cursor-pointer transition-colors hover:bg-[#FAFAF8]"
+        className="flex flex-col gap-3 p-4 text-left w-full cursor-pointer transition-colors hover:bg-[var(--ef-canvas-raised)]"
         style={{ background: 'transparent', border: 'none', touchAction: 'manipulation', borderRadius: '3px 3px 0 0' }}
       >
         <div className="flex items-center justify-between gap-2">
           <SlugChip id={topic.id} />
-          <ChevronRight size={16} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+          <ChevronRight size={16} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
         </div>
-        <p className="break-words" style={{ color: '#0C0C0B', fontSize: 14, lineHeight: 1.4 }}>
+        <p className="break-words" style={{ color: 'var(--ef-ink)', fontSize: 14, lineHeight: 1.4 }}>
           {topic.name}
         </p>
-        <span className="inline-flex items-center gap-1.5" style={{ color: '#6B6B66' }}>
-          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+        <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
+          <BookOpen size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           <span style={{ fontSize: 12 }}>{topic.questionCount}</span>
-          <span style={{ fontSize: 11, color: '#6B6B66' }}>questions</span>
+          <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>questions</span>
         </span>
       </button>
 
@@ -548,7 +548,7 @@ function TopicQuestionsView({
           onClick={onBack}
           aria-label={`Back to ${subject.name} topics`}
           className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[#F2F1EC]"
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#6B6B66', fontSize: 12, touchAction: 'manipulation' }}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ef-text-muted)', fontSize: 12, touchAction: 'manipulation' }}
         >
           <ArrowLeft size={14} strokeWidth={1.5} /> {subject.name} · topics
         </button>
@@ -558,9 +558,9 @@ function TopicQuestionsView({
       <div style={{ padding: 16, borderBottom: '1px solid #E8E7E1' }}>
         <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
           <SlugChip id={topic.id} />
-          <span style={{ fontSize: 11, color: '#6B6B66' }}>in {subject.name}</span>
+          <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>in {subject.name}</span>
         </div>
-        <p className="break-words" style={{ color: '#0C0C0B', fontSize: 16, lineHeight: 1.3 }}>{topic.name}</p>
+        <p className="break-words" style={{ color: 'var(--ef-ink)', fontSize: 16, lineHeight: 1.3 }}>{topic.name}</p>
       </div>
 
       {/* Shared question bank, scoped to this topic */}
@@ -688,7 +688,7 @@ function MoveTopicControl({
         onChange={(e) => setTarget(e.target.value)}
         disabled={busy}
         className="min-w-0"
-        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid #E8E7E1', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid #E8E7E1', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
       >
         <option value="">→ move to subject…</option>
         {candidates.map((s) => (
@@ -755,7 +755,7 @@ function MergeTopicControl({
         onChange={(e) => setTarget(e.target.value)}
         disabled={busy}
         className="min-w-0"
-        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid #E8E7E1', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid #E8E7E1', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
       >
         <option value="">⤵ merge into topic…</option>
         {candidates.map((t) => (
@@ -808,7 +808,7 @@ function NewTopicForm({
       {/* Subject selector — only when not scoped to a specific subject */}
       {!fixedSubjectId && (
         <div style={{ marginBottom: 8 }}>
-          <label style={{ fontSize: 11, color: '#6B6B66', display: 'block', marginBottom: 4 }}>
+          <label style={{ fontSize: 11, color: 'var(--ef-text-muted)', display: 'block', marginBottom: 4 }}>
             Subject <span style={{ color: '#B91C1C' }}>*</span>
           </label>
           <select
@@ -817,7 +817,7 @@ function NewTopicForm({
             disabled={busy}
             style={{
               width: '100%', maxWidth: 320, fontSize: 12, padding: '6px 8px',
-              border: `1px solid ${!subjectId ? '#F2CECE' : '#E3E1DB'}`, borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B',
+              border: `1px solid ${!subjectId ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`, borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
             }}
           >
             <option value="">— pick a subject —</option>

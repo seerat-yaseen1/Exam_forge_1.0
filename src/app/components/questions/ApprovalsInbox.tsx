@@ -28,8 +28,8 @@ const FILTERS: { key: QuestionRequestStatus | 'all'; label: string }[] = [
 function StatusChip({ status }: { status: QuestionRequestStatus }) {
   const map = {
     pending:  { bg: '#FBF6E9', fg: '#8A6D3B', icon: <Clock size={11} strokeWidth={1.5} />, label: 'Pending' },
-    approved: { bg: '#EEF4EE', fg: '#2A6B3A', icon: <Check size={11} strokeWidth={2} />,   label: 'Approved' },
-    rejected: { bg: '#FBEDED', fg: '#9B2828', icon: <X size={11} strokeWidth={2} />,        label: 'Rejected' },
+    approved: { bg: '#EEF4EE', fg: 'var(--ef-success)', icon: <Check size={11} strokeWidth={2} />,   label: 'Approved' },
+    rejected: { bg: '#FBEDED', fg: 'var(--ef-danger)', icon: <X size={11} strokeWidth={2} />,        label: 'Rejected' },
   }[status];
   return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5" style={{ background: map.bg, color: map.fg, borderRadius: 2, fontSize: 10 }}>
@@ -104,10 +104,10 @@ export function ApprovalsInbox({
                 onClick={() => setFilter(f.key)}
                 className="text-xs px-2.5 py-1 transition-all select-none"
                 style={{
-                  border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
+                  border: `1px solid ${on ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
                   borderRadius: 2,
-                  background: on ? '#F0F7F2' : '#FFFFFF',
-                  color: on ? '#2A6B3A' : '#6B6B66',
+                  background: on ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
+                  color: on ? 'var(--ef-success)' : 'var(--ef-text-muted)',
                 }}
               >
                 {f.label}{count > 0 ? ` (${count})` : ''}
@@ -115,19 +115,19 @@ export function ApprovalsInbox({
             );
           })}
         </div>
-        <button onClick={load} disabled={loading} className="flex items-center gap-1 text-xs px-2 py-1" style={{ color: '#6B6B66' }}>
+        <button onClick={load} disabled={loading} className="flex items-center gap-1 text-xs px-2 py-1" style={{ color: 'var(--ef-text-muted)' }}>
           <RefreshCw size={11} strokeWidth={1.5} className={loading ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
 
-      {error && <p className="text-xs mb-3" style={{ color: '#9B2828' }}>{error}</p>}
+      {error && <p className="text-xs mb-3" style={{ color: 'var(--ef-danger)' }}>{error}</p>}
 
       {loading ? (
-        <div className="flex items-center gap-2 py-10 justify-center text-xs" style={{ color: '#6B6B66' }}>
+        <div className="flex items-center gap-2 py-10 justify-center text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           <Loader2 size={14} className="animate-spin" /> Loading requests…
         </div>
       ) : visible.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-12" style={{ color: '#6B6B66' }}>
+        <div className="flex flex-col items-center gap-2 py-12" style={{ color: 'var(--ef-text-muted)' }}>
           <Inbox size={20} strokeWidth={1.25} />
           <p className="text-xs" style={{ letterSpacing: '0.08em' }}>
             {filter === 'pending' ? 'NO PENDING REQUESTS' : 'NOTHING HERE'}
@@ -140,16 +140,16 @@ export function ApprovalsInbox({
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex items-center gap-4 px-4 py-3.5"
-            style={{ borderBottom: '1px solid #F0EFEB' }}
+            style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}
           >
-            <span className="text-xs px-2 py-0.5 flex-shrink-0" style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 2 }}>
+            <span className="text-xs px-2 py-0.5 flex-shrink-0" style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 2 }}>
               {TYPE_LABEL[r.type]}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>
-                {r.questionStem || <em style={{ color: '#6B6B66' }}>New question</em>}
+              <p className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>
+                {r.questionStem || <em style={{ color: 'var(--ef-text-muted)' }}>New question</em>}
               </p>
-              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                 by {r.facultyName}
               </p>
             </div>
@@ -160,7 +160,7 @@ export function ApprovalsInbox({
                   onClick={() => act(r.id, 'approve')}
                   disabled={actingId === r.id}
                   className="flex items-center gap-1 text-xs px-2.5 py-1"
-                  style={{ background: '#2A6B3A', color: '#FFFFFF', borderRadius: 2, cursor: actingId === r.id ? 'not-allowed' : 'pointer', opacity: actingId === r.id ? 0.6 : 1 }}
+                  style={{ background: 'var(--ef-success)', color: 'var(--ef-surface)', borderRadius: 2, cursor: actingId === r.id ? 'not-allowed' : 'pointer', opacity: actingId === r.id ? 0.6 : 1 }}
                 >
                   {actingId === r.id ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />} Approve
                 </button>
@@ -168,7 +168,7 @@ export function ApprovalsInbox({
                   onClick={() => act(r.id, 'reject')}
                   disabled={actingId === r.id}
                   className="flex items-center gap-1 text-xs px-2.5 py-1"
-                  style={{ border: '1px solid #E3E1DB', color: '#9B2828', borderRadius: 2, cursor: actingId === r.id ? 'not-allowed' : 'pointer' }}
+                  style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-danger)', borderRadius: 2, cursor: actingId === r.id ? 'not-allowed' : 'pointer' }}
                 >
                   <X size={10} strokeWidth={2} /> Reject
                 </button>

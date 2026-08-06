@@ -76,39 +76,39 @@ export function QuestionNavigator({
       style={{
         width: 200,
         flexShrink: 0,
-        background: '#FAFAF8',
-        borderRight: '1px solid #E3E1DB',
+        background: 'var(--ef-canvas-raised)',
+        borderRight: '1px solid var(--ef-border)',
         overflow: 'hidden',
       }}
     >
       {/* Header */}
       <div
         className="px-4 py-4 flex-shrink-0"
-        style={{ borderBottom: '1px solid #E3E1DB' }}
+        style={{ borderBottom: '1px solid var(--ef-border)' }}
       >
         {totalSections > 1 && (
-          <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+          <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
             SECTION {currentSectionNumber} OF {totalSections}
           </p>
         )}
-        <p className="text-xs" style={{ color: '#0C0C0B' }}>{sectionName}</p>
+        <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{sectionName}</p>
 
         {/* Progress bar */}
         <div
           className="mt-3"
-          style={{ height: 3, background: '#E3E1DB', borderRadius: 2 }}
+          style={{ height: 3, background: 'var(--ef-border)', borderRadius: 2 }}
         >
           <div
             style={{
               height: '100%',
               width: `${progressPct}%`,
-              background: '#1E7B3C',
+              background: 'var(--ef-success-strong)',
               borderRadius: 2,
               transition: 'width 0.4s ease',
             }}
           />
         </div>
-        <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>
+        <p className="text-xs mt-1.5" style={{ color: 'var(--ef-text-muted)' }}>
           {answered}/{total} answered
         </p>
       </div>
@@ -135,20 +135,20 @@ export function QuestionNavigator({
                   borderRadius: 2,
                   cursor: 'pointer',
                   border: isCurrent
-                    ? '2px solid #0C0C0B'
+                    ? '2px solid var(--ef-ink)'
                     : answered
-                      ? '1px solid #B8E6C8'
-                      : '1px solid #E3E1DB',
+                      ? '1px solid var(--ef-success-border)'
+                      : '1px solid var(--ef-border)',
                   background: isCurrent
-                    ? '#0C0C0B'
+                    ? 'var(--ef-ink)'
                     : answered
-                      ? '#F0F9F4'
-                      : '#FFFFFF',
+                      ? 'var(--ef-success-bg)'
+                      : 'var(--ef-surface)',
                   color: isCurrent
-                    ? '#FFFFFF'
+                    ? 'var(--ef-surface)'
                     : answered
-                      ? '#1E7B3C'
-                      : '#6B6B66',
+                      ? 'var(--ef-success-strong)'
+                      : 'var(--ef-text-muted)',
                 }}
               >
                 {idx + 1}
@@ -160,7 +160,7 @@ export function QuestionNavigator({
                       top: 2, right: 2,
                       width: 4, height: 4,
                       borderRadius: '50%',
-                      background: '#1E7B3C',
+                      background: 'var(--ef-success-strong)',
                     }}
                   />
                 )}
@@ -172,16 +172,16 @@ export function QuestionNavigator({
         {/* Legend */}
         <div className="mt-4 space-y-1.5">
           <div className="flex items-center gap-2">
-            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#0C0C0B', flexShrink: 0 }} />
-            <span className="text-xs" style={{ color: '#6B6B66' }}>Current</span>
+            <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--ef-ink)', flexShrink: 0 }} />
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Current</span>
           </div>
           <div className="flex items-center gap-2">
-            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#F0F9F4', border: '1px solid #B8E6C8', flexShrink: 0 }} />
-            <span className="text-xs" style={{ color: '#6B6B66' }}>Answered</span>
+            <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', flexShrink: 0 }} />
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Answered</span>
           </div>
           <div className="flex items-center gap-2">
-            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#FFFFFF', border: '1px solid #E3E1DB', flexShrink: 0 }} />
-            <span className="text-xs" style={{ color: '#6B6B66' }}>Unanswered</span>
+            <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', flexShrink: 0 }} />
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Unanswered</span>
           </div>
         </div>
       </div>
@@ -190,10 +190,10 @@ export function QuestionNavigator({
       {answered === total && total > 0 && (
         <div
           className="flex items-center gap-2 px-4 py-3 flex-shrink-0"
-          style={{ borderTop: '1px solid #E3E1DB', background: '#F0F9F4' }}
+          style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-success-bg)' }}
         >
-          <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
-          <p className="text-xs" style={{ color: '#1E7B3C' }}>All answered</p>
+          <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
+          <p className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>All answered</p>
         </div>
       )}
     </div>

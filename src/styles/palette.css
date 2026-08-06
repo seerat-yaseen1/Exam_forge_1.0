@@ -1,0 +1,96 @@
+/* ══════════════════════════════════════════════════════════════════
+   EXAM FORGE PALETTE — the colours this product actually uses
+   ══════════════════════════════════════════════════════════════════
+
+   H3 (audit 2026-08-06). theme.css ships 76 shadcn custom properties and app
+   code referenced NONE of them — not one `var(--background)`, not one
+   `bg-primary` class. The 6,315 colour literals in src/ were written straight
+   into inline styles, so a theme change was a 6,315-site edit and the token
+   file was decoration.
+
+   This is the palette that was already there, extracted rather than invented.
+   Every value below is the exact literal it replaces, taken from the codebase
+   by frequency — which is why the names describe roles the code already had
+   rather than a scheme imposed on it.
+
+   ── WHY THE VALUES ARE UNCHANGED ──────────────────────────────────
+   Each token is defined to the byte-identical hex it replaces, so
+   `var(--ef-text-muted)` resolves to #6B6B66 exactly as `#6B6B66` did. The
+   migration therefore CANNOT change a rendered pixel: it is a redirection,
+   not a redesign. That property is deliberate and worth preserving — this
+   repo has no visual regression tests, so a migration that also adjusted
+   colours would be unverifiable. Pick new values here, later, as a separate
+   and reviewable change.
+
+   ── WHY --ef- ─────────────────────────────────────────────────────
+   theme.css already defines --border, --background, --primary and friends for
+   shadcn. Those are a different, still-unused system consumed only by the six
+   surviving components in components/ui. Prefixing avoids silently
+   redefining them.
+
+   ── WHAT IS NOT HERE ──────────────────────────────────────────────
+   150 distinct hex values exist in src/; these 22 cover ~94% of all
+   occurrences. The remaining 128 are genuine one-offs — a single badge, one
+   chart series, a lone illustration tint — and promoting each to a global
+   token would produce a palette nobody could hold in their head, which is a
+   different failure from the one being fixed. They stay literal until a
+   second use gives them a reason to be named.
+
+   ── DARK MODE ─────────────────────────────────────────────────────
+   Not attempted, and now possible. Redefining these 22 under
+   @media (prefers-color-scheme: dark) is the whole job, where before it was
+   6,315 edits. That is the point of the change; doing it is a design
+   decision, not a mechanical one.
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Text ──────────────────────────────────────────────────────
+     ink is also used as a dark BACKGROUND (exam overlays, the terminated
+     screen), which is why it is named for the colour rather than for one
+     of its two roles. */
+  --ef-ink:              #0C0C0B;
+  --ef-text-muted:       #6B6B66;   /* the single most-used value in the app */
+  --ef-text-subtle:      #4A4A45;
+
+  /* ── Surfaces ──────────────────────────────────────────────────
+     canvas is the page, surface is what sits on it. canvas-raised is the
+     off-white used for inset panels and hover states. */
+  --ef-surface:          #FFFFFF;
+  --ef-canvas:           #F7F6F3;
+  --ef-canvas-raised:    #FAFAF8;
+
+  /* ── Lines ─────────────────────────────────────────────────────
+     Three weights, in the order they are reached for: the default rule, the
+     barely-there divider, and the one used when a border must read as
+     disabled rather than merely quiet. */
+  --ef-border:           #E3E1DB;
+  --ef-border-subtle:    #F0EFEB;
+  --ef-border-muted:     #DDDBD5;
+  --ef-track:            #C8C7C2;
+
+  /* ── Status: danger ────────────────────────────────────────────
+     Also the integrity-violation colour — the terminated overlay and the
+     warning counters use it, which is why it is the most-used status hue. */
+  --ef-danger:           #9B2828;
+  --ef-danger-border:    #F2CECE;
+  --ef-danger-bg:        #FDF5F5;
+
+  /* ── Status: warning ───────────────────────────────────────────
+     Two text weights are in use; both are kept rather than collapsed,
+     because collapsing them WOULD change pixels. */
+  --ef-warning:          #92680A;
+  --ef-warning-strong:   #8B5E1A;
+  --ef-warning-border:   #F5DFA0;
+
+  /* ── Status: success ───────────────────────────────────────────
+     Two greens, two tinted backgrounds and two borders are genuinely in the
+     codebase. They are near-duplicates and probably want reconciling, but
+     that changes rendered colour, so it is left for the design pass this
+     file makes possible. */
+  --ef-success:          #2A6B3A;
+  --ef-success-strong:   #1E7B3C;
+  --ef-success-bg:       #F0F9F4;
+  --ef-success-bg-alt:   #F0F7F2;
+  --ef-success-border:   #B8E6C8;
+  --ef-success-border-alt: #C6DECE;
+}

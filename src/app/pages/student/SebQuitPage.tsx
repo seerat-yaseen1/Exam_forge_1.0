@@ -33,20 +33,20 @@ export function SebQuitPage() {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-6"
-      style={{ background: '#F7F6F3' }}
+      style={{ background: 'var(--ef-canvas)' }}
     >
       <div className="flex items-center justify-center mb-5"
         style={{ width: 52, height: 52, borderRadius: '50%',
-          background: '#F0F9F4', border: '1px solid #B8E6C8' }}>
-        <CheckCircle2 size={22} strokeWidth={1} style={{ color: '#1E7B3C' }} />
+          background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)' }}>
+        <CheckCircle2 size={22} strokeWidth={1} style={{ color: 'var(--ef-success-strong)' }} />
       </div>
-      <p className="text-xs mb-2" style={{ color: '#1E7B3C', letterSpacing: '0.1em' }}>
+      <p className="text-xs mb-2" style={{ color: 'var(--ef-success-strong)', letterSpacing: '0.1em' }}>
         EXAM SESSION ENDED
       </p>
-      <p className="text-sm mb-2 text-center" style={{ color: '#0C0C0B', lineHeight: 1.7, maxWidth: 380 }}>
+      <p className="text-sm mb-2 text-center" style={{ color: 'var(--ef-ink)', lineHeight: 1.7, maxWidth: 380 }}>
         You may now close Safe Exam Browser.
       </p>
-      <p className="text-xs text-center" style={{ color: '#6B6B66', lineHeight: 1.6, maxWidth: 380 }}>
+      <p className="text-xs text-center" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6, maxWidth: 380 }}>
         If Safe Exam Browser did not close automatically, quit it from its
         toolbar / taskbar quit button, or press Ctrl+Q (Windows) / Cmd+Q (Mac).
         A quit password, if one was set by your institute, may be requested.

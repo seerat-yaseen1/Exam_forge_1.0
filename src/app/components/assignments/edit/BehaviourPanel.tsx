@@ -146,19 +146,19 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
             onChange={(e) => setPassing(e.target.value)}
             className="w-full text-xs px-3 py-2"
             style={{
-              border: `1px solid ${passingValid ? '#E3E1DB' : '#D97757'}`,
-              borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B',
+              border: `1px solid ${passingValid ? 'var(--ef-border)' : '#D97757'}`,
+              borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
             }}
           />
         </Field>
       )}
 
       {fields.overallTimer && (
-        <div className="py-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+        <div className="py-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex-1">
-              <p className="text-xs" style={{ color: '#0C0C0B' }}>Overall time limit (minutes)</p>
-              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>Overall time limit (minutes)</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                 Whole-exam cap, counted from when a student begins. Hard-cuts the exam when it runs out. Blank = no cap.
               </p>
             </div>
@@ -171,11 +171,11 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
               className="flex items-center gap-1 px-2 py-0.5"
               style={{
                 borderRadius: 2,
-                border: `1px solid ${overallAuto ? '#B8E6C8' : '#E3E1DB'}`,
-                background: overallAuto ? '#F0F9F4' : '#FFFFFF',
+                border: `1px solid ${overallAuto ? 'var(--ef-success-border)' : 'var(--ef-border)'}`,
+                background: overallAuto ? 'var(--ef-success-bg)' : 'var(--ef-surface)',
               }}
             >
-              <span className="text-xs" style={{ color: overallAuto ? '#1E7B3C' : '#6B6B66' }}>Auto</span>
+              <span className="text-xs" style={{ color: overallAuto ? 'var(--ef-success-strong)' : 'var(--ef-text-muted)' }}>Auto</span>
             </button>
           </div>
           <input
@@ -187,24 +187,24 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
             placeholder="Blank = no overall cap"
             className="w-full text-xs px-3 py-2"
             style={{
-              border: '1px solid #E3E1DB', borderRadius: 2,
-              background: overallAuto ? '#F7F6F3' : '#FFFFFF',
-              color: overallAuto ? '#6B6A65' : '#0C0C0B',
+              border: '1px solid var(--ef-border)', borderRadius: 2,
+              background: overallAuto ? 'var(--ef-canvas)' : 'var(--ef-surface)',
+              color: overallAuto ? '#6B6A65' : 'var(--ef-ink)',
             }}
           />
           {overallAuto && (
-            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
               Auto: section time + section grace + breaks + overall grace (currently {autoOverallLimit}m).
             </p>
           )}
           {overallTooShort && (
-            <p className="text-xs mt-1" style={{ color: '#9B2828' }}>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)' }}>
               Below the total section time + breaks ({overallFloor}m) — students cannot finish; the exam will hard-cut early.
             </p>
           )}
 
           <div className="mt-3">
-            <p className="text-xs mb-1" style={{ color: '#0C0C0B' }}>Overall grace period (seconds)</p>
+            <p className="text-xs mb-1" style={{ color: 'var(--ef-ink)' }}>Overall grace period (seconds)</p>
             <input
               type="number"
               min={0}
@@ -212,7 +212,7 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
               onChange={(e) => setOverallGrace(e.target.value)}
               placeholder={`Blank = ${DEFAULT_OVERALL_GRACE_SECONDS}s default`}
               className="w-full text-xs px-3 py-2"
-              style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+              style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
             />
           </div>
         </div>
@@ -228,7 +228,7 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
       )}
 
       {fields.showResults && (
-        <div className="py-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+        <div className="py-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
           <AudienceSelector
             label="Show results"
             hint="Who can see scores and outcomes after submission."
@@ -239,7 +239,7 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
       )}
 
       {fields.allowReview && (
-        <div className="py-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+        <div className="py-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
           <AudienceSelector
             label="Allow review"
             hint="Who can see the questions and correct answers after submission."
@@ -256,10 +256,10 @@ function ToggleRow({ label, hint, checked, onChange }: {
   label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+    <div className="flex items-start justify-between gap-4 py-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
       <div className="flex-1">
-        <p className="text-xs" style={{ color: '#0C0C0B' }}>{label}</p>
-        {hint && <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{hint}</p>}
+        <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{label}</p>
+        {hint && <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{hint}</p>}
       </div>
       <Switch checked={checked} onCheckedChange={onChange} />
     </div>

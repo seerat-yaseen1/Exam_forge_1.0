@@ -106,17 +106,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return (
       <div
         className="fixed inset-0 flex flex-col items-center justify-center px-8"
-        style={{ background: '#F7F6F3' }}
+        style={{ background: 'var(--ef-canvas)' }}
       >
-        <AlertTriangle size={20} strokeWidth={1} style={{ color: '#9B2828' }} />
+        <AlertTriangle size={20} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
 
-        <p className="text-xs mt-4 text-center" style={{ color: '#9B2828', maxWidth: 380 }}>
+        <p className="text-xs mt-4 text-center" style={{ color: 'var(--ef-danger)', maxWidth: 380 }}>
           {isExam
             ? 'The exam page ran into a problem and could not continue.'
             : 'Something went wrong and this page could not be displayed.'}
         </p>
 
-        <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', maxWidth: 380 }}>
+        <p className="text-xs mt-2 text-center" style={{ color: 'var(--ef-text-muted)', maxWidth: 380 }}>
           {isExam
             // Honest about the gap rather than reassuring: in standard delivery
             // answers autosave on a 1.5s debounce, but in linear/adaptive the
@@ -131,7 +131,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           type="button"
           onClick={this.reload}
           className="text-xs mt-6 px-4 py-2"
-          style={{ background: '#2F2F2B', color: '#FFFFFF', borderRadius: 2 }}
+          style={{ background: '#2F2F2B', color: 'var(--ef-surface)', borderRadius: 2 }}
         >
           {isExam ? 'Reload and continue exam' : 'Reload page'}
         </button>
@@ -143,7 +143,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <a
             href="/login"
             className="text-xs mt-3 px-4 py-2"
-            style={{ color: '#6B6B66' }}
+            style={{ color: 'var(--ef-text-muted)' }}
           >
             Back to sign in
           </a>
@@ -169,15 +169,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <details className="mt-8" style={{ maxWidth: 560, width: '100%' }}>
           <summary
             className="text-xs text-center"
-            style={{ color: '#6B6B66', cursor: 'pointer', listStyle: 'none' }}
+            style={{ color: 'var(--ef-text-muted)', cursor: 'pointer', listStyle: 'none' }}
           >
             Technical details
           </summary>
           <pre
             className="text-xs mt-3 p-3 overflow-auto"
             style={{
-              background: '#F0EFEB', border: '1px solid #E3E1DB', borderRadius: 2,
-              color: '#4A4A45', maxHeight: 260, whiteSpace: 'pre-wrap',
+              background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)', borderRadius: 2,
+              color: 'var(--ef-text-subtle)', maxHeight: 260, whiteSpace: 'pre-wrap',
               wordBreak: 'break-word', fontSize: 11, lineHeight: 1.5,
             }}
           >
@@ -192,8 +192,8 @@ COMPONENT STACK:${componentStack ?? ' (not captured)'}`}
             onClick={this.copyDetails}
             className="text-xs mt-2 px-3 py-1.5"
             style={{
-              background: '#FFFFFF', color: '#4A4A45',
-              border: '1px solid #DDDBD5', borderRadius: 2,
+              background: 'var(--ef-surface)', color: 'var(--ef-text-subtle)',
+              border: '1px solid var(--ef-border-muted)', borderRadius: 2,
             }}
           >
             Copy details

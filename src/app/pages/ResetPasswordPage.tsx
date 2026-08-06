@@ -62,7 +62,7 @@ export function ResetPasswordPage() {
     return (
       <div
         className="min-h-screen flex flex-col items-center justify-center px-4"
-        style={{ background: '#F7F6F3' }}
+        style={{ background: 'var(--ef-canvas)' }}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }}
@@ -70,8 +70,8 @@ export function ResetPasswordPage() {
           transition={{ duration: 0.4 }}
           className="flex flex-col items-center gap-4"
         >
-          <ShieldCheck size={32} style={{ color: '#2A6B3A' }} strokeWidth={1.5} />
-          <p className="text-sm" style={{ color: '#0C0C0B' }}>
+          <ShieldCheck size={32} style={{ color: 'var(--ef-success)' }} strokeWidth={1.5} />
+          <p className="text-sm" style={{ color: 'var(--ef-ink)' }}>
             Password updated. Redirecting…
           </p>
         </motion.div>
@@ -82,7 +82,7 @@ export function ResetPasswordPage() {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: '#F7F6F3' }}
+      style={{ background: 'var(--ef-canvas)' }}
     >
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -92,7 +92,7 @@ export function ResetPasswordPage() {
       >
         {/* Platform identity */}
         <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: '#0C0C0B' }}>
+          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
             {platformSettings.logoUrl ? (
               <img
                 src={platformSettings.logoUrl}
@@ -105,26 +105,26 @@ export function ResetPasswordPage() {
           </div>
           <span
             className="text-sm font-medium"
-            style={{ letterSpacing: '0.2em', color: '#0C0C0B' }}
+            style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}
           >
             {platformSettings.name}
           </span>
           <div
             className="mt-5"
-            style={{ height: '1px', width: 32, background: '#DDDBD5' }}
+            style={{ height: '1px', width: 32, background: 'var(--ef-border-muted)' }}
           />
         </div>
 
         <div
           className="bg-white px-5 py-7 sm:px-8 sm:py-8"
           style={{
-            border: '1px solid #E3E1DB',
+            border: '1px solid var(--ef-border)',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           }}
         >
           <p
             className="text-xs mb-1"
-            style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
+            style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}
           >
             SET NEW PASSWORD
           </p>
@@ -138,7 +138,7 @@ export function ResetPasswordPage() {
               <label
                 htmlFor="r-email"
                 className="block text-xs mb-2"
-                style={{ color: '#4A4A45', letterSpacing: '0.04em' }}
+                style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
               >
                 Email address
               </label>
@@ -154,18 +154,18 @@ export function ResetPasswordPage() {
                 placeholder="you@platform.com"
                 className="w-full px-3.5 py-2.5 text-sm outline-none"
                 style={{
-                  background: '#FAFAF8',
-                  border: '1px solid #E3E1DB',
-                  color: '#0C0C0B',
+                  background: 'var(--ef-canvas-raised)',
+                  border: '1px solid var(--ef-border)',
+                  color: 'var(--ef-ink)',
                   borderRadius: 2,
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = '#0C0C0B';
-                  e.target.style.background = '#FFFFFF';
+                  e.target.style.borderColor = 'var(--ef-ink)';
+                  e.target.style.background = 'var(--ef-surface)';
                 }}
                 onBlur={(e) => {
-                  e.target.style.borderColor = '#E3E1DB';
-                  e.target.style.background = '#FAFAF8';
+                  e.target.style.borderColor = 'var(--ef-border)';
+                  e.target.style.background = 'var(--ef-canvas-raised)';
                 }}
               />
             </div>
@@ -175,10 +175,10 @@ export function ResetPasswordPage() {
               <label
                 htmlFor="r-code"
                 className="block text-xs mb-2"
-                style={{ color: '#4A4A45', letterSpacing: '0.04em' }}
+                style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
               >
                 Reset code{' '}
-                <span style={{ color: '#6B6B66' }}>(10 characters)</span>
+                <span style={{ color: 'var(--ef-text-muted)' }}>(10 characters)</span>
               </label>
               <input
                 id="r-code"
@@ -193,24 +193,24 @@ export function ResetPasswordPage() {
                 placeholder="XXXXXXXXXXXX"
                 className="w-full px-3.5 py-2.5 text-sm outline-none tracking-widest"
                 style={{
-                  background: '#FAFAF8',
-                  border: '1px solid #E3E1DB',
-                  color: '#0C0C0B',
+                  background: 'var(--ef-canvas-raised)',
+                  border: '1px solid var(--ef-border)',
+                  color: 'var(--ef-ink)',
                   borderRadius: 2,
                   fontFamily: 'monospace',
                   letterSpacing: '0.22em',
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = '#0C0C0B';
-                  e.target.style.background = '#FFFFFF';
+                  e.target.style.borderColor = 'var(--ef-ink)';
+                  e.target.style.background = 'var(--ef-surface)';
                 }}
                 onBlur={(e) => {
-                  e.target.style.borderColor = '#E3E1DB';
-                  e.target.style.background = '#FAFAF8';
+                  e.target.style.borderColor = 'var(--ef-border)';
+                  e.target.style.background = 'var(--ef-canvas-raised)';
                 }}
               />
               {code.length > 0 && code.length < 10 && (
-                <p className="mt-1 text-xs" style={{ color: '#6B6B66' }}>
+                <p className="mt-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   {10 - code.length} character{10 - code.length !== 1 ? 's' : ''} remaining
                 </p>
               )}
@@ -221,10 +221,10 @@ export function ResetPasswordPage() {
               <label
                 htmlFor="r-new"
                 className="block text-xs mb-2"
-                style={{ color: '#4A4A45', letterSpacing: '0.04em' }}
+                style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
               >
                 New password{' '}
-                <span style={{ color: '#6B6B66' }}>(min. 8 characters)</span>
+                <span style={{ color: 'var(--ef-text-muted)' }}>(min. 8 characters)</span>
               </label>
               <div className="relative">
                 <input
@@ -239,18 +239,18 @@ export function ResetPasswordPage() {
                   placeholder="••••••••••"
                   className="w-full px-3.5 py-2.5 pr-10 text-sm outline-none"
                   style={{
-                    background: '#FAFAF8',
-                    border: '1px solid #E3E1DB',
-                    color: '#0C0C0B',
+                    background: 'var(--ef-canvas-raised)',
+                    border: '1px solid var(--ef-border)',
+                    color: 'var(--ef-ink)',
                     borderRadius: 2,
                   }}
                   onFocus={(e) => {
-                    e.target.style.borderColor = '#0C0C0B';
-                    e.target.style.background = '#FFFFFF';
+                    e.target.style.borderColor = 'var(--ef-ink)';
+                    e.target.style.background = 'var(--ef-surface)';
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = '#E3E1DB';
-                    e.target.style.background = '#FAFAF8';
+                    e.target.style.borderColor = 'var(--ef-border)';
+                    e.target.style.background = 'var(--ef-canvas-raised)';
                   }}
                 />
                 <button
@@ -258,7 +258,7 @@ export function ResetPasswordPage() {
                   tabIndex={-1}
                   onClick={() => setShowNew((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: '#6B6B66' }}
+                  style={{ color: 'var(--ef-text-muted)' }}
                 >
                   {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
@@ -270,7 +270,7 @@ export function ResetPasswordPage() {
               <label
                 htmlFor="r-confirm"
                 className="block text-xs mb-2"
-                style={{ color: '#4A4A45', letterSpacing: '0.04em' }}
+                style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
               >
                 Confirm password
               </label>
@@ -287,18 +287,18 @@ export function ResetPasswordPage() {
                   placeholder="••••••••••"
                   className="w-full px-3.5 py-2.5 pr-10 text-sm outline-none"
                   style={{
-                    background: '#FAFAF8',
-                    border: '1px solid #E3E1DB',
-                    color: '#0C0C0B',
+                    background: 'var(--ef-canvas-raised)',
+                    border: '1px solid var(--ef-border)',
+                    color: 'var(--ef-ink)',
                     borderRadius: 2,
                   }}
                   onFocus={(e) => {
-                    e.target.style.borderColor = '#0C0C0B';
-                    e.target.style.background = '#FFFFFF';
+                    e.target.style.borderColor = 'var(--ef-ink)';
+                    e.target.style.background = 'var(--ef-surface)';
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = '#E3E1DB';
-                    e.target.style.background = '#FAFAF8';
+                    e.target.style.borderColor = 'var(--ef-border)';
+                    e.target.style.background = 'var(--ef-canvas-raised)';
                   }}
                 />
                 <button
@@ -306,13 +306,13 @@ export function ResetPasswordPage() {
                   tabIndex={-1}
                   onClick={() => setShowConfirm((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: '#6B6B66' }}
+                  style={{ color: 'var(--ef-text-muted)' }}
                 >
                   {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                 </button>
               </div>
               {confirmPassword && newPassword && confirmPassword !== newPassword && (
-                <p className="mt-1 text-xs" style={{ color: '#9B2828' }}>
+                <p className="mt-1 text-xs" style={{ color: 'var(--ef-danger)' }}>
                   Passwords do not match.
                 </p>
               )}
@@ -323,7 +323,7 @@ export function ResetPasswordPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="text-xs mb-4 -mt-2"
-                style={{ color: '#9B2828' }}
+                style={{ color: 'var(--ef-danger)' }}
               >
                 {error}
               </motion.p>
@@ -334,8 +334,8 @@ export function ResetPasswordPage() {
               disabled={!canSubmit}
               className="w-full py-2.5 text-sm flex items-center justify-center gap-2 mb-4"
               style={{
-                background: canSubmit ? '#0C0C0B' : '#C8C7C2',
-                color: '#FFFFFF',
+                background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
+                color: 'var(--ef-surface)',
                 borderRadius: 2,
                 letterSpacing: '0.04em',
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
@@ -355,12 +355,12 @@ export function ResetPasswordPage() {
           <Link
             to="/forgot-password"
             className="flex items-center gap-1.5 text-xs transition-colors"
-            style={{ color: '#6B6B66', textDecoration: 'none' }}
+            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#0C0C0B';
+              (e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#6B6B66';
+              (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)';
             }}
           >
             <ArrowLeft size={12} strokeWidth={1.5} />

@@ -250,25 +250,25 @@ export function BulkFacultyModal({
           style={{
             maxWidth: step === 'preview' || step === 'results' ? 680 : 480,
             maxHeight: '88vh',
-            background: '#FFFFFF',
-            border: '1px solid #E3E1DB',
+            background: 'var(--ef-surface)',
+            border: '1px solid var(--ef-border)',
             borderRadius: 3,
           }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* ── Header ── */}
           <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
-            style={{ borderBottom: '1px solid #E3E1DB' }}>
+            style={{ borderBottom: '1px solid var(--ef-border)' }}>
             <div>
-              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
                 {step === 'upload' && 'BULK ADD FACULTY'}
                 {step === 'preview' && `PREVIEW — ${rows.length} ROW${rows.length !== 1 ? 'S' : ''} FOUND`}
                 {step === 'creating' && 'CREATING ACCOUNTS'}
                 {step === 'results' && 'RESULTS'}
               </p>
-              <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{instituteName}</p>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--ef-ink)' }}>{instituteName}</p>
             </div>
-            <button onClick={handleClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+            <button onClick={handleClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
               <X size={14} strokeWidth={1.5} />
             </button>
           </div>
@@ -278,18 +278,18 @@ export function BulkFacultyModal({
             <div className="px-6 py-6 flex-1 overflow-y-auto">
               {/* Template download */}
               <div className="flex items-center justify-between mb-5 px-3 py-2.5"
-                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                 <div className="flex items-center gap-2">
-                  <FileSpreadsheet size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-                  <span className="text-xs" style={{ color: '#4A4A45' }}>
+                  <FileSpreadsheet size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+                  <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>
                     Download the template before uploading
                   </span>
                 </div>
                 <button onClick={downloadTemplate}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
-                  style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}>
+                  style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}>
                   <Download size={11} strokeWidth={1.5} />
                   Template
                 </button>
@@ -303,16 +303,16 @@ export function BulkFacultyModal({
                 onClick={() => fileInputRef.current?.click()}
                 className="flex flex-col items-center justify-center py-14 cursor-pointer transition-all"
                 style={{
-                  border: `2px dashed ${dragOver ? '#0C0C0B' : '#E3E1DB'}`,
-                  background: dragOver ? '#F7F6F3' : '#FAFAF8',
+                  border: `2px dashed ${dragOver ? 'var(--ef-ink)' : 'var(--ef-border)'}`,
+                  background: dragOver ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)',
                   borderRadius: 3,
                 }}
               >
-                <Upload size={24} strokeWidth={1} style={{ color: dragOver ? '#0C0C0B' : '#6B6B66', marginBottom: 12 }} />
-                <p className="text-sm" style={{ color: dragOver ? '#0C0C0B' : '#4A4A45', fontWeight: dragOver ? 500 : 400 }}>
+                <Upload size={24} strokeWidth={1} style={{ color: dragOver ? 'var(--ef-ink)' : 'var(--ef-text-muted)', marginBottom: 12 }} />
+                <p className="text-sm" style={{ color: dragOver ? 'var(--ef-ink)' : 'var(--ef-text-subtle)', fontWeight: dragOver ? 500 : 400 }}>
                   Drag & drop or click to upload
                 </p>
-                <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>
+                <p className="text-xs mt-1.5" style={{ color: 'var(--ef-text-muted)' }}>
                   CSV or XLSX · Max 500 rows · Max 5 MB
                 </p>
               </div>
@@ -321,15 +321,15 @@ export function BulkFacultyModal({
               {parseError && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
                   className="flex items-start gap-2 mt-4 px-3 py-2.5"
-                  style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-                  <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#9B2828', marginTop: 1, flexShrink: 0 }} />
-                  <p className="text-xs" style={{ color: '#9B2828' }}>{parseError}</p>
+                  style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+                  <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', marginTop: 1, flexShrink: 0 }} />
+                  <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{parseError}</p>
                 </motion.div>
               )}
 
               {/* Rules */}
               <div className="mt-5">
-                <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>REQUIREMENTS</p>
+                <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>REQUIREMENTS</p>
                 {[
                   'Columns: Name, Email (case-insensitive headers)',
                   'Each row must have a unique email address',
@@ -337,8 +337,8 @@ export function BulkFacultyModal({
                   'A password-setup link will be emailed to each member',
                 ].map((r, i) => (
                   <div key={i} className="flex items-start gap-2 mb-1.5">
-                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#6B6B66', marginTop: 5, flexShrink: 0 }} />
-                    <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>{r}</p>
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ef-text-muted)', marginTop: 5, flexShrink: 0 }} />
+                    <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>{r}</p>
                   </div>
                 ))}
               </div>
@@ -350,14 +350,14 @@ export function BulkFacultyModal({
             <>
               {/* Summary strip */}
               <div className="flex items-center gap-4 px-6 py-3 flex-shrink-0"
-                style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
-                <span className="text-xs" style={{ color: '#6B6B66' }}>File: <span style={{ color: '#4A4A45' }}>{fileName}</span></span>
-                <span style={{ color: '#E3E1DB' }}>·</span>
-                <span className="text-xs" style={{ color: '#2A6B3A' }}>{validRows.length} valid</span>
+                style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border)' }}>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>File: <span style={{ color: 'var(--ef-text-subtle)' }}>{fileName}</span></span>
+                <span style={{ color: 'var(--ef-border)' }}>·</span>
+                <span className="text-xs" style={{ color: 'var(--ef-success)' }}>{validRows.length} valid</span>
                 {rows.filter((r) => !r.valid).length > 0 && (
                   <>
-                    <span style={{ color: '#E3E1DB' }}>·</span>
-                    <span className="text-xs" style={{ color: '#9B2828' }}>
+                    <span style={{ color: 'var(--ef-border)' }}>·</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>
                       {rows.filter((r) => !r.valid).length} will be skipped
                     </span>
                   </>
@@ -368,10 +368,10 @@ export function BulkFacultyModal({
               <div className="flex-1 overflow-y-auto">
                 <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
+                    <tr style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border)' }}>
                       {['#', 'NAME', 'EMAIL', 'STATUS'].map((h, i) => (
                         <th key={i} className="text-left px-4 py-2.5 text-xs"
-                          style={{ color: '#6B6B66', letterSpacing: '0.07em', fontWeight: 400,
+                          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.07em', fontWeight: 400,
                             width: i === 0 ? '6%' : i === 1 ? '30%' : i === 2 ? '40%' : '24%' }}>
                           {h}
                         </th>
@@ -382,33 +382,33 @@ export function BulkFacultyModal({
                     {rows.map((row) => (
                       <tr key={row.index}
                         style={{
-                          borderBottom: '1px solid #F0EFEB',
-                          background: row.valid ? 'transparent' : '#FDF5F5',
+                          borderBottom: '1px solid var(--ef-border-subtle)',
+                          background: row.valid ? 'transparent' : 'var(--ef-danger-bg)',
                         }}>
                         <td className="px-4 py-2.5">
-                          <span className="text-xs" style={{ color: '#6B6B66' }}>{row.index + 1}</span>
+                          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{row.index + 1}</span>
                         </td>
                         <td className="px-4 py-2.5">
-                          <p className="text-xs" style={{ color: row.valid ? '#0C0C0B' : '#9B2828' }}>
-                            {row.name || <span style={{ color: '#6B6B66' }}>—</span>}
+                          <p className="text-xs" style={{ color: row.valid ? 'var(--ef-ink)' : 'var(--ef-danger)' }}>
+                            {row.name || <span style={{ color: 'var(--ef-text-muted)' }}>—</span>}
                           </p>
                         </td>
                         <td className="px-4 py-2.5">
                           <p className="text-xs" style={{
-                            color: row.valid ? '#4A4A45' : '#9B2828',
+                            color: row.valid ? 'var(--ef-text-subtle)' : 'var(--ef-danger)',
                             fontFamily: row.valid ? 'monospace' : 'inherit',
                           }}>
-                            {row.email || <span style={{ color: '#6B6B66' }}>—</span>}
+                            {row.email || <span style={{ color: 'var(--ef-text-muted)' }}>—</span>}
                           </p>
                         </td>
                         <td className="px-4 py-2.5">
                           {row.valid ? (
-                            <span className="flex items-center gap-1 text-xs" style={{ color: '#2A6B3A' }}>
+                            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-success)' }}>
                               <CheckCircle2 size={11} strokeWidth={1.5} />
                               Valid
                             </span>
                           ) : (
-                            <span className="text-xs" style={{ color: '#9B2828' }}>
+                            <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>
                               {row.errors[0]}
                             </span>
                           )}
@@ -421,18 +421,18 @@ export function BulkFacultyModal({
 
               {/* Footer */}
               <div className="flex items-center gap-3 px-6 py-4 flex-shrink-0"
-                style={{ borderTop: '1px solid #E3E1DB' }}>
+                style={{ borderTop: '1px solid var(--ef-border)' }}>
                 <button onClick={() => setStep('upload')}
                   className="text-xs px-4 py-2.5 transition-colors"
-                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}>
+                  style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-surface)')}>
                   ← Back
                 </button>
                 {validRows.length > 0 && (
                   <button onClick={handleCreate}
                     className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
-                    style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.03em' }}
+                    style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}
                     onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.85')}
                     onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}>
                     Grant access to {validRows.length} {validRows.length === 1 ? 'member' : 'members'}
@@ -440,7 +440,7 @@ export function BulkFacultyModal({
                   </button>
                 )}
                 {validRows.length === 0 && (
-                  <p className="text-xs" style={{ color: '#9B2828' }}>
+                  <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>
                     No valid rows to import. Fix the errors or upload a new file.
                   </p>
                 )}
@@ -451,18 +451,18 @@ export function BulkFacultyModal({
           {/* ── Step: Creating ── */}
           {step === 'creating' && (
             <div className="flex flex-col items-center justify-center py-20 px-8 flex-1">
-              <Loader2 size={28} strokeWidth={1} className="animate-spin mb-5" style={{ color: '#6B6B66' }} />
-              <p className="text-sm" style={{ color: '#0C0C0B' }}>
+              <Loader2 size={28} strokeWidth={1} className="animate-spin mb-5" style={{ color: 'var(--ef-text-muted)' }} />
+              <p className="text-sm" style={{ color: 'var(--ef-ink)' }}>
                 Creating {validRows.length} faculty {validRows.length === 1 ? 'account' : 'accounts'}…
               </p>
-              <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>
+              <p className="text-xs mt-1.5" style={{ color: 'var(--ef-text-muted)' }}>
                 Emailing password-setup links. Please wait.
               </p>
               {/* Progress bar */}
               <div className="w-full mt-8" style={{ maxWidth: 280 }}>
-                <div style={{ height: 2, background: '#E3E1DB', borderRadius: 1 }}>
+                <div style={{ height: 2, background: 'var(--ef-border)', borderRadius: 1 }}>
                   <motion.div
-                    style={{ height: 2, background: '#0C0C0B', borderRadius: 1 }}
+                    style={{ height: 2, background: 'var(--ef-ink)', borderRadius: 1 }}
                     animate={{ width: `${progress}%` }}
                     transition={{ duration: 0.3 }}
                   />
@@ -476,17 +476,17 @@ export function BulkFacultyModal({
             <>
               {/* Summary */}
               <div className="flex items-center gap-4 px-6 py-3 flex-shrink-0"
-                style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
+                style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border)' }}>
                 {results.filter((r) => r.success).length > 0 && (
-                  <span className="flex items-center gap-1.5 text-xs" style={{ color: '#2A6B3A' }}>
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ef-success)' }}>
                     <CheckCircle2 size={12} strokeWidth={1.5} />
                     {results.filter((r) => r.success).length} created
                   </span>
                 )}
                 {results.filter((r) => !r.success).length > 0 && (
                   <>
-                    <span style={{ color: '#E3E1DB' }}>·</span>
-                    <span className="flex items-center gap-1.5 text-xs" style={{ color: '#9B2828' }}>
+                    <span style={{ color: 'var(--ef-border)' }}>·</span>
+                    <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ef-danger)' }}>
                       <XCircle size={12} strokeWidth={1.5} />
                       {results.filter((r) => !r.success).length} failed
                     </span>
@@ -498,10 +498,10 @@ export function BulkFacultyModal({
               <div className="flex-1 overflow-y-auto">
                 <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
+                    <tr style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border)' }}>
                       {['NAME', 'EMAIL', 'RESULT'].map((h, i) => (
                         <th key={i} className="text-left px-4 py-2.5 text-xs"
-                          style={{ color: '#6B6B66', letterSpacing: '0.07em', fontWeight: 400,
+                          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.07em', fontWeight: 400,
                             width: i === 0 ? '30%' : i === 1 ? '40%' : '30%' }}>
                           {h}
                         </th>
@@ -511,21 +511,21 @@ export function BulkFacultyModal({
                   <tbody>
                     {results.map((r, i) => (
                       <tr key={i}
-                        style={{ borderBottom: '1px solid #F0EFEB', background: r.success ? 'transparent' : '#FDF5F5' }}>
+                        style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: r.success ? 'transparent' : 'var(--ef-danger-bg)' }}>
                         <td className="px-4 py-2.5">
-                          <p className="text-xs" style={{ color: '#0C0C0B' }}>{r.name}</p>
+                          <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{r.name}</p>
                         </td>
                         <td className="px-4 py-2.5">
-                          <p className="text-xs" style={{ color: '#4A4A45', fontFamily: 'monospace' }}>{r.email}</p>
+                          <p className="text-xs" style={{ color: 'var(--ef-text-subtle)', fontFamily: 'monospace' }}>{r.email}</p>
                         </td>
                         <td className="px-4 py-2.5">
                           {r.success ? (
-                            <span className="flex items-center gap-1 text-xs" style={{ color: '#2A6B3A' }}>
+                            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-success)' }}>
                               <Check size={11} strokeWidth={2} />
                               Created
                             </span>
                           ) : (
-                            <span className="text-xs" style={{ color: '#9B2828' }}>{r.error ?? 'Failed'}</span>
+                            <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>{r.error ?? 'Failed'}</span>
                           )}
                         </td>
                       </tr>
@@ -535,10 +535,10 @@ export function BulkFacultyModal({
               </div>
 
               <div className="flex justify-end px-6 py-4 flex-shrink-0"
-                style={{ borderTop: '1px solid #E3E1DB' }}>
+                style={{ borderTop: '1px solid var(--ef-border)' }}>
                 <button onClick={handleClose}
                   className="text-xs px-5 py-2.5 transition-opacity"
-                  style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2 }}
+                  style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2 }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.85')}
                   onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}>
                   Done

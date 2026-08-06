@@ -122,25 +122,25 @@ export function NodeStudentRoster({
           onClick={toggleCollapsed}
           className="flex items-center gap-2 select-none"
         >
-          <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
             STUDENTS AT OR BELOW THIS {levelLabel.toUpperCase()}
           </span>
 
           {loaded && !loading && members.length > 0 && (
             <span
               className="text-xs px-1.5 py-0.5"
-              style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 10 }}
+              style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 10 }}
               title={`${directCount} directly assigned · ${inheritedMembers.length} inherited from below`}
             >
               {members.length}
             </span>
           )}
           {!loaded && !loading && !isEager && (
-            <span className="text-xs" style={{ color: '#6B6B66' }}>— tap to load</span>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>— tap to load</span>
           )}
-          {loading && <Loader2 size={11} className="animate-spin" style={{ color: '#6B6B66' }} />}
+          {loading && <Loader2 size={11} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />}
 
-          <span style={{ color: '#6B6B66' }}>
+          <span style={{ color: 'var(--ef-text-muted)' }}>
             {collapsed
               ? <ChevronDown size={12} strokeWidth={1.5} />
               : <ChevronUp size={12} strokeWidth={1.5} />}
@@ -152,9 +152,9 @@ export function NodeStudentRoster({
           <button
             onClick={() => setDrawerOpen(true)}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
-            style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}
+            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}
           >
             <UserPlus size={10} strokeWidth={1.5} />
             Manage Assignments
@@ -175,10 +175,10 @@ export function NodeStudentRoster({
           >
             <div
               style={{
-                border: '1px solid #E3E1DB',
+                border: '1px solid var(--ef-border)',
                 borderRadius: 3,
                 overflow: 'hidden',
-                background: '#FFFFFF',
+                background: 'var(--ef-surface)',
               }}
             >
               {/* Loading */}
@@ -188,7 +188,7 @@ export function NodeStudentRoster({
                     size={16}
                     strokeWidth={1}
                     className="animate-spin"
-                    style={{ color: '#6B6B66' }}
+                    style={{ color: 'var(--ef-text-muted)' }}
                   />
                 </div>
               )}
@@ -196,8 +196,8 @@ export function NodeStudentRoster({
               {/* Lazy level, expanded but not yet loaded */}
               {!loading && !loaded && !isEager && (
                 <button onClick={ensureLoaded}
-                  className="w-full flex items-center justify-center gap-1.5 py-8 text-xs transition-colors hover:bg-[#FAFAF8]"
-                  style={{ color: '#6B6B66' }}>
+                  className="w-full flex items-center justify-center gap-1.5 py-8 text-xs transition-colors hover:bg-[var(--ef-canvas-raised)]"
+                  style={{ color: 'var(--ef-text-muted)' }}>
                   <Users size={13} strokeWidth={1.5} />
                   Load students at or below this {levelLabel.toLowerCase()}
                 </button>
@@ -205,7 +205,7 @@ export function NodeStudentRoster({
 
               {/* Inherited-remove notice */}
               {inheritedNotice && (
-                <div className="px-4 py-2 text-xs" style={{ background: '#FBF7EC', color: '#7A6420', borderBottom: '1px solid #F0EFEB' }}>
+                <div className="px-4 py-2 text-xs" style={{ background: '#FBF7EC', color: '#7A6420', borderBottom: '1px solid var(--ef-border-subtle)' }}>
                   {inheritedNotice}
                 </div>
               )}
@@ -213,8 +213,8 @@ export function NodeStudentRoster({
               {/* Empty state */}
               {loaded && !loading && members.length === 0 && (
                 <div className="flex flex-col items-center py-10">
-                  <Users size={22} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-                  <p className="text-xs mt-3" style={{ color: '#6B6B66' }}>
+                  <Users size={22} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
+                  <p className="text-xs mt-3" style={{ color: 'var(--ef-text-muted)' }}>
                     No students at or below this {levelLabel.toLowerCase()}
                   </p>
                   {!readOnly && (
@@ -222,16 +222,16 @@ export function NodeStudentRoster({
                       onClick={() => setDrawerOpen(true)}
                       className="mt-3 flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
                       style={{
-                        border: '1px solid #E3E1DB',
-                        color: '#4A4A45',
+                        border: '1px solid var(--ef-border)',
+                        color: 'var(--ef-text-subtle)',
                         borderRadius: 2,
-                        background: '#FAFAF8',
+                        background: 'var(--ef-canvas-raised)',
                       }}
                       onMouseEnter={(e) =>
-                        ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')
+                        ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')
                       }
                       onMouseLeave={(e) =>
-                        ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')
+                        ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')
                       }
                     >
                       <UserPlus size={10} strokeWidth={1.5} />
@@ -256,20 +256,20 @@ export function NodeStudentRoster({
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.12 }}
                       className="flex items-center justify-between px-4 py-3"
-                      style={{ borderBottom: isLast ? 'none' : '1px solid #F0EFEB' }}
+                      style={{ borderBottom: isLast ? 'none' : '1px solid var(--ef-border-subtle)' }}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm flex items-center gap-1.5" style={{ color: '#0C0C0B', lineHeight: 1.4 }}>
+                        <p className="text-sm flex items-center gap-1.5" style={{ color: 'var(--ef-ink)', lineHeight: 1.4 }}>
                           {m.studentName}
                           {inherited && (
                             <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5"
-                              style={{ background: '#F4F3EF', color: '#6B6B66', borderRadius: 3 }}
+                              style={{ background: '#F4F3EF', color: 'var(--ef-text-muted)', borderRadius: 3 }}
                               title={m.breadcrumb}>
                               <CornerDownRight size={9} strokeWidth={1.5} /> via {via}
                             </span>
                           )}
                         </p>
-                        <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                           {m.studentEmail}
                         </p>
                       </div>
@@ -281,12 +281,12 @@ export function NodeStudentRoster({
                           disabled={removingId === m.id}
                           title="Remove assignment"
                           className="ml-3 p-1.5 transition-colors flex-shrink-0"
-                          style={{ color: '#6B6B66' }}
+                          style={{ color: 'var(--ef-text-muted)' }}
                           onMouseEnter={(e) =>
-                            ((e.currentTarget as HTMLElement).style.color = '#9B2828')
+                            ((e.currentTarget as HTMLElement).style.color = 'var(--ef-danger)')
                           }
                           onMouseLeave={(e) =>
-                            ((e.currentTarget as HTMLElement).style.color = '#6B6B66')
+                            ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')
                           }
                         >
                           {removingId === m.id ? (

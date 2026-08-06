@@ -4,14 +4,14 @@ import { Eye, EyeOff, Loader2, Check } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 
 const inputStyle: React.CSSProperties = {
-  background: '#FAFAF8', border: '1px solid #E3E1DB', color: '#0C0C0B',
+  background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', color: 'var(--ef-ink)',
   borderRadius: 2, width: '100%', outline: 'none', fontSize: 13, padding: '10px 14px',
 };
 const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#0C0C0B'; e.target.style.background = '#FFFFFF';
+  e.target.style.borderColor = 'var(--ef-ink)'; e.target.style.background = 'var(--ef-surface)';
 };
 const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#E3E1DB'; e.target.style.background = '#FAFAF8';
+  e.target.style.borderColor = 'var(--ef-border)'; e.target.style.background = 'var(--ef-canvas-raised)';
 };
 
 function StrengthBar({ password }: { password: string }) {
@@ -19,7 +19,7 @@ function StrengthBar({ password }: { password: string }) {
     password.length >= 8, /[A-Z]/.test(password),
     /[0-9]/.test(password), /[^A-Za-z0-9]/.test(password), password.length >= 12,
   ].filter(Boolean).length;
-  const colors = ['#E3E1DB', '#D97A5A', '#D9A85A', '#7AB87A', '#2A6B3A'];
+  const colors = ['var(--ef-border)', '#D97A5A', '#D9A85A', '#7AB87A', 'var(--ef-success)'];
   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
   if (!password) return null;
   return (
@@ -27,7 +27,7 @@ function StrengthBar({ password }: { password: string }) {
       <div className="flex gap-1 mb-1">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="flex-1 h-0.5 rounded-full transition-all"
-            style={{ background: i <= score ? colors[score] : '#E3E1DB' }} />
+            style={{ background: i <= score ? colors[score] : 'var(--ef-border)' }} />
         ))}
       </div>
       {score > 0 && <p className="text-xs" style={{ color: colors[score] }}>{labels[score]}</p>}
@@ -69,24 +69,24 @@ export function StudentSecurityPage() {
       className="px-8 py-10"
       style={{ maxWidth: 520, margin: '0 auto' }}
     >
-      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>SECURITY</p>
-      <h1 className="text-base mb-8" style={{ color: '#0C0C0B', borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
+      <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>SECURITY</p>
+      <h1 className="text-base mb-8" style={{ color: 'var(--ef-ink)', borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
         Change Password
       </h1>
 
-      <div className="bg-white px-6 py-6" style={{ border: '1px solid #E3E1DB', borderRadius: 3 }}>
+      <div className="bg-white px-6 py-6" style={{ border: '1px solid var(--ef-border)', borderRadius: 3 }}>
         {success && (
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
             className="flex items-center gap-2 px-3 py-2.5 mb-5"
-            style={{ background: '#F0F7F2', border: '1px solid #C6DECE', borderRadius: 2 }}>
-            <Check size={12} strokeWidth={2} style={{ color: '#2A6B3A', flexShrink: 0 }} />
-            <p className="text-xs" style={{ color: '#2A6B3A' }}>Password updated successfully.</p>
+            style={{ background: 'var(--ef-success-bg-alt)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }}>
+            <Check size={12} strokeWidth={2} style={{ color: 'var(--ef-success)', flexShrink: 0 }} />
+            <p className="text-xs" style={{ color: 'var(--ef-success)' }}>Password updated successfully.</p>
           </motion.div>
         )}
 
         <form onSubmit={handleSubmit} noValidate>
           <div className="mb-4">
-            <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+            <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
               New password
             </label>
             <div className="relative">
@@ -96,9 +96,9 @@ export function StudentSecurityPage() {
                 style={{ ...inputStyle, paddingRight: 40 }} onFocus={onFocus} onBlur={onBlur} />
               <button type="button" tabIndex={-1} onClick={() => setShowNew((v) => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                style={{ color: '#6B6B66' }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+                style={{ color: 'var(--ef-text-muted)' }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
                 {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
               </button>
             </div>
@@ -106,7 +106,7 @@ export function StudentSecurityPage() {
           </div>
 
           <div className="mb-6">
-            <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+            <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
               Confirm new password
             </label>
             <div className="relative">
@@ -116,15 +116,15 @@ export function StudentSecurityPage() {
                 style={{ ...inputStyle, paddingRight: 40 }} onFocus={onFocus} onBlur={onBlur} />
               <button type="button" tabIndex={-1} onClick={() => setShowConfirm((v) => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                style={{ color: '#6B6B66' }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+                style={{ color: 'var(--ef-text-muted)' }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
                 {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
               </button>
             </div>
             {confirmPassword && newPassword && (
               <p className="text-xs mt-1.5" style={{
-                color: confirmPassword === newPassword ? '#2A6B3A' : '#9B2828',
+                color: confirmPassword === newPassword ? 'var(--ef-success)' : 'var(--ef-danger)',
               }}>
                 {confirmPassword === newPassword ? 'Passwords match' : 'Passwords do not match'}
               </p>
@@ -133,7 +133,7 @@ export function StudentSecurityPage() {
 
           {error && (
             <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="text-xs mb-4 -mt-2" style={{ color: '#9B2828' }}>
+              className="text-xs mb-4 -mt-2" style={{ color: 'var(--ef-danger)' }}>
               {error}
             </motion.p>
           )}
@@ -141,8 +141,8 @@ export function StudentSecurityPage() {
           <button type="submit" disabled={!canSubmit}
             className="w-full py-2.5 text-sm flex items-center justify-center gap-2"
             style={{
-              background: canSubmit ? '#0C0C0B' : '#C8C7C2',
-              color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em',
+              background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
+              color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em',
               cursor: canSubmit ? 'pointer' : 'not-allowed',
             }}>
             {loading
@@ -151,7 +151,7 @@ export function StudentSecurityPage() {
           </button>
         </form>
 
-        <p className="text-xs mt-4 pt-4" style={{ color: '#6B6B66', borderTop: '1px solid #F0EFEB', lineHeight: 1.6 }}>
+        <p className="text-xs mt-4 pt-4" style={{ color: 'var(--ef-text-muted)', borderTop: '1px solid var(--ef-border-subtle)', lineHeight: 1.6 }}>
           Choose a strong password with at least 8 characters, including uppercase, lowercase, numbers, and symbols.
         </p>
       </div>

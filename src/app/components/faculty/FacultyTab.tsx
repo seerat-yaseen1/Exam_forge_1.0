@@ -44,7 +44,7 @@ function formatDate(iso: string) {
 
 function SkeletonRow() {
   return (
-    <tr style={{ borderBottom: '1px solid #F0EFEB' }}>
+    <tr style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
       {[32, 48, 16, 20, 0].map((w, i) => (
         <td key={i} className="px-5 py-4">
           {w > 0 && <div className="h-3 rounded mb-1" style={{ width: `${w * 4}px`, background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />}
@@ -337,15 +337,15 @@ export function FacultyTab({
         <div className="flex items-center gap-4">
           {!loading && total > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3">
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 {total} {total === 1 ? 'member' : 'members'}
               </span>
-              <span style={{ color: '#E3E1DB' }}>·</span>
-              <span className="text-xs" style={{ color: '#2A6B3A' }}>{active} active</span>
+              <span style={{ color: 'var(--ef-border)' }}>·</span>
+              <span className="text-xs" style={{ color: 'var(--ef-success)' }}>{active} active</span>
               {disabled > 0 && (
                 <>
-                  <span style={{ color: '#E3E1DB' }}>·</span>
-                  <span className="text-xs" style={{ color: '#6B6B66' }}>{disabled} disabled</span>
+                  <span style={{ color: 'var(--ef-border)' }}>·</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{disabled} disabled</span>
                 </>
               )}
             </motion.div>
@@ -355,10 +355,10 @@ export function FacultyTab({
             <div className="flex items-center gap-1.5 select-none">
               <div className="relative w-2 h-2 flex items-center justify-center">
                 <span className="absolute inline-flex w-2 h-2 rounded-full opacity-60"
-                  style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
+                  style={{ background: 'var(--ef-success)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
+                <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-success)' }} />
               </div>
-              <span className="text-xs" style={{ color: '#6B6B66' }}>{syncDisplay}</span>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{syncDisplay}</span>
             </div>
           )}
         </div>
@@ -366,14 +366,14 @@ export function FacultyTab({
         <div className="flex items-center gap-2">
           <button onClick={() => setBulkOpen(true)}
             className="flex items-center gap-1.5 text-xs px-3 py-2 transition-colors"
-            style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}>
+            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}>
             <Upload size={11} strokeWidth={1.5} />Add in Bulk
           </button>
           <button onClick={() => setDrawerOpen(true)}
             className="flex items-center gap-1.5 text-xs px-3 py-2 transition-opacity"
-            style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.03em' }}
+            style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.85')}
             onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}>
             <Plus size={11} strokeWidth={2} />Add Single
@@ -388,17 +388,17 @@ export function FacultyTab({
             exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}
             className="flex items-center gap-2.5 px-4 py-2.5 mb-4"
             style={{
-              background: emailNotice.ok ? '#F0F7F2' : '#FDF5F5',
-              border: `1px solid ${emailNotice.ok ? '#C6DECE' : '#F2CECE'}`,
+              background: emailNotice.ok ? 'var(--ef-success-bg-alt)' : 'var(--ef-danger-bg)',
+              border: `1px solid ${emailNotice.ok ? 'var(--ef-success-border-alt)' : 'var(--ef-danger-border)'}`,
               borderRadius: 2,
             }}>
             {emailNotice.ok
-              ? <Mail size={12} strokeWidth={1.5} style={{ color: '#2A6B3A', flexShrink: 0 }} />
-              : <MailX size={12} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />}
-            <p className="text-xs flex-1" style={{ color: emailNotice.ok ? '#2A6B3A' : '#9B2828' }}>
+              ? <Mail size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success)', flexShrink: 0 }} />
+              : <MailX size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />}
+            <p className="text-xs flex-1" style={{ color: emailNotice.ok ? 'var(--ef-success)' : 'var(--ef-danger)' }}>
               {emailNotice.message}
             </p>
-            <button onClick={() => setEmailNotice(null)} style={{ color: '#6B6B66' }}>
+            <button onClick={() => setEmailNotice(null)} style={{ color: 'var(--ef-text-muted)' }}>
               <X size={11} strokeWidth={1.5} />
             </button>
           </motion.div>
@@ -416,23 +416,23 @@ export function FacultyTab({
 
       {fetchError && (
         <div className="flex items-center gap-2 px-4 py-3 mb-4"
-          style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-          <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-          <p className="text-xs" style={{ color: '#9B2828' }}>{fetchError}</p>
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+          <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+          <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{fetchError}</p>
           <button onClick={() => fetch_()} className="ml-auto text-xs"
-            style={{ color: '#9B2828', textDecoration: 'underline' }}>Retry</button>
+            style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>Retry</button>
         </div>
       )}
 
       {/* ── Table ── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3, overflow: 'hidden' }}>
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
+            <tr style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border)' }}>
               {['FACULTY', 'ROLE', 'STATUS', 'GRANTED', 'SCHOOLS', 'STU. CREATE', 'ROSTER', ''].map((col, i) => (
                 <th key={i} className="text-left px-5 py-3 text-xs"
                   style={{
-                    color: '#6B6B66', letterSpacing: '0.08em', fontWeight: 400,
+                    color: 'var(--ef-text-muted)', letterSpacing: '0.08em', fontWeight: 400,
                     width: i === 0 ? '24%' : i === 1 ? '9%' : i === 2 ? '9%' : i === 3 ? '10%' : i === 4 ? '9%' : i === 5 ? '10%' : i === 6 ? '9%' : '20%',
                   }}>
                   {col}
@@ -447,26 +447,26 @@ export function FacultyTab({
               <tr>
                 <td colSpan={6}>
                   <div className="flex flex-col items-center py-16">
-                    <Users size={28} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-                    <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+                    <Users size={28} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
+                    <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
                       No faculty registered
                     </p>
-                    <p className="text-xs mt-1" style={{ color: '#DDDBD5' }}>
+                    <p className="text-xs mt-1" style={{ color: 'var(--ef-border-muted)' }}>
                       Begin onboarding to grant access.
                     </p>
                     <div className="flex items-center gap-2 mt-6">
                       <button onClick={() => setDrawerOpen(true)}
                         className="flex items-center gap-1.5 text-xs px-3 py-2"
-                        style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF' }}
-                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}>
+                        style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}>
                         <Plus size={11} strokeWidth={2} />Add Single
                       </button>
                       <button onClick={() => setBulkOpen(true)}
                         className="flex items-center gap-1.5 text-xs px-3 py-2"
-                        style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF' }}
-                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}>
+                        style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}>
                         <Upload size={11} strokeWidth={1.5} />Add in Bulk
                       </button>
                     </div>
@@ -492,20 +492,20 @@ export function FacultyTab({
               return (
                 <motion.tr key={faculty.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   style={{
-                    borderBottom: '1px solid #F0EFEB',
-                    background: isConfirmDelete ? '#FDF5F5' : 'transparent',
+                    borderBottom: '1px solid var(--ef-border-subtle)',
+                    background: isConfirmDelete ? 'var(--ef-danger-bg)' : 'transparent',
                     transition: 'background 0.15s',
                   }}>
                   {/* Faculty name + email */}
                   <td className="px-5 py-3.5">
-                    <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.4 }}>{faculty.name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{faculty.email}</p>
+                    <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.4 }}>{faculty.name}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{faculty.email}</p>
                   </td>
 
                   {/* Role badge */}
                   <td className="px-5 py-3.5">
                     <span className="inline-block text-xs px-2 py-0.5"
-                      style={{ background: '#F0EFEB', color: '#4A4A45', borderRadius: 2, letterSpacing: '0.03em' }}>
+                      style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-subtle)', borderRadius: 2, letterSpacing: '0.03em' }}>
                       Faculty
                     </span>
                   </td>
@@ -514,11 +514,11 @@ export function FacultyTab({
                   <td className="px-5 py-3.5">
                     <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                       style={faculty.status === 'active'
-                        ? { background: '#F0F7F2', color: '#2A6B3A', border: '1px solid #C6DECE', borderRadius: 2 }
-                        : { background: '#F5F5F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                        ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
+                        : { background: '#F5F5F3', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                       <span style={{
                         width: 5, height: 5, borderRadius: '50%',
-                        background: faculty.status === 'active' ? '#2A6B3A' : '#6B6B66',
+                        background: faculty.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
                         display: 'inline-block', flexShrink: 0,
                       }} />
                       {faculty.status === 'active' ? 'Active' : 'Disabled'}
@@ -527,7 +527,7 @@ export function FacultyTab({
 
                   {/* Created */}
                   <td className="px-5 py-3.5">
-                    <p className="text-xs" style={{ color: '#6B6B66' }}>{formatDate(faculty.createdAt)}</p>
+                    <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{formatDate(faculty.createdAt)}</p>
                   </td>
 
                   {/* Schools permission toggle */}
@@ -549,13 +549,13 @@ export function FacultyTab({
                       }}
                     >
                       {isTogglingSchools ? (
-                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
+                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
                       ) : schoolsEnabled ? (
-                        <ShieldCheck size={13} strokeWidth={1.5} style={{ color: '#2A6B3A' }} />
+                        <ShieldCheck size={13} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
                       ) : (
-                        <Shield size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                        <Shield size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
                       )}
-                      <span style={{ color: schoolsEnabled && canToggleSchools ? '#2A6B3A' : '#6B6B66' }}>
+                      <span style={{ color: schoolsEnabled && canToggleSchools ? 'var(--ef-success)' : 'var(--ef-text-muted)' }}>
                         {schoolsEnabled ? 'On' : 'Off'}
                       </span>
                     </button>
@@ -580,13 +580,13 @@ export function FacultyTab({
                       }}
                     >
                       {isTogglingStudents ? (
-                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
+                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
                       ) : createStudentsEnabled ? (
-                        <GraduationCap size={13} strokeWidth={1.5} style={{ color: '#2A6B3A' }} />
+                        <GraduationCap size={13} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
                       ) : (
-                        <GraduationCap size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                        <GraduationCap size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
                       )}
-                      <span style={{ color: createStudentsEnabled && canToggleStudents ? '#2A6B3A' : '#6B6B66' }}>
+                      <span style={{ color: createStudentsEnabled && canToggleStudents ? 'var(--ef-success)' : 'var(--ef-text-muted)' }}>
                         {createStudentsEnabled ? 'On' : 'Off'}
                       </span>
                     </button>
@@ -611,11 +611,11 @@ export function FacultyTab({
                       }}
                     >
                       {isTogglingRosters ? (
-                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
+                        <Loader2 size={12} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
                       ) : (
-                        <Shield size={13} strokeWidth={1.5} style={{ color: manageRostersEnabled && canToggleRosters ? '#2A6B3A' : '#6B6B66' }} />
+                        <Shield size={13} strokeWidth={1.5} style={{ color: manageRostersEnabled && canToggleRosters ? 'var(--ef-success)' : 'var(--ef-text-muted)' }} />
                       )}
-                      <span style={{ color: manageRostersEnabled && canToggleRosters ? '#2A6B3A' : '#6B6B66' }}>
+                      <span style={{ color: manageRostersEnabled && canToggleRosters ? 'var(--ef-success)' : 'var(--ef-text-muted)' }}>
                         {manageRostersEnabled ? 'On' : 'Off'}
                       </span>
                     </button>
@@ -668,10 +668,10 @@ export function FacultyTab({
                           )}
                         </div>
                         <div className="flex items-center justify-end gap-2">
-                        <span className="text-xs" style={{ color: '#9B2828' }}>Remove?</span>
+                        <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>Remove?</span>
                         <button onClick={handleDelete} disabled={deleteLoading}
                           className="flex items-center gap-1 text-xs px-2 py-1"
-                          style={{ background: '#9B2828', color: '#FFFFFF', borderRadius: 2 }}>
+                          style={{ background: 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2 }}>
                           {deleteLoading ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
                           Confirm
                         </button>
@@ -679,7 +679,7 @@ export function FacultyTab({
                           onClick={() => { setDeletingId(null); setSuccessorId(null); setLiveOwnedCount(null); }}
                           disabled={deleteLoading}
                           className="text-xs px-2 py-1"
-                          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                          style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                           Cancel
                         </button>
                         </div>
@@ -693,7 +693,7 @@ export function FacultyTab({
                             title="Question rights"
                             className="p-2 rounded transition-all"
                             style={{
-                              color: rightsExpandedId === faculty.id ? '#2A6B3A' : '#6B6B66',
+                              color: rightsExpandedId === faculty.id ? 'var(--ef-success)' : 'var(--ef-text-muted)',
                               cursor: 'pointer',
                             }}
                           >
@@ -706,9 +706,9 @@ export function FacultyTab({
                           disabled={isTogglingStatus}
                           title={faculty.status === 'active' ? 'Disable faculty' : 'Enable faculty'}
                           className="p-2 rounded transition-all"
-                          style={{ color: '#6B6B66', cursor: isTogglingStatus ? 'not-allowed' : 'pointer' }}
-                          onMouseEnter={(e) => { if (!isTogglingStatus) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
+                          style={{ color: 'var(--ef-text-muted)', cursor: isTogglingStatus ? 'not-allowed' : 'pointer' }}
+                          onMouseEnter={(e) => { if (!isTogglingStatus) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)'; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)'; }}>
                           {isTogglingStatus
                             ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
                             : faculty.status === 'active'
@@ -722,9 +722,9 @@ export function FacultyTab({
                           disabled={isResending}
                           title="Resend password-setup link"
                           className="p-2 rounded transition-all"
-                          style={{ color: '#6B6B66', cursor: isResending ? 'not-allowed' : 'pointer' }}
-                          onMouseEnter={(e) => { if (!isResending) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
+                          style={{ color: 'var(--ef-text-muted)', cursor: isResending ? 'not-allowed' : 'pointer' }}
+                          onMouseEnter={(e) => { if (!isResending) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)'; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)'; }}>
                           {isResending
                             ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
                             : <Mail size={13} strokeWidth={1.5} />}
@@ -735,9 +735,9 @@ export function FacultyTab({
                           onClick={() => setDeletingId(faculty.id)}
                           title="Remove faculty member"
                           className="p-2 rounded transition-all"
-                          style={{ color: '#6B6B66' }}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#9B2828'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}>
+                          style={{ color: 'var(--ef-text-muted)' }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--ef-danger)'; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)'; }}>
                           <Trash2 size={13} strokeWidth={1.5} />
                         </button>
                       </div>
@@ -758,13 +758,13 @@ export function FacultyTab({
         return (
           <div
             className="mt-3 px-4 py-4"
-            style={{ background: '#FBFBF9', border: '1px solid #E3E1DB', borderRadius: 3 }}
+            style={{ background: '#FBFBF9', border: '1px solid var(--ef-border)', borderRadius: 3 }}
           >
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs" style={{ color: '#0C0C0B' }}>
-                Permissions — <span style={{ color: '#6B6B66' }}>{fac.name}</span>
+              <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>
+                Permissions — <span style={{ color: 'var(--ef-text-muted)' }}>{fac.name}</span>
               </p>
-              <button onClick={() => setRightsExpandedId(null)} className="p-1" style={{ color: '#6B6B66' }}>
+              <button onClick={() => setRightsExpandedId(null)} className="p-1" style={{ color: 'var(--ef-text-muted)' }}>
                 <X size={13} strokeWidth={1.5} />
               </button>
             </div>
@@ -793,7 +793,7 @@ export function FacultyTab({
       })()}
 
       {!loading && total > 0 && (
-        <p className="text-xs mt-3" style={{ color: '#6B6B66' }}>
+        <p className="text-xs mt-3" style={{ color: 'var(--ef-text-muted)' }}>
           Data refreshes automatically every 5 seconds.
         </p>
       )}

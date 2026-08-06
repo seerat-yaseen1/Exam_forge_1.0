@@ -74,7 +74,7 @@ export function FacultyDeletionRightsEditor({
 
   if (offerable.length === 0) {
     return (
-      <p className="text-xs" style={{ color: '#6B6B66' }}>
+      <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         This institute cannot delegate any deletion rights. Ask the Web Owner to
         raise the ceiling, or enable a grantable mode on it.
       </p>
@@ -120,7 +120,7 @@ export function FacultyDeletionRightsEditor({
 
   return (
     <div className="mt-4 pt-3" style={{ borderTop: '1px solid #EDEBE5' }}>
-      <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>
+      <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.05em' }}>
         DELETION RIGHTS
       </p>
 
@@ -130,12 +130,12 @@ export function FacultyDeletionRightsEditor({
         const enforced = ENFORCED_NOW.includes(r);
         return (
           <div key={r} className="flex items-center justify-between gap-3 py-1.5">
-            <span className="text-xs flex items-center gap-1.5" style={{ color: '#0C0C0B' }}>
+            <span className="text-xs flex items-center gap-1.5" style={{ color: 'var(--ef-ink)' }}>
               {resourceLabel(r)}
               {!enforced && (
                 <span
                   className="text-xs px-1.5"
-                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+                  style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
                   title="Saved as configuration. Server enforcement for this resource arrives in a later phase."
                 >
                   not yet enforced
@@ -154,10 +154,10 @@ export function FacultyDeletionRightsEditor({
                         disabled={saving}
                         className="text-xs px-2 py-0.5 transition-all select-none"
                         style={{
-                          border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
+                          border: `1px solid ${on ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
                           borderRadius: 2,
-                          background: on ? '#F0F7F2' : '#FFFFFF',
-                          color: on ? '#2A6B3A' : '#6B6B66',
+                          background: on ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
+                          color: on ? 'var(--ef-success)' : 'var(--ef-text-muted)',
                           cursor: saving ? 'not-allowed' : 'pointer',
                         }}
                         title={mode === 'request'
@@ -175,10 +175,10 @@ export function FacultyDeletionRightsEditor({
                 disabled={saving}
                 className="text-xs px-2.5 py-0.5 transition-all select-none"
                 style={{
-                  border: `1px solid ${fr.granted ? '#C6DECE' : '#E3E1DB'}`,
+                  border: `1px solid ${fr.granted ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
                   borderRadius: 2,
-                  background: fr.granted ? '#F0F7F2' : '#FFFFFF',
-                  color: fr.granted ? '#2A6B3A' : '#6B6B66',
+                  background: fr.granted ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
+                  color: fr.granted ? 'var(--ef-success)' : 'var(--ef-text-muted)',
                   cursor: saving ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -190,7 +190,7 @@ export function FacultyDeletionRightsEditor({
       })}
 
       {anyUnenforced && (
-        <div className="flex items-start gap-1.5 mt-2 text-xs" style={{ color: '#6B6B66' }}>
+        <div className="flex items-start gap-1.5 mt-2 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           <Info size={11} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
             Rows marked “not yet enforced” are stored as configuration. Those
@@ -205,12 +205,12 @@ export function FacultyDeletionRightsEditor({
           onClick={save}
           disabled={saving}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity hover:opacity-80"
-          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}
         >
           {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
           Save deletion rights
         </button>
-        {saved && <span className="text-xs" style={{ color: '#2A6B3A' }}>Saved.</span>}
+        {saved && <span className="text-xs" style={{ color: 'var(--ef-success)' }}>Saved.</span>}
       </div>
     </div>
   );

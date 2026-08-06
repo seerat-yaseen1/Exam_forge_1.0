@@ -123,16 +123,16 @@ export function DeletionRightsCeilingEditor({
   };
 
   const pill = (on: boolean) => ({
-    border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
+    border: `1px solid ${on ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
     borderRadius: 2,
-    background: on ? '#F0F7F2' : '#FFFFFF',
-    color: on ? '#2A6B3A' : '#6B6B66',
+    background: on ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
+    color: on ? 'var(--ef-success)' : 'var(--ef-text-muted)',
     cursor: saving ? ('not-allowed' as const) : ('pointer' as const),
   });
 
   return (
     <div>
-      <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
         The maximum deletion rights this institute may hold. Per resource: whether
         the institute may delete it, how the institute itself acts, and which modes
         it may grant to faculty. Everything is off by default. Deletions are
@@ -145,12 +145,12 @@ export function DeletionRightsCeilingEditor({
           <div
             key={r}
             className="px-3 py-3 md:px-4 mb-2"
-            style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs" style={{ color: '#0C0C0B' }}>{resourceLabel(r)}</p>
-                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{RESOURCE_HINT[r]}</p>
+                <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{resourceLabel(r)}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{RESOURCE_HINT[r]}</p>
               </div>
               <button
                 onClick={() => toggleAllowed(r)}
@@ -160,11 +160,11 @@ export function DeletionRightsCeilingEditor({
               >
                 <span style={{
                   display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-                  background: c.allowed ? '#2A6B3A' : '#D4D2CC',
+                  background: c.allowed ? 'var(--ef-success)' : '#D4D2CC',
                   alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
                   justifyContent: c.allowed ? 'flex-end' : 'flex-start',
                 }}>
-                  <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#FFFFFF' }} />
+                  <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: 'var(--ef-surface)' }} />
                 </span>
                 {c.allowed ? 'Allowed' : 'Off'}
               </button>
@@ -174,7 +174,7 @@ export function DeletionRightsCeilingEditor({
               <div className="mt-3 pl-0.5 flex flex-col gap-2.5">
                 {/* How the INSTITUTE ADMIN itself acts */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs" style={{ color: '#6B6B66', minWidth: 96 }}>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', minWidth: 96 }}>
                     Institute acts:
                   </span>
                   {(['direct', 'request'] as DeletionMode[]).map((mode) => {
@@ -198,7 +198,7 @@ export function DeletionRightsCeilingEditor({
 
                 {/* What it may grant ONWARD to faculty */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs" style={{ color: '#6B6B66', minWidth: 96 }}>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', minWidth: 96 }}>
                     Grant faculty:
                   </span>
                   {(['direct', 'request'] as DeletionMode[]).map((mode) => {
@@ -237,10 +237,10 @@ export function DeletionRightsCeilingEditor({
         >
           <div className="min-w-0">
             <p className="text-xs" style={{ color: '#7A7873' }}>{resourceLabel(r)}</p>
-            <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{RESOURCE_HINT[r]}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{RESOURCE_HINT[r]}</p>
           </div>
           <span className="text-xs px-2.5 py-1 flex-shrink-0"
-            style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}>
+            style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)' }}>
             Web Owner only
           </span>
         </div>
@@ -249,13 +249,13 @@ export function DeletionRightsCeilingEditor({
       {/* Content-transfer capability — separate from the ceiling because it is
           exercised while ACTIVE, not a deletion mode. */}
       <div className="px-3 py-3 md:px-4 mb-2 mt-3"
-        style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+        style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-start gap-2">
             <ArrowUpFromLine size={13} strokeWidth={1.5} style={{ color: '#7A7873', marginTop: 1, flexShrink: 0 }} />
             <div>
-              <p className="text-xs" style={{ color: '#0C0C0B' }}>Transfer content to Web Owner</p>
-              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>Transfer content to Web Owner</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                 Let this institute hand its questions and banks up to you before it
                 is deleted. Exercised while the institute is active; otherwise its
                 content is wiped with the tenant.
@@ -270,11 +270,11 @@ export function DeletionRightsCeilingEditor({
           >
             <span style={{
               display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-              background: transfer.allowed ? '#2A6B3A' : '#D4D2CC',
+              background: transfer.allowed ? 'var(--ef-success)' : '#D4D2CC',
               alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
               justifyContent: transfer.allowed ? 'flex-end' : 'flex-start',
             }}>
-              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#FFFFFF' }} />
+              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: 'var(--ef-surface)' }} />
             </span>
             {transfer.allowed ? 'Allowed' : 'Off'}
           </button>
@@ -286,12 +286,12 @@ export function DeletionRightsCeilingEditor({
           onClick={save}
           disabled={saving}
           className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-80"
-          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}
         >
           {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} strokeWidth={2} />}
           Save ceiling
         </button>
-        {saved && <span className="text-xs" style={{ color: '#2A6B3A' }}>Saved.</span>}
+        {saved && <span className="text-xs" style={{ color: 'var(--ef-success)' }}>Saved.</span>}
       </div>
     </div>
   );

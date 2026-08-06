@@ -202,16 +202,16 @@ export function FaceMonitor({ enabled, active, onViolation, onStateChange }: Fac
   // ── Status indicator ──────────────────────────────────────────
 
   const statusDot =
-    detectionState === 'ready'        ? { color: '#1E7B3C', label: 'Camera active' }  :
-    detectionState === 'unavailable'  ? { color: '#92680A', label: 'Detection unavailable' } :
-    detectionState === 'denied'       ? { color: '#9B2828', label: 'Camera denied' }   :
-    detectionState === 'error'        ? { color: '#9B2828', label: 'Camera error' }    :
-                                        { color: '#6B6B66', label: 'Initialising…' };
+    detectionState === 'ready'        ? { color: 'var(--ef-success-strong)', label: 'Camera active' }  :
+    detectionState === 'unavailable'  ? { color: 'var(--ef-warning)', label: 'Detection unavailable' } :
+    detectionState === 'denied'       ? { color: 'var(--ef-danger)', label: 'Camera denied' }   :
+    detectionState === 'error'        ? { color: 'var(--ef-danger)', label: 'Camera error' }    :
+                                        { color: 'var(--ef-text-muted)', label: 'Initialising…' };
 
   return (
     <div
       style={{
-        background: '#0C0C0B',
+        background: 'var(--ef-ink)',
         borderRadius: 3,
         overflow: 'hidden',
         border: '1px solid #2C2C2A',
@@ -241,7 +241,7 @@ export function FaceMonitor({ enabled, active, onViolation, onStateChange }: Fac
             className="absolute inset-0 flex flex-col items-center justify-center"
             style={{ background: '#1A1A18' }}
           >
-            <CameraOff size={20} strokeWidth={1} style={{ color: '#6B6B66' }} />
+            <CameraOff size={20} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
           </div>
         )}
       </div>
@@ -258,7 +258,7 @@ export function FaceMonitor({ enabled, active, onViolation, onStateChange }: Fac
             animation: detectionState === 'ready' ? 'pulse 2s ease-in-out infinite' : 'none',
           }}
         />
-        <p style={{ fontSize: 9, color: '#6B6B66', letterSpacing: '0.04em', lineHeight: 1 }}>
+        <p style={{ fontSize: 9, color: 'var(--ef-text-muted)', letterSpacing: '0.04em', lineHeight: 1 }}>
           {statusDot.label}
         </p>
       </div>

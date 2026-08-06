@@ -23,9 +23,9 @@ import { type QuestionDraft } from './QuestionTypeEngine';
 
 const S = {
   btn: (active: boolean): React.CSSProperties => ({
-    background: active ? '#0C0C0B' : '#FAFAF8',
-    color: active ? '#FFFFFF' : '#4A4A45',
-    border: `1px solid ${active ? '#0C0C0B' : '#E3E1DB'}`,
+    background: active ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+    color: active ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
+    border: `1px solid ${active ? 'var(--ef-ink)' : 'var(--ef-border)'}`,
     borderRadius: 2,
     cursor: 'pointer',
     transition: 'all 0.15s',
@@ -43,7 +43,7 @@ const STEPS = [
 
 function StepStrip({ current }: { current: number }) {
   return (
-    <div className="flex items-center gap-0" style={{ borderBottom: '1px solid #E3E1DB', padding: '0 24px' }}>
+    <div className="flex items-center gap-0" style={{ borderBottom: '1px solid var(--ef-border)', padding: '0 24px' }}>
       {STEPS.map((s, i) => {
         const done   = s.n < current;
         const active = s.n === current;
@@ -54,8 +54,8 @@ function StepStrip({ current }: { current: number }) {
                 className="flex items-center justify-center flex-shrink-0"
                 style={{
                   width: 18, height: 18, borderRadius: '50%',
-                  background: done ? '#2A6B3A' : active ? '#0C0C0B' : '#F0EFEB',
-                  color: (done || active) ? '#FFFFFF' : '#6B6B66',
+                  background: done ? 'var(--ef-success)' : active ? 'var(--ef-ink)' : 'var(--ef-border-subtle)',
+                  color: (done || active) ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                   fontSize: 9,
                   letterSpacing: '0.03em',
                   fontVariantNumeric: 'tabular-nums',
@@ -66,7 +66,7 @@ function StepStrip({ current }: { current: number }) {
               <span
                 className="text-xs"
                 style={{
-                  color: done ? '#2A6B3A' : active ? '#0C0C0B' : '#6B6B66',
+                  color: done ? 'var(--ef-success)' : active ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
                   letterSpacing: '0.05em',
                 }}
               >
@@ -74,7 +74,7 @@ function StepStrip({ current }: { current: number }) {
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <div style={{ width: 28, height: 1, background: '#E3E1DB', margin: '0 6px', flexShrink: 0 }} />
+              <div style={{ width: 28, height: 1, background: 'var(--ef-border)', margin: '0 6px', flexShrink: 0 }} />
             )}
           </React.Fragment>
         );
@@ -109,33 +109,33 @@ function Step1({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="px-6 py-6">
-      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STEP 1</p>
-      <p className="text-sm mb-2" style={{ color: '#0C0C0B' }}>Download the template</p>
-      <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
+      <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>STEP 1</p>
+      <p className="text-sm mb-2" style={{ color: 'var(--ef-ink)' }}>Download the template</p>
+      <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
         The template contains three sheets — one per question engine. Each sheet includes column definitions and worked example rows. Fill from row 3 onwards; row 2 is an instruction row that the parser ignores.
       </p>
 
       <div className="grid grid-cols-3 gap-3 mb-6">
         {cards.map((c) => (
-          <div key={c.badge} className="p-4" style={{ border: '1px solid #E3E1DB', borderRadius: 3 }}>
+          <div key={c.badge} className="p-4" style={{ border: '1px solid var(--ef-border)', borderRadius: 3 }}>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs px-1.5 py-0.5 select-none" style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}>{c.badge}</span>
-              <span className="text-xs" style={{ color: '#0C0C0B' }}>{c.title}</span>
+              <span className="text-xs px-1.5 py-0.5 select-none" style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}>{c.badge}</span>
+              <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{c.title}</span>
             </div>
             <div className="space-y-1 mb-3">
               {c.cols.map((col) => (
-                <p key={col} className="text-xs" style={{ color: '#6B6B66', fontFamily: 'monospace', fontSize: 11 }}>{col}</p>
+                <p key={col} className="text-xs" style={{ color: 'var(--ef-text-muted)', fontFamily: 'monospace', fontSize: 11 }}>{col}</p>
               ))}
             </div>
-            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{c.note}</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>{c.note}</p>
           </div>
         ))}
       </div>
 
       {/* Image URL note */}
       <div className="flex items-start gap-2.5 px-3 py-3 mb-6" style={{ background: '#FFFBF0', border: '1px solid #F0DFA0', borderRadius: 2 }}>
-        <Info size={13} strokeWidth={1.5} style={{ color: '#8B5E1A', flexShrink: 0, marginTop: 1 }} />
-        <p className="text-xs" style={{ color: '#8B5E1A', lineHeight: 1.7 }}>
+        <Info size={13} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 1 }} />
+        <p className="text-xs" style={{ color: 'var(--ef-warning-strong)', lineHeight: 1.7 }}>
           Images cannot be embedded in the spreadsheet. Use the <code style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.05)', padding: '1px 4px', borderRadius: 2 }}>_image_url</code> columns to attach pre-hosted image links (must start with https://). Questions without images can have image URLs added later via the single-question editor.
         </p>
       </div>
@@ -145,7 +145,7 @@ function Step1({ onNext }: { onNext: () => void }) {
           type="button"
           onClick={downloadTemplate}
           className="flex items-center gap-2 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
-          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.03em' }}
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}
         >
           <FileDown size={12} strokeWidth={1.5} /> Download Template (MCQ + Text + Match)
         </button>
@@ -153,7 +153,7 @@ function Step1({ onNext }: { onNext: () => void }) {
           type="button"
           onClick={onNext}
           className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+          style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
         >
           I have a file ready <ChevronRight size={11} strokeWidth={1.5} />
         </button>
@@ -196,9 +196,9 @@ function Step2({
 
   return (
     <div className="px-6 py-6">
-      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STEP 2</p>
-      <p className="text-sm mb-2" style={{ color: '#0C0C0B' }}>Upload your filled file</p>
-      <p className="text-xs mb-6" style={{ color: '#6B6B66' }}>
+      <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>STEP 2</p>
+      <p className="text-sm mb-2" style={{ color: 'var(--ef-ink)' }}>Upload your filled file</p>
+      <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)' }}>
         Upload the filled XLSX template. All three sheets (MCQ, Text, Match) can be present — any sheets you left blank are simply ignored.
       </p>
 
@@ -213,34 +213,34 @@ function Step2({
         onDrop={(e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files[0]) process(e.dataTransfer.files[0]); }}
         className="flex flex-col items-center justify-center py-14 cursor-pointer transition-all mb-4"
         style={{
-          border: `2px dashed ${dragOver ? '#0C0C0B' : '#D1CFCA'}`,
+          border: `2px dashed ${dragOver ? 'var(--ef-ink)' : '#D1CFCA'}`,
           borderRadius: 3,
-          background: dragOver ? '#F7F6F3' : '#FAFAF8',
+          background: dragOver ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)',
           outline: 'none',
         }}
       >
         <div
           className="flex items-center justify-center mb-4"
-          style={{ width: 44, height: 44, borderRadius: 3, background: '#F0EFEB', border: '1px solid #E3E1DB' }}
+          style={{ width: 44, height: 44, borderRadius: 3, background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)' }}
         >
-          <FileSpreadsheet size={20} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          <FileSpreadsheet size={20} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
         </div>
-        <p className="text-xs mb-1" style={{ color: '#0C0C0B' }}>
+        <p className="text-xs mb-1" style={{ color: 'var(--ef-ink)' }}>
           {dragOver ? 'Drop the file here' : 'Click to browse or drag & drop'}
         </p>
-        <p className="text-xs" style={{ color: '#6B6B66' }}>.xlsx / .xls — max 20 MB</p>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>.xlsx / .xls — max 20 MB</p>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2.5 mb-4" style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-          <AlertCircle size={13} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />
-          <p className="text-xs" style={{ color: '#9B2828' }}>{error}</p>
+        <div className="flex items-center gap-2 px-3 py-2.5 mb-4" style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+          <AlertCircle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
+          <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</p>
         </div>
       )}
 
       <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files?.[0]) process(e.target.files[0]); }} />
 
-      <button type="button" onClick={onBack} className="text-xs" style={{ color: '#6B6B66' }}>
+      <button type="button" onClick={onBack} className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         ← Back to template
       </button>
     </div>
@@ -252,7 +252,7 @@ function Step2({
 type ReviewTab = 'MCQ' | 'Text' | 'Match' | 'All';
 
 function StatusDot({ status }: { status: ParsedRow['status'] }) {
-  const colors = { valid: '#2A6B3A', warning: '#8B5E1A', error: '#9B2828' };
+  const colors = { valid: 'var(--ef-success)', warning: 'var(--ef-warning-strong)', error: 'var(--ef-danger)' };
   return (
     <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: colors[status] }} />
   );
@@ -275,9 +275,9 @@ function RowCard({
   const { status, draft, errors, warnings, subjectResolution, duplicateScore } = row;
   const hasDup = duplicateScore && duplicateScore.matchedReason !== 'none';
 
-  const statusColor = status === 'valid' ? '#2A6B3A' : status === 'warning' ? '#8B5E1A' : '#9B2828';
-  const statusBg    = status === 'valid' ? '#F0FBF4' : status === 'warning' ? '#FFFBF0' : '#FDF5F5';
-  const statusBorder = status === 'valid' ? '#C3E8CE' : status === 'warning' ? '#F0DFA0' : '#F2CECE';
+  const statusColor = status === 'valid' ? 'var(--ef-success)' : status === 'warning' ? 'var(--ef-warning-strong)' : 'var(--ef-danger)';
+  const statusBg    = status === 'valid' ? '#F0FBF4' : status === 'warning' ? '#FFFBF0' : 'var(--ef-danger-bg)';
+  const statusBorder = status === 'valid' ? '#C3E8CE' : status === 'warning' ? '#F0DFA0' : 'var(--ef-danger-border)';
 
   return (
     <div style={{ border: `1px solid ${statusBorder}`, borderRadius: 2, background: statusBg, marginBottom: 6 }}>
@@ -290,31 +290,31 @@ function RowCard({
         <StatusDot status={status} />
 
         {/* Sheet + row */}
-        <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66', fontSize: 10, minWidth: 60 }}>
+        <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 10, minWidth: 60 }}>
           {row.sheet} #{row.rowIndex}
         </span>
 
         {/* Type badge */}
         {draft.engine && (
-          <span className="text-xs px-1.5 py-0.5 select-none flex-shrink-0" style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, fontSize: 10 }}>
+          <span className="text-xs px-1.5 py-0.5 select-none flex-shrink-0" style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, fontSize: 10 }}>
             {draft.variant ?? draft.engine}
           </span>
         )}
 
         {/* Stem preview */}
-        <span className="flex-1 text-xs truncate" style={{ color: '#0C0C0B' }}>
-          {draft.stem ? draft.stem.slice(0, 90) : <em style={{ color: '#6B6B66' }}>No stem</em>}
+        <span className="flex-1 text-xs truncate" style={{ color: 'var(--ef-ink)' }}>
+          {draft.stem ? draft.stem.slice(0, 90) : <em style={{ color: 'var(--ef-text-muted)' }}>No stem</em>}
         </span>
 
         {/* Subject pill */}
         {draft.subject && (
-          <span className="text-xs px-2 py-0.5 flex-shrink-0" style={{ background: '#F0EFEB', borderRadius: 2, color: '#4A4A45', fontSize: 11 }}>
+          <span className="text-xs px-2 py-0.5 flex-shrink-0" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)', fontSize: 11 }}>
             {draft.subject}
             {subjectResolution?.kind === 'new' && (
-              <span style={{ color: '#8B5E1A', marginLeft: 4, fontSize: 10 }}>NEW</span>
+              <span style={{ color: 'var(--ef-warning-strong)', marginLeft: 4, fontSize: 10 }}>NEW</span>
             )}
             {subjectResolution?.kind === 'alias' && (
-              <span style={{ color: '#6B6B66', marginLeft: 4, fontSize: 10 }}>→ alias</span>
+              <span style={{ color: 'var(--ef-text-muted)', marginLeft: 4, fontSize: 10 }}>→ alias</span>
             )}
           </span>
         )}
@@ -324,9 +324,9 @@ function RowCard({
           <span
             className="flex items-center gap-1 text-xs flex-shrink-0 px-1.5 py-0.5"
             style={{
-              background: status === 'error' ? '#FDF5F5' : '#FFFBF0',
-              border: `1px solid ${status === 'error' ? '#F2CECE' : '#F0DFA0'}`,
-              color: status === 'error' ? '#9B2828' : '#8B5E1A',
+              background: status === 'error' ? 'var(--ef-danger-bg)' : '#FFFBF0',
+              border: `1px solid ${status === 'error' ? 'var(--ef-danger-border)' : '#F0DFA0'}`,
+              color: status === 'error' ? 'var(--ef-danger)' : 'var(--ef-warning-strong)',
               borderRadius: 2, fontSize: 10, letterSpacing: '0.04em',
             }}
             title={`stem ${fmtPct(duplicateScore!.stemSim)} · options ${fmtPct(duplicateScore!.optionsSim)} · answer ${duplicateScore!.answerMatch ? '✓' : '✗'}`}
@@ -340,24 +340,24 @@ function RowCard({
 
         {/* Error / warning counts */}
         {errors.length > 0 && (
-          <span className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: '#9B2828' }}>
+          <span className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: 'var(--ef-danger)' }}>
             <AlertCircle size={11} strokeWidth={1.5} /> {errors.length}
           </span>
         )}
         {warnings.length > 0 && errors.length === 0 && (
-          <span className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: '#8B5E1A' }}>
+          <span className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: 'var(--ef-warning-strong)' }}>
             <AlertTriangle size={11} strokeWidth={1.5} /> {warnings.length}
           </span>
         )}
 
-        <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66', fontSize: 10 }}>
+        <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
           {expanded ? '▲' : '▼'}
         </span>
       </button>
       {/* Possible-duplicate decision strip */}
       {isDupReview && (
         <div className="flex items-center gap-2 px-3 pb-2">
-          <span className="text-xs" style={{ color: '#8B5E1A' }}>
+          <span className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
             Possible duplicate — {isIncluded ? 'will be saved' : 'skipped unless included'}
           </span>
           <div style={{ flex: 1 }} />
@@ -365,7 +365,7 @@ function RowCard({
             type="button"
             onClick={(e) => { e.stopPropagation(); onViewMatch(row); }}
             className="text-xs px-2 py-1 transition-opacity hover:opacity-70"
-            style={{ border: '1px solid #E3E1DB', background: '#FFFFFF', color: '#4A4A45', borderRadius: 2 }}
+            style={{ border: '1px solid var(--ef-border)', background: 'var(--ef-surface)', color: 'var(--ef-text-subtle)', borderRadius: 2 }}
           >
             Compare
           </button>
@@ -374,9 +374,9 @@ function RowCard({
             onClick={(e) => { e.stopPropagation(); onToggleInclude?.(); }}
             className="text-xs px-2 py-1 transition-opacity hover:opacity-70"
             style={{
-              border: `1px solid ${isIncluded ? '#2A6B3A' : '#E3E1DB'}`,
-              background: isIncluded ? '#F0FBF4' : '#FFFFFF',
-              color: isIncluded ? '#2A6B3A' : '#4A4A45',
+              border: `1px solid ${isIncluded ? 'var(--ef-success)' : 'var(--ef-border)'}`,
+              background: isIncluded ? '#F0FBF4' : 'var(--ef-surface)',
+              color: isIncluded ? 'var(--ef-success)' : 'var(--ef-text-subtle)',
               borderRadius: 2,
             }}
           >
@@ -390,22 +390,22 @@ function RowCard({
         <div className="px-4 pb-3 pt-1" style={{ borderTop: `1px solid ${statusBorder}` }}>
           {errors.map((e, i) => (
             <div key={i} className="flex items-start gap-2 mb-1.5">
-              <AlertCircle size={11} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 2 }} />
-              <p className="text-xs" style={{ color: '#9B2828' }}>
+              <AlertCircle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 2 }} />
+              <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>
                 <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{e.field}</span>: {e.message}
               </p>
             </div>
           ))}
           {warnings.map((w, i) => (
             <div key={i} className="flex items-start gap-2 mb-1.5">
-              <AlertTriangle size={11} strokeWidth={1.5} style={{ color: '#8B5E1A', flexShrink: 0, marginTop: 2 }} />
-              <p className="text-xs" style={{ color: '#8B5E1A' }}>
+              <AlertTriangle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 2 }} />
+              <p className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
                 <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{w.field}</span>: {w.message}
               </p>
             </div>
           ))}
           {errors.length === 0 && warnings.length === 0 && (
-            <p className="text-xs" style={{ color: '#2A6B3A' }}>✓ No issues found</p>
+            <p className="text-xs" style={{ color: 'var(--ef-success)' }}>✓ No issues found</p>
           )}
 
           {hasDup && duplicateScore?.matchedQuestionId && (
@@ -413,7 +413,7 @@ function RowCard({
               type="button"
               onClick={(e) => { e.stopPropagation(); onViewMatch(row); }}
               className="mt-2 text-xs px-2 py-1 transition-opacity hover:opacity-70"
-              style={{ border: '1px solid #E3E1DB', background: '#FFFFFF', color: '#4A4A45', borderRadius: 2 }}
+              style={{ border: '1px solid var(--ef-border)', background: 'var(--ef-surface)', color: 'var(--ef-text-subtle)', borderRadius: 2 }}
             >
               View matched question →
             </button>
@@ -477,33 +477,33 @@ function Step3({
 
   return (
     <div className="px-6 py-6 flex flex-col" style={{ minHeight: 0 }}>
-      <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>STEP 3</p>
-      <p className="text-sm mb-3" style={{ color: '#0C0C0B' }}>Review & verify</p>
+      <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>STEP 3</p>
+      <p className="text-sm mb-3" style={{ color: 'var(--ef-ink)' }}>Review & verify</p>
 
       {/* Summary bar */}
       <div
         className="flex items-center gap-4 px-4 py-3 mb-4 flex-wrap"
-        style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}
+        style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
       >
-        <span className="text-xs" style={{ color: '#2A6B3A' }}>✓ {summary.valid} valid</span>
-        {summary.warnings > 0 && <span className="text-xs" style={{ color: '#8B5E1A' }}>⚠ {summary.warnings} warnings</span>}
-        {summary.dupSkipped > 0 && <span className="text-xs" style={{ color: '#9B2828' }}>⊘ {summary.dupSkipped} exact duplicates (auto-skipped)</span>}
+        <span className="text-xs" style={{ color: 'var(--ef-success)' }}>✓ {summary.valid} valid</span>
+        {summary.warnings > 0 && <span className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>⚠ {summary.warnings} warnings</span>}
+        {summary.dupSkipped > 0 && <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>⊘ {summary.dupSkipped} exact duplicates (auto-skipped)</span>}
         {summary.dupReview > 0 && (
-          <span className="text-xs" style={{ color: '#8B5E1A' }}>
+          <span className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
             ? {summary.dupReview} possible duplicates — {includedCount} included
           </span>
         )}
         {summary.errors - summary.dupSkipped > 0 && (
-          <span className="text-xs" style={{ color: '#9B2828' }}>✗ {summary.errors - summary.dupSkipped} errors (will be skipped)</span>
+          <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>✗ {summary.errors - summary.dupSkipped} errors (will be skipped)</span>
         )}
         <div style={{ flex: 1 }} />
-        <span className="text-xs" style={{ color: '#0C0C0B' }}>
+        <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>
           <strong>{rowsToSave.length}</strong> will save · <strong>{allRows.length - rowsToSave.length}</strong> skipped
         </span>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0 mb-3" style={{ borderBottom: '1px solid #E3E1DB' }}>
+      <div className="flex gap-0 mb-3" style={{ borderBottom: '1px solid var(--ef-border)' }}>
         {tabs.map((t) => {
           const count =
             t === 'All' ? allRows.length :
@@ -516,8 +516,8 @@ function Step3({
               onClick={() => setActiveTab(t)}
               className="text-xs px-4 py-2 transition-all"
               style={{
-                color: activeTab === t ? '#0C0C0B' : '#6B6B66',
-                borderBottom: activeTab === t ? '2px solid #0C0C0B' : '2px solid transparent',
+                color: activeTab === t ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
+                borderBottom: activeTab === t ? '2px solid var(--ef-ink)' : '2px solid transparent',
                 marginBottom: -1,
               }}
             >
@@ -530,7 +530,7 @@ function Step3({
       {/* Row list */}
       <div className="overflow-y-auto flex-1 mb-4" style={{ maxHeight: 340 }}>
         {rows.length === 0 ? (
-          <p className="text-xs text-center py-8" style={{ color: '#6B6B66' }}>No rows in this sheet.</p>
+          <p className="text-xs text-center py-8" style={{ color: 'var(--ef-text-muted)' }}>No rows in this sheet.</p>
         ) : (
           rows.map((row) => (
             <RowCard
@@ -546,9 +546,9 @@ function Step3({
       </div>
 
       {rowsToSave.length === 0 && (
-        <div className="flex items-start gap-2.5 px-3 py-2.5 mb-4" style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-          <AlertCircle size={13} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
-          <p className="text-xs" style={{ color: '#9B2828' }}>No rows will be saved. Fix errors, or include reviewed duplicates you want to keep.</p>
+        <div className="flex items-start gap-2.5 px-3 py-2.5 mb-4" style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+          <AlertCircle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
+          <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>No rows will be saved. Fix errors, or include reviewed duplicates you want to keep.</p>
         </div>
       )}
 
@@ -559,14 +559,14 @@ function Step3({
           disabled={rowsToSave.length === 0}
           className="flex items-center gap-2 text-xs px-4 py-2.5 transition-opacity"
           style={{
-            background: rowsToSave.length > 0 ? '#0C0C0B' : '#C8C7C2',
-            color: '#FFFFFF', borderRadius: 2,
+            background: rowsToSave.length > 0 ? 'var(--ef-ink)' : 'var(--ef-track)',
+            color: 'var(--ef-surface)', borderRadius: 2,
             cursor: rowsToSave.length > 0 ? 'pointer' : 'not-allowed',
           }}
         >
           Save {rowsToSave.length} questions <ChevronRight size={11} strokeWidth={1.5} />
         </button>
-        <button type="button" onClick={onBack} className="text-xs" style={{ color: '#6B6B66' }}>
+        <button type="button" onClick={onBack} className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           ← Re-upload
         </button>
       </div>
@@ -706,14 +706,14 @@ function Step4({
     <div className="px-6 py-10 flex flex-col items-center justify-center" style={{ minHeight: 320 }}>
       {phase === 'saving' && (
         <>
-          <Loader2 size={24} className="animate-spin mb-5" style={{ color: '#6B6B66' }} />
-          <p className="text-sm mb-2" style={{ color: '#0C0C0B' }}>Saving questions…</p>
-          <p className="text-xs mb-5" style={{ color: '#6B6B66' }}>{done} / {total}</p>
+          <Loader2 size={24} className="animate-spin mb-5" style={{ color: 'var(--ef-text-muted)' }} />
+          <p className="text-sm mb-2" style={{ color: 'var(--ef-ink)' }}>Saving questions…</p>
+          <p className="text-xs mb-5" style={{ color: 'var(--ef-text-muted)' }}>{done} / {total}</p>
           <div className="w-full" style={{ maxWidth: 280 }}>
-            <div style={{ height: 4, background: '#E3E1DB', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: '#0C0C0B', borderRadius: 2, transition: 'width 0.3s ease' }} />
+            <div style={{ height: 4, background: 'var(--ef-border)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--ef-ink)', borderRadius: 2, transition: 'width 0.3s ease' }} />
             </div>
-            <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66' }}>{pct}%</p>
+            <p className="text-xs mt-2 text-center" style={{ color: 'var(--ef-text-muted)' }}>{pct}%</p>
           </div>
         </>
       )}
@@ -721,23 +721,23 @@ function Step4({
       {phase === 'done' && (
         <>
           <div className="flex items-center justify-center mb-5" style={{ width: 48, height: 48, borderRadius: '50%', background: '#F0FBF4', border: '1px solid #C3E8CE' }}>
-            <CheckCircle2 size={22} strokeWidth={1.5} style={{ color: '#2A6B3A' }} />
+            <CheckCircle2 size={22} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
           </div>
-          <p className="text-sm mb-2" style={{ color: '#0C0C0B' }}>Done!</p>
-          <p className="text-xs" style={{ color: '#2A6B3A' }}>{saved} questions added to the pool.</p>
+          <p className="text-sm mb-2" style={{ color: 'var(--ef-ink)' }}>Done!</p>
+          <p className="text-xs" style={{ color: 'var(--ef-success)' }}>{saved} questions added to the pool.</p>
           {skipped > 0 && (
-            <p className="text-xs mt-1" style={{ color: '#9B2828' }}>{skipped} questions could not be saved.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)' }}>{skipped} questions could not be saved.</p>
           )}
         </>
       )}
 
       {phase === 'error' && (
         <>
-          <div className="flex items-center justify-center mb-5" style={{ width: 48, height: 48, borderRadius: '50%', background: '#FDF5F5', border: '1px solid #F2CECE' }}>
-            <AlertCircle size={22} strokeWidth={1.5} style={{ color: '#9B2828' }} />
+          <div className="flex items-center justify-center mb-5" style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)' }}>
+            <AlertCircle size={22} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
           </div>
-          <p className="text-sm mb-2" style={{ color: '#0C0C0B' }}>Something went wrong</p>
-          <p className="text-xs" style={{ color: '#9B2828' }}>{errMsg}</p>
+          <p className="text-sm mb-2" style={{ color: 'var(--ef-ink)' }}>Something went wrong</p>
+          <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{errMsg}</p>
         </>
       )}
     </div>
@@ -847,17 +847,17 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId, insti
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
         className="w-full flex flex-col"
-        style={{ maxWidth: 780, maxHeight: '90vh', background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 780, maxHeight: '90vh', background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div>
-            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>QUESTION POOL</p>
-            <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>Bulk Upload</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>QUESTION POOL</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--ef-ink)' }}>Bulk Upload</p>
           </div>
           {step < 4 && (
-            <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
+            <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
               <X size={15} strokeWidth={1.5} />
             </button>
           )}
@@ -870,9 +870,9 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId, insti
 
         {/* Parse error */}
         {parseErr && (
-          <div className="mx-6 mt-4 flex items-start gap-2.5 px-3 py-2.5" style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-            <AlertCircle size={13} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#9B2828' }}>{parseErr}</p>
+          <div className="mx-6 mt-4 flex items-start gap-2.5 px-3 py-2.5" style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+            <AlertCircle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{parseErr}</p>
           </div>
         )}
 
@@ -930,12 +930,12 @@ export function BulkUploadModal({ onClose, onComplete, ownerType, ownerId, insti
 
         {/* Footer for step 4 */}
         {step === 4 && (
-          <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3" style={{ borderTop: '1px solid #E3E1DB' }}>
+          <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3" style={{ borderTop: '1px solid var(--ef-border)' }}>
             <button
               type="button"
               onClick={onClose}
               className="text-xs px-4 py-2.5"
-              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2 }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2 }}
             >
               Close & view pool
             </button>

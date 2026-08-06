@@ -87,7 +87,7 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
       onSave={handleSave}
     >
       {!fields.targetType && (
-        <p className="text-xs mb-4 px-3 py-2" style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}>
+        <p className="text-xs mb-4 px-3 py-2" style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}>
           Targeting (who the assessment is assigned to) is locked once the assessment leaves draft.
         </p>
       )}
@@ -95,27 +95,27 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
       {fields.blockedStudents && (
         <>
           <Field label="Add a student to the block list">
-            <div className="flex items-center gap-2 px-3 py-2" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-              <Search size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <div className="flex items-center gap-2 px-3 py-2" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+              <Search size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by name, email, or ID"
                 className="flex-1 text-xs bg-transparent outline-none"
-                style={{ color: '#0C0C0B' }}
+                style={{ color: 'var(--ef-ink)' }}
               />
             </div>
             {searchResults.length > 0 && (
-              <div className="mt-1" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+              <div className="mt-1" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
                 {searchResults.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => { setBlocked((prev) => [...prev, s.id]); setQuery(''); }}
-                    className="w-full text-left text-xs px-3 py-2 hover:bg-[#FAFAF8]"
-                    style={{ color: '#0C0C0B' }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-[var(--ef-canvas-raised)]"
+                    style={{ color: 'var(--ef-ink)' }}
                   >
                     <span>{s.name}</span>
-                    <span className="ml-2" style={{ color: '#6B6B66' }}>{s.email}</span>
+                    <span className="ml-2" style={{ color: 'var(--ef-text-muted)' }}>{s.email}</span>
                   </button>
                 ))}
               </div>
@@ -124,7 +124,7 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
 
           <Field label={`Blocked students (${blocked.length})`}>
             {blocked.length === 0 ? (
-              <p className="text-xs" style={{ color: '#6B6B66' }}>No students are blocked.</p>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>No students are blocked.</p>
             ) : (
               <div className="space-y-1">
                 {blocked.map((id) => {
@@ -133,16 +133,16 @@ export function AccessPanel({ assessment, open, onOpenChange, onSaved }: Props) 
                     <div
                       key={id}
                       className="flex items-center justify-between gap-2 px-3 py-2"
-                      style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FAFAF8' }}
+                      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-canvas-raised)' }}
                     >
                       <div className="min-w-0">
-                        <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{s?.name ?? id}</p>
-                        {s?.email && <p className="text-xs truncate" style={{ color: '#6B6B66' }}>{s.email}</p>}
+                        <p className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>{s?.name ?? id}</p>
+                        {s?.email && <p className="text-xs truncate" style={{ color: 'var(--ef-text-muted)' }}>{s.email}</p>}
                       </div>
                       <button
                         onClick={() => setBlocked((prev) => prev.filter((x) => x !== id))}
                         className="p-1 hover:opacity-70"
-                        style={{ color: '#6B6B66' }}
+                        style={{ color: 'var(--ef-text-muted)' }}
                         title="Remove"
                       >
                         <X size={12} strokeWidth={1.5} />

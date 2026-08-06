@@ -55,16 +55,16 @@ function validityLabel(v: Institute): string {
 function validityColor(v: Institute): string {
   const d = new Date(v.activeUntil);
   const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (days < 0) return '#9B2828';
-  if (days <= 7) return '#8B5E1A';
-  return '#6B6B66';
+  if (days < 0) return 'var(--ef-danger)';
+  if (days <= 7) return 'var(--ef-warning-strong)';
+  return 'var(--ef-text-muted)';
 }
 
 // ── Shared input style ────────────────────────────────────────────────────────
 
 const inputBase: React.CSSProperties = {
-  background: '#FAFAF8', border: '1px solid #E3E1DB',
-  color: '#0C0C0B', borderRadius: 2, width: '100%',
+  background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)',
+  color: 'var(--ef-ink)', borderRadius: 2, width: '100%',
   outline: 'none', fontSize: 13, padding: '9px 12px',
 };
 
@@ -73,20 +73,20 @@ function Field({
 }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="mb-5">
-      <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
+      <label className="block text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>{label}</label>
       {children}
-      {hint && <p className="mt-1.5 text-xs" style={{ color: '#6B6B66' }}>{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs" style={{ color: 'var(--ef-text-muted)' }}>{hint}</p>}
     </div>
   );
 }
 
 function focusStyle(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) {
-  e.target.style.borderColor = '#0C0C0B';
-  e.target.style.background = '#FFFFFF';
+  e.target.style.borderColor = 'var(--ef-ink)';
+  e.target.style.background = 'var(--ef-surface)';
 }
 function blurStyle(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) {
-  e.target.style.borderColor = '#E3E1DB';
-  e.target.style.background = '#FAFAF8';
+  e.target.style.borderColor = 'var(--ef-border)';
+  e.target.style.background = 'var(--ef-canvas-raised)';
 }
 
 // ── Validity picker ───────────────────────────────────────────────────────────
@@ -114,9 +114,9 @@ function ValidityFields({
             className="flex-1 text-xs py-2 transition-all"
             style={{
               borderRadius: 2,
-              border: validityType === t ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-              background: validityType === t ? '#0C0C0B' : '#FAFAF8',
-              color: validityType === t ? '#FFFFFF' : '#4A4A45',
+              border: validityType === t ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+              background: validityType === t ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+              color: validityType === t ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
               letterSpacing: '0.04em',
             }}
           >
@@ -267,15 +267,15 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
             initial={{ x: 48, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 48, opacity: 0 }}
             transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
             className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:w-[420px] sm:max-w-full"
-            style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
+            style={{ background: 'var(--ef-surface)', borderLeft: '1px solid var(--ef-border)' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0"
-              style={{ borderBottom: '1px solid #E3E1DB' }}>
-              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+              style={{ borderBottom: '1px solid var(--ef-border)' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
                 {isEdit ? 'EDIT INSTITUTE' : 'NEW INSTITUTE'}
               </p>
-              <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
+              <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
                 <X size={15} strokeWidth={1.5} />
               </button>
             </div>
@@ -294,26 +294,26 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
               {isEdit && (
                 <Field label="Institute ID" hint="Auto-generated · 6 characters · Cannot be changed.">
                   <div className="flex items-center gap-2 px-3 py-2.5"
-                    style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 14, letterSpacing: '0.16em', color: '#0C0C0B', fontWeight: 600 }}>
+                    style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 14, letterSpacing: '0.16em', color: 'var(--ef-ink)', fontWeight: 600 }}>
                       {editing!.code}
                     </span>
-                    <span className="ml-auto text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>IMMUTABLE</span>
+                    <span className="ml-auto text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>IMMUTABLE</span>
                   </div>
                 </Field>
               )}
 
               {!isEdit && (
                 <div className="mb-5 flex items-start gap-2 px-3 py-2.5"
-                  style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#6B6B66', marginTop: 5, flexShrink: 0 }} />
-                  <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+                  style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ef-text-muted)', marginTop: 5, flexShrink: 0 }} />
+                  <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                     A unique 6-character Institute ID will be generated automatically upon creation.
                   </p>
                 </div>
               )}
 
-              <div style={{ borderTop: '1px solid #F0EFEB', margin: '4px 0 20px' }} />
+              <div style={{ borderTop: '1px solid var(--ef-border-subtle)', margin: '4px 0 20px' }} />
 
               {/* Admin Name */}
               <Field label="Institute admin name" hint="This person will administer the institute portal.">
@@ -331,7 +331,7 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
                   style={inputBase} onFocus={focusStyle} onBlur={blurStyle} />
               </Field>
 
-              <div style={{ borderTop: '1px solid #F0EFEB', margin: '4px 0 20px' }} />
+              <div style={{ borderTop: '1px solid var(--ef-border-subtle)', margin: '4px 0 20px' }} />
 
               {/* Validity */}
               <ValidityFields
@@ -341,14 +341,14 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 px-4 sm:px-6 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+            <div className="flex-shrink-0 px-4 sm:px-6 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
               <AnimatePresence>
                 {formError && (
                   <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                     className="flex items-start gap-2 mb-3 px-3 py-2.5"
-                    style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-                    <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#9B2828', marginTop: 1, flexShrink: 0 }} />
-                    <p className="text-xs" style={{ color: '#9B2828' }}>{formError}</p>
+                    style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+                    <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', marginTop: 1, flexShrink: 0 }} />
+                    <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{formError}</p>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -356,7 +356,7 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
                 <button onClick={handleSubmit} disabled={saving}
                   className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
                   style={{
-                    background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF',
+                    background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)',
                     borderRadius: 2, letterSpacing: '0.03em',
                     cursor: saving ? 'not-allowed' : 'pointer',
                   }}>
@@ -366,9 +366,9 @@ function InstituteDrawer({ open, onClose, onSaved, editing }: DrawerProps) {
                 </button>
                 <button onClick={onClose} disabled={saving}
                   className="text-xs px-4 py-2.5 transition-colors"
-                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}>
+                  style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-surface)')}>
                   Cancel
                 </button>
               </div>
@@ -428,43 +428,43 @@ function ExtendValidityModal({
         initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-sm"
-        style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: '1px solid #E3E1DB' }}>
+          style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div>
-            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>EXTEND VALIDITY</p>
-            <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{institute.name}</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>EXTEND VALIDITY</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--ef-ink)' }}>{institute.name}</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
         <div className="px-5 py-5">
-          <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
-            Current expiry: <span style={{ color: '#0C0C0B' }}>{formatDate(institute.activeUntil)}</span>
+          <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>
+            Current expiry: <span style={{ color: 'var(--ef-ink)' }}>{formatDate(institute.activeUntil)}</span>
           </p>
           <ValidityFields
             validityType={validityType} setValidityType={setValidityType}
             activeUntil={activeUntil} setActiveUntil={setActiveUntil}
           />
           {error && (
-            <p className="text-xs mt-2 mb-1" style={{ color: '#9B2828' }}>{error}</p>
+            <p className="text-xs mt-2 mb-1" style={{ color: 'var(--ef-danger)' }}>{error}</p>
           )}
         </div>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button onClick={handleExtend} disabled={saving}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5"
             style={{
-              background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF',
+              background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)',
               borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer',
             }}>
             {saving ? <><Loader2 size={11} className="animate-spin" />Saving…</> : <><CalendarDays size={11} />Apply</>}
           </button>
           <button onClick={onClose} disabled={saving}
             className="text-xs px-4 py-2.5"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
             Cancel
           </button>
         </div>
@@ -477,7 +477,7 @@ function ExtendValidityModal({
 
 function SkeletonRow() {
   return (
-    <tr style={{ borderBottom: '1px solid #F0EFEB' }}>
+    <tr style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
       {[36, 28, 16, 20, 0].map((w, i) => (
         <td key={i} className="px-5 py-4">
           {w > 0 && <div className="h-3 rounded mb-1.5" style={{ width: `${w * 4}px`, background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />}
@@ -695,11 +695,11 @@ export function UserManagementPage() {
       >
         {/* ── Page header ── */}
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-6"
-          style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
+          style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
           <div>
-            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>WEB OWNER</p>
-            <h1 className="text-base" style={{ color: '#0C0C0B' }}>User Management</h1>
-            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
+            <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>WEB OWNER</p>
+            <h1 className="text-base" style={{ color: 'var(--ef-ink)' }}>User Management</h1>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
               Institute Control — create, control, disable, and remove.
             </p>
           </div>
@@ -709,18 +709,18 @@ export function UserManagementPage() {
             <div className="flex items-center gap-1.5 select-none">
               <div className="relative w-2 h-2 flex items-center justify-center">
                 <span className="absolute inline-flex w-2 h-2 rounded-full opacity-60"
-                  style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A' }} />
+                  style={{ background: 'var(--ef-success)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
+                <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-success)' }} />
               </div>
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
-                Live{syncDisplay && <span style={{ color: '#6B6B66' }}> · {syncDisplay}</span>}
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                Live{syncDisplay && <span style={{ color: 'var(--ef-text-muted)' }}> · {syncDisplay}</span>}
               </span>
             </div>
 
             {/* New institute */}
             <button onClick={openCreate}
               className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity"
-              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.03em' }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}
               onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.85')}
               onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}>
               <Plus size={12} strokeWidth={2} />New Institute
@@ -733,15 +733,15 @@ export function UserManagementPage() {
           {!loading && totalCount > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex items-center gap-4 flex-wrap mb-5">
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 {totalCount} {totalCount === 1 ? 'institute' : 'institutes'}
               </span>
-              <span style={{ color: '#E3E1DB' }}>·</span>
-              <span className="text-xs" style={{ color: '#2A6B3A' }}>{activeCount} active</span>
+              <span style={{ color: 'var(--ef-border)' }}>·</span>
+              <span className="text-xs" style={{ color: 'var(--ef-success)' }}>{activeCount} active</span>
               {disabledCount > 0 && (
                 <>
-                  <span style={{ color: '#E3E1DB' }}>·</span>
-                  <span className="text-xs" style={{ color: '#6B6B66' }}>{disabledCount} disabled</span>
+                  <span style={{ color: 'var(--ef-border)' }}>·</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{disabledCount} disabled</span>
                 </>
               )}
             </motion.div>
@@ -756,22 +756,22 @@ export function UserManagementPage() {
               exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="flex items-start gap-2.5 px-4 py-3 mb-4"
               style={{
-                background: emailNotice.ok ? '#F0F7F2' : '#FDF5F5',
-                border: `1px solid ${emailNotice.ok ? '#C6DECE' : '#F2CECE'}`,
+                background: emailNotice.ok ? 'var(--ef-success-bg-alt)' : 'var(--ef-danger-bg)',
+                border: `1px solid ${emailNotice.ok ? 'var(--ef-success-border-alt)' : 'var(--ef-danger-border)'}`,
                 borderRadius: 2,
               }}>
               {emailNotice.ok
-                ? <Mail size={13} strokeWidth={1.5} style={{ color: '#2A6B3A', marginTop: 1, flexShrink: 0 }} />
-                : <MailX size={13} strokeWidth={1.5} style={{ color: '#9B2828', marginTop: 1, flexShrink: 0 }} />}
+                ? <Mail size={13} strokeWidth={1.5} style={{ color: 'var(--ef-success)', marginTop: 1, flexShrink: 0 }} />
+                : <MailX size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', marginTop: 1, flexShrink: 0 }} />}
               <div>
-                <p className="text-xs" style={{ color: emailNotice.ok ? '#2A6B3A' : '#9B2828' }}>
+                <p className="text-xs" style={{ color: emailNotice.ok ? 'var(--ef-success)' : 'var(--ef-danger)' }}>
                   {emailNotice.message ?? (emailNotice.ok ? `Email sent to ${emailNotice.to}` : `Email failed for ${emailNotice.to}`)}
                 </p>
                 {!emailNotice.ok && emailNotice.error && (
                   <p className="text-xs mt-0.5" style={{ color: '#B06060' }}>{emailNotice.error}</p>
                 )}
               </div>
-              <button onClick={() => setEmailNotice(null)} className="ml-auto" style={{ color: '#6B6B66' }}>
+              <button onClick={() => setEmailNotice(null)} className="ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
                 <X size={12} strokeWidth={1.5} />
               </button>
             </motion.div>
@@ -783,11 +783,11 @@ export function UserManagementPage() {
           {fetchError && (
             <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="flex items-center gap-2 px-4 py-3 mb-6"
-              style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-              <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-              <p className="text-xs" style={{ color: '#9B2828' }}>{fetchError}</p>
+              style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+              <AlertTriangle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+              <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{fetchError}</p>
               <button onClick={() => fetchInstitutes()} className="ml-auto text-xs"
-                style={{ color: '#9B2828', textDecoration: 'underline' }}>Retry</button>
+                style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>Retry</button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -813,8 +813,8 @@ export function UserManagementPage() {
             they are legal answers, not engineering ones. */}
         {user?.uid && (
           <div className="mb-5 px-3 py-3"
-            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
-            <p className="text-xs mb-2" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>
+            style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
+            <p className="text-xs mb-2" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>
               ERASURE POLICY
             </p>
             <ErasurePolicyPanel webOwnerUid={user.uid} />
@@ -829,15 +829,15 @@ export function UserManagementPage() {
         </div>
 
         {/* ── Table ── */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3, overflow: 'hidden' }}>
           <div className="overflow-x-auto">
           <table className="w-full min-w-[720px]" style={{ borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+              <tr style={{ borderBottom: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
                 {['INSTITUTE', 'ADMINISTRATOR', 'STATUS', 'VALID UNTIL', ''].map((col, i) => (
                   <th key={i} className="text-left px-5 py-3 text-xs"
                     style={{
-                      color: '#6B6B66', letterSpacing: '0.08em', fontWeight: 400,
+                      color: 'var(--ef-text-muted)', letterSpacing: '0.08em', fontWeight: 400,
                       width: i === 0 ? '26%' : i === 1 ? '28%' : i === 2 ? '12%' : i === 3 ? '16%' : '18%',
                     }}>
                     {col}
@@ -853,16 +853,16 @@ export function UserManagementPage() {
                 <tr>
                   <td colSpan={5}>
                     <div className="flex flex-col items-center py-16">
-                      <Building2 size={30} strokeWidth={1} style={{ color: '#DDDBD5' }} />
-                      <p className="text-xs mt-4" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+                      <Building2 size={30} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
+                      <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
                         No institutes registered
                       </p>
-                      <p className="text-xs mt-1" style={{ color: '#DDDBD5' }}>Create one to begin.</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--ef-border-muted)' }}>Create one to begin.</p>
                       <button onClick={openCreate}
                         className="flex items-center gap-1.5 text-xs px-4 py-2 mt-6"
-                        style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF' }}
-                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}>
+                        style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}>
                         <Plus size={11} strokeWidth={2} />New Institute
                       </button>
                     </div>
@@ -878,8 +878,8 @@ export function UserManagementPage() {
                 return (
                   <motion.tr key={institute.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                     style={{
-                      borderBottom: '1px solid #F0EFEB',
-                      background: isConfirmingDelete ? '#FDF5F5' : 'transparent',
+                      borderBottom: '1px solid var(--ef-border-subtle)',
+                      background: isConfirmingDelete ? 'var(--ef-danger-bg)' : 'transparent',
                       transition: 'background 0.18s',
                     }}>
 
@@ -891,35 +891,35 @@ export function UserManagementPage() {
                       >
                         <div>
                           <p className="text-sm group-hover:underline"
-                            style={{ color: '#0C0C0B', lineHeight: 1.4, textUnderlineOffset: 3 }}>
+                            style={{ color: 'var(--ef-ink)', lineHeight: 1.4, textUnderlineOffset: 3 }}>
                             {institute.name}
                           </p>
                           <p className="text-xs mt-0.5"
-                            style={{ color: '#6B6B66', letterSpacing: '0.12em', fontFamily: 'monospace' }}>
+                            style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.12em', fontFamily: 'monospace' }}>
                             {institute.code}
                           </p>
                         </div>
                         <ChevronRight size={12} strokeWidth={1.5}
                           className="opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 flex-shrink-0"
-                          style={{ color: '#6B6B66' }} />
+                          style={{ color: 'var(--ef-text-muted)' }} />
                       </button>
                     </td>
 
                     {/* Administrator */}
                     <td className="px-5 py-3.5">
                       <p className="text-xs" style={{ color: '#2C2C2A' }}>{institute.adminName}</p>
-                      <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{institute.adminEmail}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{institute.adminEmail}</p>
                     </td>
 
                     {/* Status badge */}
                     <td className="px-5 py-3.5">
                       <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                         style={institute.status === 'active'
-                          ? { background: '#F0F7F2', color: '#2A6B3A', border: '1px solid #C6DECE', borderRadius: 2 }
-                          : { background: '#F5F5F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                          ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
+                          : { background: '#F5F5F3', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                         <span style={{
                           width: 5, height: 5, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
-                          background: institute.status === 'active' ? '#2A6B3A' : '#6B6B66',
+                          background: institute.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
                         }} />
                         {institute.status === 'active' ? 'Active' : 'Disabled'}
                       </span>
@@ -930,7 +930,7 @@ export function UserManagementPage() {
                       <p className="text-xs" style={{ color: validityColor(institute), fontVariantNumeric: 'tabular-nums' }}>
                         {validityLabel(institute)}
                       </p>
-                      <p className="text-xs mt-0.5" style={{ color: '#6B6B66', letterSpacing: '0.04em' }}>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.04em' }}>
                         {institute.validityType?.toUpperCase()}
                       </p>
                     </td>
@@ -963,8 +963,8 @@ export function UserManagementPage() {
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <ShieldAlert size={11} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />
-                            <span className="text-xs" style={{ color: '#9B2828', letterSpacing: '0.04em' }}>
+                            <ShieldAlert size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
+                            <span className="text-xs" style={{ color: 'var(--ef-danger)', letterSpacing: '0.04em' }}>
                               Enter your password to delete
                             </span>
                           </div>
@@ -983,23 +983,23 @@ export function UserManagementPage() {
                               type="button"
                               onClick={() => setDeletePassVisible((v) => !v)}
                               className="absolute right-2 top-1/2 -translate-y-1/2"
-                              style={{ color: '#6B6B66' }}>
+                              style={{ color: 'var(--ef-text-muted)' }}>
                               {deletePassVisible ? <EyeOff size={12} strokeWidth={1.5} /> : <Eye size={12} strokeWidth={1.5} />}
                             </button>
                           </div>
                           {deletePassError && (
-                            <p className="text-xs" style={{ color: '#9B2828' }}>{deletePassError}</p>
+                            <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{deletePassError}</p>
                           )}
                           <div className="flex items-center gap-2">
                             <button onClick={handleDeleteAttempt} disabled={deleteLoading}
                               className="flex items-center gap-1 text-xs px-2.5 py-1.5"
-                              style={{ background: '#9B2828', color: '#FFFFFF', borderRadius: 2, cursor: deleteLoading ? 'not-allowed' : 'pointer' }}>
+                              style={{ background: 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2, cursor: deleteLoading ? 'not-allowed' : 'pointer' }}>
                               {deleteLoading ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} strokeWidth={1.5} />}
                               {deleteLoading ? 'Deleting…' : 'Delete'}
                             </button>
                             <button onClick={() => { setDeletingId(null); setDeletePassError(''); }} disabled={deleteLoading}
                               className="text-xs px-2.5 py-1.5"
-                              style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                              style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
                               Cancel
                             </button>
                           </div>
@@ -1057,7 +1057,7 @@ export function UserManagementPage() {
         </div>
 
         {!loading && institutes.length > 0 && (
-          <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>
+          <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>
             Data refreshes automatically every 5 seconds.
           </p>
         )}
@@ -1102,12 +1102,12 @@ function ActionButton({
       disabled={disabled}
       title={title}
       className="p-2 rounded transition-all"
-      style={{ color: '#6B6B66', cursor: disabled ? 'not-allowed' : 'pointer' }}
+      style={{ color: 'var(--ef-text-muted)', cursor: disabled ? 'not-allowed' : 'pointer' }}
       onMouseEnter={(e) => {
-        if (!disabled) (e.currentTarget as HTMLElement).style.color = danger ? '#9B2828' : '#0C0C0B';
+        if (!disabled) (e.currentTarget as HTMLElement).style.color = danger ? 'var(--ef-danger)' : 'var(--ef-ink)';
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.color = '#6B6B66';
+        (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)';
       }}
     >
       {children}

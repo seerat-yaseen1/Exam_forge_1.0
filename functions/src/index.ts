@@ -5905,6 +5905,32 @@ export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
       updatedAt: nowIso,
     });
 
+    // M5 (audit 2026-08-06): shadow audit on the highest-frequency write in
+    // the system.
+    //
+    // The `decided` set is every verdict kind, which makes the VERDICT half of
+    // this call a no-op by construction — and that is honest rather than lazy.
+    // saveAnswerNoAdvance makes no timing decision to compare against: it
+    // persists a selection and deliberately declines to advance, which is why
+    // it exists separately from submitAnswerAndAdvance. Asserting a narrower
+    // set would manufacture disagreements out of a function that never
+    // disagreed, exactly the failure this helper's own comments record twice.
+    // submitAnswerAndAdvance passes the full set for the same reason.
+    //
+    // What is NOT a no-op is checkTimingInvariants, which runs against stored
+    // state regardless of `decided`. That is the half worth having here: this
+    // is the callable a live sitting hits most often, so it is the earliest
+    // and cheapest place a drifting clock becomes visible. No extra read —
+    // `attempt` and `assessment` are already in hand.
+    //
+    // No projection: the write touches answers and updatedAt, never a clock,
+    // so stored state and post-write state agree on everything the resolver
+    // reads.
+    auditTiming('saveAnswerNoAdvance', attemptId,
+      attempt as unknown as Record<string, unknown>,
+      assessment as unknown as Record<string, unknown> | undefined,
+      ['question', 'section', 'break', 'choose', 'ended', 'not_started']);
+
     // savedAt is echoed back so the client's durability layer (Phase 4.1) can
     // mark this exact selection confirmed rather than assuming the request it
     // sent was the one that landed.
@@ -7142,6 +7168,15 @@ export const freezeAttempt = onCall<FreezeAttemptData>(
         actorRole: result.actor.role,
         reason: reason ?? null,
       });
+      // M5: a freeze opens a ledger entry, which is the input to every clock
+      // the resolver computes. INV-4a ("freeze credit cannot create time") is
+      // the invariant most likely to break here and least likely to be
+      // noticed, because the damage shows up later as a student with more
+      // time than anyone granted. No verdict comparison — a freeze is not a
+      // timing decision — so the full kind set, and the invariant check is
+      // the whole point.
+      await auditTimingFromStore(db, 'freezeAttempt', attemptId,
+        ['question', 'section', 'break', 'choose', 'ended', 'not_started']);
     }
     return { ok: true, ...result };
   },
@@ -7286,6 +7321,14 @@ export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
       reason: note ?? null,
       impact: { elapsedMs: result.elapsedMs, grantedMs: result.grantedMs },
     });
+
+    // M5: the sharper half of the freeze pair. This is where credit is
+    // actually GRANTED — a human choosing a number between 0 and elapsed —
+    // and where INV-4a is decided. The Math.min(granted, elapsed) cap and the
+    // per-clock penalty caps run inside the transaction above; this is the
+    // independent check that what landed in the document agrees with them.
+    await auditTimingFromStore(db, 'unfreezeAttempt', attemptId,
+      ['question', 'section', 'break', 'choose', 'ended', 'not_started']);
 
     return {
       ok: true,
@@ -8358,6 +8401,52 @@ function auditTiming(
     }
   } catch (e) {
     console.warn(`[timing/${where}] shadow audit failed`, e);
+  }
+}
+
+/**
+ * auditTiming against COMMITTED state, re-read from the store (M5, audit
+ * 2026-08-06).
+ *
+ * The sibling above takes documents the caller already holds, which is right
+ * for the callables that hold a plain post-write projection. The freeze pair
+ * cannot use it: openFreezeUpdates returns `freezes: FieldValue.arrayUnion(…)`,
+ * so spreading its patch over the in-memory attempt puts a SENTINEL where the
+ * ledger should be and the resolver reads garbage. Rebuilding the merged
+ * ledger here instead would duplicate openFreezeUpdates' logic in a second
+ * place that has to stay in step with it — the exact drift this file warns
+ * about repeatedly.
+ *
+ * Re-reading sidesteps both, and is a better fit besides. auditTiming's own
+ * rule is that invariants are checked against stored state, "the point is to
+ * detect what is really in the database" — after a commit, that is precisely
+ * what a re-read returns and what a projection only approximates.
+ *
+ * Two extra reads, paid only on freeze and unfreeze: rare, staff-initiated,
+ * and already doing a transaction plus an audit-row write. Not a cost worth
+ * carrying on an answer-submission path, which is why the frequent callables
+ * use the in-memory sibling.
+ *
+ * Fails soft and awaits nothing the caller needs — a broken shadow audit must
+ * never fail a freeze.
+ */
+async function auditTimingFromStore(
+  db: FirebaseFirestore.Firestore,
+  where: string,
+  attemptId: string,
+  decided: string[],
+): Promise<void> {
+  try {
+    const aSnap = await db.collection('attempts').doc(attemptId).get();
+    if (!aSnap.exists) return;
+    const attemptRaw = aSnap.data() as Record<string, unknown>;
+    const assessmentId = attemptRaw.assessmentId as string | undefined;
+    if (!assessmentId) return;
+    const asmtSnap = await db.collection('assessments').doc(assessmentId).get();
+    if (!asmtSnap.exists) return;
+    auditTiming(where, attemptId, attemptRaw, asmtSnap.data() as Record<string, unknown>, decided);
+  } catch (e) {
+    console.warn(`[timing/${where}] shadow audit (from store) failed`, e);
   }
 }
 

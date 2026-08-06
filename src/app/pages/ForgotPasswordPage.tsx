@@ -3,12 +3,14 @@ import { Link } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
 
 type Stage = 'input' | 'sent';
 
 export function ForgotPasswordPage() {
-  const { requestPasswordReset, platformSettings } = useAuth();
+  const { requestPasswordReset } = useAuth();
+  const { platformSettings } = usePlatformSettings();
 
   const [stage, setStage] = useState<Stage>('input');
   const [email, setEmail] = useState('');

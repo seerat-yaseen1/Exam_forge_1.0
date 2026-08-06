@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router';
 import { motion } from 'motion/react';
 import { Eye, EyeOff, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
-import { useAuth } from '../../context/AuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
 
 const inputStyle: React.CSSProperties = {
@@ -55,7 +55,7 @@ export function InstituteResetPasswordPage() {
   const navigate  = useNavigate();
   const location  = useLocation();
   const { resetPassword } = useInstituteAuth();
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
 
   // Pre-fill from navigation state (from forgot page)
   const prefill = location.state as { instituteCode?: string } | null;

@@ -3,7 +3,7 @@ import { useNavigate, Navigate, Link } from 'react-router';
 import { motion } from 'motion/react';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
-import { useAuth } from '../../context/AuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
 
 const inputStyle: React.CSSProperties = {
@@ -20,7 +20,7 @@ const inputStyle: React.CSSProperties = {
 export function InstituteLoginPage() {
   const navigate = useNavigate();
   const { session, login } = useInstituteAuth();
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
 
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');

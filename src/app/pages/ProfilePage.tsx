@@ -2,9 +2,11 @@ import { useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Upload, X, Check, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 
 export function ProfilePage() {
-  const { user, platformSettings, updatePlatformSettings } = useAuth();
+  const { user } = useAuth();
+  const { platformSettings, updatePlatformSettings } = usePlatformSettings();
 
   const [platformName, setPlatformName] = useState(platformSettings.name);
   const [saving, setSaving] = useState(false);

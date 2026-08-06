@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Loader2, Mail } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
-import { useAuth } from '../../context/AuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
 
 const inputStyle: React.CSSProperties = {
@@ -30,7 +30,7 @@ type Stage = 'input' | 'sent';
 export function InstituteForgotPasswordPage() {
   const navigate = useNavigate();
   const { requestPasswordReset } = useInstituteAuth();
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
 
   const [stage, setStage]                   = useState<Stage>('input');
   const [adminEmail, setAdminEmail]         = useState('');

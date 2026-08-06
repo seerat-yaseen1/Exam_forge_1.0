@@ -3,7 +3,7 @@ import { useNavigate, Navigate } from 'react-router';
 import { motion } from 'motion/react';
 import { Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
-import { useAuth } from '../../context/AuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
 
 const inputStyle: React.CSSProperties = {
@@ -54,7 +54,7 @@ function StrengthBar({ password }: { password: string }) {
 export function InstituteChangePasswordPage() {
   const navigate = useNavigate();
   const { session, changePassword } = useInstituteAuth();
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
 
   const [newPassword, setNewPassword]         = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

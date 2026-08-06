@@ -3,6 +3,7 @@ import { useNavigate, Link, Navigate } from 'react-router';
 import { motion } from 'motion/react';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
 
 const inputStyle: React.CSSProperties = {
@@ -18,7 +19,8 @@ const inputStyle: React.CSSProperties = {
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { user, login, platformSettings, mfaPending, resolveMfaSignIn } = useAuth();
+  const { user, login, mfaPending, resolveMfaSignIn } = useAuth();
+  const { platformSettings } = usePlatformSettings();
 
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');

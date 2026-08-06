@@ -3,7 +3,7 @@ import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Lock, LogOut, Building2, LayoutDashboard, BookOpen, ClipboardList, Flag } from 'lucide-react';
 import { useFacultyAuth } from '../context/FacultyAuthContext';
-import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
 import { RouteFallback } from '../components/RouteFallback';
 
@@ -175,7 +175,7 @@ const SIDEBAR_W = 180;
 
 export function FacultyDashboardLayout() {
   const { session, instituteLogo, logoLoading, loading } = useFacultyAuth();
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 

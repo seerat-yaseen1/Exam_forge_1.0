@@ -1,4 +1,4 @@
-import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 
 interface PlatformLogoProps {
   size?: 'sm' | 'md' | 'lg';
@@ -39,7 +39,7 @@ export function PlatformLogo({
   staticLogoUrl,
   staticName,
 }: PlatformLogoProps) {
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
   const { px, nameClass } = sizeMap[size];
 
   // Allow override for contexts where auth may not resolve yet (e.g. login screen)

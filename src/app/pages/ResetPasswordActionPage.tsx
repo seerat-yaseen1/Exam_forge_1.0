@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { Eye, EyeOff, Loader2, CheckCircle2, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
-import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
 
 // ══════════════════════════════════════════════════════════════════
@@ -83,7 +83,7 @@ const LOGIN_PATH: Record<Role, string> = {
 export function ResetPasswordActionPage({ role }: { role: Role }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
 
   const oobCode = params.get('oobCode') ?? '';
 

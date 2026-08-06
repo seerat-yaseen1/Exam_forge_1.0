@@ -24,7 +24,11 @@ import type {
 export type WebOwner = {
   email: string;
   name: string;
-  password: string;
+  // N8 (audit 2026-08-06): `password` removed. Authentication is Firebase
+  // Auth; nothing in the codebase has ever READ this field. Leaving it
+  // declared was worse than dead weight — it is non-optional, so any caller
+  // constructing one of these was REQUIRED by the compiler to supply a
+  // plaintext password, which is precisely how one ends up in Firestore.
   resetCode?: string;
   resetExpiry?: string;
 };
@@ -92,7 +96,11 @@ export type QuestionRightsCeiling = {
 export type InstituteCredentials = {
   instituteId: string;
   email: string;
-  password: string;
+  // N8 (audit 2026-08-06): `password` removed. Authentication is Firebase
+  // Auth; nothing in the codebase has ever READ this field. Leaving it
+  // declared was worse than dead weight — it is non-optional, so any caller
+  // constructing one of these was REQUIRED by the compiler to supply a
+  // plaintext password, which is precisely how one ends up in Firestore.
   firstLoginRequired: boolean;
 };
 
@@ -159,7 +167,11 @@ export type FacultyQuestionRights = {
 export type FacultyCredentials = {
   facultyId: string;
   email: string;
-  password: string;
+  // N8 (audit 2026-08-06): `password` removed. Authentication is Firebase
+  // Auth; nothing in the codebase has ever READ this field. Leaving it
+  // declared was worse than dead weight — it is non-optional, so any caller
+  // constructing one of these was REQUIRED by the compiler to supply a
+  // plaintext password, which is precisely how one ends up in Firestore.
   firstLoginRequired: boolean;
 };
 
@@ -197,7 +209,16 @@ export type Student = {
 export type StudentCredentials = {
   studentId: string;
   email: string;
-  password: string;
+  // N8 (audit 2026-08-06): `password` removed. Authentication is Firebase
+  // Auth; nothing in the codebase has ever READ this field. Leaving it
+  // declared was worse than dead weight — it is non-optional, so any caller
+  // constructing one of these was REQUIRED by the compiler to supply a
+  // plaintext password, which is precisely how one ends up in Firestore.
+  //
+  // NOTE: this stops NEW plaintext being written. It does not touch documents
+  // that already carry one — see functions/scripts/purge-legacy-credentials.ts,
+  // which strips the field from existing docs while keeping
+  // firstLoginRequired intact.
   firstLoginRequired: boolean;
 };
 
@@ -377,25 +398,8 @@ export async function getInstituteByCode(code: string): Promise<Institute | null
 // INSTITUTE CREDENTIALS
 // ──────────────────────────────────────────────────────────────────
 
-export async function getInstituteCredentials(
-  instituteId: string
-): Promise<InstituteCredentials | null> {
-  return firestoreGet<InstituteCredentials>('instituteCredentials', instituteId);
-}
 
-export async function setInstituteCredentials(
-  instituteId: string,
-  data: InstituteCredentials
-): Promise<void> {
-  return firestoreSet<InstituteCredentials>('instituteCredentials', instituteId, data);
-}
 
-export async function updateInstituteCredentials(
-  instituteId: string,
-  data: Partial<InstituteCredentials>
-): Promise<void> {
-  return firestoreUpdate<InstituteCredentials>('instituteCredentials', instituteId, data);
-}
 
 // ──────────────────────────────────────────────────────────────────
 // INSTITUTE LOGO

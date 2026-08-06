@@ -4597,6 +4597,33 @@ const VIOLATION_COUNTER_S = {
 const WARNING_VIOLATION_TYPES_S = new Set(['tab_switch', 'focus_loss', 'fullscreen_exit']);
 const MAX_INTEGRITY_WARNINGS_S = 3;
 /**
+ * Ceiling on STORED violation events per attempt (N5, audit 2026-08-06).
+ *
+ * integrityLog.violations grew by arrayUnion with no bound. Each entry carries
+ * a unique `timestamp`, so arrayUnion never de-duplicates — every call
+ * appends. At roughly 550 bytes per entry (type, timestamp, up to 500
+ * characters of detail, warningNumber) the array alone approaches Firestore's
+ * 1 MiB DOCUMENT limit somewhere under two thousand events.
+ *
+ * The consequence is not a large document, it is a DEAD ATTEMPT. Once the doc
+ * hits the limit EVERY subsequent write to it fails — answer autosave, section
+ * transitions, grading. A student would lose their exam, and the attempt could
+ * become impossible to finalise.
+ *
+ * It does not take an attacker. focus_loss fires on any window blur and
+ * tab_switch on any visibility change, so a flaky machine or an OS throwing
+ * notifications generates these continuously; a script generates them as fast
+ * as the network allows. The 3-warning termination does not bound it either,
+ * because it only counts WARNING types and logViolation accepts others.
+ *
+ * 500 is far past any honest sitting and far short of the limit. The COUNTERS
+ * are deliberately left uncapped: they are increments, they cost no space, and
+ * they are what the examiner's verdict reads. So an attempt that blows through
+ * the ceiling still reports its true total — the aggregate stays truthful and
+ * only the per-event detail stops accumulating.
+ */
+const MAX_VIOLATION_EVENTS_S = 500;
+/**
  * Record an integrity violation. (D-09, master plan Phase 2.)
  *
  * WHY THIS IS A CALLABLE NOW
@@ -4654,7 +4681,12 @@ exports.logViolation = (0, https_1.onCall)(EXAM_HOT_PATH, async (request) => {
         'integrityLog.totalViolations': firestore_1.FieldValue.increment(1),
         updatedAt: nowIso,
     };
-    if (!skipEventDetail) {
+    // Counters always increment; only the detail array is bounded. Read from
+    // the pre-write snapshot already in hand, so this costs no extra read.
+    const storedEvents = Array.isArray(att.integrityLog?.violations)
+        ? att.integrityLog.violations.length
+        : 0;
+    if (!skipEventDetail && storedEvents < MAX_VIOLATION_EVENTS_S) {
         updates['integrityLog.violations'] = firestore_1.FieldValue.arrayUnion({
             type,
             timestamp: nowIso,

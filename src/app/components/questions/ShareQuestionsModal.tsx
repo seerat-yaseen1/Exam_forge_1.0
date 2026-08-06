@@ -38,6 +38,15 @@ export function ShareQuestionsModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Escape closes. The backdrop click did this for mouse users from the
+  // start; keyboard users had only the header's close button, which meant
+  // tabbing to it through the whole form.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   useEffect(() => {
     let alive = true;
     getFacultyByInstitute(instituteId)
@@ -88,10 +97,25 @@ export function ShareQuestionsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(12,12,11,0.4)' }} onClick={onClose}>
+    // Audit 2026-08-06: the backdrop was flagged as an onClick div without a
+    // role. Giving it one would be wrong — a click-anywhere-to-dismiss
+    // backdrop is decoration, and announcing it as a button offers screen
+    // reader users a control that duplicates the close button already in the
+    // header. The actual defect was that dismissal was MOUSE-ONLY: there was
+    // no Escape handler, and nothing marked the panel as a dialog. Both are
+    // fixed here; the backdrop keeps its click and stays unannounced
+    // (aria-hidden is not used — it would hide the dialog nested inside it).
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(12,12,11,0.4)' }}
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-md mx-4"
         style={{ background: '#FFFFFF', borderRadius: 4, border: '1px solid #E3E1DB', maxHeight: '80vh', overflow: 'auto' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Share ${questionIds.length} question${questionIds.length !== 1 ? 's' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #F0EFEB' }}>

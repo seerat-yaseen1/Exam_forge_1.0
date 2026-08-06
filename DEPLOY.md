@@ -11,7 +11,7 @@
 ```bash
 cd functions
 npm install
-npm test          # all five suites must be green before you deploy
+npm test          # all six suites must be green before you deploy
 
 cd ..
 firebase deploy --only functions --project YOUR_PROJECT_ID

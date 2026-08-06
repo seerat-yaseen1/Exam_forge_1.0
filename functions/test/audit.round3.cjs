@@ -746,7 +746,11 @@ async function B16() {
     + 'checks the callables refuse to act on them. This harness has no rules engine, so it '
     + 'cannot prove the write is refused. That half now has its own suite: test/rules.suite.cjs '
     + 'runs the real firestore.rules against the emulator (R-01 covers C1, R-02 covers H1). '
-    + 'The two are complementary and both are needed — keep them in step.',
+    + 'The two are complementary and both are needed — keep them in step. '
+    + 'Separately: B-13 and B-14 simulate races SEQUENTIALLY, because fakeFirestore '
+    + 'commits transactions without a read set. Removing startExam\'s transactional '
+    + 'guard lets eight duplicate attempts through and BOTH still pass — '
+    + 'test/concurrency.suite.cjs is what catches that.',
   );
 }
 

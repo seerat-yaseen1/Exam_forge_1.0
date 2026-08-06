@@ -52,7 +52,7 @@ git diff --stat $BASE..HEAD -- \
 
 ```bash
 npx tsc --noEmit                    # frontend: expect 0 errors
-cd functions && npm install && npm test   # expect seven green suites
+cd functions && npm install && npm test   # expect eight green suites
 ```
 
 CI runs both on every pull request (`.github/workflows/ci.yml`), so a green PR has already
@@ -123,7 +123,7 @@ firebase deploy --only functions:gradeAttempt --project YOUR_PROJECT_ID
 
 All 48 exports live in one `index.ts` and share the helpers the fixes changed — `toCoreAttempt`, `examContractFor`, `computeAttemptLocks`, `assertSequentialAnswerWindowOpen`, `awardFor`. Deploying a subset leaves the rest running an older copy of those helpers, and the failure mode is precisely the class of bug this audit spent two rounds removing: **two paths computing the same fact and disagreeing.**
 
-`firebase.json` already runs `npm run build` as a `predeploy` step, so the TypeScript is compiled fresh on every deploy. You do not need to build by hand, and you do not need `functions/lib/` committed (it is now gitignored — see §7).
+`firebase.json` already runs `npm run build` as a `predeploy` step, so the TypeScript is compiled fresh on every deploy. You do not need to build by hand.
 
 ---
 
@@ -147,7 +147,13 @@ This repo deploys its frontend through Vercel (`vercel.json`), not Firebase Host
 
 ## 7 · One repo-hygiene change to be aware of
 
-`functions/lib/` is now **gitignored and untracked**.
+> **Correction (2026-08-06):** this section describes a state the repo is not in.
+> `functions/lib/` is **tracked**, not gitignored — `git ls-files functions/lib/`
+> lists it and `git check-ignore` does not match it. Either the change was
+> reverted by a later Figma Make push or it was never applied. The reasoning
+> below is still sound and the decision is still worth making; treat it as a
+> proposal rather than a description. Until it is applied, `functions/lib/`
+> must be rebuilt and committed alongside `functions/src/` or the two drift.
 
 It is generated output. Because the project's source of truth is the Figma Make file, every *"Update files from Figma Make"* push deleted it and every local build recreated it — an ~8,000-line add/delete churn on alternate commits that also buried real source diffs inside it.
 

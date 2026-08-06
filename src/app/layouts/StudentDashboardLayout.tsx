@@ -3,7 +3,7 @@ import { Outlet, useNavigate, Navigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Lock, LogOut, Building2, LayoutDashboard, ClipboardList } from 'lucide-react';
 import { useStudentAuth } from '../context/StudentAuthContext';
-import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
 import { RouteFallback } from '../components/RouteFallback';
 
@@ -143,7 +143,7 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
 
 export function StudentDashboardLayout() {
   const { session, instituteLogo, logoLoading, loading } = useStudentAuth();
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);

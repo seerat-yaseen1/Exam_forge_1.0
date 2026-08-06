@@ -17,11 +17,12 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
 import { revokeOtherSessionsKeepCurrent } from '../../lib/sessionSecurity';
+import { usePlatformSettings } from './PlatformSettingsContext';
 
-export interface PlatformSettings {
-  name: string;
-  logoUrl: string | null;
-}
+// M4: the type now lives with the provider that owns it. Re-exported so the
+// several files that import it from here keep compiling — moving branding out
+// of this context should not be a rename tour through unrelated screens.
+export type { PlatformSettings } from './PlatformSettingsContext';
 
 export interface AuthUser {
   email: string;
@@ -32,7 +33,6 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  platformSettings: PlatformSettings;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -42,7 +42,6 @@ interface AuthContextType {
   resetPassword: (email: string, code: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   verifyPassword: (password: string) => Promise<boolean>;
-  updatePlatformSettings: (settings: Partial<PlatformSettings>) => void;
 
   // ── Two-factor authentication (TOTP) — webOwner only ──
   /** True once a login hits the MFA challenge; the login page shows the code step. */
@@ -83,10 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const mfaResolverRef = useRef<MultiFactorResolver | null>(null);
   // Holds the in-progress TOTP secret between startMfaEnrollment and confirm.
   const totpSecretRef = useRef<TotpSecret | null>(null);
-  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
-    name: 'STRATUM',
-    logoUrl: null,
-  });
+  // M4: consumed, not owned. startMfaEnrollment needs the platform name for
+  // the authenticator QR label, which is the only reason this context still
+  // touches branding at all.
+  const { platformSettings } = usePlatformSettings();
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
@@ -349,16 +348,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const updatePlatformSettings = useCallback((settings: Partial<PlatformSettings>) => {
-    setPlatformSettings((prev) => ({ ...prev, ...settings }));
-  }, []);
-
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
-        platformSettings,
         login,
         logout,
         requestPasswordReset,
@@ -371,7 +365,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         confirmMfaEnrollment,
         disableMfa,
         resolveMfaSignIn,
-        updatePlatformSettings,
       }}
     >
       {children}

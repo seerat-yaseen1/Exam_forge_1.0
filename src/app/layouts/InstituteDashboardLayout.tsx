@@ -3,7 +3,7 @@ import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Upload, LogOut, Building2, Loader2, LayoutDashboard, BookOpen, ClipboardList, Flag } from 'lucide-react';
 import { useInstituteAuth } from '../context/InstituteAuthContext';
-import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
 import { RouteFallback } from '../components/RouteFallback';
 
@@ -209,7 +209,7 @@ const SIDEBAR_W = 180;
 
 export function InstituteDashboardLayout() {
   const { session, logo, logoLoading, uploadLogo, loading } = useInstituteAuth();
-  const { platformSettings } = useAuth();
+  const { platformSettings } = usePlatformSettings();
   const location = useLocation();
 
   const [menuOpen, setMenuOpen]       = useState(false);

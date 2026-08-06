@@ -3,12 +3,14 @@ import { Link, useNavigate, useLocation, Navigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { resetPassword, platformSettings } = useAuth();
+  const { resetPassword } = useAuth();
+  const { platformSettings } = usePlatformSettings();
 
   // Pre-filled from forgot password page via route state
   const prefillEmail: string = location.state?.email ?? '';

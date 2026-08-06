@@ -189,6 +189,13 @@ class Query {
   }
   where(field, op, value) { return new Query(this._db, this._coll, [...this._filters, [field, op, value]], this._lim); }
   limit(n) { return new Query(this._db, this._coll, this._filters, n); }
+  // NO-OP, deliberately: every suite here asserts on SETS of documents, never
+  // on their order, so implementing a comparator would add surface without
+  // adding coverage. It is recorded rather than silently accepted because it
+  // is not free — getAllocationPreviewPage (index.ts:10411) pages with
+  // orderBy('__name__') + startAfter(), and startAfter does not exist on this
+  // class at all, so that callable would throw here rather than page. It has
+  // no test today. Anything written to cover it needs the real emulator.
   orderBy() { return this; }
   async get() {
     const prefix = `${this._coll}/`;
@@ -206,6 +213,16 @@ class Query {
         else if (op === '>=') ok = ok && cur !== undefined && n(cur) >= n(v);
         else if (op === 'in') ok = ok && Array.isArray(v) && v.includes(cur);
         else if (op === 'array-contains') ok = ok && Array.isArray(cur) && cur.includes(v);
+        // Audit 2026-08-06: this chain used to have no else, so an operator it
+        // did not implement — '!=', 'not-in', 'array-contains-any' — left `ok`
+        // untouched and the filter silently did NOTHING. The query then
+        // returned every document in the collection, and a probe asserting
+        // "the wrong rows are excluded" passed by getting them all back. A
+        // false GREEN is worse than a missing feature, so an unsupported
+        // operator now fails loudly. Zero production call sites use these
+        // three today; this exists so that adding one cannot quietly weaken
+        // whichever suite covers it.
+        else throw new Error(`fakeFirestore: unsupported query operator '${op}' on field '${f}'`);
         if (!ok) break;
       }
       if (ok) docs.push(new Snap(path.split('/').pop(), data, new DocRef(this._db, path)));

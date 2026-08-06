@@ -330,9 +330,15 @@ export function FullscreenRequiredOverlay({ onReturnFullscreen }: FullscreenProp
 interface TerminatedProps {
   reason: string;
   onExitView: () => void;
+  /**
+   * H2 (audit 2026-08-06): the final flush before grading rejected, so some
+   * answers the student typed may never have reached the server. Swaps the
+   * reassurance below for the truth — see the note on the panel.
+   */
+  answersMayBeUnsaved?: boolean;
 }
 
-export function TerminatedOverlay({ reason, onExitView }: TerminatedProps) {
+export function TerminatedOverlay({ reason, onExitView, answersMayBeUnsaved }: TerminatedProps) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -353,14 +359,39 @@ export function TerminatedOverlay({ reason, onExitView }: TerminatedProps) {
         <p className="text-sm mb-6" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
           {reason}
         </p>
+        {/* H2 (audit 2026-08-06): this panel used to promise "your answers
+            have been saved and submitted" UNCONDITIONALLY, including on the
+            path where the final flush had just failed. That is the worst
+            possible moment to be reassuring: termination is the one outcome a
+            student is least placed to dispute, and telling them their work was
+            saved removes the very reason they would raise it. When the flush
+            rejects, say so, and tell them what to do about it. */}
         <div
           className="px-4 py-4 mb-8"
-          style={{ border: '1px solid #2C2C2A', borderRadius: 3 }}
+          style={{
+            border: `1px solid ${answersMayBeUnsaved ? '#9B2828' : '#2C2C2A'}`,
+            borderRadius: 3,
+          }}
         >
           <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
-            Your answers up to this point have been saved and submitted. Your examiner
-            will be able to review your session including all integrity events logged
-            during this exam.
+            {answersMayBeUnsaved ? (
+              <>
+                <span style={{ color: '#C86B6B' }}>
+                  Your last answers may not have been saved.
+                </span>{' '}
+                The final save failed as your exam was terminated, so answers you
+                entered shortly beforehand may be missing from your submission.
+                Report this to your examiner or invigilator now — your session,
+                including this failure and all integrity events logged during the
+                exam, is available for them to review.
+              </>
+            ) : (
+              <>
+                Your answers up to this point have been saved and submitted. Your
+                examiner will be able to review your session including all integrity
+                events logged during this exam.
+              </>
+            )}
           </p>
         </div>
         <button

@@ -45,6 +45,7 @@ require('firebase-admin/app').initializeApp = () => ({});
 const fns = require('../lib/index.js');
 
 const results = [];
+const KNOWN_GAPS = [];
 let current = null;
 async function scenario(id, title, fn) {
   current = { id, title, checks: [], error: null };
@@ -618,6 +619,138 @@ async function B15() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// B-16 · a tampered institute document cannot widen its own rights
+//
+// C1 (audit 2026-08-06). firestore.rules:161 read
+//
+//     allow update: if isWebOwner() || isInstituteSelf(instituteId);
+//
+// with no field whitelist, so institutes/{id} was self-governing: the admin
+// it governs could write every field on it, including the eight the Web Owner
+// owns. Two server-side gates read that document and believed it —
+// assertQuestionRight for questionRightsCeiling, and three deletion sites for
+// deletionRightsCeiling. Structurally correct checks validating
+// attacker-controlled input.
+//
+// WHAT THIS PROBE CAN AND CANNOT REACH. The rules clause is the primary fix
+// and it is NOT exercised here: this harness is an in-memory Firestore with no
+// rules engine, so it cannot prove a write is refused. That half needs the
+// rules emulator and is recorded as a gap below. What it CAN prove is the
+// half that lives in code — that when a ceiling document IS hostile, the
+// server does not simply do as it is told. So every seed here writes the
+// tampered document DIRECTLY, modelling an attacker who has already won the
+// rules layer, and asks what the callables do next.
+//
+// Three claims, in the order the audit ranked them:
+//   1. the lifecycle gate now bites server-side (it existed only in three
+//      React contexts, and `activeUntil` appeared nowhere in index.ts)
+//   2. WEBOWNER_ONLY_S still forces attempt/institute off whatever the
+//      document says — the bound that kept exam evidence out of reach
+//   3. an absent ceiling still fails closed, which is what the tamper was
+//      trying to escape
+// ═══════════════════════════════════════════════════════════════════
+function seedInstitute(patch = {}) {
+  DB.seed('institutes', 'inst_1', {
+    id: 'inst_1', name: 'Test Institute', code: 'TI',
+    status: 'active', activeUntil: '', ...patch,
+  });
+}
+
+async function B16() {
+  seedWorld();
+  DB.seed('faculty', 'fac_1', { id: 'fac_1', name: 'Test Faculty', instituteId: 'inst_1' });
+
+  const newQuestion = { engine: 'mcq', variant: 'single', stem: 'S', options: [], difficulty: 'easy' };
+  const ADMIN = () => ({ uid: 'inst_1', token: { role: 'institute', instituteId: 'inst_1' } });
+
+  // ── 1 · fails closed with no ceiling ──────────────────────────────
+  seedInstitute();
+  await expectThrow('no ceiling on the document means no right',
+    () => call(fns.createQuestionAsRole, { question: newQuestion }, ADMIN()),
+    'does not have the "create" right');
+
+  // ── 2 · the tampered ceiling, tenant live ─────────────────────────
+  // This is the escalation itself, and it SUCCEEDS: a live tenant holding a
+  // self-granted ceiling creates the question. Pinning that here is
+  // deliberate — it is the evidence that the rules clause was load-bearing,
+  // and it is what will fail loudly if anyone puts isInstituteSelf back on
+  // institutes:161 while believing the server would catch it. The server
+  // never could; only the rule can.
+  seedInstitute({ questionRightsCeiling: { create: { allowed: true, modes: ['direct'] } } });
+  const made = await call(fns.createQuestionAsRole, { question: newQuestion }, ADMIN());
+  check(made?.ok === true,
+    'a self-granted ceiling IS honoured while the tenant is live — the rule is the only guard');
+
+  // ── 3 · the lifecycle gate, which is new ──────────────────────────
+  // Same hostile ceiling, tenant switched off three different ways. Before
+  // C1 all three of these created the question: nothing on the server had
+  // ever read status, lifecycleState or activeUntil.
+  const hostile = { questionRightsCeiling: { create: { allowed: true, modes: ['direct'] } } };
+
+  seedInstitute({ ...hostile, status: 'disabled' });
+  await expectThrow('a DISABLED tenant creates nothing, ceiling or no ceiling',
+    () => call(fns.createQuestionAsRole, { question: newQuestion }, ADMIN()),
+    'disabled');
+
+  seedInstitute({ ...hostile, lifecycleState: 'softDeleted' });
+  await expectThrow('nor does a soft-deleted one',
+    () => call(fns.createQuestionAsRole, { question: newQuestion }, ADMIN()),
+    'deleted');
+
+  seedInstitute({ ...hostile, activeUntil: at(VNOW - min(1)) });
+  await expectThrow('nor one whose access period elapsed a minute ago',
+    () => call(fns.createQuestionAsRole, { question: newQuestion }, ADMIN()),
+    'expired');
+
+  // The boundary, from the safe side: still valid means still working.
+  seedInstitute({ ...hostile, activeUntil: at(VNOW + min(1)) });
+  const stillOk = await call(fns.createQuestionAsRole, { question: newQuestion }, ADMIN());
+  check(stillOk?.ok === true, 'a minute before expiry it still works (the gate is not off-by-one)');
+
+  // Absent/empty activeUntil is NO bound, not an expired one — institutes
+  // provisioned before the field existed must keep working.
+  seedInstitute({ ...hostile });
+  const noBound = await call(fns.createQuestionAsRole, { question: newQuestion }, ADMIN());
+  check(noBound?.ok === true, 'an absent activeUntil is unbounded, not expired');
+
+  // ── 4 · the WEBOWNER_ONLY_S clamp ─────────────────────────────────
+  // The most permissive ceiling that can be written, granting every resource
+  // in direct mode. attempt and institute must STILL be refused: they are
+  // forced off in code (index.ts:371), not by the document. This is the bound
+  // that kept the exam audit trail out of reach even while C1 was open.
+  seedInstitute({
+    deletionRightsCeiling: {
+      attempt:   { allowed: true, modes: ['direct'], selfMode: 'direct' },
+      institute: { allowed: true, modes: ['direct'], selfMode: 'direct' },
+      faculty:   { allowed: true, modes: ['direct'], selfMode: 'direct' },
+    },
+  });
+  DB.seed('institutes', 'inst_victim', { id: 'inst_victim', name: 'Victim', status: 'active' });
+
+  await expectThrow('a maximal self-granted ceiling still cannot delete an institute',
+    () => call(fns.deleteAuthUser, { role: 'institute', uid: 'inst_victim' }, ADMIN()),
+    'may only delete faculty or students');
+
+  // And with the tenant switched off, even the resources it legitimately
+  // holds go away.
+  seedInstitute({
+    status: 'disabled',
+    deletionRightsCeiling: { faculty: { allowed: true, modes: ['direct'], selfMode: 'direct' } },
+  });
+  await expectThrow('a disabled tenant deletes nobody, however wide its ceiling',
+    () => call(fns.deleteAuthUser, { role: 'faculty', uid: 'fac_1' }, ADMIN()),
+    'disabled');
+
+  KNOWN_GAPS.push(
+    'C1\'s PRIMARY fix is the firestore.rules change (institutes:161 is now webOwner-only, '
+    + 'instituteCredentials:178 whitelisted to firstLoginRequired). This harness has no rules '
+    + 'engine, so B-16 proves only the server-side half — it seeds hostile documents directly '
+    + 'and checks the callables refuse to act on them. That no rules test exists anywhere in '
+    + 'this repo is itself the gap: firestore.rules has zero coverage and needs the emulator.',
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['B-01', 'served questions == graded questions', B01],
   ['B-02', 'regrade marks the paper each attempt sat', B02],
@@ -634,6 +767,7 @@ const SCENARIOS = [
   ['B-13', 'startExam is idempotent; the limit bites', B13],
   ['B-14', 'racing finalisations do not double-grade', B14],
   ['B-15', 'no keys before finishing, none when review is off', B15],
+  ['B-16', 'a tampered institute cannot widen its own rights', B16],
 ];
 
 (async () => {
@@ -657,6 +791,10 @@ const SCENARIOS = [
       console.log(`        ${C.r}✗ threw${C.x} ${r.error.message}`);
       if (process.env.PROBE_TRACE) console.log(r.error.stack);
     }
+  }
+  if (KNOWN_GAPS.length > 0) {
+    console.log(`\n${C.b}KNOWN GAPS${C.x} ${C.d}(recorded, not asserted — see the note in the probe)${C.x}`);
+    for (const g of KNOWN_GAPS) console.log(`  ${C.b}•${C.x} ${g}`);
   }
   console.log(`\n${'─'.repeat(72)}`);
   console.log(fail === 0

@@ -9,6 +9,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { removeUndefined } from './firestoreSanitize';
 import { getQuestionsByIds, type Question } from './questionBankService';
 
 // ══════════════════════════════════════════════════════════════════
@@ -117,7 +118,7 @@ export async function createQuestionShare(data: {
     sharedAt:            now(),
     updatedAt:           now(),
   };
-  await setDoc(doc(db, COL, id), share);
+  await setDoc(doc(db, COL, id), removeUndefined(share));
   console.log(
     `✅ [QS] createQuestionShare → ${id} ` +
     `(${data.sharedByType}:${data.sharedBy} → ${data.sharedWithType}:${data.sharedWith})`

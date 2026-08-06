@@ -171,7 +171,24 @@ export function StudentDashboardLayout() {
         {/* Top bar */}
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           {/* Platform branding */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/student/dashboard')}>
+          {/* Audit 2026-08-06: a click-to-navigate div reachable only by
+              mouse. Given a button role it also needs to be focusable and to
+              answer Enter/Space, which is what a real button would have done
+              for free — the element stays a div only because it wraps the
+              logo mark and the wordmark as one target. */}
+          <div
+            className="flex items-center gap-3 cursor-pointer"
+            role="button"
+            tabIndex={0}
+            aria-label="Go to dashboard"
+            onClick={() => navigate('/student/dashboard')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                navigate('/student/dashboard');
+              }
+            }}
+          >
             <div style={{ color: '#0C0C0B' }}>
               {platformSettings.logoUrl
                 ? <img src={platformSettings.logoUrl} alt={platformSettings.name}

@@ -248,6 +248,63 @@ const CREDENTIALS_BY_ROLE = {
  */
 const WEBOWNER_ONLY_S = ['attempt', 'institute'];
 /**
+ * The institute lifecycle gate (C1, audit 2026-08-06), applied server-side.
+ *
+ * `status: 'disabled'` and an elapsed `activeUntil` are the two ways a Web
+ * Owner switches a tenant off. Before this, NEITHER was enforced anywhere on
+ * the server: `activeUntil` did not appear in this file at all, and
+ * firestore.rules referenced it only in a comment. The entire gate was three
+ * client-side checks (InstituteAuthContext:88, FacultyAuthContext:106,
+ * StudentAuthContext:143), and those run only while a session is being built.
+ *
+ * Two holes that left, both real once the rules clause was the only thing
+ * standing:
+ *
+ *   A session established BEFORE the tenant was switched off keeps working.
+ *   Nothing re-checks until the next sign-in, and disabling an institute does
+ *   not disable the Auth user or revoke its refresh tokens
+ *   (UserManagementPage:598 is a bare updateDoc), so the token stays valid.
+ *
+ *   Anything that is not the browser app is ungated entirely. The client
+ *   check is a UI behaviour, not a boundary; a direct callable invocation
+ *   never passed through it.
+ *
+ * SCOPE IS DELIBERATE. This takes a snapshot the caller has ALREADY fetched
+ * rather than reading the doc itself, so it is wired only into paths that
+ * were fetching institutes/{id} anyway — the question-rights gate and the
+ * three deletion-rights gates. Those are the privileged administrative paths,
+ * and there the check costs nothing. It is deliberately NOT on the exam
+ * transition callables: those read the attempt and the assessment, not the
+ * institute, and adding a Firestore read to every answer submission to
+ * re-litigate a tenant-level fact would tax the one subsystem least in need
+ * of new failure modes. A student mid-sitting when their institute expires
+ * finishes their exam, which is also the humane outcome.
+ *
+ * Fails closed on a missing document: no institute, no rights.
+ */
+function assertInstituteActiveS(snap) {
+    if (!snap.exists) {
+        throw new https_1.HttpsError('permission-denied', 'Institute not found.');
+    }
+    if (snap.get('status') === 'disabled') {
+        throw new https_1.HttpsError('permission-denied', 'This institute account is disabled. Contact your platform administrator.');
+    }
+    if (snap.get('lifecycleState') === 'softDeleted') {
+        throw new https_1.HttpsError('permission-denied', 'This institute account has been deleted. Contact your platform administrator.');
+    }
+    // Stored as an ISO string, like every other date on this document. An
+    // absent or unparseable value means NO expiry rather than an expired one —
+    // matching the client gate, which treats '' as unbounded, and keeping
+    // institutes provisioned before the field existed working.
+    const activeUntil = snap.get('activeUntil');
+    if (typeof activeUntil === 'string' && activeUntil !== '') {
+        const until = Date.parse(activeUntil);
+        if (!Number.isNaN(until) && until < Date.now()) {
+            throw new https_1.HttpsError('permission-denied', "This institute's access period has expired. Contact your platform administrator.");
+        }
+    }
+}
+/**
  * The effective deletion mode for an actor on a resource: 'direct' (do it
  * now), 'request' (needs approval — Phase 4), or 'none' (not permitted).
  *
@@ -1562,6 +1619,9 @@ exports.deleteAuthUser = (0, https_1.onCall)({ region: 'us-central1' }, async (r
         // circuits above. Reads the ceiling from the tenant's institute doc
         // and, for faculty, the grant from their own profile.
         const ceilingSnap = await db.collection('institutes').doc(callerInstituteId).get();
+        // C1: a disabled or expired tenant deletes nothing. Free here — the
+        // document is already in hand for the ceiling read below.
+        assertInstituteActiveS(ceilingSnap);
         const ceiling = ceilingSnap.exists
             ? ceilingSnap.get('deletionRightsCeiling')
             : undefined;
@@ -1824,6 +1884,8 @@ exports.submitDeletionRequest = (0, https_1.onCall)({ region: 'us-central1' }, a
     // anyone could flood an inbox with requests for rights they were never
     // granted, and an approving admin would have no way to tell.
     const instSnap = await db.collection('institutes').doc(actor.instituteId).get();
+    // C1: a disabled or expired tenant raises no requests either.
+    assertInstituteActiveS(instSnap);
     const ceiling = instSnap.exists
         ? instSnap.get('deletionRightsCeiling')
         : undefined;
@@ -1948,6 +2010,9 @@ exports.resolveDeletionRequest = (0, https_1.onCall)({ region: 'us-central1' }, 
         if (!actor.instituteId)
             throw new https_1.HttpsError('permission-denied', 'Missing tenant claim.');
         const instSnap = await db.collection('institutes').doc(actor.instituteId).get();
+        // C1: the approver's tenant must still be live. A request may have sat
+        // pending while the institute was switched off underneath it.
+        assertInstituteActiveS(instSnap);
         const ceiling = instSnap.exists
             ? instSnap.get('deletionRightsCeiling')
             : undefined;
@@ -6773,6 +6838,9 @@ requireMode = 'direct') {
     }
     // Institute ceiling — required for the right to exist at all.
     const instSnap = await db.collection('institutes').doc(callerInstituteId).get();
+    // C1: the tenant must still be switched on. Free here — the document is
+    // already in hand for the ceiling read below.
+    assertInstituteActiveS(instSnap);
     const ceiling = instSnap.get('questionRightsCeiling') ?? undefined;
     const cr = ceiling?.[right];
     if (!cr?.allowed) {

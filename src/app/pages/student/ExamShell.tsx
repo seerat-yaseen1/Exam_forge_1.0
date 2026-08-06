@@ -115,7 +115,7 @@ type OverlayKind =
   | { kind: 'warning'; violationType: ViolationType; warningNumber: 1 | 2 }
   | { kind: 'final_warning'; violationType: ViolationType }
   | { kind: 'fullscreen_required' }
-  | { kind: 'terminated'; reason: string }
+  | { kind: 'terminated'; reason: string; answersMayBeUnsaved?: boolean }
   | { kind: 'session_conflict' }
   | null;
 
@@ -3063,7 +3063,34 @@ export function ExamShell() {
     const reason = 'Exam terminated due to repeated integrity violations.';
 
     // Flush pending answers and ask the server to grade + terminate.
-    await flushAnswers().catch(() => {});
+    //
+    // H2 (audit 2026-08-06): this was `await flushAnswers().catch(() => {})` —
+    // the rejection discarded with no log and no student-visible signal —
+    // followed by an unconditional gradeAttempt. Grading then ran against
+    // server state, marking every unflushed answer unattempted, and the
+    // overlay told the student their answers had been saved.
+    //
+    // Of the six flushAnswers call sites this was the only one that swallowed
+    // silently AND had a consequence. The durability sweep at :2143 logs; the
+    // teardown at :2163 swallows, but that one is honest — a Firestore write
+    // genuinely cannot be guaranteed to leave the tab during pagehide, and it
+    // is documented as best-effort.
+    //
+    // WHY THIS STILL GRADES. Termination is an integrity outcome, not a
+    // student action: refusing to grade would leave the attempt in_progress
+    // after the shell has already torn down, so the sitting would hang open
+    // until the sweep closed it — worse for the student than a graded attempt
+    // with a recorded caveat. So the flush failure does not block grading; it
+    // becomes evidence. It is logged, and the student is told plainly, because
+    // termination is precisely the outcome they are least placed to dispute
+    // and they need to know there is something to dispute.
+    let answersMayBeUnsaved = false;
+    try {
+      await flushAnswers();
+    } catch (e) {
+      answersMayBeUnsaved = true;
+      console.error('[ExamShell] flush before terminate failed — answers may be lost', e);
+    }
     if (a) {
       await gradeAttempt({
         attemptId: att.id,
@@ -3071,7 +3098,7 @@ export function ExamShell() {
         terminateReason: reason,
       }).catch((e) => console.error('[ExamShell] gradeAttempt(terminate) failed', e));
     }
-    setOverlay({ kind: 'terminated', reason });
+    setOverlay({ kind: 'terminated', reason, answersMayBeUnsaved });
   }, [flushAnswers]);
 
   const handleExitTerminatedView = useCallback(() => {
@@ -3150,10 +3177,19 @@ export function ExamShell() {
     if (shellStatus !== 'ready') return;
     if (isFrozenRef.current) return;
     if (submittingRef.current) return;
+    // H4 (audit 2026-08-06): hoisted out of expiredClock, which already
+    // returns null for a null attempt (:407) — so `!expired` below has always
+    // covered this case and the deref at the getExamVerdict call was never
+    // reachable with null. The guard is here to make the invariant local and
+    // checkable rather than an inference across two functions; under
+    // `strict: true` this was the single genuine error in the whole
+    // application. An assertion would have silenced the compiler and left the
+    // reasoning where it was.
+    if (!attempt) return;
     const expired = expiredClock(
       attempt,
       Date.now(),
-      currentSection ? attempt?.sectionTimings?.[currentSection.id]?.startedAt : undefined,
+      currentSection ? attempt.sectionTimings?.[currentSection.id]?.startedAt : undefined,
     );
     if (!expired) return;
 
@@ -3797,6 +3833,7 @@ export function ExamShell() {
           <TerminatedOverlay
             key="terminated"
             reason={overlay.reason}
+            answersMayBeUnsaved={overlay.answersMayBeUnsaved}
             onExitView={handleExitTerminatedView}
           />
         )}

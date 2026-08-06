@@ -51,9 +51,9 @@ export function InstitutePicker({
   return (
     <div
       style={{
-        border: '1px solid #E3E1DB',
+        border: '1px solid var(--ef-border)',
         borderRadius: 2,
-        background: '#FFFFFF',
+        background: 'var(--ef-surface)',
         marginTop: 6,
         opacity: locked ? 0.5 : 1,
         pointerEvents: locked ? 'none' : 'auto',
@@ -62,11 +62,11 @@ export function InstitutePicker({
       {/* Header */}
       <div
         className="flex items-center justify-between px-3 py-2"
-        style={{ borderBottom: '1px solid #F0EFEB', background: '#FAFAF8' }}
+        style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}
       >
         <div className="flex items-center gap-1.5">
-          <Building2 size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-          <span className="text-xs" style={{ color: '#6B6B66' }}>
+          <Building2 size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             {selectedIds.length === 0
               ? 'No institutes selected'
               : `${selectedIds.length} institute${selectedIds.length !== 1 ? 's' : ''} selected`}
@@ -77,7 +77,7 @@ export function InstitutePicker({
             <button
               onClick={() => onChange([...new Set([...selectedIds, ...filtered.map((i) => i.id)])])}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#6B6B66' }}
+              style={{ color: 'var(--ef-text-muted)' }}
             >
               Select all ({filtered.length})
             </button>
@@ -86,7 +86,7 @@ export function InstitutePicker({
             <button
               onClick={() => onChange([])}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#6B6B66' }}
+              style={{ color: 'var(--ef-text-muted)' }}
             >
               Clear
             </button>
@@ -97,19 +97,19 @@ export function InstitutePicker({
       {/* Search */}
       <div
         className="flex items-center gap-2 px-3 py-2"
-        style={{ borderBottom: '1px solid #F0EFEB' }}
+        style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}
       >
-        <Search size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+        <Search size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search institutes…"
           className="flex-1 text-xs outline-none bg-transparent"
-          style={{ color: '#0C0C0B' }}
+          style={{ color: 'var(--ef-ink)' }}
         />
         {search && (
           <button onClick={() => setSearch('')}>
-            <X size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <X size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           </button>
         )}
       </div>
@@ -118,11 +118,11 @@ export function InstitutePicker({
       <div style={{ maxHeight: 200, overflowY: 'auto' }}>
         {loadingInst ? (
           <div className="flex items-center justify-center py-6">
-            <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+            <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-6 text-center">
-            <span className="text-xs" style={{ color: '#6B6B66' }}>No institutes found</span>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>No institutes found</span>
           </div>
         ) : (
           filtered.map((inst) => {
@@ -133,8 +133,8 @@ export function InstitutePicker({
                 onClick={() => toggle(inst.id)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors"
                 style={{
-                  background: isSelected ? '#FAFAF8' : '#FFFFFF',
-                  borderBottom: '1px solid #F7F6F3',
+                  background: isSelected ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)',
+                  borderBottom: '1px solid var(--ef-canvas)',
                 }}
               >
                 {/* Checkbox */}
@@ -143,8 +143,8 @@ export function InstitutePicker({
                     width: 14,
                     height: 14,
                     borderRadius: 2,
-                    border: `1px solid ${isSelected ? '#0C0C0B' : '#DDDBD5'}`,
-                    background: isSelected ? '#0C0C0B' : '#FFFFFF',
+                    border: `1px solid ${isSelected ? 'var(--ef-ink)' : 'var(--ef-border-muted)'}`,
+                    background: isSelected ? 'var(--ef-ink)' : 'var(--ef-surface)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -152,18 +152,18 @@ export function InstitutePicker({
                   }}
                 >
                   {isSelected && (
-                    <CheckCircle2 size={9} strokeWidth={2.5} style={{ color: '#FFFFFF' }} />
+                    <CheckCircle2 size={9} strokeWidth={2.5} style={{ color: 'var(--ef-surface)' }} />
                   )}
                 </div>
 
-                <span className="flex-1 text-xs" style={{ color: '#0C0C0B' }}>
+                <span className="flex-1 text-xs" style={{ color: 'var(--ef-ink)' }}>
                   {inst.name}
                 </span>
 
                 <span
                   className="text-xs px-1.5 py-0.5 flex-shrink-0"
                   style={{
-                    background: '#F0EFEB', color: '#6B6B66',
+                    background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)',
                     borderRadius: 2, fontSize: 10,
                   }}
                 >
@@ -179,10 +179,10 @@ export function InstitutePicker({
       {selectedIds.length === 0 && !loadingInst && institutes.length > 0 && (
         <div
           className="flex items-center gap-2 px-3 py-2"
-          style={{ borderTop: '1px solid #F0EFEB', background: '#FEF9EC' }}
+          style={{ borderTop: '1px solid var(--ef-border-subtle)', background: '#FEF9EC' }}
         >
-          <AlertTriangle size={10} strokeWidth={1.5} style={{ color: '#92680A', flexShrink: 0 }} />
-          <span style={{ color: '#92680A', fontSize: 10 }}>
+          <AlertTriangle size={10} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0 }} />
+          <span style={{ color: 'var(--ef-warning)', fontSize: 10 }}>
             No institutes selected — no students will receive this assessment.
           </span>
         </div>
@@ -259,9 +259,9 @@ export function StudentPicker({
   return (
     <div
       style={{
-        border: '1px solid #E3E1DB',
+        border: '1px solid var(--ef-border)',
         borderRadius: 2,
-        background: '#FFFFFF',
+        background: 'var(--ef-surface)',
         marginTop: 6,
         opacity: locked ? 0.5 : 1,
         pointerEvents: locked ? 'none' : 'auto',
@@ -270,11 +270,11 @@ export function StudentPicker({
       {/* Header */}
       <div
         className="flex items-center justify-between px-3 py-2"
-        style={{ borderBottom: '1px solid #F0EFEB', background: '#FAFAF8' }}
+        style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}
       >
         <div className="flex items-center gap-1.5">
-          <Users size={11} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-          <span className="text-xs" style={{ color: '#6B6B66' }}>
+          <Users size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             {selectedIds.length === 0
               ? 'No students selected'
               : `${selectedIds.length} student${selectedIds.length !== 1 ? 's' : ''} selected`}
@@ -285,7 +285,7 @@ export function StudentPicker({
             <button
               onClick={selectAllVisible}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#6B6B66' }}
+              style={{ color: 'var(--ef-text-muted)' }}
             >
               Select {filterInstId === 'all' ? 'all' : 'all in institute'} ({filtered.length})
             </button>
@@ -294,7 +294,7 @@ export function StudentPicker({
             <button
               onClick={() => onChange([])}
               className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#6B6B66' }}
+              style={{ color: 'var(--ef-text-muted)' }}
             >
               Clear all
             </button>
@@ -306,16 +306,16 @@ export function StudentPicker({
       {!loadingStudents && instTabs.length > 1 && (
         <div
           className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto"
-          style={{ borderBottom: '1px solid #F0EFEB' }}
+          style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}
         >
           <button
             onClick={() => setFilterInstId('all')}
             className="text-xs px-2.5 py-1 flex-shrink-0 transition-colors"
             style={{
               borderRadius: 2,
-              background: filterInstId === 'all' ? '#0C0C0B' : '#F0EFEB',
-              color: filterInstId === 'all' ? '#FFFFFF' : '#6B6B66',
-              border: filterInstId === 'all' ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+              background: filterInstId === 'all' ? 'var(--ef-ink)' : 'var(--ef-border-subtle)',
+              color: filterInstId === 'all' ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
+              border: filterInstId === 'all' ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
             }}
           >
             All institutes
@@ -332,17 +332,17 @@ export function StudentPicker({
                 className="text-xs px-2.5 py-1 flex-shrink-0 transition-colors flex items-center gap-1"
                 style={{
                   borderRadius: 2,
-                  background: isActive ? '#0C0C0B' : '#F0EFEB',
-                  color: isActive ? '#FFFFFF' : '#6B6B66',
-                  border: isActive ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                  background: isActive ? 'var(--ef-ink)' : 'var(--ef-border-subtle)',
+                  color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
+                  border: isActive ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
                 }}
               >
                 {inst.name}
                 {countInInst > 0 && (
                   <span
                     style={{
-                      background: isActive ? 'rgba(255,255,255,0.25)' : '#0C0C0B',
-                      color: '#FFFFFF',
+                      background: isActive ? 'rgba(255,255,255,0.25)' : 'var(--ef-ink)',
+                      color: 'var(--ef-surface)',
                       borderRadius: 9,
                       fontSize: 9,
                       padding: '1px 5px',
@@ -360,19 +360,19 @@ export function StudentPicker({
       {/* Search */}
       <div
         className="flex items-center gap-2 px-3 py-2"
-        style={{ borderBottom: '1px solid #F0EFEB' }}
+        style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}
       >
-        <Search size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+        <Search size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name or email…"
           className="flex-1 text-xs outline-none bg-transparent"
-          style={{ color: '#0C0C0B' }}
+          style={{ color: 'var(--ef-ink)' }}
         />
         {search && (
           <button onClick={() => setSearch('')}>
-            <X size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <X size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           </button>
         )}
       </div>
@@ -381,11 +381,11 @@ export function StudentPicker({
       <div style={{ maxHeight: 240, overflowY: 'auto' }}>
         {loadingStudents ? (
           <div className="flex items-center justify-center py-6">
-            <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+            <Loader2 size={14} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-6 text-center">
-            <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               {search ? 'No students match your search' : 'No students found'}
             </span>
           </div>
@@ -399,8 +399,8 @@ export function StudentPicker({
                 onClick={() => toggle(student.id)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors"
                 style={{
-                  background: isSelected ? '#FAFAF8' : '#FFFFFF',
-                  borderBottom: '1px solid #F7F6F3',
+                  background: isSelected ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)',
+                  borderBottom: '1px solid var(--ef-canvas)',
                 }}
               >
                 {/* Checkbox */}
@@ -409,8 +409,8 @@ export function StudentPicker({
                     width: 14,
                     height: 14,
                     borderRadius: 2,
-                    border: `1px solid ${isSelected ? '#0C0C0B' : '#DDDBD5'}`,
-                    background: isSelected ? '#0C0C0B' : '#FFFFFF',
+                    border: `1px solid ${isSelected ? 'var(--ef-ink)' : 'var(--ef-border-muted)'}`,
+                    background: isSelected ? 'var(--ef-ink)' : 'var(--ef-surface)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -418,19 +418,19 @@ export function StudentPicker({
                   }}
                 >
                   {isSelected && (
-                    <CheckCircle2 size={9} strokeWidth={2.5} style={{ color: '#FFFFFF' }} />
+                    <CheckCircle2 size={9} strokeWidth={2.5} style={{ color: 'var(--ef-surface)' }} />
                   )}
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs" style={{ color: '#0C0C0B' }}>{student.name}</p>
-                  <p className="text-xs" style={{ color: '#6B6B66', marginTop: 1 }}>{student.email}</p>
+                  <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{student.name}</p>
+                  <p className="text-xs" style={{ color: 'var(--ef-text-muted)', marginTop: 1 }}>{student.email}</p>
                 </div>
 
                 <span
                   className="text-xs px-1.5 py-0.5 flex-shrink-0"
                   style={{
-                    background: '#F0EFEB', color: '#6B6B66',
+                    background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)',
                     borderRadius: 2, fontSize: 10,
                     maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
@@ -448,10 +448,10 @@ export function StudentPicker({
       {selectedIds.length === 0 && !loadingStudents && students.length > 0 && (
         <div
           className="flex items-center gap-2 px-3 py-2"
-          style={{ borderTop: '1px solid #F0EFEB', background: '#FEF9EC' }}
+          style={{ borderTop: '1px solid var(--ef-border-subtle)', background: '#FEF9EC' }}
         >
-          <AlertTriangle size={10} strokeWidth={1.5} style={{ color: '#92680A', flexShrink: 0 }} />
-          <span style={{ color: '#92680A', fontSize: 10 }}>
+          <AlertTriangle size={10} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0 }} />
+          <span style={{ color: 'var(--ef-warning)', fontSize: 10 }}>
             No students selected — this assessment will not be visible to anyone.
           </span>
         </div>

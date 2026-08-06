@@ -17,10 +17,10 @@ export function Field({ label, hint, required, children }: {
   return (
     <div>
       <div className="flex items-baseline gap-1.5 mb-1.5">
-        <label className="text-xs" style={{ color: '#6B6B66' }}>
-          {label}{required && <span style={{ color: '#9B2828' }}> *</span>}
+        <label className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+          {label}{required && <span style={{ color: 'var(--ef-danger)' }}> *</span>}
         </label>
-        {hint && <span style={{ color: '#6B6B66', fontSize: 10 }}>{hint}</span>}
+        {hint && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{hint}</span>}
       </div>
       {children}
     </div>
@@ -30,16 +30,16 @@ export function Field({ label, hint, required, children }: {
 export function SectionLabel({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2 pt-1">
-      <div style={{ flex: 1, height: 1, background: '#F0EFEB' }} />
-      <span style={{ color: '#6B6B66', letterSpacing: '0.1em', fontSize: 10, flexShrink: 0 }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: '#F0EFEB' }} />
+      <div style={{ flex: 1, height: 1, background: 'var(--ef-border-subtle)' }} />
+      <span style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em', fontSize: 10, flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: 'var(--ef-border-subtle)' }} />
     </div>
   );
 }
 
 export const inputStyle: React.CSSProperties = {
-  border: '1px solid #E3E1DB', borderRadius: 2,
-  color: '#0C0C0B', background: '#FFFFFF',
+  border: '1px solid var(--ef-border)', borderRadius: 2,
+  color: 'var(--ef-ink)', background: 'var(--ef-surface)',
   width: '100%', fontSize: 12, padding: '7px 10px', outline: 'none',
 };
 
@@ -64,9 +64,9 @@ export function DurationIndicator({ startDate, endDate, totalSectionTime = 0 }: 
       : `${shortBy}m`;
     return (
       <div className="flex items-center gap-2 px-3 py-2"
-        style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-        <AlertTriangle size={11} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />
-        <span className="text-xs" style={{ color: '#9B2828' }}>
+        style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+        <AlertTriangle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
+        <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>
           Window <strong>{label}</strong> is too short — extend by at least <strong>{shortLabel}</strong> to cover all section time limits ({totalSectionTime}m total) plus a 1m buffer.
         </span>
       </div>
@@ -75,9 +75,9 @@ export function DurationIndicator({ startDate, endDate, totalSectionTime = 0 }: 
 
   return (
     <div className="flex items-center gap-2 px-3 py-2"
-      style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}>
-      <Clock size={11} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
-      <span className="text-xs" style={{ color: '#1E7B3C' }}>Window duration: <strong>{label}</strong></span>
+      style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
+      <Clock size={11} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />
+      <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>Window duration: <strong>{label}</strong></span>
     </div>
   );
 }
@@ -91,18 +91,18 @@ export function PresetChip({ label, onClick }: { label: string; onClick: () => v
       onClick={onClick}
       className="px-2.5 py-1 transition-all"
       style={{
-        background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 999,
-        fontSize: 11, color: '#4A4A45', letterSpacing: '0.01em',
+        background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 999,
+        fontSize: 11, color: 'var(--ef-text-subtle)', letterSpacing: '0.01em',
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.background = '#0C0C0B';
-        (e.currentTarget as HTMLElement).style.color = '#FFFFFF';
-        (e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B';
+        (e.currentTarget as HTMLElement).style.background = 'var(--ef-ink)';
+        (e.currentTarget as HTMLElement).style.color = 'var(--ef-surface)';
+        (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)';
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.background = '#FFFFFF';
-        (e.currentTarget as HTMLElement).style.color = '#4A4A45';
-        (e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB';
+        (e.currentTarget as HTMLElement).style.background = 'var(--ef-surface)';
+        (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)';
+        (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)';
       }}
     >
       {label}
@@ -120,13 +120,13 @@ export function SegmentedToggle({
   const btn = (active: boolean): React.CSSProperties => ({
     flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
     gap: 6, padding: '7px 10px', fontSize: 11, letterSpacing: '0.02em',
-    background: active ? '#0C0C0B' : 'transparent',
-    color: active ? '#FFFFFF' : '#6B6B66',
+    background: active ? 'var(--ef-ink)' : 'transparent',
+    color: active ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
     transition: 'all 0.15s',
     cursor: active ? 'default' : 'pointer',
   });
   return (
-    <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+    <div className="flex" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', overflow: 'hidden' }}>
       <button type="button" onClick={onLeft} style={btn(isLeft)}>{leftIcon}{leftLabel}</button>
       <button type="button" onClick={onRight} style={btn(!isLeft)}>{rightIcon}{rightLabel}</button>
     </div>
@@ -166,18 +166,18 @@ export function StartScheduleControl({
         />
 
         {isImmediate ? (
-          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
             <Zap size={10} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
             Students can begin as soon as the assessment is published.
           </p>
         ) : (
           <>
             <div className="flex items-center gap-2 px-3 py-2"
-              style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-              <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+              style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+              <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
               <input type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)}
                 className="flex-1 outline-none"
-                style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
+                style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
             </div>
             <div className="flex flex-wrap gap-1.5">
               <PresetChip label="In 15 min" onClick={() => setRelative(15)} />
@@ -226,18 +226,18 @@ export function EndScheduleControl({
         />
 
         {!hasDeadline ? (
-          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
             <InfinityIcon size={10} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
             The assessment stays open until you close it manually.
           </p>
         ) : (
           <>
             <div className="flex items-center gap-2 px-3 py-2"
-              style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-              <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+              style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+              <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
               <input type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)}
                 className="flex-1 outline-none"
-                style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }}
+                style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }}
                 min={startDate || undefined} />
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -246,7 +246,7 @@ export function EndScheduleControl({
               <PresetChip label="+2 hr" onClick={() => setRelative(120)} />
               <PresetChip label="+1 day" onClick={() => setRelative(60 * 24)} />
             </div>
-            <p className="text-xs px-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+            <p className="text-xs px-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
               Presets are relative to {startDate ? 'the start time' : 'now'}.
             </p>
           </>
@@ -264,10 +264,10 @@ export function LockedFieldWrapper({ label, reason, children }: {
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-xs" style={{ color: '#6B6B66' }}>{label}</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{label}</span>
         <div className="flex items-center gap-1">
-          <Lock size={9} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-          <span style={{ color: '#6B6B66', fontSize: 10 }}>{reason}</span>
+          <Lock size={9} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+          <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{reason}</span>
         </div>
       </div>
       <div style={{ opacity: 0.4, pointerEvents: 'none', userSelect: 'none' }}>
@@ -297,7 +297,7 @@ export function PenaltyInput({
   return (
     <div className="flex items-center gap-1.5">
       {/* type toggle */}
-      <div className="flex" style={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #E3E1DB' }}>
+      <div className="flex" style={{ borderRadius: 2, overflow: 'hidden', border: '1px solid var(--ef-border)' }}>
         {(['fixed', 'percent'] as PenaltyType[]).map((t) => {
           const active = type === t;
           return (
@@ -308,8 +308,8 @@ export function PenaltyInput({
               style={{
                 fontSize: compact ? 10 : 11,
                 padding: compact ? '2px 6px' : '4px 9px',
-                background: active ? '#9B2828' : '#FFFFFF',
-                color: active ? '#FFFFFF' : '#6B6A65',
+                background: active ? 'var(--ef-danger)' : 'var(--ef-surface)',
+                color: active ? 'var(--ef-surface)' : '#6B6A65',
                 border: 'none',
                 cursor: 'pointer',
               }}
@@ -321,8 +321,8 @@ export function PenaltyInput({
       </div>
       {/* magnitude */}
       <div className="flex items-center gap-1 px-2 py-1"
-        style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-        <span style={{ color: '#9B2828', fontSize: compact ? 11 : 12 }}>−</span>
+        style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+        <span style={{ color: 'var(--ef-danger)', fontSize: compact ? 11 : 12 }}>−</span>
         <input
           type="number"
           value={policy.penaltyValue ?? ''}
@@ -333,10 +333,10 @@ export function PenaltyInput({
           className="outline-none text-center"
           style={{
             width: compact ? 40 : 48, fontSize: compact ? 11 : 12, border: 'none',
-            background: 'transparent', color: '#0C0C0B',
+            background: 'transparent', color: 'var(--ef-ink)',
           }}
         />
-        <span style={{ color: '#6B6B66', fontSize: 10 }}>{type === 'percent' ? '%' : 'mk'}</span>
+        <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{type === 'percent' ? '%' : 'mk'}</span>
       </div>
     </div>
   );
@@ -375,8 +375,8 @@ export function DifficultyRow({
       className="flex items-center gap-2.5 py-1.5 px-3 mx-2 my-0.5"
       style={{
         borderRadius: 2,
-        border: hasValue ? `1px solid ${isOver ? '#F2CECE' : '#E3E1DB'}` : '1px solid transparent',
-        background: hasValue ? (isOver ? '#FDF5F5' : '#FFFFFF') : 'transparent',
+        border: hasValue ? `1px solid ${isOver ? 'var(--ef-danger-border)' : 'var(--ef-border)'}` : '1px solid transparent',
+        background: hasValue ? (isOver ? 'var(--ef-danger-bg)' : 'var(--ef-surface)') : 'transparent',
         opacity: isEmpty ? 0.4 : 1,
       }}
     >
@@ -392,13 +392,13 @@ export function DifficultyRow({
       </span>
 
       {/* Available count */}
-      <span className="flex-shrink-0 text-xs" style={{ color: available === 0 ? '#6B6B66' : '#6B6B66', minWidth: 62 }}>
+      <span className="flex-shrink-0 text-xs" style={{ color: available === 0 ? 'var(--ef-text-muted)' : 'var(--ef-text-muted)', minWidth: 62 }}>
         {isEmpty ? 'none in bank' : `${available} avail.`}
       </span>
 
       {/* Pick count */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <span style={{ color: '#6B6B66', fontSize: 11 }}>pick</span>
+        <span style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>pick</span>
         <input
           type="number"
           disabled={isEmpty}
@@ -410,9 +410,9 @@ export function DifficultyRow({
           className="outline-none text-center"
           style={{
             width: 38, padding: '3px 4px', fontSize: 12, borderRadius: 2,
-            border: `1px solid ${isOver ? '#F2CECE' : '#E3E1DB'}`,
-            background: isOver ? '#FDF5F5' : '#FFFFFF',
-            color: isOver ? '#9B2828' : '#0C0C0B',
+            border: `1px solid ${isOver ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
+            background: isOver ? 'var(--ef-danger-bg)' : 'var(--ef-surface)',
+            color: isOver ? 'var(--ef-danger)' : 'var(--ef-ink)',
             cursor: isEmpty ? 'not-allowed' : 'text',
           }}
         />
@@ -431,11 +431,11 @@ export function DifficultyRow({
           className="outline-none text-center"
           style={{
             width: 38, padding: '3px 4px', fontSize: 12, borderRadius: 2,
-            border: '1px solid #E3E1DB', background: '#FFFFFF', color: '#0C0C0B',
+            border: '1px solid var(--ef-border)', background: 'var(--ef-surface)', color: 'var(--ef-ink)',
             cursor: isEmpty ? 'not-allowed' : 'text',
           }}
         />
-        <span style={{ color: '#6B6B66', fontSize: 10 }}>mk/Q</span>
+        <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>mk/Q</span>
       </div>
 
       {/* Per-level negative-marking override (Standard/Linear, gate open) */}
@@ -448,7 +448,7 @@ export function DifficultyRow({
                 type="button"
                 onClick={() => onRowPolicyChange(null)}
                 title="Reset to inherited penalty"
-                style={{ fontSize: 10, color: '#6B6B66', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ fontSize: 10, color: 'var(--ef-text-muted)', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}
               >
                 reset
               </button>
@@ -460,11 +460,11 @@ export function DifficultyRow({
               title="Override the penalty for this difficulty"
               className="flex items-center gap-1"
               style={{
-                fontSize: 10, color: '#6B6B66', padding: '2px 7px',
-                border: '1px dashed #E3E1DB', borderRadius: 2, background: 'transparent', cursor: 'pointer',
+                fontSize: 10, color: 'var(--ef-text-muted)', padding: '2px 7px',
+                border: '1px dashed var(--ef-border)', borderRadius: 2, background: 'transparent', cursor: 'pointer',
               }}
             >
-              <span style={{ color: '#6B6B66' }}>−penalty:</span>
+              <span style={{ color: 'var(--ef-text-muted)' }}>−penalty:</span>
               <span>{inheritedPenaltyLabel ?? 'inherited'}</span>
             </button>
           )}
@@ -474,17 +474,17 @@ export function DifficultyRow({
       {/* Subtotal + status */}
       <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
         {hasValue && !isOver && (
-          <span style={{ color: '#6B6B66', fontSize: 10 }}>
+          <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
             {count * (parseFloat(rule?.marksPerQuestion ?? '') || 1)} mk
           </span>
         )}
         {hasValue && (
           isOver
             ? <div className="flex items-center gap-0.5">
-                <AlertCircle size={11} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-                <span style={{ color: '#9B2828', fontSize: 10 }}>only {available}</span>
+                <AlertCircle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+                <span style={{ color: 'var(--ef-danger)', fontSize: 10 }}>only {available}</span>
               </div>
-            : <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
+            : <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
         )}
       </div>
     </div>
@@ -509,9 +509,9 @@ export function SettingsToggle({ icon, label, hint, value, onChange, locked, loc
       onClick={locked ? undefined : () => onChange(!value)}
       className="w-full flex items-center gap-4 px-4 py-3 text-left transition-colors"
       style={{
-        border: '1px solid #E3E1DB',
+        border: '1px solid var(--ef-border)',
         borderRadius: 2,
-        background: value ? '#FAFAF8' : '#FFFFFF',
+        background: value ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)',
         opacity: locked ? 0.45 : 1,
         cursor: locked ? 'default' : 'pointer',
         pointerEvents: locked ? 'none' : 'auto',
@@ -519,21 +519,21 @@ export function SettingsToggle({ icon, label, hint, value, onChange, locked, loc
     >
       {/* Icon */}
       <div className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 28, height: 28, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA' }}>
+        style={{ width: 28, height: 28, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}>
         {icon}
       </div>
 
       {/* Label + hint */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs" style={{ color: '#0C0C0B' }}>{label}</p>
-        <p className="text-xs mt-0.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{hint}</p>
+        <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{label}</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>{hint}</p>
       </div>
 
       {/* Lock indicator or toggle track */}
       {locked ? (
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Lock size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-          {lockReason && <span style={{ color: '#6B6B66', fontSize: 10 }}>{lockReason}</span>}
+          <Lock size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+          {lockReason && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{lockReason}</span>}
         </div>
       ) : (
         <div
@@ -542,7 +542,7 @@ export function SettingsToggle({ icon, label, hint, value, onChange, locked, loc
             width: 34,
             height: 18,
             borderRadius: 9,
-            background: value ? '#0C0C0B' : '#D9D8D3',
+            background: value ? 'var(--ef-ink)' : '#D9D8D3',
             position: 'relative',
           }}
         >
@@ -555,7 +555,7 @@ export function SettingsToggle({ icon, label, hint, value, onChange, locked, loc
               width: 12,
               height: 12,
               borderRadius: '50%',
-              background: '#FFFFFF',
+              background: 'var(--ef-surface)',
             }}
           />
         </div>

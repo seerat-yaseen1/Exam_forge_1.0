@@ -15,16 +15,16 @@ function InstituteMark({ logo, name, size = 28 }: { logo: string | null; name: s
     return (
       <img src={logo} alt={name}
         style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover',
-          border: '1px solid #E3E1DB', flexShrink: 0 }} />
+          border: '1px solid var(--ef-border)', flexShrink: 0 }} />
     );
   }
   return (
     <div style={{
-      width: size, height: size, borderRadius: '50%', background: '#F0EFEB',
-      border: '1px solid #E3E1DB', display: 'flex', alignItems: 'center',
+      width: size, height: size, borderRadius: '50%', background: 'var(--ef-border-subtle)',
+      border: '1px solid var(--ef-border)', display: 'flex', alignItems: 'center',
       justifyContent: 'center', flexShrink: 0,
     }}>
-      <Building2 size={size * 0.42} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+      <Building2 size={size * 0.42} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
     </div>
   );
 }
@@ -36,10 +36,10 @@ function StudentAvatar({ name, size = 28 }: { name: string; size?: number }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
-      background: '#0C0C0B', border: '1px solid #2C2C2A',
+      background: 'var(--ef-ink)', border: '1px solid #2C2C2A',
       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     }}>
-      <span style={{ fontSize: size * 0.34, color: '#FFFFFF', fontWeight: 500, letterSpacing: '0.04em' }}>
+      <span style={{ fontSize: size * 0.34, color: 'var(--ef-surface)', fontWeight: 500, letterSpacing: '0.04em' }}>
         {initials}
       </span>
     </div>
@@ -80,19 +80,19 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
       className="absolute right-0 top-full mt-2 z-50"
       style={{
         width: 240,
-        background: '#FFFFFF',
-        border: '1px solid #E3E1DB',
+        background: 'var(--ef-surface)',
+        border: '1px solid var(--ef-border)',
         boxShadow: '0 6px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
         borderRadius: 3,
       }}
     >
       {/* Account info */}
-      <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: '1px solid #F0EFEB' }}>
+      <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
         <StudentAvatar name={session?.name ?? ''} size={30} />
         <div className="min-w-0">
-          <p className="text-xs font-medium truncate" style={{ color: '#0C0C0B' }}>{session?.name}</p>
-          <p className="text-xs truncate mt-0.5" style={{ color: '#6B6B66' }}>{session?.instituteName}</p>
-          <p className="text-xs truncate mt-0.5" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+          <p className="text-xs font-medium truncate" style={{ color: 'var(--ef-ink)' }}>{session?.name}</p>
+          <p className="text-xs truncate mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{session?.instituteName}</p>
+          <p className="text-xs truncate mt-0.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
             STUDENT
           </p>
         </div>
@@ -103,8 +103,8 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
         <button
           onClick={() => handleNav('/student/profile')}
           className={menuItem}
-          style={{ color: '#4A4A45' }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
+          style={{ color: 'var(--ef-text-subtle)' }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
         >
           <User size={14} strokeWidth={1.5} />
@@ -113,8 +113,8 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
         <button
           onClick={() => handleNav('/student/security')}
           className={menuItem}
-          style={{ color: '#4A4A45' }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
+          style={{ color: 'var(--ef-text-subtle)' }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
         >
           <Lock size={14} strokeWidth={1.5} />
@@ -123,11 +123,11 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Logout */}
-      <div style={{ borderTop: '1px solid #F0EFEB' }}>
+      <div style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
         <button
           onClick={handleLogout}
           className={menuItem}
-          style={{ color: '#9B2828' }}
+          style={{ color: 'var(--ef-danger)' }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#FEF6F5')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
         >
@@ -165,9 +165,9 @@ export function StudentDashboardLayout() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#F7F6F3' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--ef-canvas)' }}>
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white" style={{ borderBottom: '1px solid #E3E1DB' }}>
+      <header className="sticky top-0 z-40 bg-white" style={{ borderBottom: '1px solid var(--ef-border)' }}>
         {/* Top bar */}
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           {/* Platform branding */}
@@ -189,13 +189,13 @@ export function StudentDashboardLayout() {
               }
             }}
           >
-            <div style={{ color: '#0C0C0B' }}>
+            <div style={{ color: 'var(--ef-ink)' }}>
               {platformSettings.logoUrl
                 ? <img src={platformSettings.logoUrl} alt={platformSettings.name}
                     style={{ width: 24, height: 24, objectFit: 'contain' }} />
                 : <LogoMark px={24} />}
             </div>
-            <span className="text-xs font-medium" style={{ color: '#0C0C0B', letterSpacing: '0.16em' }}>
+            <span className="text-xs font-medium" style={{ color: 'var(--ef-ink)', letterSpacing: '0.16em' }}>
               {platformSettings.name}
             </span>
           </div>
@@ -204,17 +204,17 @@ export function StudentDashboardLayout() {
           <div className="flex items-center gap-3">
             {!logoLoading && (
               <div className="flex items-center gap-2.5 px-3 py-1.5 rounded"
-                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB' }}>
+                style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)' }}>
                 <InstituteMark logo={instituteLogo} name={session.instituteName} size={20} />
-                <span className="text-xs" style={{ color: '#6B6B66' }}>{session.instituteName}</span>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{session.instituteName}</span>
               </div>
             )}
             <div className="relative">
               <button
                 onClick={() => setProfileOpen((v) => !v)}
                 className="flex items-center gap-2 px-2 py-1 rounded transition-colors"
-                style={{ background: profileOpen ? '#F7F6F3' : 'transparent' }}
-                onMouseEnter={(e) => { if (!profileOpen) (e.currentTarget as HTMLElement).style.background = '#F7F6F3'; }}
+                style={{ background: profileOpen ? 'var(--ef-canvas)' : 'transparent' }}
+                onMouseEnter={(e) => { if (!profileOpen) (e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)'; }}
                 onMouseLeave={(e) => { if (!profileOpen) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
                 <StudentAvatar name={session.name} size={26} />
@@ -227,7 +227,7 @@ export function StudentDashboardLayout() {
         </div>
 
         {/* Navigation tab bar */}
-        <div style={{ borderTop: '1px solid #F0EFEB' }}>
+        <div style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
           <div className="max-w-7xl mx-auto px-4 flex items-center gap-1">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
@@ -236,9 +236,9 @@ export function StudentDashboardLayout() {
                   key={item.path}
                   onClick={() => navigate(item.path)}
                   className="flex items-center gap-1.5 text-xs px-3 py-2.5 relative transition-colors"
-                  style={{ color: isActive ? '#0C0C0B' : '#6B6B66', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                  onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}
-                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = '#6B6B66'; }}
+                  style={{ color: isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                  onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)'; }}
+                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)'; }}
                 >
                   {item.icon}
                   {item.label}
@@ -247,7 +247,7 @@ export function StudentDashboardLayout() {
                     <span
                       style={{
                         position: 'absolute', bottom: 0, left: 0, right: 0,
-                        height: 2, background: '#0C0C0B', borderRadius: '2px 2px 0 0',
+                        height: 2, background: 'var(--ef-ink)', borderRadius: '2px 2px 0 0',
                       }}
                     />
                   )}

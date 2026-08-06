@@ -17,8 +17,8 @@ const TYPE_LABEL: Record<QuestionRequest['type'], string> = {
 function StatusChip({ status }: { status: QuestionRequestStatus }) {
   const map = {
     pending:  { bg: '#FBF6E9', fg: '#8A6D3B', icon: <Clock size={11} strokeWidth={1.5} />, label: 'Pending' },
-    approved: { bg: '#EEF4EE', fg: '#2A6B3A', icon: <Check size={11} strokeWidth={2} />,   label: 'Approved' },
-    rejected: { bg: '#FBEDED', fg: '#9B2828', icon: <X size={11} strokeWidth={2} />,        label: 'Rejected' },
+    approved: { bg: '#EEF4EE', fg: 'var(--ef-success)', icon: <Check size={11} strokeWidth={2} />,   label: 'Approved' },
+    rejected: { bg: '#FBEDED', fg: 'var(--ef-danger)', icon: <X size={11} strokeWidth={2} />,        label: 'Rejected' },
   }[status];
   return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5" style={{ background: map.bg, color: map.fg, borderRadius: 2, fontSize: 10 }}>
@@ -41,14 +41,14 @@ export function MyRequestsList({ facultyId }: { facultyId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 px-5 py-8 text-xs" style={{ color: '#6B6B66' }}>
+      <div className="flex items-center gap-2 px-5 py-8 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={13} className="animate-spin" /> Loading your requests…
       </div>
     );
   }
   if (rows.length === 0) {
     return (
-      <div className="px-5 py-10 text-center text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+      <div className="px-5 py-10 text-center text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
         NO REQUESTS YET
       </div>
     );
@@ -57,16 +57,16 @@ export function MyRequestsList({ facultyId }: { facultyId: string }) {
   return (
     <div>
       {rows.map((r) => (
-        <div key={r.id} className="flex items-center gap-4 px-5 py-3.5" style={{ borderBottom: '1px solid #F0EFEB' }}>
-          <span className="text-xs px-2 py-0.5 flex-shrink-0" style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 2 }}>
+        <div key={r.id} className="flex items-center gap-4 px-5 py-3.5" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
+          <span className="text-xs px-2 py-0.5 flex-shrink-0" style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 2 }}>
             {TYPE_LABEL[r.type]}
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>
-              {r.questionStem || <em style={{ color: '#6B6B66' }}>New question</em>}
+            <p className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>
+              {r.questionStem || <em style={{ color: 'var(--ef-text-muted)' }}>New question</em>}
             </p>
             {r.reviewNote && (
-              <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>Note: {r.reviewNote}</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>Note: {r.reviewNote}</p>
             )}
           </div>
           <StatusChip status={r.status} />

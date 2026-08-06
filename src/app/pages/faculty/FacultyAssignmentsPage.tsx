@@ -64,29 +64,29 @@ function AssessmentCard({
       onClick={onClick}
       className="cursor-pointer"
       style={{
-        background: '#FFFFFF',
-        border: '1px solid #E3E1DB',
+        background: 'var(--ef-surface)',
+        border: '1px solid var(--ef-border)',
         borderRadius: 3,
         padding: '18px 20px',
         transition: 'box-shadow 0.15s',
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)';
-        (e.currentTarget as HTMLElement).style.borderColor = '#6B6B66';
+        (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-text-muted)';
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-        (e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB';
+        (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)';
       }}
     >
       {/* Row 1: title + status */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.5 }}>
             {assessment.title}
           </p>
           {assessment.subject && (
-            <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
               {assessment.subject}
             </p>
           )}
@@ -106,29 +106,29 @@ function AssessmentCard({
       <div className="flex items-center gap-3 flex-wrap">
         {sectionCount > 0 && (
           <div className="flex items-center gap-1">
-            <Layers size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-            <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <Layers size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               {sectionCount} section{sectionCount !== 1 ? 's' : ''}
             </span>
           </div>
         )}
         {questionCount > 0 && (
           <div className="flex items-center gap-1">
-            <BookOpen size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-            <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <BookOpen size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               {questionCount} question{questionCount !== 1 ? 's' : ''}
             </span>
           </div>
         )}
         <div className="flex items-center gap-1">
-          <Users size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-          <span className="text-xs" style={{ color: '#6B6B66' }}>
+          <Users size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             {describeAssignment(assessment)}
           </span>
         </div>
         {assessment.totalMarks > 0 && (
           <div className="flex items-center gap-1">
-            <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               {assessment.totalMarks} marks
             </span>
           </div>
@@ -137,34 +137,34 @@ function AssessmentCard({
 
       {/* Row 3: dates */}
       <div className="flex items-center justify-between mt-3 pt-3"
-        style={{ borderTop: '1px solid #F0EFEB' }}>
+        style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
         <div className="flex items-center gap-3">
           {assessment.startDate && (
             <div className="flex items-center gap-1">
-              <Calendar size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
+              <Calendar size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 {formatDateShort(assessment.startDate)}
               </span>
             </div>
           )}
           {assessment.endDate && (
             <div className="flex items-center gap-1">
-              <Clock size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
+              <Clock size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 ends {formatDateShort(assessment.endDate)}
               </span>
             </div>
           )}
         </div>
         {assessment.status !== 'draft' && rosterAllowed ? (
-          <div className="flex items-center gap-1" style={{ color: '#6B6B66' }}>
+          <div className="flex items-center gap-1" style={{ color: 'var(--ef-text-muted)' }}>
             <span className="text-xs">View roster</span>
             <ChevronRight size={11} strokeWidth={1.5} />
           </div>
         ) : assessment.status === 'draft' ? (
-          <span className="text-xs" style={{ color: '#6B6B66' }}>Draft — no roster</span>
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Draft — no roster</span>
         ) : (
-          <div className="flex items-center gap-1" style={{ color: '#6B6B66' }}>
+          <div className="flex items-center gap-1" style={{ color: 'var(--ef-text-muted)' }}>
             <Lock size={10} strokeWidth={1.5} />
             <span className="text-xs">Roster access restricted</span>
           </div>
@@ -221,21 +221,21 @@ export function FacultyAssignmentsPage() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: '#F7F6F3' }}>
+    <div className="min-h-screen" style={{ background: 'var(--ef-canvas)' }}>
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 24px' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+            <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
               ASSIGNMENTS
             </p>
-            <h1 className="text-sm" style={{ color: '#0C0C0B' }}>
+            <h1 className="text-sm" style={{ color: 'var(--ef-ink)' }}>
               My Assessments
             </h1>
           </div>
           <div className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-            style={{ background: '#F0EFEB', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}>
+            style={{ background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}>
             <ClipboardList size={11} strokeWidth={1.5} />
             {assessments.length} total
           </div>
@@ -244,14 +244,14 @@ export function FacultyAssignmentsPage() {
         {/* Search + filter */}
         <div className="flex items-center gap-3 mb-6">
           <div className="flex items-center gap-2 flex-1 px-3 py-2"
-            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-            <Search size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+            style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+            <Search size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search assessments…"
               className="flex-1 text-xs outline-none bg-transparent"
-              style={{ color: '#0C0C0B' }}
+              style={{ color: 'var(--ef-ink)' }}
             />
           </div>
           <div className="flex items-center gap-1">
@@ -262,9 +262,9 @@ export function FacultyAssignmentsPage() {
                 className="text-xs px-3 py-1.5 transition-colors"
                 style={{
                   borderRadius: 2,
-                  background: filterStatus === tab.value ? '#0C0C0B' : 'transparent',
-                  color: filterStatus === tab.value ? '#FFFFFF' : '#6B6B66',
-                  border: filterStatus === tab.value ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                  background: filterStatus === tab.value ? 'var(--ef-ink)' : 'transparent',
+                  color: filterStatus === tab.value ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
+                  border: filterStatus === tab.value ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
                 }}
               >
                 {tab.label}
@@ -276,13 +276,13 @@ export function FacultyAssignmentsPage() {
         {/* Content */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
-            <p className="text-xs" style={{ color: '#6B6B66' }}>Loading assessments…</p>
+            <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Loading assessments…</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <ClipboardList size={24} strokeWidth={1} style={{ color: '#6B6B66' }} />
-            <p className="text-xs" style={{ color: '#6B6B66' }}>
+            <ClipboardList size={24} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               {search || filterStatus !== 'all' ? 'No assessments match your filters.' : 'No assessments created yet.'}
             </p>
           </div>

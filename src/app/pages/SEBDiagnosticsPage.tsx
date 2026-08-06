@@ -92,16 +92,16 @@ export function SEBDiagnosticsPage() {
   return (
     <div className="p-8" style={{ maxWidth: 820 }}>
       <div className="flex items-center gap-2 mb-1">
-        <ShieldCheck size={18} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-        <h1 className="text-lg" style={{ color: '#0C0C0B' }}>SEB Diagnostics</h1>
+        <ShieldCheck size={18} strokeWidth={1.5} style={{ color: 'var(--ef-ink)' }} />
+        <h1 className="text-lg" style={{ color: 'var(--ef-ink)' }}>SEB Diagnostics</h1>
       </div>
-      <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.7, maxWidth: 620 }}>
+      <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.7, maxWidth: 620 }}>
         Open this page <strong>inside Safe Exam Browser</strong> (via your <code>.seb</code> config
         file), paste the Config Key from the SEB Config Tool, and run the check. It reports what the
         server actually received, so enforcement can be built against reality rather than guesswork.
       </p>
 
-      <label className="text-xs block mb-1.5" style={{ color: '#6B6B66' }}>
+      <label className="text-xs block mb-1.5" style={{ color: 'var(--ef-text-muted)' }}>
         Config Key (64 hex chars — optional, but needed for the match test)
       </label>
       <div className="flex items-center gap-2 mb-5">
@@ -110,13 +110,13 @@ export function SEBDiagnosticsPage() {
           onChange={(e) => setKey(e.target.value)}
           placeholder="e.g. 81aad4ab9dfd447cc479e6a4a7c9a544e2cafc7f3adeb68b2a21efad68eca4dc"
           className="flex-1 text-xs px-3 py-2 outline-none"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#0C0C0B', fontFamily: 'monospace' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-ink)', fontFamily: 'monospace' }}
         />
         <button
           onClick={run}
           disabled={running}
           className="flex items-center gap-1.5 text-xs px-4 py-2 flex-shrink-0"
-          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: running ? 'default' : 'pointer', opacity: running ? 0.5 : 1 }}
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: running ? 'default' : 'pointer', opacity: running ? 0.5 : 1 }}
         >
           {running ? <><Loader2 size={12} className="animate-spin" /> Running…</> : 'Run SEB check'}
         </button>
@@ -124,7 +124,7 @@ export function SEBDiagnosticsPage() {
           onClick={runEcho}
           disabled={echoRunning}
           className="flex items-center gap-1.5 text-xs px-4 py-2 flex-shrink-0"
-          style={{ border: '1px solid #0C0C0B', color: '#0C0C0B', borderRadius: 2, cursor: echoRunning ? 'default' : 'pointer', opacity: echoRunning ? 0.5 : 1 }}
+          style={{ border: '1px solid var(--ef-ink)', color: 'var(--ef-ink)', borderRadius: 2, cursor: echoRunning ? 'default' : 'pointer', opacity: echoRunning ? 0.5 : 1 }}
         >
           {echoRunning ? <><Loader2 size={12} className="animate-spin" /> Checking…</> : 'Same-origin check'}
         </button>
@@ -133,51 +133,51 @@ export function SEBDiagnosticsPage() {
       {/* Same-origin result — this is the one that matters now */}
       {echoError && (
         <div className="flex items-start gap-2 px-3 py-2.5 mb-4" style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
-          <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828', marginTop: 1 }} />
-          <span className="text-xs" style={{ color: '#9B2828' }}>{echoError}</span>
+          <AlertTriangle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', marginTop: 1 }} />
+          <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>{echoError}</span>
         </div>
       )}
       {echo && (
         <div className="mb-5">
           <div className="flex items-start gap-2 px-4 py-3 mb-2"
             style={{
-              background: echo.sawAnySebHeader ? '#F0F9F4' : '#FEF9EC',
-              border: `1px solid ${echo.sawAnySebHeader ? '#B8E6C8' : '#F5DFA0'}`,
+              background: echo.sawAnySebHeader ? 'var(--ef-success-bg)' : '#FEF9EC',
+              border: `1px solid ${echo.sawAnySebHeader ? 'var(--ef-success-border)' : 'var(--ef-warning-border)'}`,
               borderRadius: 2,
             }}>
             {echo.sawAnySebHeader
-              ? <CheckCircle2 size={15} strokeWidth={1.5} style={{ color: '#1E7B3C', marginTop: 1 }} />
-              : <AlertTriangle size={15} strokeWidth={1.5} style={{ color: '#92680A', marginTop: 1 }} />}
+              ? <CheckCircle2 size={15} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', marginTop: 1 }} />
+              : <AlertTriangle size={15} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', marginTop: 1 }} />}
             <div>
-              <p className="text-xs" style={{ color: echo.sawAnySebHeader ? '#1E7B3C' : '#92680A', fontWeight: 500 }}>
+              <p className="text-xs" style={{ color: echo.sawAnySebHeader ? 'var(--ef-success-strong)' : 'var(--ef-warning)', fontWeight: 500 }}>
                 SAME-ORIGIN GET (/api/seb-echo): {echo.sawAnySebHeader
                   ? 'SEB headers received.'
                   : 'No SEB headers.'}
               </p>
               {echoPost && (
-                <p className="text-xs mt-1" style={{ color: echoPost.sawAnySebHeader ? '#1E7B3C' : '#9B2828', fontWeight: 500 }}>
+                <p className="text-xs mt-1" style={{ color: echoPost.sawAnySebHeader ? 'var(--ef-success-strong)' : 'var(--ef-danger)', fontWeight: 500 }}>
                   SAME-ORIGIN POST: {echoPost.sawAnySebHeader
                     ? 'SEB headers received — POST is safe to build on.'
                     : 'NO headers on POST — enforcement must use GET.'}
                 </p>
               )}
               {Object.entries(echo.matches).some(([, v]) => v) && (
-                <p className="text-xs mt-1" style={{ color: '#1E7B3C' }}>
+                <p className="text-xs mt-1" style={{ color: 'var(--ef-success-strong)' }}>
                   Hash reproduced by URL form: <strong>{Object.entries(echo.matches).find(([, v]) => v)?.[0]}</strong>
                 </p>
               )}
             </div>
           </div>
-          <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>GET RESULT</p>
+          <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>GET RESULT</p>
           <pre className="text-xs p-3 overflow-auto mb-3"
-            style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 260, fontFamily: 'monospace', lineHeight: 1.5 }}>
+            style={{ background: 'var(--ef-ink)', color: '#E8E6E0', borderRadius: 2, maxHeight: 260, fontFamily: 'monospace', lineHeight: 1.5 }}>
             {JSON.stringify(echo, null, 2)}
           </pre>
           {echoPost && (
             <>
-              <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>POST RESULT</p>
+              <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>POST RESULT</p>
               <pre className="text-xs p-3 overflow-auto"
-                style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 260, fontFamily: 'monospace', lineHeight: 1.5 }}>
+                style={{ background: 'var(--ef-ink)', color: '#E8E6E0', borderRadius: 2, maxHeight: 260, fontFamily: 'monospace', lineHeight: 1.5 }}>
                 {JSON.stringify(echoPost, null, 2)}
               </pre>
             </>
@@ -187,8 +187,8 @@ export function SEBDiagnosticsPage() {
 
       {error && (
         <div className="flex items-start gap-2 px-3 py-2.5 mb-4" style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
-          <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828', marginTop: 1 }} />
-          <span className="text-xs" style={{ color: '#9B2828' }}>{error}</span>
+          <AlertTriangle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', marginTop: 1 }} />
+          <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</span>
         </div>
       )}
 
@@ -197,33 +197,33 @@ export function SEBDiagnosticsPage() {
           {/* Headline verdict */}
           <div className="flex items-start gap-2 px-4 py-3"
             style={{
-              background: result.sawAnySebHeader ? '#F0F9F4' : '#FEF9EC',
-              border: `1px solid ${result.sawAnySebHeader ? '#B8E6C8' : '#F5DFA0'}`,
+              background: result.sawAnySebHeader ? 'var(--ef-success-bg)' : '#FEF9EC',
+              border: `1px solid ${result.sawAnySebHeader ? 'var(--ef-success-border)' : 'var(--ef-warning-border)'}`,
               borderRadius: 2,
             }}>
             {result.sawAnySebHeader
-              ? <CheckCircle2 size={15} strokeWidth={1.5} style={{ color: '#1E7B3C', marginTop: 1 }} />
-              : <AlertTriangle size={15} strokeWidth={1.5} style={{ color: '#92680A', marginTop: 1 }} />}
+              ? <CheckCircle2 size={15} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', marginTop: 1 }} />
+              : <AlertTriangle size={15} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', marginTop: 1 }} />}
             <div>
-              <p className="text-xs" style={{ color: result.sawAnySebHeader ? '#1E7B3C' : '#92680A', fontWeight: 500 }}>
+              <p className="text-xs" style={{ color: result.sawAnySebHeader ? 'var(--ef-success-strong)' : 'var(--ef-warning)', fontWeight: 500 }}>
                 {result.sawAnySebHeader
                   ? 'SEB headers received — header-based enforcement is viable.'
                   : 'No SEB headers received on this callable.'}
               </p>
               {!result.sawAnySebHeader && (
-                <p className="text-xs mt-1" style={{ color: '#92680A', lineHeight: 1.6 }}>
+                <p className="text-xs mt-1" style={{ color: 'var(--ef-warning)', lineHeight: 1.6 }}>
                   Either this browser is not SEB, "Use Browser & Config Keys (send in HTTP header)"
                   is off in the config, or SEB does not inject headers into cross-origin callables.
                   If you ARE in SEB with the setting on, Stage 2 must verify at the app origin instead.
                 </p>
               )}
               {matchedForm && (
-                <p className="text-xs mt-1" style={{ color: '#1E7B3C', lineHeight: 1.6 }}>
+                <p className="text-xs mt-1" style={{ color: 'var(--ef-success-strong)', lineHeight: 1.6 }}>
                   Hash reproduced by URL form: <strong>{matchedForm}</strong> — this is what Stage 2 will hash.
                 </p>
               )}
               {result.sawAnySebHeader && key && !matchedForm && (
-                <p className="text-xs mt-1" style={{ color: '#92680A', lineHeight: 1.6 }}>
+                <p className="text-xs mt-1" style={{ color: 'var(--ef-warning)', lineHeight: 1.6 }}>
                   Header present but no URL form reproduced the hash with this key. Double-check the
                   Config Key, or the URL reconstruction needs another variant.
                 </p>
@@ -233,9 +233,9 @@ export function SEBDiagnosticsPage() {
 
           {/* Raw JSON — copy this back */}
           <div>
-            <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>FULL RESULT (copy all of this)</p>
+            <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>FULL RESULT (copy all of this)</p>
             <pre className="text-xs p-3 overflow-auto"
-              style={{ background: '#0C0C0B', color: '#E8E6E0', borderRadius: 2, maxHeight: 460, fontFamily: 'monospace', lineHeight: 1.5 }}>
+              style={{ background: 'var(--ef-ink)', color: '#E8E6E0', borderRadius: 2, maxHeight: 460, fontFamily: 'monospace', lineHeight: 1.5 }}>
               {JSON.stringify(result, null, 2)}
             </pre>
           </div>

@@ -102,30 +102,30 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
       initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       className="fixed inset-0 z-50 flex flex-col"
-      style={{ background: '#F7F6F3' }}
+      style={{ background: 'var(--ef-canvas)' }}
     >
       {/* Top bar */}
       <div className="flex items-center justify-between px-8 flex-shrink-0"
-        style={{ height: 56, borderBottom: '1px solid #E3E1DB', background: '#FFFFFF' }}>
+        style={{ height: 56, borderBottom: '1px solid var(--ef-border)', background: 'var(--ef-surface)' }}>
         {/* Left */}
         <div className="flex items-center gap-4">
           <button onClick={onClose}
             className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-60"
-            style={{ color: '#6B6B66' }}>
+            style={{ color: 'var(--ef-text-muted)' }}>
             <X size={13} strokeWidth={1.5} />
             <span style={{ letterSpacing: '0.04em' }}>Cancel</span>
           </button>
-          <div style={{ width: 1, height: 14, background: '#E3E1DB' }} />
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+          <div style={{ width: 1, height: 14, background: 'var(--ef-border)' }} />
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
             {mode === 'create' ? 'NEW ASSESSMENT' : 'EDIT ASSESSMENT'}
           </p>
           {/* Step indicator */}
           <div className="flex items-center gap-1.5">
             {[1, 2, 3].map((n, i) => (
               <React.Fragment key={n}>
-                {i > 0 && <div style={{ width: 16, height: 1, background: step >= n ? '#0C0C0B' : '#E3E1DB' }} />}
+                {i > 0 && <div style={{ width: 16, height: 1, background: step >= n ? 'var(--ef-ink)' : 'var(--ef-border)' }} />}
                 <div className="flex items-center justify-center"
-                  style={{ width: 18, height: 18, borderRadius: 9, background: step >= n ? '#0C0C0B' : '#E3E1DB', fontSize: 9, color: step >= n ? '#FFFFFF' : '#6B6B66' }}>
+                  style={{ width: 18, height: 18, borderRadius: 9, background: step >= n ? 'var(--ef-ink)' : 'var(--ef-border)', fontSize: 9, color: step >= n ? 'var(--ef-surface)' : 'var(--ef-text-muted)' }}>
                   {n}
                 </div>
               </React.Fragment>
@@ -136,7 +136,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
         {/* Center */}
         {step >= 2 && grandTotalQ > 0 && (
           <span className="text-xs px-2.5 py-1"
-            style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}>
+            style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}>
             {sections.length} section{sections.length !== 1 ? 's' : ''} · {grandTotalQ} Q · {grandTotalMarks} marks
           </span>
         )}
@@ -148,8 +148,8 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
             disabled={!title.trim() || !sections.every((s) => s.name.trim() && parseInt(s.timeLimit, 10) >= 1)}
             className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
             style={{
-              background: title.trim() && sections.every((s) => s.name.trim() && parseInt(s.timeLimit, 10) >= 1) ? '#0C0C0B' : '#C8C7C2',
-              color: '#FFFFFF', borderRadius: 2,
+              background: title.trim() && sections.every((s) => s.name.trim() && parseInt(s.timeLimit, 10) >= 1) ? 'var(--ef-ink)' : 'var(--ef-track)',
+              color: 'var(--ef-surface)', borderRadius: 2,
               cursor: title.trim() && sections.every((s) => s.name.trim() && parseInt(s.timeLimit, 10) >= 1) ? 'pointer' : 'not-allowed',
             }}>
             Continue to Rules <ChevronRight size={12} strokeWidth={2} />

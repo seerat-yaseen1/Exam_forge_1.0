@@ -216,20 +216,20 @@ export function SetupStep({
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
             <div className="flex items-center justify-center"
-              style={{ width: 28, height: 28, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA' }}>
-              <Layers size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+              style={{ width: 28, height: 28, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}>
+              <Layers size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
             </div>
-            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>STEP 1 OF 3</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>STEP 1 OF 3</p>
           </div>
-          <h2 className="text-base mb-1" style={{ color: '#0C0C0B' }}>Assessment Setup</h2>
-          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+          <h2 className="text-base mb-1" style={{ color: 'var(--ef-ink)' }}>Assessment Setup</h2>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
             Define the basics and configure sections. Question rules are set in the next step.
           </p>
           {originalStatus && originalStatus !== 'draft' && (
             <div className="flex items-start gap-2.5 mt-4 px-3 py-3"
-              style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-              <Lock size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0, marginTop: 1 }} />
-              <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+              style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+              <Lock size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 1 }} />
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                 {originalStatus === 'active'
                   ? <>Some fields are locked because this test is <strong>live</strong>.</>
                   : <>Some fields are locked because this test is <strong>closed</strong>.</>}
@@ -251,10 +251,10 @@ export function SetupStep({
                 <input
                   type="text" value={title}
                   onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setTitleError(false); }}
-                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px', borderColor: titleError ? '#F2CECE' : '#E3E1DB', background: titleError ? '#FDF5F5' : '#FFFFFF' }}
+                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px', borderColor: titleError ? 'var(--ef-danger-border)' : 'var(--ef-border)', background: titleError ? 'var(--ef-danger-bg)' : 'var(--ef-surface)' }}
                   placeholder="e.g., Midterm Exam — Mathematics" autoFocus
                 />
-                {titleError && <p className="text-xs mt-1" style={{ color: '#9B2828' }}>Title is required</p>}
+                {titleError && <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)' }}>Title is required</p>}
               </Field>
 
               <Field label="Subject" hint="(optional)">
@@ -289,7 +289,7 @@ export function SetupStep({
                     {i > 0 && (
                       <div style={{
                         flex: 1, height: 1, margin: '0 8px',
-                        background: isDone ? '#0C0C0B' : '#E3E1DB',
+                        background: isDone ? 'var(--ef-ink)' : 'var(--ef-border)',
                         transition: 'background 0.2s',
                       }} />
                     )}
@@ -302,17 +302,17 @@ export function SetupStep({
                     >
                       <div style={{
                         width: 18, height: 18, borderRadius: 9, fontSize: 9,
-                        background: isActive ? '#0C0C0B' : isDone ? '#0C0C0B' : '#E3E1DB',
-                        color: (isActive || isDone) ? '#FFFFFF' : '#6B6B66',
+                        background: isActive ? 'var(--ef-ink)' : isDone ? 'var(--ef-ink)' : 'var(--ef-border)',
+                        color: (isActive || isDone) ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                       }}>
                         {isDone
-                          ? <CheckCircle2 size={10} strokeWidth={2.5} style={{ color: '#FFFFFF' }} />
+                          ? <CheckCircle2 size={10} strokeWidth={2.5} style={{ color: 'var(--ef-surface)' }} />
                           : n}
                       </div>
                       <span style={{
                         fontSize: 11,
-                        color: isActive ? '#0C0C0B' : isDone ? '#6B6B66' : '#6B6B66',
+                        color: isActive ? 'var(--ef-ink)' : isDone ? 'var(--ef-text-muted)' : 'var(--ef-text-muted)',
                       }}>
                         {label}
                       </span>
@@ -357,16 +357,16 @@ export function SetupStep({
                 {/* Pool reminder strip */}
                 {topicPool.length > 0 && (
                   <div className="flex items-center gap-2 px-3 py-2 mb-4"
-                    style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}>
-                    <BookOpen size={10} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: '#1E7B3C', flex: 1 }}>
+                    style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
+                    <BookOpen size={10} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: 'var(--ef-success-strong)', flex: 1 }}>
                       Topic pool: {topicPool.length} topic{topicPool.length !== 1 ? 's' : ''} across {subjectPool.length} subject{subjectPool.length !== 1 ? 's' : ''}
                     </span>
                     <button
                       type="button"
                       onClick={() => setRightPhase(2)}
                       className="text-xs transition-opacity hover:opacity-70"
-                      style={{ color: '#1E7B3C', flexShrink: 0 }}
+                      style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }}
                     >
                       Edit ↗
                     </button>
@@ -387,7 +387,7 @@ export function SetupStep({
                           exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                           style={{
-                            border: '1px solid #E3E1DB',
+                            border: '1px solid var(--ef-border)',
                             borderRadius: 3,
                             overflow: 'hidden',
                             opacity: !mut.sections ? 0.5 : 1,
@@ -395,9 +395,9 @@ export function SetupStep({
                           }}
                         >
                           {/* Top row: index + name + time + topics toggle + remove */}
-                          <div className="flex items-center" style={{ gap: 8, padding: '8px 10px', background: '#FFFFFF' }}>
+                          <div className="flex items-center" style={{ gap: 8, padding: '8px 10px', background: 'var(--ef-surface)' }}>
                             <div className="flex-shrink-0 flex items-center justify-center"
-                              style={{ width: 26, height: 26, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA', fontSize: 10, color: '#6B6B66' }}>
+                              style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA', fontSize: 10, color: 'var(--ef-text-muted)' }}>
                               {(idx + 1).toString().padStart(2, '0')}
                             </div>
                             <input
@@ -405,7 +405,7 @@ export function SetupStep({
                               onChange={(e) => updateSection(idx, 'name', e.target.value)}
                               placeholder={`Section ${SECTION_LETTERS[idx] ?? idx + 1}`}
                               className="flex-1 outline-none text-xs"
-                              style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#0C0C0B', background: '#FFFFFF', padding: '7px 10px', minWidth: 0 }}
+                              style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-ink)', background: 'var(--ef-surface)', padding: '7px 10px', minWidth: 0 }}
                             />
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <input
@@ -413,11 +413,11 @@ export function SetupStep({
                                 onChange={(e) => updateSection(idx, 'timeLimit', e.target.value)}
                                 placeholder="—" min="1"
                                 className="flex-shrink-0 outline-none text-center text-xs"
-                                style={{ width: 52, padding: '7px 6px', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B', MozAppearance: 'textfield' } as React.CSSProperties}
+                                style={{ width: 52, padding: '7px 6px', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)', MozAppearance: 'textfield' } as React.CSSProperties}
                                 onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                 onKeyDown={(e) => { if (['-', 'e', '+', '.'].includes(e.key)) e.preventDefault(); }}
                               />
-                              <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>min</span>
+                              <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>min</span>
                             </div>
                             {/* Per-question timer (Phase 2.5) — authority toggle.
                                 Only meaningful in sequential delivery; hidden in standard. */}
@@ -428,11 +428,11 @@ export function SetupStep({
                                   onChange={(e) => updateSection(idx, 'questionTimeLimit', e.target.value)}
                                   placeholder="—" min="1"
                                   className="flex-shrink-0 outline-none text-center text-xs"
-                                  style={{ width: 52, padding: '7px 6px', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B', MozAppearance: 'textfield' } as React.CSSProperties}
+                                  style={{ width: 52, padding: '7px 6px', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)', MozAppearance: 'textfield' } as React.CSSProperties}
                                   onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                   onKeyDown={(e) => { if (['-', 'e', '+', '.'].includes(e.key)) e.preventDefault(); }}
                                 />
-                                <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>s/q</span>
+                                <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>s/q</span>
                               </div>
                             )}
                             {/* Topics toggle button */}
@@ -442,9 +442,9 @@ export function SetupStep({
                               className="flex-shrink-0 flex items-center gap-1 text-xs px-2 py-1.5 transition-all"
                               style={{
                                 borderRadius: 2,
-                                border: isPickerOpen ? '1px solid #0C0C0B' : (hasAssigned ? '1px solid #B8E6C8' : '1px solid #E3E1DB'),
-                                background: isPickerOpen ? '#0C0C0B' : (hasAssigned ? '#F0F9F4' : '#FAFAF8'),
-                                color: isPickerOpen ? '#FFFFFF' : (hasAssigned ? '#1E7B3C' : '#6B6B66'),
+                                border: isPickerOpen ? '1px solid var(--ef-ink)' : (hasAssigned ? '1px solid var(--ef-success-border)' : '1px solid var(--ef-border)'),
+                                background: isPickerOpen ? 'var(--ef-ink)' : (hasAssigned ? 'var(--ef-success-bg)' : 'var(--ef-canvas-raised)'),
+                                color: isPickerOpen ? 'var(--ef-surface)' : (hasAssigned ? 'var(--ef-success-strong)' : 'var(--ef-text-muted)'),
                               }}
                               title={isPickerOpen ? 'Close topic picker' : 'Assign topics to this section'}
                             >
@@ -456,7 +456,7 @@ export function SetupStep({
                               onClick={() => removeSection(idx)}
                               disabled={sections.length <= 1}
                               className="flex-shrink-0 flex items-center justify-center transition-opacity hover:opacity-60"
-                              style={{ width: 22, height: 22, borderRadius: 2, color: sections.length <= 1 ? '#E3E1DB' : '#6B6B66', cursor: sections.length <= 1 ? 'not-allowed' : 'pointer' }}
+                              style={{ width: 22, height: 22, borderRadius: 2, color: sections.length <= 1 ? 'var(--ef-border)' : 'var(--ef-text-muted)', cursor: sections.length <= 1 ? 'not-allowed' : 'pointer' }}
                             >
                               <X size={12} strokeWidth={1.5} />
                             </button>
@@ -469,11 +469,11 @@ export function SetupStep({
                               style={{
                                 gap: 8,
                                 padding: '6px 10px 8px 44px',
-                                background: '#FFFFFF',
-                                borderTop: '1px dashed #F0EFEB',
+                                background: 'var(--ef-surface)',
+                                borderTop: '1px dashed var(--ef-border-subtle)',
                               }}
                             >
-                              <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>
+                              <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
                                 {/* Positional: this break applies after the (idx+1)th COMPLETED
                                     section, whichever section that turns out to be when the
                                     section order is Random or Student's choice. */}
@@ -490,15 +490,15 @@ export function SetupStep({
                                 placeholder="—"
                                 min="1"
                                 className="flex-shrink-0 outline-none text-center text-xs"
-                                style={{ width: 52, padding: '5px 6px', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B', MozAppearance: 'textfield' } as React.CSSProperties}
+                                style={{ width: 52, padding: '5px 6px', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)', MozAppearance: 'textfield' } as React.CSSProperties}
                                 onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                 onKeyDown={(e) => { if (['-', 'e', '+', '.'].includes(e.key)) e.preventDefault(); }}
                               />
-                              <span className="text-xs flex-shrink-0" style={{ color: '#6B6B66' }}>min</span>
+                              <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>min</span>
                               <label
                                 className="flex items-center gap-1.5 text-xs ml-2"
                                 style={{
-                                  color: sec.breakAfterMinutes ? '#4A4A45' : '#6B6B66',
+                                  color: sec.breakAfterMinutes ? 'var(--ef-text-subtle)' : 'var(--ef-text-muted)',
                                   cursor: sec.breakAfterMinutes ? 'pointer' : 'not-allowed',
                                 }}
                               >
@@ -512,7 +512,7 @@ export function SetupStep({
                                 />
                                 Mandatory wait
                               </label>
-                              <span className="text-xs ml-auto" style={{ color: '#6B6B66' }}>
+                              <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
                                 {sec.breakAfterMinutes
                                   ? sec.breakMandatory
                                     ? 'Student must wait the full duration'
@@ -524,7 +524,7 @@ export function SetupStep({
 
                           {/* Assigned topic tags (collapsed view) */}
                           {hasAssigned && !isPickerOpen && (
-                            <div className="flex flex-wrap gap-1.5 px-10 pb-2.5 pt-0" style={{ background: '#FFFFFF' }}>
+                            <div className="flex flex-wrap gap-1.5 px-10 pb-2.5 pt-0" style={{ background: 'var(--ef-surface)' }}>
                               {sec.assignedTopics.map((key) => {
                                 const parts = key.split('::');
                                 const subj = parts[0] ?? '';
@@ -533,16 +533,16 @@ export function SetupStep({
                                   <span
                                     key={key}
                                     className="inline-flex items-center gap-1 px-2 py-0.5"
-                                    style={{ background: '#F0F9F4', color: '#1E7B3C', border: '1px solid #B8E6C8', borderRadius: 2, fontSize: 10 }}
+                                    style={{ background: 'var(--ef-success-bg)', color: 'var(--ef-success-strong)', border: '1px solid var(--ef-success-border)', borderRadius: 2, fontSize: 10 }}
                                   >
-                                    <span style={{ color: '#6B6B66', fontSize: 9 }}>{subj}</span>
-                                    <span style={{ color: '#6B6B66', fontSize: 9 }}>›</span>
+                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 9 }}>{subj}</span>
+                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 9 }}>›</span>
                                     <span>{topic}</span>
                                     <button
                                       type="button"
                                       onClick={(e) => { e.stopPropagation(); toggleAssignedTopic(idx, key); }}
                                       className="hover:opacity-60 transition-opacity"
-                                      style={{ color: '#1E7B3C', lineHeight: 1, marginLeft: 1 }}
+                                      style={{ color: 'var(--ef-success-strong)', lineHeight: 1, marginLeft: 1 }}
                                     >
                                       <X size={8} strokeWidth={2.5} />
                                     </button>
@@ -584,7 +584,7 @@ export function SetupStep({
                   onClick={addSection}
                   disabled={sections.length >= 26 || !mut.sections}
                   className="w-full mt-3 flex items-center justify-center gap-1.5 py-2.5 text-xs transition-all hover:opacity-80"
-                  style={{ border: '1px dashed #DDDBD5', borderRadius: 3, color: '#6B6B66', background: 'transparent', cursor: sections.length >= 26 || !mut.sections ? 'not-allowed' : 'pointer', opacity: !mut.sections ? 0.4 : 1 }}
+                  style={{ border: '1px dashed var(--ef-border-muted)', borderRadius: 3, color: 'var(--ef-text-muted)', background: 'transparent', cursor: sections.length >= 26 || !mut.sections ? 'not-allowed' : 'pointer', opacity: !mut.sections ? 0.4 : 1 }}
                 >
                   <Plus size={12} strokeWidth={1.5} /> Add Section
                 </button>
@@ -594,18 +594,18 @@ export function SetupStep({
                   const totalAssigned = sections.reduce((s, sec) => s + sec.assignedTopics.length, 0);
                   return (
                     <div className="flex items-center gap-4 mt-4 px-4 py-3"
-                      style={{ background: '#F7F6F3', border: '1px solid #EEECEA', borderRadius: 2 }}>
-                      <span className="text-xs" style={{ color: '#6B6B66' }}>
+                      style={{ background: 'var(--ef-canvas)', border: '1px solid #EEECEA', borderRadius: 2 }}>
+                      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                         {sections.length} section{sections.length !== 1 ? 's' : ''}
                       </span>
                       {totalAssigned > 0 && (
-                        <span className="text-xs flex items-center gap-1" style={{ color: '#1E7B3C' }}>
+                        <span className="text-xs flex items-center gap-1" style={{ color: 'var(--ef-success-strong)' }}>
                           <BookOpen size={9} strokeWidth={1.5} />
                           {totalAssigned} topic{totalAssigned !== 1 ? 's' : ''} assigned
                         </span>
                       )}
                       {totalSectionTime > 0 && (
-                        <span className="text-xs flex items-center gap-1.5 ml-auto" style={{ color: '#6B6B66' }}>
+                        <span className="text-xs flex items-center gap-1.5 ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
                           <Timer size={10} strokeWidth={1.5} />
                           {totalSectionTime} min total
                         </span>
@@ -623,8 +623,8 @@ export function SetupStep({
           <button onClick={handleContinue} disabled={!canContinue}
             className="flex items-center gap-2 text-xs px-5 py-2.5 transition-opacity"
             style={{
-              background: canContinue ? '#0C0C0B' : '#C8C7C2',
-              color: '#FFFFFF', borderRadius: 2,
+              background: canContinue ? 'var(--ef-ink)' : 'var(--ef-track)',
+              color: 'var(--ef-surface)', borderRadius: 2,
               cursor: canContinue ? 'pointer' : 'not-allowed',
               letterSpacing: '0.03em',
             }}>

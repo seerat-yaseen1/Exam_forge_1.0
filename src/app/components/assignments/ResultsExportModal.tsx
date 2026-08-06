@@ -103,8 +103,8 @@ export function ResultsExportModal({
       onClick={onClick}
       className="w-full text-left px-3 py-2.5 transition-colors"
       style={{
-        border: `1px solid ${active ? '#0C0C0B' : '#E3E1DB'}`,
-        background: active ? '#FAFAF8' : '#FFFFFF',
+        border: `1px solid ${active ? 'var(--ef-ink)' : 'var(--ef-border)'}`,
+        background: active ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)',
         borderRadius: 2, cursor: 'pointer',
       }}
     >
@@ -112,15 +112,15 @@ export function ResultsExportModal({
         <span
           style={{
             width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
-            border: `1px solid ${active ? '#0C0C0B' : '#6B6B66'}`,
-            background: active ? '#0C0C0B' : 'transparent',
-            boxShadow: active ? 'inset 0 0 0 2.5px #FFFFFF' : 'none',
+            border: `1px solid ${active ? 'var(--ef-ink)' : 'var(--ef-text-muted)'}`,
+            background: active ? 'var(--ef-ink)' : 'transparent',
+            boxShadow: active ? 'inset 0 0 0 2.5px var(--ef-surface)' : 'none',
           }}
         />
         {icon}
-        <span className="text-xs" style={{ color: '#0C0C0B' }}>{label}</span>
+        <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{label}</span>
       </div>
-      <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.5, paddingLeft: 20 }}>
+      <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5, paddingLeft: 20 }}>
         {hint}
       </p>
     </button>
@@ -138,17 +138,17 @@ export function ResultsExportModal({
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
-        style={{ maxWidth: 440, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 440, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: '1px solid #E3E1DB' }}>
+          style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-center gap-2">
-            <Download size={13} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-            <p className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em' }}>EXPORT RESULTS</p>
+            <Download size={13} strokeWidth={1.5} style={{ color: 'var(--ef-ink)' }} />
+            <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>EXPORT RESULTS</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -156,7 +156,7 @@ export function ResultsExportModal({
         {/* Body */}
         <div className="px-5 py-5 space-y-5">
           <div>
-            <p className="text-xs mb-2" style={{ color: '#6B6B66' }}>Attempts to include</p>
+            <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)' }}>Attempts to include</p>
             <div className="space-y-2">
               {SCOPE_OPTIONS.map((o) =>
                 optionCard(scope === o.value, () => setScope(o.value), o.label, o.hint)
@@ -165,40 +165,40 @@ export function ResultsExportModal({
           </div>
 
           <div>
-            <p className="text-xs mb-2" style={{ color: '#6B6B66' }}>Format</p>
+            <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)' }}>Format</p>
             <div className="space-y-2">
               {FORMAT_OPTIONS.map((o) =>
                 optionCard(
                   format === o.value, () => setFormat(o.value), o.label, o.hint,
                   o.icon === 'xlsx'
-                    ? <FileSpreadsheet size={12} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
-                    : <FileText size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                    ? <FileSpreadsheet size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />
+                    : <FileText size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                 )
               )}
             </div>
           </div>
 
-          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
-            Covers all <strong style={{ color: '#4A4A45' }}>{students.length}</strong>{' '}
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+            Covers all <strong style={{ color: 'var(--ef-text-subtle)' }}>{students.length}</strong>{' '}
             allocated student{students.length === 1 ? '' : 's'} — those who never attempted
             appear as “Not attempted”. Deleted attempts are excluded, matching the live
             roster.
           </p>
 
           {error && (
-            <p className="text-xs" style={{ color: '#9B2828' }}>{error}</p>
+            <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</p>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button
             onClick={handleExport}
             disabled={busy}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
-              background: busy ? '#4A4A45' : '#0C0C0B',
-              color: '#FFFFFF', borderRadius: 2,
+              background: busy ? 'var(--ef-text-subtle)' : 'var(--ef-ink)',
+              color: 'var(--ef-surface)', borderRadius: 2,
               cursor: busy ? 'not-allowed' : 'pointer',
               opacity: busy ? 0.7 : 1,
             }}
@@ -211,7 +211,7 @@ export function ResultsExportModal({
             onClick={onClose}
             disabled={busy}
             className="text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
           >
             Cancel
           </button>

@@ -73,7 +73,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
+      <div className="flex items-center gap-2 text-xs py-4" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={12} className="animate-spin" /> Loading requests…
       </div>
     );
@@ -93,21 +93,21 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
     <div>
       {error && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2 mb-3"
-          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: '#9B2828' }}>
+          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: 'var(--ef-danger)' }}>
           <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>{error}</span>
         </div>
       )}
 
       {toDecide.length === 0 && mine.length === 0 && (
-        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
+        <div className="flex items-center gap-2 text-xs py-4" style={{ color: 'var(--ef-text-muted)' }}>
           <Inbox size={13} strokeWidth={1.5} /> No pending deletion requests.
         </div>
       )}
 
       {toDecide.length > 0 && (
         <>
-          <p className="text-xs mb-2" style={{ color: '#0C0C0B', letterSpacing: '0.05em' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--ef-ink)', letterSpacing: '0.05em' }}>
             AWAITING YOUR DECISION ({toDecide.length})
           </p>
           {toDecide.map((r) => {
@@ -115,14 +115,14 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
             const busy = busyId === r.id;
             return (
               <div key={r.id} className="px-3 py-3 mb-2"
-                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs" style={{ color: '#0C0C0B' }}>
+                    <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>
                       Delete {entityTypeLabel(r.entityType).toLowerCase()}{' '}
-                      <span style={{ color: '#6B6B66' }}>{r.entityLabel ?? r.entityId}</span>
+                      <span style={{ color: 'var(--ef-text-muted)' }}>{r.entityLabel ?? r.entityId}</span>
                     </p>
-                    <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                       Requested by {r.requesterRole}
                       {r.reason ? ` — “${r.reason}”` : ''}
                     </p>
@@ -130,7 +130,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
                   <button
                     onClick={() => { setExpandedId(open ? null : r.id); setNote(''); }}
                     className="text-xs px-2 py-1 flex-shrink-0"
-                    style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6862', background: '#FFFFFF' }}
+                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)' }}
                   >
                     {open ? 'Close' : 'Review'}
                   </button>
@@ -149,7 +149,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
                       placeholder="Note (optional) — recorded in the audit trail"
                       disabled={busy}
                       className="text-xs px-2 py-1.5 w-full"
-                      style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#0C0C0B', background: '#FFFFFF' }}
+                      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-ink)', background: 'var(--ef-surface)' }}
                     />
 
                     <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
                         onClick={() => act(r, 'approve')}
                         disabled={busy}
                         className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-                        style={{ background: '#9B2828', color: '#FFFFFF', borderRadius: 2, cursor: busy ? 'not-allowed' : 'pointer' }}
+                        style={{ background: 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2, cursor: busy ? 'not-allowed' : 'pointer' }}
                       >
                         {busy ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
                         Approve &amp; delete
@@ -166,7 +166,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
                         onClick={() => act(r, 'reject')}
                         disabled={busy}
                         className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-                        style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6862', background: '#FFFFFF', cursor: busy ? 'not-allowed' : 'pointer' }}
+                        style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)', cursor: busy ? 'not-allowed' : 'pointer' }}
                       >
                         <X size={10} strokeWidth={2} /> Reject
                       </button>
@@ -181,7 +181,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
 
       {mine.length > 0 && (
         <>
-          <p className="text-xs mb-2 mt-4" style={{ color: '#0C0C0B', letterSpacing: '0.05em' }}>
+          <p className="text-xs mb-2 mt-4" style={{ color: 'var(--ef-ink)', letterSpacing: '0.05em' }}>
             AWAITING THE WEB OWNER ({mine.length})
           </p>
           {mine.map((r) => (
@@ -189,10 +189,10 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
               style={{ background: '#F4F3F0', border: '1px dashed #DAD8D2', borderRadius: 2 }}>
               <p className="text-xs" style={{ color: '#7A7873' }}>
                 Delete {entityTypeLabel(r.entityType).toLowerCase()}{' '}
-                <span style={{ color: '#6B6B66' }}>{r.entityLabel ?? r.entityId}</span>
+                <span style={{ color: 'var(--ef-text-muted)' }}>{r.entityLabel ?? r.entityId}</span>
               </p>
               <span className="text-xs px-2 py-0.5 flex-shrink-0"
-                style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}>
+                style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)' }}>
                 Pending
               </span>
             </div>
@@ -202,16 +202,16 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
 
       {resolved.length > 0 && (
         <>
-          <p className="text-xs mb-2 mt-4" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>
+          <p className="text-xs mb-2 mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.05em' }}>
             RECENTLY RESOLVED
           </p>
           {resolved.map((r) => (
             <div key={r.id} className="flex items-center justify-between gap-3 py-1.5">
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 {entityTypeLabel(r.entityType)} {r.entityLabel ?? r.entityId}
               </span>
               <span className="text-xs" style={{
-                color: r.status === 'approved' ? '#9B2828' : '#6B6B66',
+                color: r.status === 'approved' ? 'var(--ef-danger)' : 'var(--ef-text-muted)',
               }}>
                 {requestStatusLabel(r.status)}
               </span>

@@ -17,17 +17,17 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
   return (
     <div
       className="flex items-center gap-2 md:gap-3 px-3 py-3 md:px-5 md:py-4"
-      style={{ border: '1px solid #E3E1DB', borderRadius: 3, background: '#FFFFFF' }}
+      style={{ border: '1px solid var(--ef-border)', borderRadius: 3, background: 'var(--ef-surface)' }}
     >
       <div
         className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 26, height: 26, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA' }}
+        style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}
       >
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-xs truncate" style={{ color: '#6B6B66' }}>{label}</p>
-        <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{value}</p>
+        <p className="text-xs truncate" style={{ color: 'var(--ef-text-muted)' }}>{label}</p>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--ef-ink)' }}>{value}</p>
       </div>
     </div>
   );
@@ -45,15 +45,15 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
     { id: 'subjects', label: 'Subjects'      },
   ];
   return (
-    <div className="flex gap-0" style={{ borderBottom: '1px solid #E3E1DB', marginBottom: 0 }}>
+    <div className="flex gap-0" style={{ borderBottom: '1px solid var(--ef-border)', marginBottom: 0 }}>
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
           className="text-xs px-4 py-2.5 transition-all relative"
           style={{
-            color: active === t.id ? '#0C0C0B' : '#6B6B66',
-            borderBottom: active === t.id ? '2px solid #0C0C0B' : '2px solid transparent',
+            color: active === t.id ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
+            borderBottom: active === t.id ? '2px solid var(--ef-ink)' : '2px solid transparent',
             letterSpacing: '0.02em',
             marginBottom: -1,
             background: 'transparent',
@@ -70,15 +70,15 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 
 function StubTab({ label, step, description }: { label: string; step: string; description: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20" style={{ color: '#6B6B66' }}>
+    <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--ef-text-muted)' }}>
       <div
         className="flex items-center justify-center text-xs mb-4 select-none"
-        style={{ width: 28, height: 28, borderRadius: 2, background: '#EEECEA', color: '#6B6B66', letterSpacing: '0.04em' }}
+        style={{ width: 28, height: 28, borderRadius: 2, background: '#EEECEA', color: 'var(--ef-text-muted)', letterSpacing: '0.04em' }}
       >
         {step}
       </div>
       <p className="text-xs" style={{ letterSpacing: '0.1em' }}>{label}</p>
-      <p className="text-xs mt-2" style={{ color: '#6B6B66' }}>{description}</p>
+      <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)' }}>{description}</p>
     </div>
   );
 }
@@ -134,12 +134,12 @@ export function QuestionsPage() {
         {/* ── Page header ── */}
         <div
           className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-8"
-          style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}
+          style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}
         >
           <div>
-            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>WEB OWNER</p>
-            <h1 className="text-base" style={{ color: '#0C0C0B' }}>Questions</h1>
-            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
+            <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>WEB OWNER</p>
+            <h1 className="text-base" style={{ color: 'var(--ef-ink)' }}>Questions</h1>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
               Global question pool — upload questions, organise into banks, grant access to institutes.
             </p>
           </div>
@@ -149,7 +149,7 @@ export function QuestionsPage() {
             <button
               onClick={() => setExportOpen(true)}
               className="flex items-center gap-1.5 text-xs px-3 py-2.5 transition-opacity hover:opacity-80"
-              style={{ border: '1px solid #E3E1DB', color: '#6B6B66', borderRadius: 2, background: '#FFFFFF' }}
+              style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-muted)', borderRadius: 2, background: 'var(--ef-surface)' }}
             >
               <Download size={12} strokeWidth={1.5} /> Export
             </button>
@@ -157,7 +157,7 @@ export function QuestionsPage() {
             <button
               onClick={() => setBulkUploadOpen(true)}
               className="flex items-center gap-1.5 text-xs px-3 py-2.5 transition-opacity hover:opacity-80"
-              style={{ border: '1px solid #E3E1DB', color: '#6B6B66', borderRadius: 2, background: '#FFFFFF' }}
+              style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-muted)', borderRadius: 2, background: 'var(--ef-surface)' }}
             >
               <Upload size={12} strokeWidth={1.5} /> Bulk Upload
             </button>
@@ -165,7 +165,7 @@ export function QuestionsPage() {
             <button
               onClick={() => coreRef.current?.openCreate()}
               className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
-              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.03em' }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}
             >
               <Plus size={12} strokeWidth={2} /> Add Question
             </button>
@@ -174,9 +174,9 @@ export function QuestionsPage() {
 
         {/* ── Stat pills ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-          <StatPill icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Total Questions" value={loading ? '…' : fmt(questions.length)} />
-          <StatPill icon={<Library size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Question Banks" value={fmt(bankCount)} />
-          <StatPill icon={<Share2 size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />} label="Active Grants" value={fmt(grantCount)} />
+          <StatPill icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />} label="Total Questions" value={loading ? '…' : fmt(questions.length)} />
+          <StatPill icon={<Library size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />} label="Question Banks" value={fmt(bankCount)} />
+          <StatPill icon={<Share2 size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />} label="Active Grants" value={fmt(grantCount)} />
         </div>
 
         {/* ── Tabs ── */}
@@ -185,7 +185,7 @@ export function QuestionsPage() {
         {/* ── Tab content ── */}
         <div
           className="mt-0"
-          style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderTop: 'none', borderRadius: '0 0 3px 3px' }}
+          style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderTop: 'none', borderRadius: '0 0 3px 3px' }}
         >
           {/* ── QUESTION POOL ── */}
           {activeTab === 'pool' && (
@@ -205,8 +205,8 @@ export function QuestionsPage() {
           {/* ── SUBJECTS ── */}
           {activeTab === 'subjects' && (
             <div className="px-6 py-6">
-              <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>SUBJECT REGISTRY</p>
-              <p className="text-xs mb-5" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
+              <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>SUBJECT REGISTRY</p>
+              <p className="text-xs mb-5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
                 Canonical subject names used across all questions. Add aliases so that bulk uploads using alternate names (e.g. QUANT, Maths) automatically resolve to the correct subject. Use Merge to permanently consolidate two subjects.
               </p>
               <SubjectManager />

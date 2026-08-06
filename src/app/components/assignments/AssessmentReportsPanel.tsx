@@ -50,10 +50,10 @@ const STATUS_LABEL: Record<ReportStatus, string> = {
 };
 
 const STATUS_COLOR: Record<ReportStatus, { bg: string; border: string; text: string }> = {
-  open:      { bg: '#FEF9EC', border: '#F5DFA0', text: '#92680A' },
-  reviewed:  { bg: '#F7F6F3', border: '#E3E1DB', text: '#4A4A45' },
-  dismissed: { bg: '#F7F6F3', border: '#E3E1DB', text: '#6B6B66' },
-  fixed:     { bg: '#EAF6EE', border: '#B5D9C0', text: '#1E7B3C' },
+  open:      { bg: '#FEF9EC', border: 'var(--ef-warning-border)', text: 'var(--ef-warning)' },
+  reviewed:  { bg: 'var(--ef-canvas)', border: 'var(--ef-border)', text: 'var(--ef-text-subtle)' },
+  dismissed: { bg: 'var(--ef-canvas)', border: 'var(--ef-border)', text: 'var(--ef-text-muted)' },
+  fixed:     { bg: '#EAF6EE', border: '#B5D9C0', text: 'var(--ef-success-strong)' },
 };
 
 type Grouped = {
@@ -138,15 +138,15 @@ export function AssessmentReportsPanel({ assessmentId, reviewerId, reviewerRole,
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 size={16} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <Loader2 size={16} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
       </div>
     );
   }
   if (errorMsg) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-2">
-        <AlertTriangle size={16} strokeWidth={1} style={{ color: '#9B2828' }} />
-        <p className="text-xs" style={{ color: '#9B2828' }}>{errorMsg}</p>
+        <AlertTriangle size={16} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
+        <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{errorMsg}</p>
       </div>
     );
   }
@@ -170,7 +170,7 @@ export function AssessmentReportsPanel({ assessmentId, reviewerId, reviewerRole,
     if (!mayReview) {
       return (
         <div className="px-4 py-8 text-center">
-          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
             Question reports on this exam are handled by its owner.
             <br />
             Your role doesn't have question-review access here — the exam
@@ -193,30 +193,30 @@ export function AssessmentReportsPanel({ assessmentId, reviewerId, reviewerRole,
               className="flex items-center gap-1.5 text-xs px-3 py-1.5"
               style={{
                 borderRadius: 2, cursor: 'pointer',
-                background: isActive ? '#0C0C0B' : 'transparent',
-                color: isActive ? '#FFFFFF' : '#6B6B66',
-                border: isActive ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                background: isActive ? 'var(--ef-ink)' : 'transparent',
+                color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
+                border: isActive ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
               }}>
               {tab === 'all' ? 'All' : STATUS_LABEL[tab]}
               <span style={{
-                background: isActive ? 'rgba(255,255,255,0.2)' : '#F0EFEB',
-                color: isActive ? '#FFFFFF' : '#6B6B66',
+                background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--ef-border-subtle)',
+                color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                 borderRadius: 2, padding: '0 4px', fontSize: 10,
               }}>{count}</span>
             </button>
           );
         })}
         <button onClick={load} className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5"
-          style={{ color: '#6B6B66', cursor: 'pointer' }}>
+          style={{ color: 'var(--ef-text-muted)', cursor: 'pointer' }}>
           <RefreshCw size={11} strokeWidth={1.5} /> Refresh
         </button>
       </div>
 
       {grouped.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3"
-          style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
-          <Flag size={20} strokeWidth={1} style={{ color: '#6B6B66' }} />
-          <p className="text-xs" style={{ color: '#6B6B66' }}>
+          style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
+          <Flag size={20} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             No reports {filter !== 'all' ? `with status "${STATUS_LABEL[filter]}"` : 'on this assessment'}.
           </p>
         </div>
@@ -258,23 +258,23 @@ function ReportGroupCard({
   }, {} as Record<ReportReason, number>);
 
   return (
-    <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}>
+    <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
       {/* Header */}
-      <div className="flex items-start gap-3 px-4 py-3" style={{ borderBottom: '1px solid #F0EFEB' }}>
-        <Flag size={13} strokeWidth={1.5} style={{ color: '#92680A', marginTop: 2 }} />
+      <div className="flex items-start gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
+        <Flag size={13} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', marginTop: 2 }} />
         <div className="flex-1 min-w-0">
-          <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.6 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.6 }}>
             {group.question
               ? group.question.stem.slice(0, 140) + (group.question.stem.length > 140 ? '…' : '')
-              : <span style={{ color: '#6B6B66' }}>Question not found (deleted?)</span>}
+              : <span style={{ color: 'var(--ef-text-muted)' }}>Question not found (deleted?)</span>}
           </p>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               {group.reports.length} report{group.reports.length !== 1 ? 's' : ''}
             </span>
             {Object.entries(reasonCounts).map(([reason, count]) => (
               <span key={reason} className="text-xs px-2 py-0.5"
-                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}>
+                style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}>
                 {REASON_LABEL[reason as ReportReason]} · {count}
               </span>
             ))}
@@ -282,7 +282,7 @@ function ReportGroupCard({
         </div>
         <button onClick={() => setExpanded((e) => !e)}
           className="text-xs flex items-center gap-1"
-          style={{ color: '#6B6B66', cursor: 'pointer' }}>
+          style={{ color: 'var(--ef-text-muted)', cursor: 'pointer' }}>
           {expanded ? 'Hide' : 'Show'} details
           <ChevronDown size={11} strokeWidth={1.5}
             style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
@@ -304,12 +304,12 @@ function ReportGroupCard({
 
           {/* Bulk resolve (regrade) */}
           {assessment && group.question && (
-            <div className="mt-2 pt-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+            <div className="mt-2 pt-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
               <button
                 onClick={() => setResolveOpen((o) => !o)}
                 className="text-xs px-3 py-1.5"
                 style={{
-                  background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer',
+                  background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer',
                 }}
               >
                 Resolve all {group.reports.filter((r) => r.status === 'open').length} open report(s)…
@@ -383,27 +383,27 @@ function ReportRow({
 
   return (
     <div className="flex items-start gap-3 px-3 py-2.5"
-      style={{ background: '#FAFAF8', border: '1px solid #F0EFEB', borderRadius: 2 }}>
+      style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border-subtle)', borderRadius: 2 }}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs" style={{ color: '#0C0C0B' }}>{report.studentName}</span>
+          <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{report.studentName}</span>
           <span className="text-xs px-1.5 py-0.5"
             style={{ background: sc.bg, border: `1px solid ${sc.border}`, color: sc.text, borderRadius: 2 }}>
             {STATUS_LABEL[report.status]}
           </span>
-          <span className="text-xs" style={{ color: '#6B6B66' }}>·</span>
-          <span className="text-xs" style={{ color: '#6B6B66' }}>{REASON_LABEL[report.reason]}</span>
-          <span className="text-xs ml-auto" style={{ color: '#6B6B66' }}>
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>·</span>
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{REASON_LABEL[report.reason]}</span>
+          <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
             {new Date(report.createdAt).toLocaleString()}
           </span>
         </div>
         {report.note && (
-          <p className="text-xs mt-1.5" style={{ color: '#4A4A45', lineHeight: 1.6 }}>
+          <p className="text-xs mt-1.5" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.6 }}>
             "{report.note}"
           </p>
         )}
         {report.resolution && (
-          <p className="text-xs mt-1.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+          <p className="text-xs mt-1.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
             Resolved by {report.resolution.resolvedByRole.replace('_', ' ')} ·{' '}
             {report.resolution.action.replace(/_/g, ' ')}
             {report.resolution.regradeApplied ? ' (regraded)' : ''}
@@ -414,12 +414,12 @@ function ReportRow({
         <div className="flex items-center gap-1 flex-shrink-0">
           <button onClick={markReviewed} disabled={busy}
             className="text-xs px-2 py-1"
-            style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, cursor: 'pointer' }}>
+            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, cursor: 'pointer' }}>
             <CheckCircle2 size={11} strokeWidth={1.5} className="inline" /> Reviewed
           </button>
           <button onClick={dismiss} disabled={busy}
             className="text-xs px-2 py-1"
-            style={{ border: '1px solid #E3E1DB', color: '#9B2828', borderRadius: 2, cursor: 'pointer' }}>
+            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-danger)', borderRadius: 2, cursor: 'pointer' }}>
             <XCircle size={11} strokeWidth={1.5} className="inline" /> Dismiss
           </button>
         </div>
@@ -494,8 +494,8 @@ function ResolveAllForm({
 
   return (
     <div className="mt-3 px-3 py-3"
-      style={{ background: '#FAFAF8', border: '1px solid #F0EFEB', borderRadius: 2 }}>
-      <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+      style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border-subtle)', borderRadius: 2 }}>
+      <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
         RESOLUTION ACTION
       </p>
       <div className="flex flex-col gap-1.5 mb-3">
@@ -505,7 +505,7 @@ function ResolveAllForm({
           ['answer_key_changed',    'Answer key changed — regrade all attempts'],
           ['question_invalidated',  'Invalidate question — award full marks to all'],
         ] as Array<[ResolutionAction, string]>).map(([val, label]) => (
-          <label key={val} className="flex items-center gap-2 text-xs" style={{ color: '#0C0C0B', cursor: 'pointer' }}>
+          <label key={val} className="flex items-center gap-2 text-xs" style={{ color: 'var(--ef-ink)', cursor: 'pointer' }}>
             <input type="radio" name="action" checked={action === val}
               onChange={() => setAction(val)} />
             {label}
@@ -513,7 +513,7 @@ function ResolveAllForm({
         ))}
       </div>
 
-      <p className="text-xs mb-1.5" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>
+      <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
         NOTE TO STUDENT (optional)
       </p>
       <textarea
@@ -522,26 +522,26 @@ function ResolveAllForm({
         placeholder="Visible to the student on the results page…"
         className="w-full outline-none text-xs"
         style={{
-          background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2,
-          padding: '8px 10px', color: '#0C0C0B', fontFamily: 'inherit',
+          background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 2,
+          padding: '8px 10px', color: 'var(--ef-ink)', fontFamily: 'inherit',
         }}
       />
 
       {willRegrade && (
-        <p className="text-xs mt-2" style={{ color: '#92680A', lineHeight: 1.5 }}>
+        <p className="text-xs mt-2" style={{ color: 'var(--ef-warning)', lineHeight: 1.5 }}>
           Heads up: this will recompute scores for every finished attempt on this assessment.
           Make sure the question doc has the correct answer key first.
         </p>
       )}
       {statusMsg && (
-        <p className="text-xs mt-2" style={{ color: '#4A4A45' }}>{statusMsg}</p>
+        <p className="text-xs mt-2" style={{ color: 'var(--ef-text-subtle)' }}>{statusMsg}</p>
       )}
 
       <div className="flex items-center gap-2 mt-3">
         <button onClick={submit} disabled={busy}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5"
           style={{
-            background: busy ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2,
+            background: busy ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2,
             cursor: busy ? 'not-allowed' : 'pointer',
           }}>
           {busy && <Loader2 size={11} className="animate-spin" />}
@@ -549,7 +549,7 @@ function ResolveAllForm({
         </button>
         <button onClick={onCancel} disabled={busy}
           className="text-xs px-3 py-1.5"
-          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+          style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
           Cancel
         </button>
       </div>

@@ -66,8 +66,8 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
           disabled={loading}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 self-start"
           style={{
-            border: '1px solid #E3E1DB', borderRadius: 2,
-            background: '#FFFFFF', color: '#6B6862',
+            border: '1px solid var(--ef-border)', borderRadius: 2,
+            background: 'var(--ef-surface)', color: '#6B6862',
             cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
@@ -76,7 +76,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
         </button>
         {error && (
           <div className="flex items-start gap-2 text-xs px-2.5 py-2"
-            style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: '#9B2828' }}>
+            style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: 'var(--ef-danger)' }}>
             <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
             <span>{error}</span>
           </div>
@@ -100,7 +100,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
         <button
           onClick={download}
           className="flex items-center gap-1.5 text-xs px-2.5 py-1 flex-shrink-0"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#6B6862' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: '#6B6862' }}
         >
           <Download size={11} strokeWidth={1.5} /> Export JSON
         </button>
@@ -119,7 +119,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
         </div>
       )}
 
-      <div style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+      <div style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
         {sections.map((s) => {
           const open = expanded === s.collection;
           const unreadable = s.records === null;
@@ -130,18 +130,18 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
                 className="flex items-center justify-between gap-3 w-full px-2.5 py-2 text-left"
                 style={{ background: 'transparent', cursor: 'pointer' }}
               >
-                <span className="flex items-center gap-1.5 text-xs" style={{ color: '#0C0C0B' }}>
+                <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ef-ink)' }}>
                   {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                   {collectionLabel(s.collection)}
                 </span>
-                <span className="text-xs" style={{ color: unreadable ? '#7A5B12' : '#6B6B66' }}>
+                <span className="text-xs" style={{ color: unreadable ? '#7A5B12' : 'var(--ef-text-muted)' }}>
                   {unreadable ? 'unreadable' : `${s.records!.length}`}
                 </span>
               </button>
               {open && (
                 <div className="px-2.5 pb-2">
                   {s.note && (
-                    <p className="text-xs mb-1.5" style={{ color: '#6B6B66' }}>{s.note}</p>
+                    <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)' }}>{s.note}</p>
                   )}
                   {unreadable ? (
                     <p className="text-xs" style={{ color: '#7A5B12' }}>
@@ -150,7 +150,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
                   ) : (
                     <pre className="text-xs overflow-x-auto"
                       style={{
-                        background: '#F7F6F3', border: '1px solid #EDEBE5',
+                        background: 'var(--ef-canvas)', border: '1px solid #EDEBE5',
                         borderRadius: 2, padding: 8, maxHeight: 240,
                         color: '#3A3833', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                       }}>
@@ -164,7 +164,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
         })}
       </div>
 
-      <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+      <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
         {data.note} Credentials and session tokens are excluded. Face detection
         during exams runs in the browser only — no images or biometric data are
         stored.

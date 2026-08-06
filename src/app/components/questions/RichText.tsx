@@ -68,7 +68,7 @@ function renderKatex(formula: string, display: boolean): string {
       strict: 'ignore',
     });
   } catch {
-    return `<span style="color:#9B2828;font-family:monospace">${escapeHtml(formula)}</span>`;
+    return `<span style="color:var(--ef-danger);font-family:monospace">${escapeHtml(formula)}</span>`;
   }
 }
 
@@ -127,7 +127,7 @@ export function RichText({ text, image, className, style, onImageClick }: RichTe
             onClick={() => onImageClick?.(image)}
             className="rounded max-h-64 max-w-full object-contain"
             style={{
-              border: '1px solid #E3E1DB',
+              border: '1px solid var(--ef-border)',
               borderRadius: 3,
               cursor: onImageClick ? 'zoom-in' : 'default',
               display: 'block',
@@ -152,7 +152,7 @@ export function MathPreview({ formula, display = false }: MathPreviewProps) {
   return (
     <div
       className="px-3 py-2 rounded overflow-x-auto"
-      style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}
+      style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

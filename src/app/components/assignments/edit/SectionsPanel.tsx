@@ -25,14 +25,14 @@ export function SectionsPanel({ assessment, open, onOpenChange, onOpenLegacyEdit
       canSave={false}
       onSave={() => {}}
     >
-      <p className="text-xs mb-4" style={{ color: '#4A4A45' }}>
+      <p className="text-xs mb-4" style={{ color: 'var(--ef-text-subtle)' }}>
         Section structure, question selection rules, and per-section time limits are
         edited in the full builder. Once this assessment is published, sections become locked.
       </p>
       <button
         onClick={() => { onOpenChange(false); onOpenLegacyEditor(); }}
         className="text-xs px-4 py-2 transition-opacity hover:opacity-80"
-        style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2 }}
+        style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2 }}
       >
         Open full builder
       </button>

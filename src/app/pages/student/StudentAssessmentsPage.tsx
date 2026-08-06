@@ -148,19 +148,19 @@ function AttemptStatusBadge({ status, autoTerminated }: { status: AttemptStatus;
         <div className="relative w-2 h-2">
           <span
             className="absolute inline-flex w-2 h-2 rounded-full opacity-70"
-            style={{ background: '#92680A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }}
+            style={{ background: 'var(--ef-warning)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }}
           />
-          <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#92680A', margin: '1px' }} />
+          <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-warning)', margin: '1px' }} />
         </div>
-        <span className="text-xs" style={{ color: '#92680A' }}>In progress</span>
+        <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>In progress</span>
       </div>
     );
   }
   if (status === 'submitted' || status === 'auto_submitted') {
     return (
       <div className="flex items-center gap-1.5">
-        <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
-        <span className="text-xs" style={{ color: '#1E7B3C' }}>
+        <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
+        <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>
           {status === 'auto_submitted' ? 'Auto-submitted' : 'Submitted'}
         </span>
       </div>
@@ -169,8 +169,8 @@ function AttemptStatusBadge({ status, autoTerminated }: { status: AttemptStatus;
   if (status === 'terminated') {
     return (
       <div className="flex items-center gap-1.5">
-        <XCircle size={12} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-        <span className="text-xs" style={{ color: '#9B2828' }}>Terminated</span>
+        <XCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+        <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>Terminated</span>
       </div>
     );
   }
@@ -182,14 +182,14 @@ function AttemptStatusBadge({ status, autoTerminated }: { status: AttemptStatus;
 function ScoreDisplay({ attempt, assessment }: { attempt: Attempt; assessment: Assessment }) {
   if (!assessment.showResults) {
     return (
-      <span className="text-xs" style={{ color: '#6B6B66' }}>
+      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         Results not shown
       </span>
     );
   }
   if (!attempt.scores) {
     return (
-      <span className="text-xs" style={{ color: '#6B6B66' }}>
+      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         Score pending
       </span>
     );
@@ -197,7 +197,7 @@ function ScoreDisplay({ attempt, assessment }: { attempt: Attempt; assessment: A
   const { total, available, percentage, passed } = attempt.scores;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs" style={{ color: '#0C0C0B' }}>
+      <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>
         {total}/{available}
       </span>
       {/* G-02: amber while `passed` is null — the paper is scored but not
@@ -206,16 +206,16 @@ function ScoreDisplay({ attempt, assessment }: { attempt: Attempt; assessment: A
       <span
         className="text-xs px-1.5 py-0.5"
         style={{
-          background: passed === true ? '#F0F9F4' : passed === false ? '#FDF5F5' : '#FDF8EC',
-          color: passed === true ? '#1E7B3C' : passed === false ? '#9B2828' : '#92680A',
-          border: `1px solid ${passed === true ? '#B8E6C8' : passed === false ? '#F2CECE' : '#EBD9A8'}`,
+          background: passed === true ? 'var(--ef-success-bg)' : passed === false ? 'var(--ef-danger-bg)' : '#FDF8EC',
+          color: passed === true ? 'var(--ef-success-strong)' : passed === false ? 'var(--ef-danger)' : 'var(--ef-warning)',
+          border: `1px solid ${passed === true ? 'var(--ef-success-border)' : passed === false ? 'var(--ef-danger-border)' : '#EBD9A8'}`,
           borderRadius: 2,
         }}
       >
         {percentage}%
       </span>
       {attempt.scores.requiresManualReview && (
-        <span className="text-xs" style={{ color: '#92680A' }}>· awaiting marking</span>
+        <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>· awaiting marking</span>
       )}
     </div>
   );
@@ -315,7 +315,7 @@ function AssessmentCard({
   // ── Status bar left side ───────────────────────────────────────
   const statusLeft = useMemo(() => {
     if (!attempt) {
-      return <span className="text-xs" style={{ color: '#6B6B66' }}>Not started</span>;
+      return <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Not started</span>;
     }
     return (
       <AttemptStatusBadge
@@ -327,10 +327,10 @@ function AssessmentCard({
 
   // ── Availability colours ───────────────────────────────────────
   const leftBarColor =
-    availability === 'available'     ? '#1E7B3C' :
+    availability === 'available'     ? 'var(--ef-success-strong)' :
     availability === 'upcoming'      ? '#4A6FA5' :
-    availability === 'window_closed' ? '#6B6B66' :
-    '#6B6B66';
+    availability === 'window_closed' ? 'var(--ef-text-muted)' :
+    'var(--ef-text-muted)';
 
   return (
     <motion.div
@@ -340,8 +340,8 @@ function AssessmentCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background: hovered ? '#FAFAF8' : '#FFFFFF',
-        border: '1px solid #E3E1DB',
+        background: hovered ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)',
+        border: '1px solid var(--ef-border)',
         borderRadius: 3,
         overflow: 'hidden',
         transition: 'background 0.15s',
@@ -356,8 +356,8 @@ function AssessmentCard({
 
         {/* Top row: title + time indicator */}
         <div className="flex items-start justify-between gap-3 mb-2">
-          <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.5, flex: 1 }}>
-            {a.title || <em style={{ color: '#6B6B66' }}>Untitled Assessment</em>}
+          <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.5, flex: 1 }}>
+            {a.title || <em style={{ color: 'var(--ef-text-muted)' }}>Untitled Assessment</em>}
           </p>
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Reattempt badge — only when prior submission exists + chances left */}
@@ -366,7 +366,7 @@ function AssessmentCard({
                 className="text-xs px-2 py-0.5 flex items-center gap-1"
                 style={{
                   background: '#FFF7E6',
-                  color: '#8B5E1A',
+                  color: 'var(--ef-warning-strong)',
                   border: '1px solid #F0DFA0',
                   borderRadius: 2,
                 }}
@@ -381,9 +381,9 @@ function AssessmentCard({
               <span
                 className="text-xs px-2 py-0.5 flex items-center gap-1"
                 style={{
-                  background: timeInfo.urgent ? '#FDF5F5' : '#F0F9F4',
-                  color: timeInfo.urgent ? '#9B2828' : '#1E7B3C',
-                  border: `1px solid ${timeInfo.urgent ? '#F2CECE' : '#B8E6C8'}`,
+                  background: timeInfo.urgent ? 'var(--ef-danger-bg)' : 'var(--ef-success-bg)',
+                  color: timeInfo.urgent ? 'var(--ef-danger)' : 'var(--ef-success-strong)',
+                  border: `1px solid ${timeInfo.urgent ? 'var(--ef-danger-border)' : 'var(--ef-success-border)'}`,
                   borderRadius: 2,
                 }}
               >
@@ -412,8 +412,8 @@ function AssessmentCard({
                 className="text-xs px-2 py-0.5"
                 style={{
                   background: '#F5F5F5',
-                  color: '#6B6B66',
-                  border: '1px solid #DDDBD5',
+                  color: 'var(--ef-text-muted)',
+                  border: '1px solid var(--ef-border-muted)',
                   borderRadius: 2,
                 }}
               >
@@ -426,33 +426,33 @@ function AssessmentCard({
         {/* Meta pills row */}
         <div className="flex items-center gap-3 flex-wrap mb-3">
           {a.subject && (
-            <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
-              <BookOpen size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+              <BookOpen size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
               {a.subject}
             </span>
           )}
           {sectionCount > 0 && (
-            <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
+            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               <Layers size={10} strokeWidth={1.5} />
               {sectionCount} section{sectionCount !== 1 ? 's' : ''}
             </span>
           )}
-          <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
+          <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             <ClipboardList size={10} strokeWidth={1.5} />
             {questionCount} question{questionCount !== 1 ? 's' : ''}
           </span>
-          <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
+          <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             <Award size={10} strokeWidth={1.5} />
             {a.totalMarks} marks
           </span>
           {totalSectionTime > 0 && (
-            <span className="flex items-center gap-1 text-xs" style={{ color: '#6B6B66' }}>
+            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               <Timer size={10} strokeWidth={1.5} />
               {totalSectionTime}m
             </span>
           )}
           {a.passingScore !== undefined && (
-            <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               · Pass: {a.passingScore}%
             </span>
           )}
@@ -461,14 +461,14 @@ function AssessmentCard({
         {/* Date range */}
         {(a.startDate || a.endDate) && (
           <div className="flex items-center gap-1.5 mb-3">
-            <Calendar size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-            <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <Calendar size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               {a.startDate ? formatDateTime(a.startDate) : 'Open'}
             </span>
             {a.endDate && (
               <>
-                <ArrowRight size={9} strokeWidth={1.5} style={{ color: '#DDDBD5' }} />
-                <span className="text-xs" style={{ color: '#6B6B66' }}>
+                <ArrowRight size={9} strokeWidth={1.5} style={{ color: 'var(--ef-border-muted)' }} />
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   {formatDateTime(a.endDate)}
                 </span>
               </>
@@ -484,9 +484,9 @@ function AssessmentCard({
                 key={sec.id}
                 className="text-xs px-2 py-0.5"
                 style={{
-                  background: '#F7F6F3',
-                  color: '#6B6B66',
-                  border: '1px solid #E3E1DB',
+                  background: 'var(--ef-canvas)',
+                  color: 'var(--ef-text-muted)',
+                  border: '1px solid var(--ef-border)',
                   borderRadius: 2,
                 }}
               >
@@ -500,7 +500,7 @@ function AssessmentCard({
         {/* Bottom row: attempt status + score + action */}
         <div
           className="flex items-center justify-between gap-3 pt-3"
-          style={{ borderTop: '1px solid #F0EFEB' }}
+          style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
         >
           <div className="flex items-center gap-4">
             {statusLeft}
@@ -509,8 +509,8 @@ function AssessmentCard({
                 className="text-xs px-2 py-0.5"
                 style={{
                   background: '#F5F5F5',
-                  color: '#6B6B66',
-                  border: '1px solid #DDDBD5',
+                  color: 'var(--ef-text-muted)',
+                  border: '1px solid var(--ef-border-muted)',
                   borderRadius: 2,
                 }}
               >
@@ -522,8 +522,8 @@ function AssessmentCard({
             )}
             {attempt && attempt.integrityLog && attempt.integrityLog.totalViolations > 0 && (
               <div className="flex items-center gap-1" title={`${attempt.integrityLog.totalViolations} integrity violation(s) logged`}>
-                <Shield size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-                <span className="text-xs" style={{ color: '#6B6B66' }}>
+                <Shield size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   {attempt.integrityLog.totalViolations}v
                 </span>
               </div>
@@ -541,9 +541,9 @@ function AssessmentCard({
               }}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity hover:opacity-75"
               style={{
-                background: action.variant === 'primary' ? '#0C0C0B' : '#FFFFFF',
-                color: action.variant === 'primary' ? '#FFFFFF' : '#4A4A45',
-                border: action.variant === 'primary' ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                background: action.variant === 'primary' ? 'var(--ef-ink)' : 'var(--ef-surface)',
+                color: action.variant === 'primary' ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
+                border: action.variant === 'primary' ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
                 borderRadius: 2,
                 cursor: 'pointer',
               }}
@@ -564,22 +564,22 @@ function AssessmentCard({
 function EmptyState({ category }: { category: 'available' | 'missed' | 'submitted' | 'all' }) {
   const messages: Record<typeof category, { icon: React.ReactNode; title: string; body: string }> = {
     all: {
-      icon: <ClipboardList size={28} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
+      icon: <ClipboardList size={28} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />,
       title: 'No assessments yet',
       body: 'Assessments assigned to you will appear here once your administrator publishes them.',
     },
     available: {
-      icon: <PlayCircle size={20} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
+      icon: <PlayCircle size={20} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />,
       title: 'Nothing available right now',
       body: 'Check back later — new assessments will appear here when they open.',
     },
     missed: {
-      icon: <XCircle size={20} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
+      icon: <XCircle size={20} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />,
       title: 'Nothing missed',
       body: 'Assessments you did not submit before they closed will appear here.',
     },
     submitted: {
-      icon: <CheckCircle2 size={20} strokeWidth={1} style={{ color: '#DDDBD5' }} />,
+      icon: <CheckCircle2 size={20} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />,
       title: 'No submissions yet',
       body: 'Your completed assessments will appear here.',
     },
@@ -589,12 +589,12 @@ function EmptyState({ category }: { category: 'available' | 'missed' | 'submitte
   return (
     <div
       className="flex flex-col items-center py-10"
-      style={{ background: '#FAFAF8', border: '1px solid #F0EFEB', borderRadius: 3 }}
+      style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border-subtle)', borderRadius: 3 }}
     >
       {m.icon}
-      <p className="text-xs mt-3" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>{m.title}</p>
+      <p className="text-xs mt-3" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>{m.title}</p>
       {m.body && (
-        <p className="text-xs mt-1 text-center" style={{ color: '#DDDBD5', maxWidth: 300, lineHeight: 1.7 }}>
+        <p className="text-xs mt-1 text-center" style={{ color: 'var(--ef-border-muted)', maxWidth: 300, lineHeight: 1.7 }}>
           {m.body}
         </p>
       )}
@@ -752,19 +752,19 @@ export function StudentAssessmentsPage() {
       style={{ maxWidth: 860, margin: '0 auto' }}
     >
       {/* Page header */}
-      <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
+      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
         <div className="flex items-center gap-2 mb-2">
           <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#4A6FA5' }} />
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
             ASSESSMENTS · {session.instituteName.toUpperCase()}
           </p>
         </div>
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-light" style={{ color: '#0C0C0B', letterSpacing: '0.02em' }}>
+            <h1 className="text-2xl font-light" style={{ color: 'var(--ef-ink)', letterSpacing: '0.02em' }}>
               Your Assessments
             </h1>
-            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
               Tests and exams assigned to you will appear here.
             </p>
           </div>
@@ -775,11 +775,11 @@ export function StudentAssessmentsPage() {
                 <div className="relative w-2 h-2">
                   <span
                     className="absolute inline-flex w-2 h-2 rounded-full opacity-60"
-                    style={{ background: '#2A6B3A', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }}
+                    style={{ background: 'var(--ef-success)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }}
                   />
-                  <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: '#2A6B3A', margin: '1px' }} />
+                  <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-success)', margin: '1px' }} />
                 </div>
-                <span className="text-xs" style={{ color: '#6B6B66' }}>{syncAge}</span>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{syncAge}</span>
               </div>
             )}
             <button
@@ -787,11 +787,11 @@ export function StudentAssessmentsPage() {
               disabled={loading}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
               style={{
-                border: '1px solid #E3E1DB', color: '#4A4A45',
-                borderRadius: 2, background: '#FFFFFF',
+                border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)',
+                borderRadius: 2, background: 'var(--ef-surface)',
               }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}
             >
               <RefreshCw size={10} strokeWidth={1.5} className={loading ? 'animate-spin' : ''} />
               Refresh
@@ -807,8 +807,8 @@ export function StudentAssessmentsPage() {
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="flex flex-col items-center py-24">
-              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
-              <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Loading assessments…</p>
+              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+              <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Loading assessments…</p>
             </div>
           </motion.div>
         )}
@@ -818,11 +818,11 @@ export function StudentAssessmentsPage() {
           <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div
               className="flex items-center gap-2.5 px-4 py-3"
-              style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}
+              style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}
             >
-              <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0 }} />
-              <p className="text-xs flex-1" style={{ color: '#9B2828' }}>{error}</p>
-              <button onClick={load} className="text-xs" style={{ color: '#9B2828', textDecoration: 'underline' }}>
+              <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
+              <p className="text-xs flex-1" style={{ color: 'var(--ef-danger)' }}>{error}</p>
+              <button onClick={load} className="text-xs" style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>
                 Retry
               </button>
             </div>
@@ -841,7 +841,7 @@ export function StudentAssessmentsPage() {
           <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
 
             {/* Tab strip */}
-            <div className="flex items-center gap-1 mb-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+            <div className="flex items-center gap-1 mb-5" style={{ borderBottom: '1px solid var(--ef-border)' }}>
               {(['available', 'missed', 'submitted'] as TabKey[]).map((key) => {
                 const count = key === 'available' ? available.length : key === 'missed' ? missed.length : submitted.length;
                 const label = key === 'available' ? 'Available' : key === 'missed' ? 'Missed' : 'Submitted';
@@ -853,8 +853,8 @@ export function StudentAssessmentsPage() {
                     onClick={() => setActiveTab(key)}
                     className="flex items-center gap-1.5 text-xs px-3 py-2 transition-colors"
                     style={{
-                      color: isActive ? '#0C0C0B' : '#6B6B66',
-                      borderBottom: isActive ? '2px solid #0C0C0B' : '2px solid transparent',
+                      color: isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
+                      borderBottom: isActive ? '2px solid var(--ef-ink)' : '2px solid transparent',
                       marginBottom: -1,
                       background: 'transparent',
                       letterSpacing: '0.04em',
@@ -864,8 +864,8 @@ export function StudentAssessmentsPage() {
                     <span
                       className="text-xs px-1.5"
                       style={{
-                        background: isActive ? '#0C0C0B' : '#F0EFEB',
-                        color: isActive ? '#FFFFFF' : '#6B6B66',
+                        background: isActive ? 'var(--ef-ink)' : 'var(--ef-border-subtle)',
+                        color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                         borderRadius: 2,
                         fontSize: 10,
                       }}
@@ -891,7 +891,7 @@ export function StudentAssessmentsPage() {
             })()}
 
             {/* Footer note */}
-            <p className="text-xs mt-6 text-center" style={{ color: '#6B6B66' }}>
+            <p className="text-xs mt-6 text-center" style={{ color: 'var(--ef-text-muted)' }}>
               {total} assessment{total !== 1 ? 's' : ''} assigned to your account
             </p>
           </motion.div>

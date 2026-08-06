@@ -1197,9 +1197,9 @@ export function questionTypeBadge(engine: QuestionEngine, variant: QuestionVaria
 
 /** Colour token for difficulty badge. */
 export function difficultyColor(d: Difficulty): { bg: string; text: string; border: string } {
-  if (d === 'easy')   return { bg: '#F0FBF4', text: '#2A6B3A', border: '#C3E8CE' };
-  if (d === 'hard')   return { bg: '#FDF5F5', text: '#9B2828', border: '#F2CECE' };
-  return                     { bg: '#FFFBF0', text: '#8B5E1A', border: '#F0DFA0' };
+  if (d === 'easy')   return { bg: '#F0FBF4', text: 'var(--ef-success)', border: '#C3E8CE' };
+  if (d === 'hard')   return { bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)' };
+  return                     { bg: '#FFFBF0', text: 'var(--ef-warning-strong)', border: '#F0DFA0' };
 }
 
 // ══════════════════════════════════════════════════════════════════

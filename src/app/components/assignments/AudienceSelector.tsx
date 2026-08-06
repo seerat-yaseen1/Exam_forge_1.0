@@ -44,18 +44,18 @@ export function AudienceSelector({
     <div
       className="px-3 py-2.5"
       style={{
-        border: '1px solid #E3E1DB', borderRadius: 2,
-        background: locked ? '#FAFAF8' : '#FFFFFF',
+        border: '1px solid var(--ef-border)', borderRadius: 2,
+        background: locked ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)',
         opacity: locked ? 0.7 : 1,
       }}
     >
       <div className="flex items-start gap-2">
         {icon}
         <div className="flex-1 min-w-0">
-          <p className="text-xs" style={{ color: '#0C0C0B' }}>{label}</p>
-          <p className="text-xs mt-0.5" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{hint}</p>
+          <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{label}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>{hint}</p>
           {locked && lockReason && (
-            <p className="text-xs mt-1" style={{ color: '#92680A' }}>{lockReason}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-warning)' }}>{lockReason}</p>
           )}
         </div>
       </div>
@@ -70,9 +70,9 @@ export function AudienceSelector({
               disabled={locked}
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 transition-colors"
               style={{
-                border: `1px solid ${active ? '#0C0C0B' : '#E3E1DB'}`,
-                background: active ? '#0C0C0B' : 'transparent',
-                color: active ? '#FFFFFF' : '#6B6B66',
+                border: `1px solid ${active ? 'var(--ef-ink)' : 'var(--ef-border)'}`,
+                background: active ? 'var(--ef-ink)' : 'transparent',
+                color: active ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                 borderRadius: 2,
                 cursor: locked ? 'not-allowed' : 'pointer',
               }}
@@ -83,7 +83,7 @@ export function AudienceSelector({
           );
         })}
         {value.length === 0 && (
-          <span className="text-xs" style={{ color: '#92680A' }}>No one — hidden from every audience</span>
+          <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>No one — hidden from every audience</span>
         )}
       </div>
     </div>

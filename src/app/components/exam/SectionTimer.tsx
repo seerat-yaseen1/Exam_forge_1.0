@@ -111,19 +111,19 @@ export function SectionTimer({
   const isCritical   = pct < 0.1;
 
   const color =
-    isCritical ? '#9B2828' :
-    isUrgent   ? '#92680A' :
-                 '#1E7B3C';
+    isCritical ? 'var(--ef-danger)' :
+    isUrgent   ? 'var(--ef-warning)' :
+                 'var(--ef-success-strong)';
 
   const bgColor =
-    isCritical ? '#FDF5F5' :
+    isCritical ? 'var(--ef-danger-bg)' :
     isUrgent   ? '#FEF9EC' :
-                 '#F0F9F4';
+                 'var(--ef-success-bg)';
 
   const borderColor =
-    isCritical ? '#F2CECE' :
-    isUrgent   ? '#F5DFA0' :
-                 '#B8E6C8';
+    isCritical ? 'var(--ef-danger-border)' :
+    isUrgent   ? 'var(--ef-warning-border)' :
+                 'var(--ef-success-border)';
 
   return (
     <div

@@ -35,9 +35,9 @@ const sel: React.CSSProperties = {
   width: '100%',
   height: 38,
   padding: '0 10px',
-  border: '1px solid #E3E1DB',
+  border: '1px solid var(--ef-border)',
   borderRadius: 2,
-  background: '#FFFFFF',
+  background: 'var(--ef-surface)',
   fontSize: 13,
 };
 
@@ -110,7 +110,7 @@ export function SubjectTopicSelect({ subjectId, topicId, onChange, subjectError,
           style={{
             ...sel,
             marginTop: 4,
-            borderColor: subjectError ? '#B91C1C' : '#E3E1DB',
+            borderColor: subjectError ? '#B91C1C' : 'var(--ef-border)',
           }}
           disabled={loadingSubjects}
         >
@@ -130,8 +130,8 @@ export function SubjectTopicSelect({ subjectId, topicId, onChange, subjectError,
           style={{
             ...sel,
             marginTop: 4,
-            borderColor: topicError ? '#B91C1C' : '#E3E1DB',
-            color: subjectId ? '#0C0C0B' : '#A8A7A1',
+            borderColor: topicError ? '#B91C1C' : 'var(--ef-border)',
+            color: subjectId ? 'var(--ef-ink)' : '#A8A7A1',
           }}
           disabled={!subjectId || loadingTopics}
         >

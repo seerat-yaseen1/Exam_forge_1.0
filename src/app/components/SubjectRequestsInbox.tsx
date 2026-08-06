@@ -126,7 +126,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
+      <div className="flex items-center gap-2 text-xs py-4" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={12} className="animate-spin" /> Loading requests…
       </div>
     );
@@ -139,14 +139,14 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
     <div>
       {error && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2 mb-3"
-          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: '#9B2828' }}>
+          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: 'var(--ef-danger)' }}>
           <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>{error}</span>
         </div>
       )}
 
       {open.length === 0 && closed.length === 0 && (
-        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
+        <div className="flex items-center gap-2 text-xs py-4" style={{ color: 'var(--ef-text-muted)' }}>
           <Inbox size={13} strokeWidth={1.5} /> No access or erasure requests.
         </div>
       )}
@@ -156,14 +156,14 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
         const busy = busyId === r.id;
         return (
           <div key={r.id} className="px-3 py-3 mb-2"
-            style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+            style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs" style={{ color: '#0C0C0B' }}>
+                <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>
                   {typeLabel(r.type)} request —{' '}
-                  <span style={{ color: '#6B6B66' }}>{r.subjectLabel ?? r.subjectId}</span>
+                  <span style={{ color: 'var(--ef-text-muted)' }}>{r.subjectLabel ?? r.subjectId}</span>
                 </p>
-                <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: '#6B6B66' }}>
+                <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--ef-text-muted)' }}>
                   <Clock size={10} strokeWidth={1.5} />
                   Asked {ageLabel(r)}
                   {r.basis ? ` · “${r.basis}”` : ''}
@@ -172,7 +172,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
               <button
                 onClick={() => { setOpenId(expanded ? null : r.id); setReason(''); setError(''); }}
                 className="text-xs px-2 py-1 flex-shrink-0"
-                style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6862', background: '#FFFFFF' }}
+                style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)' }}
               >
                 {expanded ? 'Close' : 'Review'}
               </button>
@@ -197,7 +197,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                   disabled={busy}
                   rows={2}
                   className="text-xs px-2 py-1.5 w-full"
-                  style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#0C0C0B', background: '#FFFFFF', resize: 'vertical' }}
+                  style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-ink)', background: 'var(--ef-surface)', resize: 'vertical' }}
                 />
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -206,7 +206,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                       onClick={() => decide(r, 'fulfilled')}
                       disabled={busy}
                       className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-                      style={{ background: '#2A6B3A', color: '#FFFFFF', borderRadius: 2, cursor: busy ? 'not-allowed' : 'pointer' }}
+                      style={{ background: 'var(--ef-success)', color: 'var(--ef-surface)', borderRadius: 2, cursor: busy ? 'not-allowed' : 'pointer' }}
                     >
                       {busy ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
                       Mark fulfilled
@@ -216,7 +216,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                     onClick={() => decide(r, 'refused')}
                     disabled={busy}
                     className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-                    style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6862', background: '#FFFFFF', cursor: busy ? 'not-allowed' : 'pointer' }}
+                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)', cursor: busy ? 'not-allowed' : 'pointer' }}
                   >
                     <X size={10} strokeWidth={2} /> Refuse with reason
                   </button>
@@ -225,7 +225,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                 {r.type === 'erasure' && canErase && (
                   <div className="flex flex-col gap-2 px-2.5 py-2"
                     style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2 }}>
-                    <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.5 }}>
+                    <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.5 }}>
                       Erasure is permanent and bypasses the retention window —
                       there is no restore. Type the person&apos;s name to confirm.
                     </p>
@@ -235,7 +235,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                       placeholder={r.subjectLabel ?? 'Full name'}
                       disabled={busy}
                       className="text-xs px-2 py-1.5 w-full"
-                      style={{ border: '1px solid #E8CFCF', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+                      style={{ border: '1px solid #E8CFCF', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
                     />
                     {retentionBlock && (
                       <label className="flex items-start gap-1.5 text-xs" style={{ color: '#7A5B12' }}>
@@ -258,7 +258,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                       disabled={busy || !confirmName.trim() || (!!retentionBlock && !override)}
                       className="flex items-center gap-1.5 text-xs px-3 py-1.5 self-start"
                       style={{
-                        background: '#9B2828', color: '#FFFFFF', borderRadius: 2,
+                        background: 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2,
                         opacity: (!confirmName.trim() || (!!retentionBlock && !override)) ? 0.5 : 1,
                         cursor: busy ? 'not-allowed' : 'pointer',
                       }}
@@ -269,7 +269,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                   </div>
                 )}
                 {r.type === 'erasure' && !canErase && (
-                  <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+                  <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
                     Erasure is carried out by the Web Owner. Leave this open for
                     them, or refuse it with a reason.
                   </p>
@@ -282,7 +282,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
 
       {closed.length > 0 && (
         <>
-          <p className="text-xs mb-2 mt-4" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>
+          <p className="text-xs mb-2 mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.05em' }}>
             DECIDED
           </p>
           {closed.map((r) => (
@@ -298,7 +298,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                 </span>
               </div>
               {r.decision && (
-                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>{r.decision}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{r.decision}</p>
               )}
             </div>
           ))}

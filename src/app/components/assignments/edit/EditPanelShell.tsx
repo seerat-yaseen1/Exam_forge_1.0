@@ -39,10 +39,10 @@ export function EditPanelShell({
         onOpenChange={(next) => { if (next) onOpenChange(true); else requestClose(); }}
       >
         <SheetContent side="right" className="w-full sm:max-w-[480px] flex flex-col p-0">
-          <SheetHeader className="px-4 sm:px-6 pt-5 sm:pt-6 pb-4 pr-12" style={{ borderBottom: '1px solid #F0EFEB' }}>
-            <SheetTitle className="text-base break-words" style={{ color: '#0C0C0B' }}>{title}</SheetTitle>
+          <SheetHeader className="px-4 sm:px-6 pt-5 sm:pt-6 pb-4 pr-12" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
+            <SheetTitle className="text-base break-words" style={{ color: 'var(--ef-ink)' }}>{title}</SheetTitle>
             {description && (
-              <SheetDescription className="text-xs" style={{ color: '#6B6B66' }}>
+              <SheetDescription className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 {description}
               </SheetDescription>
             )}
@@ -52,13 +52,13 @@ export function EditPanelShell({
 
           <div
             className="flex items-center justify-end gap-2 px-4 sm:px-6 py-3 sm:py-4"
-            style={{ borderTop: '1px solid #F0EFEB', background: '#FAFAF8' }}
+            style={{ borderTop: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}
           >
             <button
               onClick={requestClose}
               disabled={saving}
               className="text-xs px-3 py-1.5 transition-opacity hover:opacity-70 disabled:opacity-40"
-              style={{ color: '#4A4A45', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+              style={{ color: 'var(--ef-text-subtle)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
             >
               Cancel
             </button>
@@ -66,7 +66,7 @@ export function EditPanelShell({
               onClick={onSave}
               disabled={saving || !canSave || !dirty}
               className="text-xs px-4 py-1.5 transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2 }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2 }}
             >
               {saving ? 'Saving…' : 'Save changes'}
             </button>
@@ -100,9 +100,9 @@ export function EditPanelShell({
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div className="mb-5">
-      <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
+      <label className="block text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>{label}</label>
       {children}
-      {hint && <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>{hint}</p>}
+      {hint && <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>{hint}</p>}
     </div>
   );
 }

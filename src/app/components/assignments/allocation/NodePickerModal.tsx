@@ -26,7 +26,7 @@ type Props = {
   onClose: () => void;
 };
 
-const INK = '#0C0C0B', MUTED = '#6B6B66', FAINT = '#6B6B66', LINE = '#E3E1DB', PAPER = '#FFFFFF', BG = '#F7F6F3';
+const INK = 'var(--ef-ink)', MUTED = 'var(--ef-text-muted)', FAINT = 'var(--ef-text-muted)', LINE = 'var(--ef-border)', PAPER = 'var(--ef-surface)', BG = 'var(--ef-canvas)';
 
 export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfirm, onClose }: Props) {
   const [query, setQuery] = useState('');
@@ -167,7 +167,7 @@ export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfi
         </div>
 
         {/* Search + filter chips */}
-        <div className="px-6 pt-4 pb-3 space-y-2.5 flex-shrink-0" style={{ borderBottom: `1px solid ${LINE}`, background: '#FAFAF8' }}>
+        <div className="px-6 pt-4 pb-3 space-y-2.5 flex-shrink-0" style={{ borderBottom: `1px solid ${LINE}`, background: 'var(--ef-canvas-raised)' }}>
           <div className="flex items-center gap-2 px-3" style={{ border: `1px solid ${LINE}`, borderRadius: 2, background: PAPER }}>
             <Search size={12} strokeWidth={1.5} style={{ color: FAINT }} />
             <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)}
@@ -242,7 +242,7 @@ export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfi
           {/* Select-all over visible rows */}
           {visible.length > 0 && (
             <button onClick={toggleAllVisible}
-              className="w-full flex items-center gap-2.5 px-6 py-2 text-xs transition-colors hover:bg-[#FAFAF8]"
+              className="w-full flex items-center gap-2.5 px-6 py-2 text-xs transition-colors hover:bg-[var(--ef-canvas-raised)]"
               style={{ borderBottom: `1px solid ${LINE}`, color: MUTED }}>
               {allVisibleSelected
                 ? <CheckSquare size={13} strokeWidth={1.5} style={{ color: INK }} />
@@ -254,7 +254,7 @@ export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfi
           {groups.map(([crumb, groupRows]) => (
             <div key={crumb}>
               <div className="sticky top-0 px-6 py-1.5 text-xs z-10"
-                style={{ background: '#FAFAF8', borderBottom: `1px solid ${LINE}`, color: FAINT }}>
+                style={{ background: 'var(--ef-canvas-raised)', borderBottom: `1px solid ${LINE}`, color: FAINT }}>
                 {crumb}
               </div>
               {groupRows.map((r) => (
@@ -273,7 +273,7 @@ export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfi
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderTop: `1px solid ${LINE}`, background: '#FAFAF8' }}>
+        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderTop: `1px solid ${LINE}`, background: 'var(--ef-canvas-raised)' }}>
           <p className="text-xs" style={{ color: MUTED }}>
             {selected.size} {typeLabel.toLowerCase()}{selected.size !== 1 ? 's' : ''} selected
           </p>
@@ -285,7 +285,7 @@ export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfi
             <button onClick={() => onConfirm([...selected])} disabled={selected.size === 0}
               className="text-xs px-4 py-2 transition-opacity hover:opacity-80"
               style={{
-                background: selected.size > 0 ? INK : '#C8C7C2', color: '#FFFFFF', borderRadius: 2,
+                background: selected.size > 0 ? INK : 'var(--ef-track)', color: 'var(--ef-surface)', borderRadius: 2,
                 cursor: selected.size > 0 ? 'pointer' : 'not-allowed',
               }}>
               Use selection
@@ -304,7 +304,7 @@ function RowItem({ row, checked, onToggle, query }: {
 }) {
   return (
     <button onClick={onToggle}
-      className="w-full flex items-center gap-2.5 px-6 py-2.5 text-left transition-colors hover:bg-[#FAFAF8]"
+      className="w-full flex items-center gap-2.5 px-6 py-2.5 text-left transition-colors hover:bg-[var(--ef-canvas-raised)]"
       style={{ borderBottom: '1px solid #F1F0EC' }}>
       {checked
         ? <CheckSquare size={13} strokeWidth={1.5} style={{ color: INK, flexShrink: 0 }} />

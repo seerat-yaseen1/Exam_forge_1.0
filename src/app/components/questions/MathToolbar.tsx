@@ -63,8 +63,8 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
     <div
       className="mt-1 p-3 z-40"
       style={{
-        border: '1px solid #E3E1DB', borderRadius: 3,
-        background: '#FFFFFF',
+        border: '1px solid var(--ef-border)', borderRadius: 3,
+        background: 'var(--ef-surface)',
         boxShadow: '0 4px 16px rgba(12,12,11,0.08)',
       }}
     >
@@ -79,8 +79,8 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
           placeholder="e.g. \frac{a}{b} or x^2 + y^2"
           className="flex-1 text-xs outline-none px-2.5 py-2"
           style={{
-            border: '1px solid #E3E1DB', borderRadius: 2,
-            background: '#FAFAF8', color: '#0C0C0B',
+            border: '1px solid var(--ef-border)', borderRadius: 2,
+            background: 'var(--ef-canvas-raised)', color: 'var(--ef-ink)',
             fontFamily: 'monospace', fontSize: 12,
           }}
         />
@@ -94,9 +94,9 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
           className="flex-1 text-xs py-1.5 transition-all"
           style={{
             borderRadius: 2,
-            border: !isBlock ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-            background: !isBlock ? '#0C0C0B' : '#FAFAF8',
-            color: !isBlock ? '#FFFFFF' : '#6B6B66',
+            border: !isBlock ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+            background: !isBlock ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+            color: !isBlock ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
           }}
         >
           Inline &nbsp;<code style={{ fontSize: 10, opacity: 0.8 }}>$...$</code>
@@ -107,9 +107,9 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
           className="flex-1 text-xs py-1.5 transition-all"
           style={{
             borderRadius: 2,
-            border: isBlock ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-            background: isBlock ? '#0C0C0B' : '#FAFAF8',
-            color: isBlock ? '#FFFFFF' : '#6B6B66',
+            border: isBlock ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+            background: isBlock ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+            color: isBlock ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
           }}
         >
           Block &nbsp;<code style={{ fontSize: 10, opacity: 0.8 }}>$$...$$</code>
@@ -133,8 +133,8 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
             onClick={() => setFormula((f) => f + s.latex)}
             className="text-xs px-1.5 py-0.5 transition-opacity hover:opacity-70 select-none"
             style={{
-              border: '1px solid #E3E1DB', borderRadius: 2,
-              background: '#F7F6F3', color: '#4A4A45',
+              border: '1px solid var(--ef-border)', borderRadius: 2,
+              background: 'var(--ef-canvas)', color: 'var(--ef-text-subtle)',
               fontFamily: 'serif', fontSize: 13,
             }}
           >
@@ -151,8 +151,8 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
           disabled={!formula.trim()}
           className="text-xs px-3 py-1.5 transition-opacity"
           style={{
-            background: formula.trim() ? '#0C0C0B' : '#C8C7C2',
-            color: '#FFFFFF', borderRadius: 2,
+            background: formula.trim() ? 'var(--ef-ink)' : 'var(--ef-track)',
+            color: 'var(--ef-surface)', borderRadius: 2,
             cursor: formula.trim() ? 'pointer' : 'not-allowed',
           }}
         >
@@ -162,7 +162,7 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
           type="button"
           onClick={onClose}
           className="text-xs px-3 py-1.5 transition-opacity hover:opacity-60"
-          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+          style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
         >
           Cancel
         </button>
@@ -225,10 +225,10 @@ export function MathToolbar({ textareaRef, onChange }: MathToolbarProps) {
         title="Insert math formula (LaTeX)"
         className="flex items-center gap-1.5 text-xs px-2.5 py-1 transition-all select-none"
         style={{
-          border: open ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+          border: open ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
           borderRadius: 2,
-          background: open ? '#0C0C0B' : '#FAFAF8',
-          color: open ? '#FFFFFF' : '#6B6B66',
+          background: open ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+          color: open ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
         }}
       >
         <span style={{ fontFamily: 'serif', fontSize: 14, lineHeight: 1 }}>∑</span>
@@ -273,9 +273,9 @@ export function InlineMathButton({ onInsert }: InlineMathButtonProps) {
         className="flex items-center justify-center transition-all"
         style={{
           width: 26, height: 26, borderRadius: 2,
-          border: open ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-          background: open ? '#0C0C0B' : '#FAFAF8',
-          color: open ? '#FFFFFF' : '#6B6B66',
+          border: open ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+          background: open ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+          color: open ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
           fontFamily: 'serif', fontSize: 14,
         }}
       >

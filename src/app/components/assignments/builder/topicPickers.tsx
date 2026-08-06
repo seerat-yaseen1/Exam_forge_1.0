@@ -272,21 +272,21 @@ export function RuleBuilderPanel({
   if (!activeSection) return null;
 
   return (
-    <div className="flex" style={{ background: '#FFFFFF', minHeight: 560, alignItems: 'stretch' }}>
+    <div className="flex" style={{ background: 'var(--ef-surface)', minHeight: 560, alignItems: 'stretch' }}>
 
       {/* ── LEFT: Vertical section rail (sticky while page scrolls) ── */}
       <div className="flex-shrink-0 flex flex-col"
         style={{
           width: 172,
-          borderRight: '1px solid #E3E1DB',
-          background: '#FAFAF8',
+          borderRight: '1px solid var(--ef-border)',
+          background: 'var(--ef-canvas-raised)',
           position: 'sticky',
           top: 0,
           alignSelf: 'flex-start',
         }}>
 
         <div className="flex-shrink-0 px-4 pt-4 pb-2">
-          <p style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.09em' }}>SECTIONS</p>
+          <p style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.09em' }}>SECTIONS</p>
         </div>
 
         <div className="flex-1">
@@ -300,19 +300,19 @@ export function RuleBuilderPanel({
                 onClick={() => setActiveSectionIdx(idx)}
                 className="w-full flex flex-col items-start px-4 py-3 transition-colors text-left"
                 style={{
-                  background: isActive ? '#FFFFFF' : 'transparent',
-                  borderLeft: `2px solid ${isActive ? '#0C0C0B' : 'transparent'}`,
-                  borderBottom: '1px solid #E3E1DB',
+                  background: isActive ? 'var(--ef-surface)' : 'transparent',
+                  borderLeft: `2px solid ${isActive ? 'var(--ef-ink)' : 'transparent'}`,
+                  borderBottom: '1px solid var(--ef-border)',
                 }}
               >
-                <span className="text-xs" style={{ color: isActive ? '#0C0C0B' : '#6B6B66', lineHeight: 1.4, wordBreak: 'break-word' }}>
+                <span className="text-xs" style={{ color: isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)', lineHeight: 1.4, wordBreak: 'break-word' }}>
                   {sec.name}
                 </span>
-                <span style={{ color: '#6B6B66', fontSize: 10, marginTop: 2 }}>
+                <span style={{ color: 'var(--ef-text-muted)', fontSize: 10, marginTop: 2 }}>
                   {secQ > 0 ? `${secQ} Q · ${secMarks} mk` : 'no rules yet'}
                 </span>
                 {sec.timeLimit && (
-                  <span className="flex items-center gap-1 mt-1" style={{ color: '#6B6B66', fontSize: 10 }}>
+                  <span className="flex items-center gap-1 mt-1" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
                     <Timer size={9} strokeWidth={1.5} />{sec.timeLimit} min
                   </span>
                 )}
@@ -322,9 +322,9 @@ export function RuleBuilderPanel({
         </div>
 
         {/* Grand total at rail bottom */}
-        <div className="flex-shrink-0 px-4 py-3" style={{ borderTop: '1px solid #E3E1DB', background: '#F7F6F3' }}>
-          <p style={{ color: '#6B6B66', fontSize: 10 }}>{grandTotalQ} Q · {grandTotalMarks} marks</p>
-          <p style={{ color: '#6B6B66', fontSize: 10, marginTop: 1 }}>
+        <div className="flex-shrink-0 px-4 py-3" style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas)' }}>
+          <p style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{grandTotalQ} Q · {grandTotalMarks} marks</p>
+          <p style={{ color: 'var(--ef-text-muted)', fontSize: 10, marginTop: 1 }}>
             {sections.length} section{sections.length !== 1 ? 's' : ''} total
           </p>
         </div>
@@ -336,26 +336,26 @@ export function RuleBuilderPanel({
       {/* ── Instruction or lock banner ── */}
       {locked ? (
         <div className="px-5 py-2.5 flex-shrink-0 flex items-center gap-2"
-          style={{ background: '#FEF9EC', borderBottom: '1px solid #F5DFA0' }}>
-          <Lock size={11} strokeWidth={1.5} style={{ color: '#92680A', flexShrink: 0 }} />
-          <p style={{ color: '#92680A', fontSize: 11, lineHeight: 1.5 }}>
+          style={{ background: '#FEF9EC', borderBottom: '1px solid var(--ef-warning-border)' }}>
+          <Lock size={11} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0 }} />
+          <p style={{ color: 'var(--ef-warning)', fontSize: 11, lineHeight: 1.5 }}>
             Question rules are locked — the question set was resolved when this test went live and cannot be changed.
           </p>
         </div>
       ) : isTopicFiltered ? (
         <div className="px-5 py-2.5 flex-shrink-0 flex items-center gap-2"
-          style={{ background: '#F0F9F4', borderBottom: '1px solid #B8E6C8' }}>
-          <BookOpen size={11} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
-          <p style={{ color: '#1E7B3C', fontSize: 11, lineHeight: 1.5 }}>
+          style={{ background: 'var(--ef-success-bg)', borderBottom: '1px solid var(--ef-success-border)' }}>
+          <BookOpen size={11} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />
+          <p style={{ color: 'var(--ef-success-strong)', fontSize: 11, lineHeight: 1.5 }}>
             Showing <strong>{activeSection?.assignedTopics.length}</strong> pre-assigned topic{(activeSection?.assignedTopics.length ?? 0) !== 1 ? 's' : ''} for this section.
             Set pick count &amp; marks per difficulty row.
           </p>
         </div>
       ) : (
         <div className="px-5 py-2.5 flex-shrink-0 flex items-center gap-2"
-          style={{ background: '#FAFAF8', borderBottom: '1px solid #F0EFEB' }}>
-          <Layers size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
-          <p style={{ color: '#6B6B66', fontSize: 11, lineHeight: 1.5 }}>
+          style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border-subtle)' }}>
+          <Layers size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
+          <p style={{ color: 'var(--ef-text-muted)', fontSize: 11, lineHeight: 1.5 }}>
             No topics pre-assigned — showing full bank. Assign topics in Setup (Step 1) for a focused view.
           </p>
         </div>
@@ -364,16 +364,16 @@ export function RuleBuilderPanel({
       {/* ── Subject / topic / difficulty tree ── */}
       <div className="flex-1" style={locked ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
         {allSubjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16" style={{ color: '#6B6B66' }}>
+          <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--ef-text-muted)' }}>
             {isTopicFiltered ? (
               <>
                 <p className="text-xs">No topics assigned to this section</p>
-                <p style={{ fontSize: 11, color: '#DDDBD5', marginTop: 4 }}>Go back to Setup to assign topics</p>
+                <p style={{ fontSize: 11, color: 'var(--ef-border-muted)', marginTop: 4 }}>Go back to Setup to assign topics</p>
               </>
             ) : (
               <>
                 <p className="text-xs">No subjects found in question bank</p>
-                <p style={{ fontSize: 11, color: '#DDDBD5', marginTop: 4 }}>Add questions to the bank first</p>
+                <p style={{ fontSize: 11, color: 'var(--ef-border-muted)', marginTop: 4 }}>Add questions to the bank first</p>
               </>
             )}
           </div>
@@ -390,24 +390,24 @@ export function RuleBuilderPanel({
             const subjectSelectedTopics = topics.filter((t) => selectedTopics.has(`${subject}::${t}`)).length;
 
             return (
-              <div key={subject} style={{ borderBottom: '1px solid #F0EFEB' }}>
+              <div key={subject} style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
 
                 {/* Subject accordion header */}
                 <button
                   className="w-full flex items-center gap-2.5 px-5 py-3 text-left transition-colors"
-                  style={{ background: isSubjectOpen ? '#FAFAF8' : '#FFFFFF' }}
+                  style={{ background: isSubjectOpen ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)' }}
                   onClick={() => toggleSubject(subject)}
                 >
                   {/* Chevron */}
                   <ChevronRight size={13} strokeWidth={1.5}
-                    style={{ color: '#6B6B66', flexShrink: 0, transition: 'transform 0.15s', transform: isSubjectOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+                    style={{ color: 'var(--ef-text-muted)', flexShrink: 0, transition: 'transform 0.15s', transform: isSubjectOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
 
-                  <span className="flex-1 text-xs" style={{ color: '#0C0C0B' }}>{subject}</span>
+                  <span className="flex-1 text-xs" style={{ color: 'var(--ef-ink)' }}>{subject}</span>
 
                   {/* Badge: selected topics count */}
                   {subjectSelectedTopics > 0 && (
                     <span className="text-xs px-1.5 py-0.5 flex-shrink-0"
-                      style={{ background: '#F7F6F3', color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, fontSize: 10 }}>
+                      style={{ background: 'var(--ef-canvas)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, fontSize: 10 }}>
                       {subjectSelectedTopics}/{topics.length} topic{topics.length !== 1 ? 's' : ''}
                     </span>
                   )}
@@ -415,12 +415,12 @@ export function RuleBuilderPanel({
                   {/* Badge: Q selected */}
                   {subjectSelectedQ > 0 && (
                     <span className="text-xs px-1.5 py-0.5 flex-shrink-0"
-                      style={{ background: '#F0F9F4', color: '#1E7B3C', border: '1px solid #B8E6C8', borderRadius: 2 }}>
+                      style={{ background: 'var(--ef-success-bg)', color: 'var(--ef-success-strong)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
                       {subjectSelectedQ} Q
                     </span>
                   )}
 
-                  <span style={{ color: '#6B6B66', fontSize: 11, flexShrink: 0 }}>{totalInBank} in bank</span>
+                  <span style={{ color: 'var(--ef-text-muted)', fontSize: 11, flexShrink: 0 }}>{totalInBank} in bank</span>
                 </button>
 
                 {/* Topics list */}
@@ -431,9 +431,9 @@ export function RuleBuilderPanel({
                       animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }}
                       exit={{ height: 0, opacity: 0, overflow: 'hidden' }}
                       transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                      style={{ borderTop: '1px solid #F0EFEB' }}
+                      style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
                     >
-                      <div className="py-1.5" style={{ background: '#FAFAF8' }}>
+                      <div className="py-1.5" style={{ background: 'var(--ef-canvas-raised)' }}>
                         {topics.map((topic) => {
                           const tk = `${subject}::${topic}`;
                           const isTopicSelected = selectedTopics.has(tk);
@@ -451,35 +451,35 @@ export function RuleBuilderPanel({
                           const otherSectionIdxs = topicOtherSectionsMap[tk] ?? [];
 
                           return (
-                            <div key={topic} style={{ borderBottom: '1px solid #F0EFEB' }}>
+                            <div key={topic} style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
                               {/* Topic row with checkbox */}
                               <button
                                 className="w-full flex items-center gap-2.5 px-5 py-2.5 text-left transition-colors"
-                                style={{ background: isTopicSelected ? '#FFFFFF' : 'transparent' }}
+                                style={{ background: isTopicSelected ? 'var(--ef-surface)' : 'transparent' }}
                                 onClick={() => toggleTopic(subject, topic)}
                               >
                                 {/* Checkbox */}
                                 <span style={{ flexShrink: 0 }}>
                                   {isTopicSelected
-                                    ? <CheckSquare size={13} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-                                    : <Square size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+                                    ? <CheckSquare size={13} strokeWidth={1.5} style={{ color: 'var(--ef-ink)' }} />
+                                    : <Square size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
                                 </span>
 
                                 {/* Topic name */}
-                                <span className="flex-1 text-xs" style={{ color: isTopicSelected ? '#0C0C0B' : '#6B6B66' }}>
+                                <span className="flex-1 text-xs" style={{ color: isTopicSelected ? 'var(--ef-ink)' : 'var(--ef-text-muted)' }}>
                                   {topic}
                                 </span>
 
                                 {/* Cross-section "also in Sec X" badge */}
                                 {otherSectionIdxs.length > 0 && (
-                                  <span style={{ fontSize: 10, color: '#92680A', background: '#FEF9EC', border: '1px solid #F5DFA0', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
+                                  <span style={{ fontSize: 10, color: 'var(--ef-warning)', background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
                                     also in {otherSectionIdxs.map((si) => sections[si]?.name ?? `Sec ${si + 1}`).join(', ')}
                                   </span>
                                 )}
 
                                 {/* Marks subtotal for this topic */}
                                 {topicMarks > 0 && (
-                                  <span style={{ color: '#6B6B66', fontSize: 11, flexShrink: 0 }}>
+                                  <span style={{ color: 'var(--ef-text-muted)', fontSize: 11, flexShrink: 0 }}>
                                     {topicMarks} mk
                                   </span>
                                 )}
@@ -487,12 +487,12 @@ export function RuleBuilderPanel({
                                 {/* Q count badge */}
                                 {topicQ > 0 && (
                                   <span className="text-xs px-1.5 py-0.5 flex-shrink-0"
-                                    style={{ background: '#F0F9F4', color: '#1E7B3C', border: '1px solid #B8E6C8', borderRadius: 2, fontSize: 10 }}>
+                                    style={{ background: 'var(--ef-success-bg)', color: 'var(--ef-success-strong)', border: '1px solid var(--ef-success-border)', borderRadius: 2, fontSize: 10 }}>
                                     {topicQ} Q
                                   </span>
                                 )}
 
-                                <span style={{ color: '#6B6B66', fontSize: 10, flexShrink: 0 }}>
+                                <span style={{ color: 'var(--ef-text-muted)', fontSize: 10, flexShrink: 0 }}>
                                   {topicTotalInBank} in bank
                                 </span>
                               </button>
@@ -505,7 +505,7 @@ export function RuleBuilderPanel({
                                     animate={{ height: 'auto', opacity: 1 }}
                                     exit={{ height: 0, opacity: 0 }}
                                     transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                                    style={{ overflow: 'hidden', borderTop: '1px solid #F0EFEB', background: '#FFFFFF', paddingTop: 4, paddingBottom: 6 }}
+                                    style={{ overflow: 'hidden', borderTop: '1px solid var(--ef-border-subtle)', background: 'var(--ef-surface)', paddingTop: 4, paddingBottom: 6 }}
                                   >
                                     {DIFFICULTIES.map((diff) => (
                                       <DifficultyRow
@@ -544,24 +544,24 @@ export function RuleBuilderPanel({
         const secOverrides = !!secPol && (secPol.penaltyValue !== undefined || secPol.negativeMarking === false);
         return (
           <div className="flex-shrink-0 flex items-center gap-2 px-5 py-2"
-            style={{ borderTop: '1px solid #F0EFEB', background: '#FDFBF7' }}>
-            <AlertCircle size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-            <span className="text-xs" style={{ color: '#6B6B66' }}>Penalty for this section</span>
+            style={{ borderTop: '1px solid var(--ef-border-subtle)', background: '#FDFBF7' }}>
+            <AlertCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Penalty for this section</span>
             {secOverrides ? (
               <div className="flex items-center gap-1.5 ml-auto">
                 <PenaltyInput compact policy={secPol ?? {}} onChange={(patch) => grading.setSectionPolicy(activeSection.id, patch)} />
                 <button type="button" onClick={() => grading.setSectionPolicy(activeSection.id, null)}
-                  style={{ fontSize: 10, color: '#6B6B66', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  style={{ fontSize: 10, color: 'var(--ef-text-muted)', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}>
                   reset
                 </button>
               </div>
             ) : (
               <button type="button" onClick={() => grading.setSectionPolicy(activeSection.id, { penaltyValue: 0 })}
                 className="ml-auto flex items-center gap-1"
-                style={{ fontSize: 10, color: '#6B6B66', padding: '2px 8px', border: '1px dashed #E3E1DB', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}>
-                <span style={{ color: '#6B6B66' }}>inherits exam default:</span>
+                style={{ fontSize: 10, color: 'var(--ef-text-muted)', padding: '2px 8px', border: '1px dashed var(--ef-border)', borderRadius: 2, background: 'transparent', cursor: 'pointer' }}>
+                <span style={{ color: 'var(--ef-text-muted)' }}>inherits exam default:</span>
                 <span>{grading.resolveInherited(activeSection.id, 'medium')}</span>
-                <span style={{ color: '#6B6B66' }}>· override</span>
+                <span style={{ color: 'var(--ef-text-muted)' }}>· override</span>
               </button>
             )}
           </div>
@@ -571,11 +571,11 @@ export function RuleBuilderPanel({
       {/* ── Footer: per-section total ── */}
       {sectionTotalQ > 0 && (
         <div className="flex-shrink-0 flex items-center justify-between px-5 py-2.5"
-          style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
-          <span className="text-xs" style={{ color: '#6B6B66' }}>
+          style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             {activeSection.name} · {sectionTotalQ} question{sectionTotalQ !== 1 ? 's' : ''}
           </span>
-          <span className="text-xs" style={{ color: '#0C0C0B' }}>{sectionTotalMarks} marks</span>
+          <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{sectionTotalMarks} marks</span>
         </div>
       )}
       </div>{/* end right column */}
@@ -634,36 +634,36 @@ export function SectionTopicPicker({
 
   if (allSubjects.length === 0) {
     return (
-      <div className="py-5 text-center" style={{ borderTop: '1px solid #E3E1DB' }}>
-        <p style={{ color: '#6B6B66', fontSize: 11 }}>No subjects in question bank</p>
-        <p style={{ color: '#DDDBD5', fontSize: 10, marginTop: 3 }}>Add questions first to assign topics</p>
+      <div className="py-5 text-center" style={{ borderTop: '1px solid var(--ef-border)' }}>
+        <p style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>No subjects in question bank</p>
+        <p style={{ color: 'var(--ef-border-muted)', fontSize: 10, marginTop: 3 }}>Add questions first to assign topics</p>
       </div>
     );
   }
 
   return (
-    <div style={{ borderTop: '1px solid #E3E1DB' }}>
+    <div style={{ borderTop: '1px solid var(--ef-border)' }}>
       {allSubjects.map((subject) => {
         const topics = subjectTopics[subject] ?? [];
         const isOpen = expandedSubjects.has(subject);
         const assignedCount = topics.filter((t) => assignedTopics.includes(`${subject}::${t}`)).length;
 
         return (
-          <div key={subject} style={{ borderBottom: '1px solid #F0EFEB' }}>
+          <div key={subject} style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
             {/* Subject header */}
             <button
               type="button"
               className="w-full flex items-center gap-2 px-4 py-2 text-left transition-colors"
-              style={{ background: isOpen ? '#F7F6F3' : '#FAFAF8' }}
+              style={{ background: isOpen ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)' }}
               onClick={() => toggleSubject(subject)}
             >
               <ChevronRight
                 size={11} strokeWidth={1.5}
-                style={{ color: '#6B6B66', flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'none' }}
+                style={{ color: 'var(--ef-text-muted)', flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'none' }}
               />
-              <span className="flex-1 text-xs" style={{ color: '#0C0C0B' }}>{subject}</span>
+              <span className="flex-1 text-xs" style={{ color: 'var(--ef-ink)' }}>{subject}</span>
               {assignedCount > 0 && (
-                <span style={{ fontSize: 10, color: '#1E7B3C', background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
+                <span style={{ fontSize: 10, color: 'var(--ef-success-strong)', background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
                   {assignedCount}/{topics.length}
                 </span>
               )}
@@ -688,19 +688,19 @@ export function SectionTopicPicker({
                         key={topic}
                         type="button"
                         className="w-full flex items-center gap-2.5 px-5 py-2 text-left transition-colors"
-                        style={{ background: isChecked ? '#FAFAF8' : '#FFFFFF', borderTop: '1px solid #F7F6F3' }}
+                        style={{ background: isChecked ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)', borderTop: '1px solid var(--ef-canvas)' }}
                         onClick={() => onToggleTopic(key)}
                       >
                         <span style={{ flexShrink: 0 }}>
                           {isChecked
-                            ? <CheckSquare size={12} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-                            : <Square size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+                            ? <CheckSquare size={12} strokeWidth={1.5} style={{ color: 'var(--ef-ink)' }} />
+                            : <Square size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
                         </span>
-                        <span className="flex-1 text-xs" style={{ color: isChecked ? '#0C0C0B' : '#6B6B66' }}>
+                        <span className="flex-1 text-xs" style={{ color: isChecked ? 'var(--ef-ink)' : 'var(--ef-text-muted)' }}>
                           {topic}
                         </span>
                         {otherSecs.length > 0 && (
-                          <span style={{ fontSize: 10, color: '#92680A', background: '#FEF9EC', border: '1px solid #F5DFA0', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, color: 'var(--ef-warning)', background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
                             also in {otherSecs.map((si) => sections[si]?.name ?? `Sec ${si + 1}`).join(', ')}
                           </span>
                         )}
@@ -763,24 +763,24 @@ export function SubjectPickerPhase({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-14">
-        <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
       </div>
     );
   }
 
   if (subjects.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-14" style={{ color: '#6B6B66' }}>
+      <div className="flex flex-col items-center justify-center py-14" style={{ color: 'var(--ef-text-muted)' }}>
         <BookOpen size={22} strokeWidth={1} style={{ marginBottom: 10 }} />
         <p className="text-xs">No subjects in question bank</p>
-        <p style={{ fontSize: 11, color: '#DDDBD5', marginTop: 4 }}>Add questions with subject metadata first</p>
+        <p style={{ fontSize: 11, color: 'var(--ef-border-muted)', marginTop: 4 }}>Add questions with subject metadata first</p>
       </div>
     );
   }
 
   return (
     <div>
-      <p className="text-xs mb-4" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+      <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
         Select the subjects this assessment will draw from. Topics are chosen in the next step.
       </p>
 
@@ -797,32 +797,32 @@ export function SubjectPickerPhase({
               onClick={() => onToggle(subj.id)}
               className="w-full flex items-center gap-3 px-4 py-3 text-left transition-all"
               style={{
-                border: isSelected ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
+                border: isSelected ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
                 borderRadius: 3,
-                background: isSelected ? '#FFFFFF' : '#FAFAF8',
+                background: isSelected ? 'var(--ef-surface)' : 'var(--ef-canvas-raised)',
               }}
             >
               {/* Checkbox */}
               <div style={{
                 width: 16, height: 16, borderRadius: 2, flexShrink: 0,
-                border: `1px solid ${isSelected ? '#0C0C0B' : '#DDDBD5'}`,
-                background: isSelected ? '#0C0C0B' : '#FFFFFF',
+                border: `1px solid ${isSelected ? 'var(--ef-ink)' : 'var(--ef-border-muted)'}`,
+                background: isSelected ? 'var(--ef-ink)' : 'var(--ef-surface)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                {isSelected && <CheckCircle2 size={9} strokeWidth={2.5} style={{ color: '#FFFFFF' }} />}
+                {isSelected && <CheckCircle2 size={9} strokeWidth={2.5} style={{ color: 'var(--ef-surface)' }} />}
               </div>
 
               {/* Name + meta */}
               <div className="flex-1 min-w-0">
-                <p className="text-xs" style={{ color: isSelected ? '#0C0C0B' : '#4A4A45' }}>{subj.name}</p>
-                <p style={{ fontSize: 10, color: '#6B6B66', marginTop: 2 }}>
+                <p className="text-xs" style={{ color: isSelected ? 'var(--ef-ink)' : 'var(--ef-text-subtle)' }}>{subj.name}</p>
+                <p style={{ fontSize: 10, color: 'var(--ef-text-muted)', marginTop: 2 }}>
                   {topicCount} topic{topicCount !== 1 ? 's' : ''}{qCount > 0 ? ` · ${qCount} Q` : ''}
                 </p>
               </div>
 
               {/* Selected tick */}
               {isSelected && (
-                <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: '#0C0C0B', flexShrink: 0 }} />
+                <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: 'var(--ef-ink)', flexShrink: 0 }} />
               )}
             </button>
           );
@@ -831,7 +831,7 @@ export function SubjectPickerPhase({
 
       {/* Footer */}
       <div className="flex items-center justify-between mt-5">
-        <span className="text-xs" style={{ color: '#6B6B66' }}>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           {selectedIds.length === 0
             ? 'Select at least one subject to continue'
             : `${selectedIds.length} subject${selectedIds.length !== 1 ? 's' : ''} selected`}
@@ -842,8 +842,8 @@ export function SubjectPickerPhase({
           disabled={selectedIds.length === 0}
           className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity"
           style={{
-            background: selectedIds.length > 0 ? '#0C0C0B' : '#C8C7C2',
-            color: '#FFFFFF', borderRadius: 2,
+            background: selectedIds.length > 0 ? 'var(--ef-ink)' : 'var(--ef-track)',
+            color: 'var(--ef-surface)', borderRadius: 2,
             cursor: selectedIds.length > 0 ? 'pointer' : 'not-allowed',
           }}
         >
@@ -953,9 +953,9 @@ export function TopicPickerPhase({
 
   if (selectedSubjectIds.length === 0) {
     return (
-      <div className="py-10 text-center" style={{ color: '#6B6B66' }}>
+      <div className="py-10 text-center" style={{ color: 'var(--ef-text-muted)' }}>
         <p className="text-xs">No subjects selected</p>
-        <button type="button" onClick={onBack} className="mt-3 text-xs transition-opacity hover:opacity-70" style={{ color: '#6B6B66' }}>
+        <button type="button" onClick={onBack} className="mt-3 text-xs transition-opacity hover:opacity-70" style={{ color: 'var(--ef-text-muted)' }}>
           ← Back to subjects
         </button>
       </div>
@@ -964,11 +964,11 @@ export function TopicPickerPhase({
 
   return (
     <div>
-      <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
         Choose which topics to include. Grayed-out topics have no questions yet.
       </p>
 
-      <div style={{ border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid var(--ef-border)', borderRadius: 3, overflow: 'hidden' }}>
         {selectedSubjectNames.map((subjName, si) => {
           const data = subjectData[subjName] ?? { topics: [], counts: {} };
           const topics = data.topics;
@@ -978,22 +978,22 @@ export function TopicPickerPhase({
           const allAvailableSelected = availableCount > 0 && assignedCount >= availableCount;
 
           return (
-            <div key={subjName} style={{ borderBottom: si < selectedSubjectNames.length - 1 ? '1px solid #E3E1DB' : 'none' }}>
+            <div key={subjName} style={{ borderBottom: si < selectedSubjectNames.length - 1 ? '1px solid var(--ef-border)' : 'none' }}>
               {/* Subject header row */}
               <div className="flex items-stretch">
                 <button
                   type="button"
                   className="flex-1 flex items-center gap-2 px-3 py-2.5 text-left transition-colors min-w-0"
-                  style={{ background: isOpen ? '#F7F6F3' : '#FAFAF8' }}
+                  style={{ background: isOpen ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)' }}
                   onClick={() => toggleSubjectAccordion(subjName)}
                 >
                   <ChevronRight
                     size={11} strokeWidth={1.5}
-                    style={{ color: '#6B6B66', flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'none' }}
+                    style={{ color: 'var(--ef-text-muted)', flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'none' }}
                   />
-                  <span className="flex-1 text-xs truncate" style={{ color: '#0C0C0B' }}>{subjName}</span>
+                  <span className="flex-1 text-xs truncate" style={{ color: 'var(--ef-ink)' }}>{subjName}</span>
                   {assignedCount > 0 && (
-                    <span style={{ fontSize: 10, color: '#1E7B3C', background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, color: 'var(--ef-success-strong)', background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
                       {assignedCount}/{availableCount}
                     </span>
                   )}
@@ -1003,9 +1003,9 @@ export function TopicPickerPhase({
                   type="button"
                   className="flex-shrink-0 px-3 text-xs transition-opacity hover:opacity-70"
                   style={{
-                    color: '#6B6B66',
-                    borderLeft: '1px solid #E3E1DB',
-                    background: isOpen ? '#F7F6F3' : '#FAFAF8',
+                    color: 'var(--ef-text-muted)',
+                    borderLeft: '1px solid var(--ef-border)',
+                    background: isOpen ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)',
                     cursor: availableCount === 0 ? 'not-allowed' : 'pointer',
                     opacity: availableCount === 0 ? 0.4 : 1,
                   }}
@@ -1026,8 +1026,8 @@ export function TopicPickerPhase({
                     transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
                   >
                     {topics.length === 0 ? (
-                      <div className="px-5 py-3" style={{ background: '#FFFFFF', borderTop: '1px solid #F0EFEB' }}>
-                        <p style={{ color: '#6B6B66', fontSize: 11 }}>No topics found for this subject</p>
+                      <div className="px-5 py-3" style={{ background: 'var(--ef-surface)', borderTop: '1px solid var(--ef-border-subtle)' }}>
+                        <p style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>No topics found for this subject</p>
                       </div>
                     ) : (
                       topics.map((topic) => {
@@ -1044,21 +1044,21 @@ export function TopicPickerPhase({
                             onClick={() => hasQ && onToggleTopic(key)}
                             className="w-full flex items-center gap-2.5 px-5 py-2 text-left transition-colors"
                             style={{
-                              background: isChecked ? '#FAFAF8' : '#FFFFFF',
-                              borderTop: '1px solid #F7F6F3',
+                              background: isChecked ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)',
+                              borderTop: '1px solid var(--ef-canvas)',
                               opacity: hasQ ? 1 : 0.4,
                               cursor: hasQ ? 'pointer' : 'not-allowed',
                             }}
                           >
                             <span style={{ flexShrink: 0 }}>
                               {isChecked
-                                ? <CheckSquare size={12} strokeWidth={1.5} style={{ color: '#0C0C0B' }} />
-                                : <Square size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+                                ? <CheckSquare size={12} strokeWidth={1.5} style={{ color: 'var(--ef-ink)' }} />
+                                : <Square size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
                             </span>
-                            <span className="flex-1 text-xs" style={{ color: isChecked ? '#0C0C0B' : '#6B6B66' }}>
+                            <span className="flex-1 text-xs" style={{ color: isChecked ? 'var(--ef-ink)' : 'var(--ef-text-muted)' }}>
                               {topic}
                             </span>
-                            <span style={{ fontSize: 10, color: hasQ ? '#6B6B66' : '#6B6B66', flexShrink: 0 }}>
+                            <span style={{ fontSize: 10, color: hasQ ? 'var(--ef-text-muted)' : 'var(--ef-text-muted)', flexShrink: 0 }}>
                               {hasQ ? `${qCount} Q` : 'No questions'}
                             </span>
                           </button>
@@ -1079,12 +1079,12 @@ export function TopicPickerPhase({
           type="button"
           onClick={onBack}
           className="flex items-center gap-1.5 text-xs px-3 py-2 transition-opacity hover:opacity-70"
-          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+          style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
         >
           ← Subjects
         </button>
         <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: '#6B6B66' }}>
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             {selectedTopics.length === 0
               ? `${totalAvailableTopics} available`
               : `${selectedTopics.length} of ${totalAvailableTopics} selected`}
@@ -1095,8 +1095,8 @@ export function TopicPickerPhase({
             disabled={selectedTopics.length === 0}
             className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity"
             style={{
-              background: selectedTopics.length > 0 ? '#0C0C0B' : '#C8C7C2',
-              color: '#FFFFFF', borderRadius: 2,
+              background: selectedTopics.length > 0 ? 'var(--ef-ink)' : 'var(--ef-track)',
+              color: 'var(--ef-surface)', borderRadius: 2,
               cursor: selectedTopics.length > 0 ? 'pointer' : 'not-allowed',
             }}
           >

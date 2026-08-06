@@ -29,8 +29,8 @@ const OPTION_BASE: React.CSSProperties = {
   transition: 'all 0.12s',
   textAlign: 'left',
   width: '100%',
-  border: '1px solid #E3E1DB',
-  background: '#FFFFFF',
+  border: '1px solid var(--ef-border)',
+  background: 'var(--ef-surface)',
 };
 
 // ──────────────────────────────────────────────────────────────────
@@ -59,8 +59,8 @@ function MCQSingleEngine({
             onClick={() => onChange(opt.id)}
             style={{
               ...OPTION_BASE,
-              border: isSelected ? '1.5px solid #0C0C0B' : '1px solid #E3E1DB',
-              background: isSelected ? '#F7F6F3' : '#FFFFFF',
+              border: isSelected ? '1.5px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+              background: isSelected ? 'var(--ef-canvas)' : 'var(--ef-surface)',
             }}
           >
             {/* Radio indicator */}
@@ -69,20 +69,20 @@ function MCQSingleEngine({
               style={{
                 width: 18, height: 18,
                 borderRadius: '50%',
-                border: `1.5px solid ${isSelected ? '#0C0C0B' : '#6B6B66'}`,
-                background: isSelected ? '#0C0C0B' : 'transparent',
+                border: `1.5px solid ${isSelected ? 'var(--ef-ink)' : 'var(--ef-text-muted)'}`,
+                background: isSelected ? 'var(--ef-ink)' : 'transparent',
                 transition: 'all 0.12s',
               }}
             >
               {isSelected && (
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#FFFFFF' }} />
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ef-surface)' }} />
               )}
             </div>
             {/* Letter label */}
             <span
               className="flex-shrink-0 text-xs"
               style={{
-                color: isSelected ? '#0C0C0B' : '#6B6B66',
+                color: isSelected ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
                 fontWeight: isSelected ? 500 : 400,
                 minWidth: 14,
               }}
@@ -94,7 +94,7 @@ function MCQSingleEngine({
               <RichText
                 text={opt.text}
                 image={opt.image}
-                style={{ fontSize: 13, color: '#0C0C0B', lineHeight: '1.6' }}
+                style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.6' }}
               />
             </div>
           </motion.button>
@@ -128,7 +128,7 @@ function MCQMultiEngine({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
+      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>
         Select all that apply.
       </p>
       {options.map((opt, idx) => {
@@ -141,8 +141,8 @@ function MCQMultiEngine({
             onClick={() => toggle(opt.id)}
             style={{
               ...OPTION_BASE,
-              border: isSelected ? '1.5px solid #0C0C0B' : '1px solid #E3E1DB',
-              background: isSelected ? '#F7F6F3' : '#FFFFFF',
+              border: isSelected ? '1.5px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+              background: isSelected ? 'var(--ef-canvas)' : 'var(--ef-surface)',
             }}
           >
             {/* Checkbox indicator */}
@@ -151,8 +151,8 @@ function MCQMultiEngine({
               style={{
                 width: 18, height: 18,
                 borderRadius: 2,
-                border: `1.5px solid ${isSelected ? '#0C0C0B' : '#6B6B66'}`,
-                background: isSelected ? '#0C0C0B' : 'transparent',
+                border: `1.5px solid ${isSelected ? 'var(--ef-ink)' : 'var(--ef-text-muted)'}`,
+                background: isSelected ? 'var(--ef-ink)' : 'transparent',
                 transition: 'all 0.12s',
               }}
             >
@@ -162,14 +162,14 @@ function MCQMultiEngine({
                 </svg>
               )}
             </div>
-            <span className="flex-shrink-0 text-xs" style={{ color: isSelected ? '#0C0C0B' : '#6B6B66', minWidth: 14 }}>
+            <span className="flex-shrink-0 text-xs" style={{ color: isSelected ? 'var(--ef-ink)' : 'var(--ef-text-muted)', minWidth: 14 }}>
               {letter}.
             </span>
             <div className="flex-1 min-w-0">
               <RichText
                 text={opt.text}
                 image={opt.image}
-                style={{ fontSize: 13, color: '#0C0C0B', lineHeight: '1.6' }}
+                style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.6' }}
               />
             </div>
           </motion.button>
@@ -208,34 +208,34 @@ function TextEngine({
         placeholder={placeholder}
         className="w-full outline-none resize-y"
         style={{
-          background: '#FAFAF8',
-          border: '1px solid #E3E1DB',
+          background: 'var(--ef-canvas-raised)',
+          border: '1px solid var(--ef-border)',
           borderRadius: 3,
           padding: '12px 14px',
           fontSize: 13,
-          color: '#0C0C0B',
+          color: 'var(--ef-ink)',
           lineHeight: 1.7,
           fontFamily: 'inherit',
           transition: 'border-color 0.12s, background 0.12s',
           minHeight: variant === 'long' ? 200 : 80,
         }}
         onFocus={(e) => {
-          e.target.style.borderColor = '#0C0C0B';
-          e.target.style.background = '#FFFFFF';
+          e.target.style.borderColor = 'var(--ef-ink)';
+          e.target.style.background = 'var(--ef-surface)';
         }}
         onBlur={(e) => {
-          e.target.style.borderColor = '#E3E1DB';
-          e.target.style.background = '#FAFAF8';
+          e.target.style.borderColor = 'var(--ef-border)';
+          e.target.style.background = 'var(--ef-canvas-raised)';
         }}
       />
       <div className="flex items-center justify-between mt-2">
-        <p className="text-xs" style={{ color: '#6B6B66' }}>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           {variant === 'long'
             ? 'Write a detailed response. Your answer is saved automatically.'
             : 'Provide a concise answer. Your answer is saved automatically.'}
         </p>
         {value.trim().length > 0 && (
-          <p className="text-xs" style={{ color: '#6B6B66' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             {value.trim().split(/\s+/).filter(Boolean).length} words
           </p>
         )}
@@ -291,15 +291,15 @@ function MatchEngine({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>
+      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>
         Match each item in Column A with the correct item in Column B.
       </p>
 
       {/* Column headers */}
       <div className="grid gap-3" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
-        <p className="text-xs px-2" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>COLUMN A</p>
+        <p className="text-xs px-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>COLUMN A</p>
         <div style={{ width: 20 }} />
-        <p className="text-xs px-2" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>COLUMN B</p>
+        <p className="text-xs px-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>COLUMN B</p>
       </div>
 
       {pairs.map((pair, idx) => {
@@ -316,8 +316,8 @@ function MatchEngine({
             <div
               className="px-3 py-3"
               style={{
-                background: '#FAFAF8',
-                border: '1px solid #E3E1DB',
+                background: 'var(--ef-canvas-raised)',
+                border: '1px solid var(--ef-border)',
                 borderRadius: 3,
                 minHeight: 48,
               }}
@@ -325,12 +325,12 @@ function MatchEngine({
               <RichText
                 text={pair.leftText}
                 image={pair.leftImage}
-                style={{ fontSize: 13, color: '#0C0C0B', lineHeight: '1.6' }}
+                style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.6' }}
               />
             </div>
 
             {/* Arrow */}
-            <div style={{ color: '#6B6B66', fontSize: 16, userSelect: 'none' }}>→</div>
+            <div style={{ color: 'var(--ef-text-muted)', fontSize: 16, userSelect: 'none' }}>→</div>
 
             {/* Right dropdown */}
             <div className="relative">
@@ -339,12 +339,12 @@ function MatchEngine({
                 onChange={(e) => handleSelect(pair.leftId, e.target.value)}
                 className="w-full outline-none appearance-none"
                 style={{
-                  background: isMatched ? '#F7F6F3' : '#FFFFFF',
-                  border: isMatched ? '1.5px solid #0C0C0B' : '1px solid #E3E1DB',
+                  background: isMatched ? 'var(--ef-canvas)' : 'var(--ef-surface)',
+                  border: isMatched ? '1.5px solid var(--ef-ink)' : '1px solid var(--ef-border)',
                   borderRadius: 3,
                   padding: '10px 36px 10px 12px',
                   fontSize: 13,
-                  color: selectedRightId ? '#0C0C0B' : '#6B6B66',
+                  color: selectedRightId ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
                   cursor: 'pointer',
                   minHeight: 48,
                   transition: 'all 0.12s',
@@ -359,7 +359,7 @@ function MatchEngine({
                 size={13}
                 strokeWidth={1.5}
                 className="absolute pointer-events-none"
-                style={{ right: 10, top: '50%', transform: 'translateY(-50%)', color: '#6B6B66' }}
+                style={{ right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--ef-text-muted)' }}
               />
             </div>
           </div>
@@ -408,10 +408,10 @@ function FlagControl({
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 text-xs px-2 py-0.5"
         style={{
-          background: isFlagged ? '#FEF9EC' : '#FFFFFF',
-          border: `1px solid ${isFlagged ? '#F5DFA0' : '#E3E1DB'}`,
+          background: isFlagged ? '#FEF9EC' : 'var(--ef-surface)',
+          border: `1px solid ${isFlagged ? 'var(--ef-warning-border)' : 'var(--ef-border)'}`,
           borderRadius: 2,
-          color: isFlagged ? '#92680A' : '#6B6B66',
+          color: isFlagged ? 'var(--ef-warning)' : 'var(--ef-text-muted)',
           cursor: 'pointer',
         }}
         title={isFlagged ? 'Reported — click to change' : 'Report an issue with this question'}
@@ -431,14 +431,14 @@ function FlagControl({
               top: 'calc(100% + 6px)',
               right: 0,
               width: 240,
-              background: '#FFFFFF',
-              border: '1px solid #E3E1DB',
+              background: 'var(--ef-surface)',
+              border: '1px solid var(--ef-border)',
               borderRadius: 3,
               boxShadow: '0 4px 16px rgba(12,12,11,0.08)',
             }}
           >
-            <div className="px-3 py-2" style={{ borderBottom: '1px solid #F0EFEB' }}>
-              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+            <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
                 REPORT THIS QUESTION
               </p>
             </div>
@@ -451,8 +451,8 @@ function FlagControl({
                     onClick={() => { onChange(opt.value); setOpen(false); }}
                     className="w-full text-left text-xs px-3 py-2"
                     style={{
-                      background: selected ? '#F7F6F3' : 'transparent',
-                      color: '#0C0C0B',
+                      background: selected ? 'var(--ef-canvas)' : 'transparent',
+                      color: 'var(--ef-ink)',
                       cursor: 'pointer',
                     }}
                   >
@@ -462,18 +462,18 @@ function FlagControl({
               })}
             </div>
             {isFlagged && (
-              <div className="px-3 py-2" style={{ borderTop: '1px solid #F0EFEB' }}>
+              <div className="px-3 py-2" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
                 <button
                   onClick={() => { onChange(null); setOpen(false); }}
                   className="text-xs"
-                  style={{ color: '#9B2828', cursor: 'pointer' }}
+                  style={{ color: 'var(--ef-danger)', cursor: 'pointer' }}
                 >
                   Remove report
                 </button>
               </div>
             )}
-            <div className="px-3 py-2" style={{ borderTop: '1px solid #F0EFEB' }}>
-              <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+            <div className="px-3 py-2" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
                 Reports are submitted with your exam and reviewed by your evaluator.
               </p>
             </div>
@@ -526,13 +526,13 @@ export function QuestionRenderer({
             <span
               className="text-xs px-2 py-0.5 select-none"
               style={{
-                background: '#0C0C0B', color: '#FFFFFF',
+                background: 'var(--ef-ink)', color: 'var(--ef-surface)',
                 borderRadius: 2, letterSpacing: '0.04em', fontSize: 10,
               }}
             >
               {badgeText}
             </span>
-            <span className="text-xs" style={{ color: '#6B6B66' }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               Q{questionNumber} of {totalQuestions}
             </span>
           </div>
@@ -540,10 +540,10 @@ export function QuestionRenderer({
             <span
               className="text-xs px-2 py-0.5"
               style={{
-                background: '#F7F6F3',
-                border: '1px solid #E3E1DB',
+                background: 'var(--ef-canvas)',
+                border: '1px solid var(--ef-border)',
                 borderRadius: 2,
-                color: '#6B6B66',
+                color: 'var(--ef-text-muted)',
               }}
             >
               {marks} mark{marks !== 1 ? 's' : ''}
@@ -561,7 +561,7 @@ export function QuestionRenderer({
             image={question.stemImage}
             style={{
               fontSize: 15,
-              color: '#0C0C0B',
+              color: 'var(--ef-ink)',
               lineHeight: '1.75',
               display: 'block',
             }}

@@ -13,7 +13,7 @@ import {
   type ResolvePreviewResponse,
 } from '../../../../lib/allocationService';
 
-const INK = '#0C0C0B', MUTED = '#6B6B66', FAINT = '#6B6B66', LINE = '#E3E1DB';
+const INK = 'var(--ef-ink)', MUTED = 'var(--ef-text-muted)', FAINT = 'var(--ef-text-muted)', LINE = 'var(--ef-border)';
 
 type Props = {
   loading: boolean;
@@ -98,7 +98,7 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
   if (loading) {
     return (
       <div className="flex items-center gap-2 px-5 py-4 text-xs"
-        style={{ border: `1px solid ${LINE}`, borderRadius: 3, background: '#FAFAF8', color: MUTED }}>
+        style={{ border: `1px solid ${LINE}`, borderRadius: 3, background: 'var(--ef-canvas-raised)', color: MUTED }}>
         <Loader2 size={12} className="animate-spin" /> Resolving on the server…
       </div>
     );
@@ -108,7 +108,7 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
   const blockers = result.commitBlockers ?? [];
 
   return (
-    <div style={{ border: `1px solid ${LINE}`, borderRadius: 3, background: '#FFFFFF' }}>
+    <div style={{ border: `1px solid ${LINE}`, borderRadius: 3, background: 'var(--ef-surface)' }}>
 
       <div className="flex items-center gap-2.5 px-5 py-4" style={{ borderBottom: `1px solid ${LINE}` }}>
         <Users size={14} strokeWidth={1.5} style={{ color: MUTED }} />
@@ -117,7 +117,7 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
           <span style={{ color: MUTED }}> · {result.byNode.length} {nodeTypeLabel.toLowerCase()}{result.byNode.length !== 1 ? 's' : ''}</span>
         </p>
         {result.isLive && (
-          <span className="text-xs px-2 py-0.5" style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2, color: '#9B2828' }}>
+          <span className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, color: 'var(--ef-danger)' }}>
             LIVE
           </span>
         )}
@@ -126,12 +126,12 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
       {(blockers.length > 0 || result.warnings.length > 0 || result.errors.length > 0) && (
         <div className="px-5 py-3 space-y-1.5" style={{ borderBottom: `1px solid ${LINE}` }}>
           {result.errors.map((e, i) => (
-            <p key={`e${i}`} className="flex items-start gap-1.5 text-xs" style={{ color: '#9B2828' }}>
+            <p key={`e${i}`} className="flex items-start gap-1.5 text-xs" style={{ color: 'var(--ef-danger)' }}>
               <AlertTriangle size={11} strokeWidth={1.5} className="mt-0.5 flex-shrink-0" /> {e}
             </p>
           ))}
           {blockers.map((b, i) => (
-            <p key={`b${i}`} className="flex items-start gap-1.5 text-xs" style={{ color: '#9B2828' }}>
+            <p key={`b${i}`} className="flex items-start gap-1.5 text-xs" style={{ color: 'var(--ef-danger)' }}>
               <AlertTriangle size={11} strokeWidth={1.5} className="mt-0.5 flex-shrink-0" /> {b}
             </p>
           ))}
@@ -157,14 +157,14 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
       {(result.deltaCounts.added > 0 || result.deltaCounts.removed > 0) && (
         <div className="px-5 py-2 text-xs" style={{ borderBottom: `1px solid ${LINE}`, color: MUTED }}>
           Change since last save: <span style={{ color: '#2E7D32' }}>+{result.deltaCounts.added}</span>
-          {result.deltaCounts.removed > 0 && <> · <span style={{ color: '#9B2828' }}>−{result.deltaCounts.removed}</span></>}
+          {result.deltaCounts.removed > 0 && <> · <span style={{ color: 'var(--ef-danger)' }}>−{result.deltaCounts.removed}</span></>}
         </div>
       )}
 
       {canPageList ? (
         <>
           <button onClick={() => setExpanded((v) => !v)}
-            className="w-full flex items-center gap-1.5 px-5 py-2.5 text-xs transition-colors hover:bg-[#FAFAF8]"
+            className="w-full flex items-center gap-1.5 px-5 py-2.5 text-xs transition-colors hover:bg-[var(--ef-canvas-raised)]"
             style={{ color: MUTED }}>
             {expanded ? <ChevronDown size={12} strokeWidth={1.5} /> : <ChevronRight size={12} strokeWidth={1.5} />}
             {showingPending ? 'View students to be allocated' : 'View allocated students'}
@@ -173,14 +173,14 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
             <div style={{ borderTop: `1px solid ${LINE}` }}>
               {/* Pre-save notice: these resolved on the server but aren't committed yet. */}
               {showingPending && (
-                <p className="text-xs px-5 py-2" style={{ background: '#FAFAF8', borderBottom: `1px solid ${LINE}`, color: MUTED }}>
+                <p className="text-xs px-5 py-2" style={{ background: 'var(--ef-canvas-raised)', borderBottom: `1px solid ${LINE}`, color: MUTED }}>
                   Not saved yet — these students will be allocated when you save.
                   {result.resolvedCount > sampleRows.length && (
                     <> Showing the first {sampleRows.length} of {result.resolvedCount.toLocaleString()}.</>
                   )}
                 </p>
               )}
-              <div className="flex items-center gap-2 px-5 py-2" style={{ borderBottom: `1px solid ${LINE}`, background: '#FAFAF8' }}>
+              <div className="flex items-center gap-2 px-5 py-2" style={{ borderBottom: `1px solid ${LINE}`, background: 'var(--ef-canvas-raised)' }}>
                 <Search size={11} strokeWidth={1.5} style={{ color: FAINT }} />
                 <input value={search} onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search loaded rows…"
@@ -225,14 +225,14 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
         /* Create mode (no assessment id yet) — the dry-run sample still shows. */
         <>
           <button onClick={() => setExpanded((v) => !v)}
-            className="w-full flex items-center gap-1.5 px-5 py-2.5 text-xs transition-colors hover:bg-[#FAFAF8]"
+            className="w-full flex items-center gap-1.5 px-5 py-2.5 text-xs transition-colors hover:bg-[var(--ef-canvas-raised)]"
             style={{ color: MUTED }}>
             {expanded ? <ChevronDown size={12} strokeWidth={1.5} /> : <ChevronRight size={12} strokeWidth={1.5} />}
             View students to be allocated
           </button>
           {expanded && (
             <div style={{ borderTop: `1px solid ${LINE}` }}>
-              <p className="text-xs px-5 py-2" style={{ background: '#FAFAF8', borderBottom: `1px solid ${LINE}`, color: MUTED }}>
+              <p className="text-xs px-5 py-2" style={{ background: 'var(--ef-canvas-raised)', borderBottom: `1px solid ${LINE}`, color: MUTED }}>
                 Not saved yet — these students will be allocated when you save.
                 {result.resolvedCount > sampleRows.length && (
                   <> Showing the first {sampleRows.length} of {result.resolvedCount.toLocaleString()}.</>

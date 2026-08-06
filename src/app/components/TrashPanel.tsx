@@ -86,7 +86,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
+      <div className="flex items-center gap-2 text-xs py-4" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={12} className="animate-spin" /> Loading deleted records…
       </div>
     );
@@ -96,14 +96,14 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
     <div>
       {error && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2 mb-3"
-          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: '#9B2828' }}>
+          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: 'var(--ef-danger)' }}>
           <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>{error}</span>
         </div>
       )}
 
       {records.length === 0 ? (
-        <div className="flex items-center gap-2 text-xs py-4" style={{ color: '#6B6B66' }}>
+        <div className="flex items-center gap-2 text-xs py-4" style={{ color: 'var(--ef-text-muted)' }}>
           <Inbox size={13} strokeWidth={1.5} /> Nothing deleted.
         </div>
       ) : (
@@ -112,14 +112,14 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
           const confirming = confirmPurgeId === rec.id;
           return (
             <div key={`${rec.role}:${rec.id}`} className="px-3 py-2.5 mb-2"
-              style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+              style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs" style={{ color: '#0C0C0B' }}>
-                    <span style={{ color: '#6B6B66' }}>{roleLabel(rec.role)} · </span>
+                  <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>
+                    <span style={{ color: 'var(--ef-text-muted)' }}>{roleLabel(rec.role)} · </span>
                     {rec.name ?? rec.email ?? rec.id}
                   </p>
-                  <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                     {retentionLabel(rec)}
                     {rec.deletedByRole ? ` · removed by ${rec.deletedByRole}` : ''}
                   </p>
@@ -131,8 +131,8 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
                     disabled={busy}
                     className="flex items-center gap-1.5 text-xs px-2.5 py-1"
                     style={{
-                      border: '1px solid #C6DECE', borderRadius: 2,
-                      background: '#F0F7F2', color: '#2A6B3A',
+                      border: '1px solid var(--ef-success-border-alt)', borderRadius: 2,
+                      background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)',
                       cursor: busy ? 'not-allowed' : 'pointer',
                     }}
                   >
@@ -146,7 +146,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
                       disabled={busy}
                       title="Permanently delete — cannot be undone"
                       className="p-1.5"
-                      style={{ color: '#6B6B66', cursor: busy ? 'not-allowed' : 'pointer' }}
+                      style={{ color: 'var(--ef-text-muted)', cursor: busy ? 'not-allowed' : 'pointer' }}
                     >
                       <Trash2 size={12} strokeWidth={1.5} />
                     </button>
@@ -157,7 +157,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
               {confirming && (
                 <div className="mt-2 px-2.5 py-2"
                   style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2 }}>
-                  <p className="text-xs mb-2" style={{ color: '#9B2828' }}>
+                  <p className="text-xs mb-2" style={{ color: 'var(--ef-danger)' }}>
                     {rec.role === 'institute'
                       ? 'This destroys the institute and everything belonging to it — faculty, students, content and attempts. It cannot be undone.'
                       : 'This removes the record permanently. It cannot be undone.'}
@@ -176,7 +176,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
                       onClick={() => doPurge(rec)}
                       disabled={busy}
                       className="flex items-center gap-1.5 text-xs px-3 py-1"
-                      style={{ background: '#9B2828', color: '#FFFFFF', borderRadius: 2, cursor: busy ? 'not-allowed' : 'pointer' }}
+                      style={{ background: 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2, cursor: busy ? 'not-allowed' : 'pointer' }}
                     >
                       {busy ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} strokeWidth={2} />}
                       Delete permanently
@@ -185,7 +185,7 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
                       onClick={() => { setConfirmPurgeId(null); setPurgeSelection([]); }}
                       disabled={busy}
                       className="text-xs px-3 py-1"
-                      style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6862', background: '#FFFFFF' }}
+                      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)' }}
                     >
                       Cancel
                     </button>

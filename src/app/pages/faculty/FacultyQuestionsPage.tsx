@@ -42,7 +42,7 @@ function TypeBadgeChip({ engine, variant }: Pick<Question, 'engine' | 'variant'>
     <span
       className="text-xs px-1.5 py-0.5 select-none flex-shrink-0 inline-block"
       style={{
-        background: '#0C0C0B', color: '#FFFFFF',
+        background: 'var(--ef-ink)', color: 'var(--ef-surface)',
         borderRadius: 2, letterSpacing: '0.04em', fontSize: 10,
       }}
     >
@@ -69,17 +69,17 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
   return (
     <div
       className="flex items-center gap-3 px-5 py-4"
-      style={{ border: '1px solid #E3E1DB', borderRadius: 3, background: '#FFFFFF' }}
+      style={{ border: '1px solid var(--ef-border)', borderRadius: 3, background: 'var(--ef-surface)' }}
     >
       <div
         className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 30, height: 30, borderRadius: 2, background: '#F7F6F3', border: '1px solid #EEECEA' }}
+        style={{ width: 30, height: 30, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}
       >
         {icon}
       </div>
       <div>
-        <p className="text-xs" style={{ color: '#6B6B66' }}>{label}</p>
-        <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>{value}</p>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{label}</p>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--ef-ink)' }}>{value}</p>
       </div>
     </div>
   );
@@ -89,7 +89,7 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
 
 function SkeletonRow() {
   return (
-    <div className="flex items-center gap-4 px-5 py-4" style={{ borderBottom: '1px solid #F0EFEB' }}>
+    <div className="flex items-center gap-4 px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
       <div className="h-4 w-10 rounded" style={{ background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />
       <div className="flex-1 space-y-1.5">
         <div className="h-3 rounded" style={{ width: '60%', background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />
@@ -112,15 +112,15 @@ function TabBar({ active, onChange, showRequests }: { active: Tab; onChange: (t:
     ...(showRequests ? [{ id: 'requests' as Tab, label: 'My Requests' }] : []),
   ];
   return (
-    <div className="flex gap-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
+    <div className="flex gap-0" style={{ borderBottom: '1px solid var(--ef-border)' }}>
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
           className="text-xs px-4 py-2.5 transition-all"
           style={{
-            color: active === t.id ? '#0C0C0B' : '#6B6B66',
-            borderBottom: active === t.id ? '2px solid #0C0C0B' : '2px solid transparent',
+            color: active === t.id ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
+            borderBottom: active === t.id ? '2px solid var(--ef-ink)' : '2px solid transparent',
             letterSpacing: '0.02em',
             marginBottom: -1,
             background: 'transparent',
@@ -161,23 +161,23 @@ interface FilterBarProps {
 
 function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, setDiffFilter }: FilterBarProps) {
   return (
-    <div className="flex flex-col gap-3 px-5 py-4" style={{ borderBottom: '1px solid #F0EFEB' }}>
+    <div className="flex flex-col gap-3 px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
       <div
         className="flex items-center gap-2 px-3 py-2"
-        style={{ background: '#FAFAF8', border: '1px solid #E3E1DB', borderRadius: 2 }}
+        style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
       >
-        <Search size={13} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+        <Search size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search stem, subject, topic…"
           className="flex-1 text-xs outline-none"
-          style={{ background: 'transparent', color: '#0C0C0B', fontSize: 13 }}
+          style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
         />
         {search && (
           <button onClick={() => setSearch('')} className="hover:opacity-60 transition-opacity">
-            <X size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+            <X size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           </button>
         )}
       </div>
@@ -191,9 +191,9 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
               className="text-xs px-2.5 py-1 transition-all"
               style={{
                 borderRadius: 2,
-                border: typeFilter === f.value ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-                background: typeFilter === f.value ? '#0C0C0B' : '#FAFAF8',
-                color: typeFilter === f.value ? '#FFFFFF' : '#6B6B66',
+                border: typeFilter === f.value ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+                background: typeFilter === f.value ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+                color: typeFilter === f.value ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
               }}
             >
               {f.label}
@@ -201,7 +201,7 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
           ))}
         </div>
 
-        <div style={{ width: 1, height: 20, background: '#E3E1DB', flexShrink: 0 }} />
+        <div style={{ width: 1, height: 20, background: 'var(--ef-border)', flexShrink: 0 }} />
 
         <div className="flex items-center gap-1.5">
           {DIFF_FILTERS.map((f) => {
@@ -214,9 +214,9 @@ function FilterBar({ search, setSearch, typeFilter, setTypeFilter, diffFilter, s
                 className="text-xs px-2.5 py-1 transition-all"
                 style={{
                   borderRadius: 2,
-                  border: isActive ? `1px solid ${colors?.border ?? '#0C0C0B'}` : '1px solid #E3E1DB',
-                  background: isActive ? (colors?.bg ?? '#0C0C0B') : '#FAFAF8',
-                  color: isActive ? (colors?.text ?? '#FFFFFF') : '#6B6B66',
+                  border: isActive ? `1px solid ${colors?.border ?? 'var(--ef-ink)'}` : '1px solid var(--ef-border)',
+                  background: isActive ? (colors?.bg ?? 'var(--ef-ink)') : 'var(--ef-canvas-raised)',
+                  color: isActive ? (colors?.text ?? 'var(--ef-surface)') : 'var(--ef-text-muted)',
                 }}
               >
                 {f.label}
@@ -247,7 +247,7 @@ function QuestionRow({
   return (
     <div
       className="flex items-center gap-4 px-5 py-3.5 transition-colors"
-      style={{ borderBottom: '1px solid #F0EFEB', background: hovered ? '#FAFAF8' : '#FFFFFF' }}
+      style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: hovered ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -256,21 +256,21 @@ function QuestionRow({
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-          {truncate(question.stem, 110) || <em style={{ color: '#6B6B66' }}>No stem</em>}
+        <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.5 }}>
+          {truncate(question.stem, 110) || <em style={{ color: 'var(--ef-text-muted)' }}>No stem</em>}
         </p>
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
           {question.subject && (
-            <span className="text-xs" style={{ color: '#6B6B66' }}>{question.subject}</span>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{question.subject}</span>
           )}
           {question.topic && (
-            <span className="text-xs" style={{ color: '#6B6B66' }}>· {question.topic}</span>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>· {question.topic}</span>
           )}
           {question.tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
               className="text-xs px-1.5 py-0.5"
-              style={{ background: '#F0EFEB', borderRadius: 2, color: '#6B6B66', fontSize: 10 }}
+              style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10 }}
             >
               #{tag}
             </span>
@@ -283,25 +283,25 @@ function QuestionRow({
       </div>
 
       <div className="flex-shrink-0 w-24 text-right">
-        <span className="text-xs" style={{ color: '#6B6B66' }}>{formatDate(question.createdAt)}</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{formatDate(question.createdAt)}</span>
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0">
-        <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
+        <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
           <Eye size={13} strokeWidth={1.5} />
         </button>
         {canShare && (
-          <button onClick={onShare} title="Share" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
+          <button onClick={onShare} title="Share" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
             <Share2 size={13} strokeWidth={1.5} />
           </button>
         )}
         {canEdit && (
-          <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
+          <button onClick={onEdit} title="Edit" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
             <Pencil size={13} strokeWidth={1.5} />
           </button>
         )}
         {canDelete && (
-          <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
+          <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
             <Trash2 size={13} strokeWidth={1.5} />
           </button>
         )}
@@ -314,8 +314,8 @@ function QuestionRow({
 
 function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd?: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16" style={{ color: '#6B6B66' }}>
-      <div style={{ width: 1, height: 32, background: 'linear-gradient(to bottom, transparent, #DDDBD5)', marginBottom: 16 }} />
+    <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--ef-text-muted)' }}>
+      <div style={{ width: 1, height: 32, background: 'linear-gradient(to bottom, transparent, var(--ef-border-muted))', marginBottom: 16 }} />
       <p className="text-xs" style={{ letterSpacing: '0.1em' }}>
         {filtered ? 'NO QUESTIONS MATCH' : 'NO QUESTIONS YET'}
       </p>
@@ -323,12 +323,12 @@ function EmptyState({ filtered, onAdd }: { filtered: boolean; onAdd?: () => void
         <button
           onClick={onAdd}
           className="mt-4 flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-70"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)' }}
         >
           <Plus size={12} strokeWidth={1.5} /> Add first question
         </button>
       )}
-      <div style={{ width: 1, height: 32, background: 'linear-gradient(to top, transparent, #DDDBD5)', marginTop: 16 }} />
+      <div style={{ width: 1, height: 32, background: 'linear-gradient(to top, transparent, var(--ef-border-muted))', marginTop: 16 }} />
     </div>
   );
 }
@@ -352,35 +352,35 @@ function DeleteModal({
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-sm"
-        style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>DELETE QUESTION</p>
-          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>DELETE QUESTION</p>
+          <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
         <div className="px-5 py-5">
           <div
             className="flex items-start gap-2.5 mb-4 px-3 py-3"
-            style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}
+            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}
           >
-            <AlertTriangle size={13} strokeWidth={1.5} style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+            <AlertTriangle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
               This question will be permanently removed from your question pool.
             </p>
           </div>
-          <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>Are you sure you want to delete:</p>
-          <p className="text-xs mt-1.5 italic" style={{ color: '#6B6B66' }}>"{truncate(question.stem, 80)}"</p>
+          <p className="text-xs" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.6 }}>Are you sure you want to delete:</p>
+          <p className="text-xs mt-1.5 italic" style={{ color: 'var(--ef-text-muted)' }}>"{truncate(question.stem, 80)}"</p>
         </div>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button
             onClick={onConfirm}
             disabled={deleting}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
-              background: deleting ? '#C8C7C2' : '#9B2828', color: '#FFFFFF',
+              background: deleting ? 'var(--ef-track)' : 'var(--ef-danger)', color: 'var(--ef-surface)',
               borderRadius: 2, cursor: deleting ? 'not-allowed' : 'pointer',
             }}
           >
@@ -392,7 +392,7 @@ function DeleteModal({
             onClick={onCancel}
             disabled={deleting}
             className="text-xs px-4 py-2.5"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2 }}
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
           >
             Cancel
           </button>
@@ -417,12 +417,12 @@ function PreviewModal({ question, onClose }: { question: Question; onClose: () =
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
-        style={{ maxWidth: 560, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 560, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>QUESTION PREVIEW</p>
-          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>QUESTION PREVIEW</p>
+          <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -461,16 +461,16 @@ function QuestionPanel({
         initial={{ x: 48, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 48, opacity: 0 }}
         transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
         className="fixed right-0 top-0 bottom-0 z-50 flex flex-col"
-        style={{ width: 500, background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
+        style={{ width: 500, background: 'var(--ef-surface)', borderLeft: '1px solid var(--ef-border)' }}
       >
         <div
           className="flex items-center justify-between px-6 py-4 flex-shrink-0"
-          style={{ borderBottom: '1px solid #E3E1DB' }}
+          style={{ borderBottom: '1px solid var(--ef-border)' }}
         >
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
             {mode === 'create' ? 'NEW QUESTION' : 'EDIT QUESTION'}
           </p>
-          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
+          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={15} strokeWidth={1.5} />
           </button>
         </div>
@@ -681,12 +681,12 @@ export function FacultyQuestionsPage() {
         {/* ── Page header ── */}
         <div
           className="flex items-start justify-between mb-8"
-          style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}
+          style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}
         >
           <div>
-            <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>FACULTY</p>
-            <h1 className="text-base" style={{ color: '#0C0C0B' }}>Questions</h1>
-            <p className="text-xs mt-1" style={{ color: '#6B6B66' }}>
+            <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>FACULTY</p>
+            <h1 className="text-base" style={{ color: 'var(--ef-ink)' }}>Questions</h1>
+            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
               Your personal question pool — visible only to you.
             </p>
           </div>
@@ -695,7 +695,7 @@ export function FacultyQuestionsPage() {
             <button
               onClick={() => setExportOpen(true)}
               className="flex items-center gap-1.5 text-xs px-3 py-2.5 transition-opacity hover:opacity-80"
-              style={{ border: '1px solid #E3E1DB', color: '#6B6B66', borderRadius: 2, background: '#FFFFFF' }}
+              style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-muted)', borderRadius: 2, background: 'var(--ef-surface)' }}
             >
               <Download size={12} strokeWidth={1.5} /> Export
             </button>
@@ -704,7 +704,7 @@ export function FacultyQuestionsPage() {
             <button
               onClick={() => setBulkUploadOpen(true)}
               className="flex items-center gap-1.5 text-xs px-3 py-2.5 transition-opacity hover:opacity-80"
-              style={{ border: '1px solid #E3E1DB', color: '#6B6B66', borderRadius: 2, background: '#FFFFFF' }}
+              style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-muted)', borderRadius: 2, background: 'var(--ef-surface)' }}
             >
               <Upload size={12} strokeWidth={1.5} /> Bulk Upload
             </button>
@@ -714,7 +714,7 @@ export function FacultyQuestionsPage() {
             <button
               onClick={openCreate}
               className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
-              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.03em' }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}
             >
               <Plus size={12} strokeWidth={2} /> Add Question
             </button>
@@ -725,12 +725,12 @@ export function FacultyQuestionsPage() {
         {/* ── Stat pills ── */}
         <div className="grid grid-cols-2 gap-3 mb-8" style={{ maxWidth: 480 }}>
           <StatPill
-            icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+            icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
             label="Total Questions"
             value={loading ? '…' : String(questions.length)}
           />
           <StatPill
-            icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+            icon={<BookOpen size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
             label="Subjects"
             value={loading ? '…' : String(subjects.length)}
           />
@@ -740,7 +740,7 @@ export function FacultyQuestionsPage() {
         <TabBar active={activeTab} onChange={setActiveTab} showRequests={anyRequestMode} />
 
         {/* ── Tab content ── */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderTop: 'none', borderRadius: '0 0 3px 3px' }}>
+        <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderTop: 'none', borderRadius: '0 0 3px 3px' }}>
 
           {/* Pool tab */}
           {activeTab === 'pool' && (
@@ -773,9 +773,9 @@ export function FacultyQuestionsPage() {
               {!loading && filtered.length > 0 && (
                 <div
                   className="px-5 py-3 flex items-center justify-between"
-                  style={{ borderTop: '1px solid #F0EFEB' }}
+                  style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
                 >
-                  <p className="text-xs" style={{ color: '#6B6B66' }}>
+                  <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                     {isFiltered
                       ? `${filtered.length} of ${questions.length} question${questions.length !== 1 ? 's' : ''}`
                       : `${questions.length} question${questions.length !== 1 ? 's' : ''}`}
@@ -867,7 +867,7 @@ export function FacultyQuestionsPage() {
       {notice && (
         <div
           className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 text-xs px-4 py-2.5"
-          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
         >
           {notice}
         </div>

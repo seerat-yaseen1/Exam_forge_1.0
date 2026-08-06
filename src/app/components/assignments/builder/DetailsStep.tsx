@@ -664,18 +664,18 @@ export function DetailsStep({
       <>
 
       {/* ── TOP: Schedule + Grading + Section Limits | Settings (fixed natural height) ── */}
-      <div className="flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+      <div className="flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
         <div style={{ padding: '20px 48px 24px' }}>
 
           {/* Back link */}
           <div className="flex items-center gap-2 mb-4">
             <button onClick={onBack}
               className="flex items-center gap-1 text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#6B6B66' }}>
+              style={{ color: 'var(--ef-text-muted)' }}>
               <X size={11} strokeWidth={1.5} /> Back to Setup
             </button>
-            <span style={{ color: '#DDDBD5', fontSize: 10 }}>·</span>
-            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>STEP 2 OF 3 — RULES &amp; SETTINGS</p>
+            <span style={{ color: 'var(--ef-border-muted)', fontSize: 10 }}>·</span>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>STEP 2 OF 3 — RULES &amp; SETTINGS</p>
           </div>
 
           {/* Two-column layout: left stacks Schedule/Grading/Section Limits, right holds Settings.
@@ -700,10 +700,10 @@ export function DetailsStep({
               ) : (
                 <LockedFieldWrapper label="Start Date & Time" reason={lockReason}>
                   <div className="flex items-center gap-2 px-3 py-2"
-                    style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                    <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+                    <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                     <input type="datetime-local" value={startDate} readOnly className="flex-1 outline-none"
-                      style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
+                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
                   </div>
                 </LockedFieldWrapper>
               )}
@@ -715,15 +715,15 @@ export function DetailsStep({
                 <div>
                   <Field label="End Date & Time">
                     <div className="flex items-center gap-2 px-3 py-2"
-                      style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                      <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+                      <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                       <input type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)}
                         className="flex-1 outline-none"
-                        style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }}
+                        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }}
                         min={toDateTimeLocal(assessment?.endDate) || startDate || undefined} />
                     </div>
                   </Field>
-                  <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: '#6B6B66' }}>
+                  <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: 'var(--ef-text-muted)' }}>
                     <Clock size={9} strokeWidth={1.5} style={{ flexShrink: 0 }} />
                     You may only extend the deadline, not shorten it.
                   </p>
@@ -732,10 +732,10 @@ export function DetailsStep({
               {mut.endDate === false && (
                 <LockedFieldWrapper label="End Date & Time" reason={lockReason}>
                   <div className="flex items-center gap-2 px-3 py-2"
-                    style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                    <Calendar size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+                    <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                     <input type="datetime-local" value={endDate} readOnly className="flex-1 outline-none"
-                      style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
+                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
                   </div>
                 </LockedFieldWrapper>
               )}
@@ -750,34 +750,34 @@ export function DetailsStep({
               <SectionLabel label="GRADING" />
               <Field label="Passing Score" hint="(%, optional)">
                 <div className="flex items-center gap-2 px-3 py-2"
-                  style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                  <Award size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                  style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+                  <Award size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input type="number" value={passingScore} onChange={(e) => setPassingScore(e.target.value)}
                     placeholder="e.g., 50" min="0" max="100" className="flex-1 outline-none"
-                    style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                  {passingScore && <span style={{ color: '#6B6B66', fontSize: 10 }}>%</span>}
+                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
+                  {passingScore && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>%</span>}
                 </div>
               </Field>
 
               <Field label="Max Attempts" hint="(per student, default 1)">
                 <div className="flex items-center gap-2 px-3 py-2"
-                  style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                  <ClipboardList size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                  style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+                  <ClipboardList size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input type="number" value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)}
                     placeholder="e.g., 2" min="1" className="flex-1 outline-none"
-                    style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                  {maxAttempts && <span style={{ color: '#6B6B66', fontSize: 10 }}>attempts</span>}
+                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
+                  {maxAttempts && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>attempts</span>}
                 </div>
               </Field>
 
               <Field label="Section grace period" hint="(seconds past each section timer; blank = 30s default)">
                 <div className="flex items-center gap-2 px-3 py-2"
-                  style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                  <Timer size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                  style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+                  <Timer size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input type="number" value={sectionGraceSeconds} onChange={(e) => setSectionGraceSeconds(e.target.value)}
                     placeholder="e.g., 30" min="0" className="flex-1 outline-none"
-                    style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                  {sectionGraceSeconds && <span style={{ color: '#6B6B66', fontSize: 10 }}>seconds</span>}
+                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
+                  {sectionGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>seconds</span>}
                 </div>
               </Field>
 
@@ -786,7 +786,7 @@ export function DetailsStep({
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs" style={{ color: '#6B6A65' }}>Overall time limit</span>
-                    <span className="text-xs" style={{ color: '#6B6B66' }}>(whole exam, optional)</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>(whole exam, optional)</span>
                   </div>
                   {/* Auto toggle — when on, the value is computed from the
                       sections and stays in sync. Off = manual entry. */}
@@ -802,22 +802,22 @@ export function DetailsStep({
                     className="flex items-center gap-1 px-2 py-0.5"
                     style={{
                       borderRadius: 2,
-                      border: `1px solid ${overallAuto ? '#B8E6C8' : '#E3E1DB'}`,
-                      background: overallAuto ? '#F0F9F4' : '#FFFFFF',
+                      border: `1px solid ${overallAuto ? 'var(--ef-success-border)' : 'var(--ef-border)'}`,
+                      background: overallAuto ? 'var(--ef-success-bg)' : 'var(--ef-surface)',
                     }}
                   >
-                    <span className="text-xs" style={{ color: overallAuto ? '#1E7B3C' : '#6B6B66' }}>
+                    <span className="text-xs" style={{ color: overallAuto ? 'var(--ef-success-strong)' : 'var(--ef-text-muted)' }}>
                       Auto
                     </span>
-                    {overallAuto && <CheckCircle2 size={10} strokeWidth={2} style={{ color: '#1E7B3C' }} />}
+                    {overallAuto && <CheckCircle2 size={10} strokeWidth={2} style={{ color: 'var(--ef-success-strong)' }} />}
                   </button>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-2"
                   style={{
-                    border: '1px solid #E3E1DB', borderRadius: 2,
-                    background: overallAuto ? '#F7F6F3' : '#FFFFFF',
+                    border: '1px solid var(--ef-border)', borderRadius: 2,
+                    background: overallAuto ? 'var(--ef-canvas)' : 'var(--ef-surface)',
                   }}>
-                  <Clock size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                  <Clock size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input
                     type="number"
                     value={overallLimitDisplay}
@@ -828,13 +828,13 @@ export function DetailsStep({
                     className="flex-1 outline-none"
                     style={{
                       background: 'transparent',
-                      color: overallAuto ? '#6B6A65' : '#0C0C0B',
+                      color: overallAuto ? '#6B6A65' : 'var(--ef-ink)',
                       fontSize: 12, border: 'none',
                     }}
                   />
-                  {overallLimitDisplay && <span style={{ color: '#6B6B66', fontSize: 10 }}>minutes</span>}
+                  {overallLimitDisplay && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>minutes</span>}
                 </div>
-                <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+                <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
                   {overallAuto
                     ? `Auto: sum of section time, section grace, breaks and overall grace (currently ${autoOverallLimit}m). Counts from when a student begins — time in breaks and gaps between sections counts against it.`
                     : 'Counts from when a student begins the exam. The exam hard-cuts when this runs out, even mid-section. Blank = no overall cap.'}
@@ -843,12 +843,12 @@ export function DetailsStep({
 
               <Field label="Overall grace period" hint={`(seconds past the overall timer; blank = ${DEFAULT_OVERALL_GRACE_SECONDS}s default)`}>
                 <div className="flex items-center gap-2 px-3 py-2"
-                  style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                  <Timer size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                  style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+                  <Timer size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input type="number" value={overallGraceSeconds} onChange={(e) => setOverallGraceSeconds(e.target.value)}
                     placeholder={`e.g., ${DEFAULT_OVERALL_GRACE_SECONDS}`} min="0" className="flex-1 outline-none"
-                    style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                  {overallGraceSeconds && <span style={{ color: '#6B6B66', fontSize: 10 }}>seconds</span>}
+                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
+                  {overallGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>seconds</span>}
                 </div>
               </Field>
 
@@ -859,12 +859,12 @@ export function DetailsStep({
               {deliveryMode !== 'standard' && (
                 <Field label="Question grace period" hint="(seconds past each question's timer; blank = 5s default)">
                   <div className="flex items-center gap-2 px-3 py-2"
-                    style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
-                    <Timer size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+                    <Timer size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                     <input type="number" value={questionGraceSeconds} onChange={(e) => setQuestionGraceSeconds(e.target.value)}
                       placeholder="e.g., 5" min="0" className="flex-1 outline-none"
-                      style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }} />
-                    {questionGraceSeconds && <span style={{ color: '#6B6B66', fontSize: 10 }}>seconds</span>}
+                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
+                    {questionGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>seconds</span>}
                   </div>
                 </Field>
               )}
@@ -881,13 +881,13 @@ export function DetailsStep({
                     className="w-full flex items-center justify-between px-3 py-2.5"
                     style={{
                       borderRadius: 2,
-                      border: `1px solid ${negMarkingOn ? '#F2CECE' : '#E3E1DB'}`,
-                      background: negMarkingOn ? '#FDF5F5' : '#FFFFFF',
+                      border: `1px solid ${negMarkingOn ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
+                      background: negMarkingOn ? 'var(--ef-danger-bg)' : 'var(--ef-surface)',
                     }}
                   >
                     <div className="flex items-center gap-2">
-                      <AlertCircle size={13} strokeWidth={1.5} style={{ color: negMarkingOn ? '#9B2828' : '#6B6B66' }} />
-                      <span className="text-xs" style={{ color: negMarkingOn ? '#9B2828' : '#6B6A65' }}>
+                      <AlertCircle size={13} strokeWidth={1.5} style={{ color: negMarkingOn ? 'var(--ef-danger)' : 'var(--ef-text-muted)' }} />
+                      <span className="text-xs" style={{ color: negMarkingOn ? 'var(--ef-danger)' : '#6B6A65' }}>
                         Deduct marks for wrong answers
                       </span>
                     </div>
@@ -895,9 +895,9 @@ export function DetailsStep({
                       className="flex items-center px-2 py-0.5"
                       style={{
                         borderRadius: 2, fontSize: 10,
-                        border: `1px solid ${negMarkingOn ? '#F2CECE' : '#E3E1DB'}`,
-                        background: negMarkingOn ? '#FFFFFF' : '#F7F6F3',
-                        color: negMarkingOn ? '#9B2828' : '#6B6B66',
+                        border: `1px solid ${negMarkingOn ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
+                        background: negMarkingOn ? 'var(--ef-surface)' : 'var(--ef-canvas)',
+                        color: negMarkingOn ? 'var(--ef-danger)' : 'var(--ef-text-muted)',
                       }}
                     >
                       {negMarkingOn ? 'ON' : 'OFF'}
@@ -914,7 +914,7 @@ export function DetailsStep({
                         />
                       </Field>
 
-                      <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+                      <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
                         Only <strong>fully wrong</strong> answers are penalised. Partially correct answers keep their partial marks, and blanks are never penalised. The exam total never drops below zero.
                       </p>
                     </>
@@ -923,7 +923,7 @@ export function DetailsStep({
                   {/* Blank rule — meaningful even with penalties off; almost always 0. */}
                   <Field label="Score for a blank (unanswered) question" hint="(default 0 — a student is never penalised for not attempting)">
                     <div className="flex items-center gap-2 px-3 py-2"
-                      style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
                       <input
                         type="number"
                         value={examPolicy.blankScore ?? ''}
@@ -931,9 +931,9 @@ export function DetailsStep({
                         placeholder="0"
                         step="0.5"
                         className="flex-1 outline-none"
-                        style={{ background: 'transparent', color: '#0C0C0B', fontSize: 12, border: 'none' }}
+                        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }}
                       />
-                      <span style={{ color: '#6B6B66', fontSize: 10 }}>marks</span>
+                      <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>marks</span>
                     </div>
                   </Field>
                 </div>
@@ -941,9 +941,9 @@ export function DetailsStep({
 
               {status === 'active' && (
                 <div className="flex items-start gap-2 px-3 py-3"
-                  style={{ background: '#F0F9F4', border: '1px solid #B8E6C8', borderRadius: 2 }}>
-                  <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0, marginTop: 1 }} />
-                  <p className="text-xs" style={{ color: '#1E7B3C', lineHeight: 1.6 }}>
+                  style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
+                  <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0, marginTop: 1 }} />
+                  <p className="text-xs" style={{ color: 'var(--ef-success-strong)', lineHeight: 1.6 }}>
                     Setting status to <strong>Active</strong> will validate and randomly resolve a unique question set per student at save time.
                   </p>
                 </div>
@@ -963,20 +963,20 @@ export function DetailsStep({
                       <div key={sec.id} className="space-y-1">
                         {showSection && (
                           <div className="flex items-center justify-between px-3 py-1.5"
-                            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 2 }}>
-                            <span className="text-xs" style={{ color: '#6B6B66' }}>{sec.name}</span>
-                            <span className="text-xs flex items-center gap-1" style={{ color: '#6B6B66' }}>
+                            style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{sec.name}</span>
+                            <span className="text-xs flex items-center gap-1" style={{ color: 'var(--ef-text-muted)' }}>
                               <Timer size={10} strokeWidth={1.5} />{sec.timeLimit} min
                             </span>
                           </div>
                         )}
                         {breakMins > 0 && (
                           <div className="flex items-center justify-between px-3 py-1"
-                            style={{ background: '#FAFAF8', border: '1px dashed #E3E1DB', borderRadius: 2 }}>
-                            <span className="text-xs" style={{ color: '#6B6B66' }}>
+                            style={{ background: 'var(--ef-canvas-raised)', border: '1px dashed var(--ef-border)', borderRadius: 2 }}>
+                            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                               Break {sec.breakMandatory ? '(mandatory)' : '(skippable)'}
                             </span>
-                            <span className="text-xs" style={{ color: '#6B6B66' }}>{breakMins} min</span>
+                            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{breakMins} min</span>
                           </div>
                         )}
                       </div>
@@ -994,10 +994,10 @@ export function DetailsStep({
 
               {/* Security tier */}
               <div className="space-y-1.5">
-                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   Security tier
                 </p>
-                <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+                <div className="flex" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', overflow: 'hidden' }}>
                   {([
                     { key: 'mock' as const,       label: 'Mock' },
                     { key: 'normal' as const,     label: 'Normal' },
@@ -1022,9 +1022,9 @@ export function DetailsStep({
                         }}
                         className="flex-1 text-xs px-2 py-1.5 transition-colors"
                         style={{
-                          background: active ? '#0C0C0B' : 'transparent',
-                          color: active ? '#FFFFFF' : '#4A4A45',
-                          borderLeft: i === 0 ? 'none' : '1px solid #E3E1DB',
+                          background: active ? 'var(--ef-ink)' : 'transparent',
+                          color: active ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
+                          borderLeft: i === 0 ? 'none' : '1px solid var(--ef-border)',
                           cursor: 'pointer',
                         }}
                       >
@@ -1033,7 +1033,7 @@ export function DetailsStep({
                     );
                   })}
                 </div>
-                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   {securityTier === 'mock'
                     ? 'Practice mode — no proctoring. Camera off, phones allowed.'
                     : securityTier === 'high_stake'
@@ -1052,7 +1052,7 @@ export function DetailsStep({
               {securityTier !== 'mock' && (
                 <div className="space-y-2">
                   <SettingsToggle
-                    icon={<Shield size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+                    icon={<Shield size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
                     label="Require Safe Exam Browser"
                     hint={securityTier === 'high_stake'
                       ? 'Locks the exam to genuine SEB — blocks VPNs, remote desktop, userscripts. Default on for high-stake.'
@@ -1062,11 +1062,11 @@ export function DetailsStep({
                   />
                   {requireSEB && (
                     <div className="space-y-1.5 px-4 py-3"
-                      style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FAFAF8' }}>
-                      <p className="text-xs" style={{ color: '#6B6B66' }}>
+                      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-canvas-raised)' }}>
+                      <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                         SEB configuration for this exam
                       </p>
-                      <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+                      <div className="flex" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', overflow: 'hidden' }}>
                         {([
                           { key: 'platform' as const, label: 'Platform config' },
                           { key: 'custom' as const,   label: 'Exam-specific config' },
@@ -1079,9 +1079,9 @@ export function DetailsStep({
                               onClick={() => { setSebConfigSource(opt.key); setSebKeysError(''); }}
                               className="flex-1 text-xs px-2 py-1.5 transition-colors"
                               style={{
-                                background: active ? '#0C0C0B' : 'transparent',
-                                color: active ? '#FFFFFF' : '#4A4A45',
-                                borderLeft: i === 0 ? 'none' : '1px solid #E3E1DB',
+                                background: active ? 'var(--ef-ink)' : 'transparent',
+                                color: active ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
+                                borderLeft: i === 0 ? 'none' : '1px solid var(--ef-border)',
                                 cursor: 'pointer',
                               }}
                             >
@@ -1091,13 +1091,13 @@ export function DetailsStep({
                         })}
                       </div>
                       {sebConfigSource === 'platform' ? (
-                        <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+                        <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
                           Uses the platform Config Keys and the platform .seb file from the
                           Safe Exam Browser page. Nothing else to set here.
                         </p>
                       ) : (
                         <>
-                          <p className="text-xs pt-2" style={{ color: '#6B6B66' }}>
+                          <p className="text-xs pt-2" style={{ color: 'var(--ef-text-muted)' }}>
                             Config Keys for this exam (one per line)
                           </p>
                           <textarea
@@ -1108,15 +1108,15 @@ export function DetailsStep({
                             spellCheck={false}
                             className="w-full text-xs px-3 py-2"
                             style={{
-                              border: `1px solid ${sebKeysError ? '#F2CECE' : '#E3E1DB'}`,
-                              borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B',
+                              border: `1px solid ${sebKeysError ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
+                              borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
                               fontFamily: 'ui-monospace, monospace', outline: 'none', resize: 'vertical',
                             }}
                           />
                           {sebKeysError && (
-                            <p className="text-xs" style={{ color: '#9B2828' }}>{sebKeysError}</p>
+                            <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{sebKeysError}</p>
                           )}
-                          <p className="text-xs pt-2" style={{ color: '#6B6B66' }}>
+                          <p className="text-xs pt-2" style={{ color: 'var(--ef-text-muted)' }}>
                             .seb file for this exam
                           </p>
                           <input
@@ -1131,16 +1131,16 @@ export function DetailsStep({
                           />
                           {sebFile ? (
                             <div className="w-full flex items-center justify-between gap-3 px-3 py-2"
-                              style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}>
+                              style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
                               <div className="flex items-center gap-2 min-w-0">
-                                <FileText size={12} strokeWidth={1.5} style={{ color: '#1E7B3C', flexShrink: 0 }} />
-                                <p className="text-xs truncate" style={{ color: '#0C0C0B' }}>{sebFile.name}</p>
+                                <FileText size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />
+                                <p className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>{sebFile.name}</p>
                               </div>
                               <button
                                 type="button"
                                 onClick={() => setSebFile(null)}
                                 className="p-1 flex-shrink-0"
-                                style={{ color: '#6B6B66', background: 'none', border: 'none', cursor: 'pointer' }}
+                                style={{ color: 'var(--ef-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
                                 aria-label="Clear chosen file"
                               >
                                 <X size={12} strokeWidth={1.5} />
@@ -1152,15 +1152,15 @@ export function DetailsStep({
                               onClick={() => sebFileInputRef.current?.click()}
                               className="w-full flex items-center justify-center gap-2 text-xs px-3 py-2 transition-colors"
                               style={{
-                                border: '1px dashed #C8C7C2', borderRadius: 2,
-                                background: '#FFFFFF', color: '#4A4A45', cursor: 'pointer',
+                                border: '1px dashed var(--ef-track)', borderRadius: 2,
+                                background: 'var(--ef-surface)', color: 'var(--ef-text-subtle)', cursor: 'pointer',
                               }}
                             >
                               <Upload size={11} strokeWidth={1.5} />
                               {sebConfigFileUrl ? 'Choose .seb file to replace the current one…' : 'Choose .seb file…'}
                             </button>
                           )}
-                          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>
+                          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
                             {sebFile
                               ? `Will upload "${sebFile.name}" on save and offer it on this exam's briefing gate.`
                               : sebConfigFileUrl
@@ -1176,10 +1176,10 @@ export function DetailsStep({
 
               {/* Delivery mode */}
               <div className="space-y-1.5">
-                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   Delivery mode
                 </p>
-                <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+                <div className="flex" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', overflow: 'hidden' }}>
                   {([
                     { key: 'standard' as const, label: 'Standard' },
                     { key: 'linear' as const,   label: 'Linear' },
@@ -1193,9 +1193,9 @@ export function DetailsStep({
                         onClick={() => setDeliveryMode(opt.key)}
                         className="flex-1 text-xs px-2 py-1.5 transition-colors"
                         style={{
-                          background: active ? '#0C0C0B' : 'transparent',
-                          color: active ? '#FFFFFF' : '#4A4A45',
-                          borderLeft: i === 0 ? 'none' : '1px solid #E3E1DB',
+                          background: active ? 'var(--ef-ink)' : 'transparent',
+                          color: active ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
+                          borderLeft: i === 0 ? 'none' : '1px solid var(--ef-border)',
                           cursor: 'pointer',
                         }}
                       >
@@ -1214,7 +1214,7 @@ export function DetailsStep({
                     exactly like linear, and the difficulty ladder does NOT
                     exist yet (the next question is simply the next in order).
                     Both now say what actually happens. */}
-                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   {deliveryMode === 'linear'
                     ? 'One question at a time, no going back — enforced by the server. Answers are committed as the student advances.'
                     : deliveryMode === 'adaptive'
@@ -1232,10 +1232,10 @@ export function DetailsStep({
 
               {/* Section start order */}
               <div className="space-y-1.5">
-                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   Section order
                 </p>
-                <div className="flex" style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', overflow: 'hidden' }}>
+                <div className="flex" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', overflow: 'hidden' }}>
                   {([
                     { key: 'sequential' as const, label: 'In order' },
                     { key: 'random' as const,     label: 'Random' },
@@ -1249,9 +1249,9 @@ export function DetailsStep({
                         onClick={() => setSectionStartOrder(opt.key)}
                         className="flex-1 text-xs px-2 py-1.5 transition-colors"
                         style={{
-                          background: active ? '#0C0C0B' : 'transparent',
-                          color: active ? '#FFFFFF' : '#4A4A45',
-                          borderLeft: i === 0 ? 'none' : '1px solid #E3E1DB',
+                          background: active ? 'var(--ef-ink)' : 'transparent',
+                          color: active ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
+                          borderLeft: i === 0 ? 'none' : '1px solid var(--ef-border)',
                           cursor: 'pointer',
                         }}
                       >
@@ -1260,7 +1260,7 @@ export function DetailsStep({
                     );
                   })}
                 </div>
-                <p className="text-xs" style={{ color: '#6B6B66' }}>
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   {sectionStartOrder === 'random'
                     ? 'Each student gets sections in a different order. Breaks apply by completion count — after the 1st completed section, the 2nd, and so on.'
                     : sectionStartOrder === 'student_choice'
@@ -1271,7 +1271,7 @@ export function DetailsStep({
 
               <div className="space-y-2">
                 <SettingsToggle
-                  icon={<Shuffle size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+                  icon={<Shuffle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
                   label="Shuffle Questions"
                   hint="Randomise question order for each student"
                   value={shuffleQuestions}
@@ -1280,14 +1280,14 @@ export function DetailsStep({
                   lockReason={mut.shuffleQuestions ? undefined : lockReason}
                 />
                 <AudienceSelector
-                  icon={<BarChart2 size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+                  icon={<BarChart2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
                   label="Show Results"
                   hint="Who can see scores and outcomes after submission"
                   value={showResultsTo}
                   onChange={setShowResultsTo}
                 />
                 <AudienceSelector
-                  icon={<BookOpen size={12} strokeWidth={1.5} style={{ color: '#6B6B66' }} />}
+                  icon={<BookOpen size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
                   label="Allow Review"
                   hint="Who can see the questions and correct answers after submission"
                   value={allowReviewTo}
@@ -1325,10 +1325,10 @@ export function DetailsStep({
       {/* Bottom bar — rules phase hands off to Step 3 (Allocation). Saving now
           happens there, so this bar only advances the wizard. */}
       <div className="flex items-center justify-end gap-3 px-12 py-5 mt-8"
-        style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+        style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
         <button onClick={onContinueToAllocation}
           className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}>
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
           Continue to Allocation <ChevronRight size={12} strokeWidth={2} />
         </button>
       </div>
@@ -1345,24 +1345,24 @@ export function DetailsStep({
       <motion.div key="allocation-phase" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
         transition={{ duration: 0.18 }} className="flex flex-col flex-1">
 
-        <div className="flex-shrink-0" style={{ background: '#FAFAF8' }}>
+        <div className="flex-shrink-0" style={{ background: 'var(--ef-canvas-raised)' }}>
           <div style={{ padding: '20px 48px 24px' }}>
 
             {/* Back link */}
             <div className="flex items-center gap-2 mb-4">
               <button onClick={onBackToRules}
                 className="flex items-center gap-1 text-xs transition-opacity hover:opacity-60"
-                style={{ color: '#6B6B66' }}>
+                style={{ color: 'var(--ef-text-muted)' }}>
                 <X size={11} strokeWidth={1.5} /> Back to Rules &amp; Settings
               </button>
-              <span style={{ color: '#DDDBD5', fontSize: 10 }}>·</span>
-              <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>STEP 3 OF 3 — ALLOCATION</p>
+              <span style={{ color: 'var(--ef-border-muted)', fontSize: 10 }}>·</span>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>STEP 3 OF 3 — ALLOCATION</p>
             </div>
 
             <div className="space-y-5" style={{ maxWidth: hierarchyMode ? 920 : 560 }}>
               <div>
                 <SectionLabel label="ALLOCATION" />
-                <p className="text-xs mt-2" style={{ color: '#6B6B66' }}>
+                <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)' }}>
                   Choose who takes this exam. Saving and publishing happen from this step.
                 </p>
               </div>
@@ -1428,7 +1428,7 @@ export function DetailsStep({
 
         {/* Save bar — moved verbatim from the rules phase */}
         <div className="flex items-center justify-end gap-3 px-12 py-5 mt-auto"
-          style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+          style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
           {(() => {
             // Edit mode on a live or closed assessment: status is locked, single Save Changes.
             const lockedStatus = mode === 'edit' && (originalStatus === 'active' || originalStatus === 'closed');
@@ -1436,7 +1436,7 @@ export function DetailsStep({
               return (
                 <button onClick={() => handleSave()} disabled={saving}
                   className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                  style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  style={{ background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
                   {saving
                     ? <><Loader2 size={11} className="animate-spin" /> Saving…</>
                     : <><CheckCircle2 size={11} /> Save Changes</>}
@@ -1450,12 +1450,12 @@ export function DetailsStep({
               <>
                 <button onClick={() => handleSave('draft')} disabled={saving}
                   className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                  style={{ background: '#FFFFFF', color: '#0C0C0B', border: '1px solid #0C0C0B', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  style={{ background: 'var(--ef-surface)', color: 'var(--ef-ink)', border: '1px solid var(--ef-ink)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
                   {saving ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : <>{draftLabel}</>}
                 </button>
                 <button onClick={() => handleSave('active')} disabled={saving}
                   className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                  style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  style={{ background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
                   {saving ? <><Loader2 size={11} className="animate-spin" /> Publishing…</> : <><CheckCircle2 size={11} /> {publishLabel}</>}
                 </button>
               </>
@@ -1471,28 +1471,28 @@ export function DetailsStep({
           style={{ background: 'rgba(12,12,11,0.45)' }}
           onClick={() => setValidationErrors([])}>
           <div onClick={(e) => e.stopPropagation()}
-            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, maxWidth: 520, width: '100%' }}>
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+            style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3, maxWidth: 520, width: '100%' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--ef-border)' }}>
               <div className="flex items-center gap-2">
-                <AlertCircle size={14} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-                <span className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <AlertCircle size={14} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+                <span className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   Fix the following before saving
                 </span>
               </div>
             </div>
             <ul className="px-6 py-4 space-y-2.5">
               {validationErrors.map((err, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#0C0C0B', lineHeight: 1.55 }}>
-                  <span style={{ color: '#9B2828', flexShrink: 0, marginTop: 1 }}>•</span>
+                <li key={i} className="flex items-start gap-2 text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.55 }}>
+                  <span style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }}>•</span>
                   <span>{err}</span>
                 </li>
               ))}
             </ul>
             <div className="flex items-center justify-end gap-2 px-6 py-4"
-              style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+              style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
               <button onClick={() => setValidationErrors([])}
                 className="text-xs px-4 py-2 transition-opacity hover:opacity-80"
-                style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}>
+                style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
                 Got it
               </button>
             </div>
@@ -1506,36 +1506,36 @@ export function DetailsStep({
           style={{ background: 'rgba(12,12,11,0.45)' }}
           onClick={() => setPendingPublish(null)}>
           <div onClick={(e) => e.stopPropagation()}
-            style={{ background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3, maxWidth: 520, width: '100%' }}>
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #E3E1DB' }}>
+            style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3, maxWidth: 520, width: '100%' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--ef-border)' }}>
               <div className="flex items-center gap-2">
                 <AlertTriangle size={14} strokeWidth={1.5} style={{ color: '#B5651D' }} />
-                <span className="text-xs" style={{ color: '#0C0C0B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <span className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   Confirm publish
                 </span>
               </div>
-              <p className="text-xs mt-2" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+              <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                 Before publishing, please review the following:
               </p>
             </div>
             <ul className="px-6 py-4 space-y-2.5">
               {pendingPublish.warnings.map((w, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#0C0C0B', lineHeight: 1.55 }}>
+                <li key={i} className="flex items-start gap-2 text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.55 }}>
                   <span style={{ color: '#B5651D', flexShrink: 0, marginTop: 1 }}>•</span>
                   <span>{w}</span>
                 </li>
               ))}
             </ul>
             <div className="flex items-center justify-end gap-2 px-6 py-4"
-              style={{ borderTop: '1px solid #E3E1DB', background: '#FAFAF8' }}>
+              style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
               <button onClick={() => setPendingPublish(null)}
                 className="text-xs px-4 py-2 transition-opacity hover:opacity-80"
-                style={{ background: '#FFFFFF', color: '#0C0C0B', border: '1px solid #C8C7C2', borderRadius: 2, cursor: 'pointer' }}>
+                style={{ background: 'var(--ef-surface)', color: 'var(--ef-ink)', border: '1px solid var(--ef-track)', borderRadius: 2, cursor: 'pointer' }}>
                 Go back
               </button>
               <button onClick={() => { setPendingPublish(null); handleSave('active', true); }} disabled={saving}
                 className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-80"
-                style={{ background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                style={{ background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
                 {saving ? <><Loader2 size={11} className="animate-spin" /> Publishing…</> : <><CheckCircle2 size={11} /> Publish anyway</>}
               </button>
             </div>

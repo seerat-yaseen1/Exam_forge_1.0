@@ -30,7 +30,7 @@ import type { Institute } from '../../../../lib/firebaseService';
 import { NodePickerModal } from './NodePickerModal';
 import { AllocationPreview } from './AllocationPreview';
 
-const INK = '#0C0C0B', MUTED = '#6B6B66', FAINT = '#6B6B66', LINE = '#E3E1DB', PAPER = '#FFFFFF';
+const INK = 'var(--ef-ink)', MUTED = 'var(--ef-text-muted)', FAINT = 'var(--ef-text-muted)', LINE = 'var(--ef-border)', PAPER = 'var(--ef-surface)';
 
 const selectStyle: React.CSSProperties = {
   width: '100%', border: `1px solid ${LINE}`, borderRadius: 2,
@@ -213,7 +213,7 @@ export function AllocationPanelCore({ draft, setDraft, assessmentId, version = 0
 
           {selectedRows.length === 0 ? (
             <button onClick={() => setPickerOpen(true)}
-              className="w-full text-xs py-6 transition-colors hover:bg-[#FAFAF8]"
+              className="w-full text-xs py-6 transition-colors hover:bg-[var(--ef-canvas-raised)]"
               style={{ border: `1px dashed ${LINE}`, borderRadius: 3, color: MUTED }}>
               Choose who takes this exam
             </button>
@@ -222,7 +222,7 @@ export function AllocationPanelCore({ draft, setDraft, assessmentId, version = 0
               {selectedRows.map((r) => (
                 <span key={r.id} title={r.breadcrumb}
                   className="inline-flex items-center gap-1.5 text-xs px-2 py-1"
-                  style={{ border: `1px solid ${LINE}`, borderRadius: 2, background: '#FAFAF8', color: INK }}>
+                  style={{ border: `1px solid ${LINE}`, borderRadius: 2, background: 'var(--ef-canvas-raised)', color: INK }}>
                   {r.name}
                   {r.breadcrumb && (
                     <span style={{ color: FAINT, maxWidth: 200 }} className="truncate">
@@ -241,7 +241,7 @@ export function AllocationPanelCore({ draft, setDraft, assessmentId, version = 0
 
       {/* 4 · Live preview (server dry-run) */}
       {previewError && (
-        <div className="text-xs px-4 py-3" style={{ border: '1px solid #F2CECE', background: '#FDF5F5', borderRadius: 3, color: '#9B2828' }}>
+        <div className="text-xs px-4 py-3" style={{ border: '1px solid var(--ef-danger-border)', background: 'var(--ef-danger-bg)', borderRadius: 3, color: 'var(--ef-danger)' }}>
           {previewError}
         </div>
       )}

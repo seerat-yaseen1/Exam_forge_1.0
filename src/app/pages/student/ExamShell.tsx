@@ -514,7 +514,7 @@ function FreezePausedOverlay({ reason }: { reason?: string }) {
             background: '#D4A017', opacity: 0.25,
             animation: 'freeze-ping 1.6s ease-in-out infinite',
           }} />
-          <Flag size={22} strokeWidth={1.5} style={{ color: '#F5DFA0' }} />
+          <Flag size={22} strokeWidth={1.5} style={{ color: 'var(--ef-warning-border)' }} />
         </div>
         <div className="flex flex-col gap-2">
           {/*
@@ -540,10 +540,10 @@ function FreezePausedOverlay({ reason }: { reason?: string }) {
             Wording follows A1: "paused by invigilator", never "finished" or
             "submitted" — a student reads either as final, and it is not.
           */}
-          <p className="text-xs" style={{ color: '#F5DFA0', letterSpacing: '0.12em' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-warning-border)', letterSpacing: '0.12em' }}>
             ASSESSMENT PAUSED
           </p>
-          <p className="text-sm" style={{ color: '#FFFFFF', lineHeight: 1.6 }}>
+          <p className="text-sm" style={{ color: 'var(--ef-surface)', lineHeight: 1.6 }}>
             Your assessment has been paused by an invigilator.
           </p>
           <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
@@ -602,13 +602,13 @@ function ExtensionFreezeOverlay({
             width: 56, height: 56, borderRadius: '50%',
             background: 'rgba(212,160,23,0.15)', border: '1px solid rgba(212,160,23,0.35)',
           }}>
-          <Flag size={22} strokeWidth={1.5} style={{ color: '#F5DFA0' }} />
+          <Flag size={22} strokeWidth={1.5} style={{ color: 'var(--ef-warning-border)' }} />
         </div>
         <div className="flex flex-col gap-2">
-          <p className="text-xs" style={{ color: '#F5DFA0', letterSpacing: '0.12em' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-warning-border)', letterSpacing: '0.12em' }}>
             EXAM PAUSED — EXTENSION DETECTED
           </p>
-          <p className="text-sm" style={{ color: '#FFFFFF', lineHeight: 1.6 }}>
+          <p className="text-sm" style={{ color: 'var(--ef-surface)', lineHeight: 1.6 }}>
             A browser extension was detected and your exam has been paused.
           </p>
           <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
@@ -629,8 +629,8 @@ function ExtensionFreezeOverlay({
             disabled={resuming}
             className="text-xs px-4 py-2 transition-colors"
             style={{
-              background: resuming ? 'rgba(255,255,255,0.15)' : '#F5DFA0',
-              color: resuming ? 'rgba(255,255,255,0.6)' : '#0C0C0B',
+              background: resuming ? 'rgba(255,255,255,0.15)' : 'var(--ef-warning-border)',
+              color: resuming ? 'rgba(255,255,255,0.6)' : 'var(--ef-ink)',
               borderRadius: 2, cursor: resuming ? 'default' : 'pointer',
             }}
           >
@@ -667,17 +667,17 @@ function FaceGateOverlay() {
         style={{ maxWidth: 380, textAlign: 'center' }}
       >
         <div className="flex items-center justify-center"
-          style={{ width: 52, height: 52, borderRadius: '50%', background: '#EFEEE9', border: '1px solid #E3E1DB' }}>
-          <Loader2 size={20} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
+          style={{ width: 52, height: 52, borderRadius: '50%', background: '#EFEEE9', border: '1px solid var(--ef-border)' }}>
+          <Loader2 size={20} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.12em' }}>
             PREPARING MONITORING
           </p>
-          <p className="text-sm" style={{ color: '#4A4A45', lineHeight: 1.6 }}>
+          <p className="text-sm" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.6 }}>
             Setting up webcam monitoring before your exam begins…
           </p>
-          <p className="text-xs mt-1" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+          <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
             This takes just a moment. Your questions will appear once monitoring is active.
           </p>
         </div>
@@ -705,13 +705,13 @@ function SessionConflictOverlay() {
         <div className="flex items-center justify-center"
           style={{ width: 56, height: 56, borderRadius: '50%',
             background: 'rgba(155,40,40,0.15)', border: '1px solid rgba(155,40,40,0.3)' }}>
-          <MonitorSmartphone size={24} strokeWidth={1} style={{ color: '#F2CECE' }} />
+          <MonitorSmartphone size={24} strokeWidth={1} style={{ color: 'var(--ef-danger-border)' }} />
         </div>
         <div className="flex flex-col gap-2">
-          <p className="text-xs" style={{ color: '#F2CECE', letterSpacing: '0.12em' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-danger-border)', letterSpacing: '0.12em' }}>
             SESSION CONFLICT
           </p>
-          <p className="text-sm" style={{ color: '#FFFFFF', lineHeight: 1.6 }}>
+          <p className="text-sm" style={{ color: 'var(--ef-surface)', lineHeight: 1.6 }}>
             Another device has joined this exam session.
           </p>
           <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
@@ -770,11 +770,11 @@ function SubmitConfirmModal({
         initial={{ scale: 0.96, opacity: 0, y: 10 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.96, opacity: 0 }}
-        style={{ width: 400, background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ width: 400, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 py-4" style={{ borderBottom: '1px solid #E3E1DB' }}>
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+        <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
             {isFinal ? 'SUBMIT EXAM' : `SUBMIT ${sectionName.toUpperCase()}`}
           </p>
         </div>
@@ -793,9 +793,9 @@ function SubmitConfirmModal({
               still counted honestly in the second clause rather than hidden. */}
           {(unanswered > 0 || unseen > 0) && (
             <div className="flex items-start gap-2.5 px-3 py-3 mb-4"
-              style={{ background: '#FEF9EC', border: '1px solid #F5DFA0', borderRadius: 2 }}>
-              <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#92680A', flexShrink: 0, marginTop: 1 }} />
-              <p className="text-xs" style={{ color: '#92680A', lineHeight: 1.6 }}>
+              style={{ background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+              <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0, marginTop: 1 }} />
+              <p className="text-xs" style={{ color: 'var(--ef-warning)', lineHeight: 1.6 }}>
                 {unseen > 0 ? (
                   <>
                     <strong>
@@ -814,20 +814,20 @@ function SubmitConfirmModal({
               </p>
             </div>
           )}
-          <p className="text-xs" style={{ color: '#4A4A45', lineHeight: 1.6 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.6 }}>
             {isFinal
               ? 'Are you sure you want to submit the entire exam? This action cannot be undone.'
               : `Are you sure you want to submit ${sectionName}? You cannot return to this section once submitted.`}
           </p>
         </div>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button
             onClick={() => { if (confirming) return; setConfirming(true); onConfirm(); }}
             disabled={confirming}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5"
             style={{
-              background: confirming ? '#5A5A54' : '#0C0C0B',
-              color: '#FFFFFF', borderRadius: 2,
+              background: confirming ? '#5A5A54' : 'var(--ef-ink)',
+              color: 'var(--ef-surface)', borderRadius: 2,
               cursor: confirming ? 'wait' : 'pointer',
             }}
           >
@@ -840,7 +840,7 @@ function SubmitConfirmModal({
             disabled={confirming}
             className="text-xs px-4 py-2.5"
             style={{
-              color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2,
+              color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2,
               cursor: confirming ? 'not-allowed' : 'pointer',
               opacity: confirming ? 0.5 : 1,
             }}
@@ -932,10 +932,10 @@ function BreakScreen({
   const busy = autoContinuing || continuing;
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
+    <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: 'var(--ef-canvas)' }}>
       <div className="flex flex-col items-center gap-4" style={{ maxWidth: 440, textAlign: 'center', padding: '0 24px' }}>
-        <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>BREAK</p>
-        <p className="text-sm" style={{ color: '#0C0C0B', lineHeight: 1.6 }}>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.12em' }}>BREAK</p>
+        <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.6 }}>
           {state.then === 'choose'
             ? `${state.justSubmittedSectionName} submitted. Take a moment — you'll choose your next section when you continue.`
             : `${state.justSubmittedSectionName} submitted. Take a moment before ${state.nextSectionName} begins.`}
@@ -944,14 +944,14 @@ function BreakScreen({
           className="flex items-center justify-center"
           style={{
             width: 120, height: 120, borderRadius: '50%',
-            border: '1px solid #E3E1DB', background: '#FFFFFF',
+            border: '1px solid var(--ef-border)', background: 'var(--ef-surface)',
           }}
         >
-          <span style={{ color: '#0C0C0B', fontVariantNumeric: 'tabular-nums', fontSize: 24 }}>
+          <span style={{ color: 'var(--ef-ink)', fontVariantNumeric: 'tabular-nums', fontSize: 24 }}>
             {mm}:{ss.toString().padStart(2, '0')}
           </span>
         </div>
-        <p className="text-xs" style={{ color: '#6B6B66' }}>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           {state.mandatory
             ? 'You must wait until the timer ends.'
             : 'You may skip this break and continue immediately.'}
@@ -961,8 +961,8 @@ function BreakScreen({
           disabled={!canContinue || busy}
           className="text-xs px-5 py-2.5 mt-2"
           style={{
-            background: canContinue && !busy ? '#0C0C0B' : '#C8C7C2',
-            color: '#FFFFFF', borderRadius: 2,
+            background: canContinue && !busy ? 'var(--ef-ink)' : 'var(--ef-track)',
+            color: 'var(--ef-surface)', borderRadius: 2,
             cursor: canContinue && !busy ? 'pointer' : 'not-allowed',
           }}
         >
@@ -991,7 +991,7 @@ function TimerChip({ label, children }: { label: string; children: ReactNode }) 
     <div className="flex items-center gap-1.5 flex-shrink-0">
       <span
         className="text-[10px] uppercase"
-        style={{ color: '#6B6B66', letterSpacing: '0.06em', fontWeight: 500 }}
+        style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontWeight: 500 }}
       >
         {label}
       </span>
@@ -1018,10 +1018,10 @@ function SectionPicker({
   picking: boolean;
 }) {
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3', padding: 24 }}>
+    <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: 'var(--ef-canvas)', padding: 24 }}>
       <div className="flex flex-col items-center gap-4" style={{ maxWidth: 560, width: '100%' }}>
-        <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>CHOOSE YOUR NEXT SECTION</p>
-        <p className="text-sm" style={{ color: '#0C0C0B', textAlign: 'center', lineHeight: 1.6 }}>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.12em' }}>CHOOSE YOUR NEXT SECTION</p>
+        <p className="text-sm" style={{ color: 'var(--ef-ink)', textAlign: 'center', lineHeight: 1.6 }}>
           {completedCount === 0
             ? 'Pick which section you want to start with.'
             : `You've completed ${completedCount} of ${totalCount} sections. Pick what to take next.`}
@@ -1035,17 +1035,17 @@ function SectionPicker({
               onClick={() => onPick(sec.id)}
               className="flex flex-col items-start gap-1.5 px-4 py-3 transition-colors text-left"
               style={{
-                background: '#FFFFFF',
-                border: '1px solid #E3E1DB',
+                background: 'var(--ef-surface)',
+                border: '1px solid var(--ef-border)',
                 borderRadius: 3,
                 cursor: picking ? 'not-allowed' : 'pointer',
                 opacity: picking ? 0.6 : 1,
               }}
-              onMouseEnter={(e) => { if (!picking) e.currentTarget.style.borderColor = '#0C0C0B'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E3E1DB'; }}
+              onMouseEnter={(e) => { if (!picking) e.currentTarget.style.borderColor = 'var(--ef-ink)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--ef-border)'; }}
             >
-              <span className="text-xs" style={{ color: '#0C0C0B' }}>{sec.name}</span>
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
+              <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{sec.name}</span>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 {sec.questions.length} question{sec.questions.length === 1 ? '' : 's'}
                 {sec.timeLimit ? ` · ${sec.timeLimit} min` : ''}
               </span>
@@ -1053,7 +1053,7 @@ function SectionPicker({
           ))}
         </div>
         {picking && (
-          <div className="flex items-center gap-2" style={{ color: '#6B6B66' }}>
+          <div className="flex items-center gap-2" style={{ color: 'var(--ef-text-muted)' }}>
             <Loader2 size={11} className="animate-spin" />
             <span className="text-xs">Starting section…</span>
           </div>
@@ -3305,14 +3305,14 @@ export function ExamShell() {
 
   if (shellStatus === 'loading') {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
+      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: 'var(--ef-canvas)' }}>
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
         {/* Copy varies with startPhase so a staggered wait reads as progress
             rather than a stalled spinner. Deliberately NOT a countdown or a
             queue position: both invite students to compare with a neighbour
             and conclude something is wrong, when in fact the delay costs them
             nothing — their timer starts when their attempt does. */}
-        <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>
+        <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>
           {startPhase === 'retrying'
             ? 'Still preparing your exam…'
             : startPhase === 'queued'
@@ -3328,18 +3328,18 @@ export function ExamShell() {
     // what to do, where to get SEB and the config — never a raw error code.
     if (errorIsSeb) {
       return (
-        <div className="fixed inset-0 flex flex-col items-center justify-center px-6" style={{ background: '#F7F6F3' }}>
+        <div className="fixed inset-0 flex flex-col items-center justify-center px-6" style={{ background: 'var(--ef-canvas)' }}>
           <div className="flex items-center justify-center mb-5"
             style={{ width: 52, height: 52, borderRadius: '50%', background: '#FBF3F3', border: '1px solid #E3C9C9' }}>
-            <AlertTriangle size={22} strokeWidth={1} style={{ color: '#9B2828' }} />
+            <AlertTriangle size={22} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
           </div>
-          <p className="text-xs mb-2" style={{ color: '#9B2828', letterSpacing: '0.1em' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--ef-danger)', letterSpacing: '0.1em' }}>
             SAFE EXAM BROWSER REQUIRED
           </p>
-          <p className="text-xs text-center mb-1" style={{ color: '#4A4A45', lineHeight: 1.7, maxWidth: 420 }}>
+          <p className="text-xs text-center mb-1" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.7, maxWidth: 420 }}>
             {errorMsg}
           </p>
-          <p className="text-xs text-center mb-6" style={{ color: '#6B6B66', lineHeight: 1.6, maxWidth: 420 }}>
+          <p className="text-xs text-center mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6, maxWidth: 420 }}>
             Your progress is saved — resuming inside Safe Exam Browser continues where you left off.
           </p>
           <div className="flex items-center gap-2 flex-wrap justify-center">
@@ -3348,7 +3348,7 @@ export function ExamShell() {
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs px-4 py-2"
-              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, textDecoration: 'none' }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, textDecoration: 'none' }}
             >
               Download Safe Exam Browser
             </a>
@@ -3356,7 +3356,7 @@ export function ExamShell() {
               <a
                 href={assessment?.sebConfigFileUrl || platformSebUrl}
                 className="text-xs px-4 py-2"
-                style={{ color: '#4A4A45', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', textDecoration: 'none' }}
+                style={{ color: 'var(--ef-text-subtle)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', textDecoration: 'none' }}
               >
                 Exam configuration (.seb)
               </a>
@@ -3364,7 +3364,7 @@ export function ExamShell() {
             <button
               onClick={() => navigate('/student/assessments')}
               className="text-xs px-4 py-2"
-              style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FFFFFF', cursor: 'pointer' }}
+              style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)', cursor: 'pointer' }}
             >
               Return to assessments
             </button>
@@ -3373,13 +3373,13 @@ export function ExamShell() {
       );
     }
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <AlertTriangle size={20} strokeWidth={1} style={{ color: '#9B2828' }} />
-        <p className="text-xs mt-4" style={{ color: '#9B2828' }}>{errorMsg}</p>
+      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: 'var(--ef-canvas)' }}>
+        <AlertTriangle size={20} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
+        <p className="text-xs mt-4" style={{ color: 'var(--ef-danger)' }}>{errorMsg}</p>
         <button
           onClick={() => navigate('/student/assessments')}
           className="text-xs mt-6 px-4 py-2"
-          style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2 }}
+          style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2 }}
         >
           Return to assessments
         </button>
@@ -3389,9 +3389,9 @@ export function ExamShell() {
 
   if (shellStatus === 'submit_failed') {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <AlertTriangle size={20} strokeWidth={1} style={{ color: '#9B2828' }} />
-        <p className="text-xs mt-4 px-8 text-center" style={{ color: '#9B2828' }}>{errorMsg}</p>
+      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: 'var(--ef-canvas)' }}>
+        <AlertTriangle size={20} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
+        <p className="text-xs mt-4 px-8 text-center" style={{ color: 'var(--ef-danger)' }}>{errorMsg}</p>
         <button
           onClick={() => {
             // B-02: goes through handleFinalSubmit rather than re-implementing
@@ -3404,7 +3404,7 @@ export function ExamShell() {
             void handleFinalSubmit(lastFinalReasonRef.current);
           }}
           className="text-xs mt-6 px-4 py-2"
-          style={{ background: '#2F2F2B', color: '#FFFFFF', borderRadius: 2 }}
+          style={{ background: '#2F2F2B', color: 'var(--ef-surface)', borderRadius: 2 }}
         >
           Retry submission
         </button>
@@ -3419,18 +3419,18 @@ export function ExamShell() {
   // invited a second click on an already-submitting section.
   if (shellStatus === 'submitting_section') {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
-        <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Submitting this section…</p>
+      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: 'var(--ef-canvas)' }}>
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+        <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Submitting this section…</p>
       </div>
     );
   }
 
   if (shellStatus === 'submitting_exam' || shellStatus === 'submitted') {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: '#F7F6F3' }}>
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: '#6B6B66' }} />
-        <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Submitting your exam…</p>
+      <div className="fixed inset-0 flex flex-col items-center justify-center" style={{ background: 'var(--ef-canvas)' }}>
+        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+        <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Submitting your exam…</p>
       </div>
     );
   }
@@ -3506,7 +3506,7 @@ export function ExamShell() {
   return (
     <div
       className="fixed inset-0 flex flex-col"
-      style={{ background: '#F7F6F3', userSelect: 'none' }}
+      style={{ background: 'var(--ef-canvas)', userSelect: 'none' }}
     >
       {/* ── Invisible engines ── */}
       <IntegrityEngine
@@ -3523,20 +3523,20 @@ export function ExamShell() {
       <div
         className="flex items-center gap-4 px-5 py-2.5 flex-shrink-0"
         style={{
-          background: '#FFFFFF',
-          borderBottom: '1px solid #E3E1DB',
+          background: 'var(--ef-surface)',
+          borderBottom: '1px solid var(--ef-border)',
           height: 52,
         }}
       >
         {/* Section name + progress */}
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <Layers size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-            <span className="text-xs" style={{ color: '#0C0C0B' }}>
+            <Layers size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>
               {currentSection.name}
             </span>
             {totalSections > 1 && (
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 ({currentSectionIdx + 1}/{totalSections})
               </span>
             )}
@@ -3549,10 +3549,10 @@ export function ExamShell() {
                 style={{
                   width: 6, height: 6, borderRadius: '50%',
                   background: idx < currentSectionIdx
-                    ? '#1E7B3C'
+                    ? 'var(--ef-success-strong)'
                     : idx === currentSectionIdx
-                      ? '#0C0C0B'
-                      : '#E3E1DB',
+                      ? 'var(--ef-ink)'
+                      : 'var(--ef-border)',
                 }}
               />
             ))}
@@ -3587,8 +3587,8 @@ export function ExamShell() {
             className="flex items-center gap-1.5 flex-shrink-0 px-2 py-1"
             style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}
           >
-            <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-            <span className="text-xs" style={{ color: '#9B2828' }}>Some answers unsent</span>
+            <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>Some answers unsent</span>
           </div>
         )}
 
@@ -3601,9 +3601,9 @@ export function ExamShell() {
           >
             <div style={{
               width: 6, height: 6, borderRadius: '50%',
-              background: unsavedCount > 0 ? '#B7791F' : '#1E7B3C',
+              background: unsavedCount > 0 ? '#B7791F' : 'var(--ef-success-strong)',
             }} />
-            <span className="text-xs" style={{ color: unsavedCount > 0 ? '#B7791F' : '#6B6B66' }}>
+            <span className="text-xs" style={{ color: unsavedCount > 0 ? '#B7791F' : 'var(--ef-text-muted)' }}>
               {unsavedCount > 0
                 ? `${unsavedCount} unsaved`
                 : 'All answers saved'}
@@ -3644,9 +3644,9 @@ export function ExamShell() {
         {/* Session conflict badge */}
         {hasConflict && (
           <div className="flex items-center gap-1.5 px-3 py-1.5"
-            style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-            <MonitorSmartphone size={11} strokeWidth={1.5} style={{ color: '#9B2828' }} />
-            <span className="text-xs" style={{ color: '#9B2828' }}>Multi-device</span>
+            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+            <MonitorSmartphone size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>Multi-device</span>
           </div>
         )}
 
@@ -3654,19 +3654,19 @@ export function ExamShell() {
         <div
           className="flex items-center gap-1.5 px-3 py-1.5"
           style={{
-            background: warningCount >= 2 ? '#FDF5F5' : warningCount >= 1 ? '#FEF9EC' : '#F7F6F3',
-            border: `1px solid ${warningCount >= 2 ? '#F2CECE' : warningCount >= 1 ? '#F5DFA0' : '#E3E1DB'}`,
+            background: warningCount >= 2 ? 'var(--ef-danger-bg)' : warningCount >= 1 ? '#FEF9EC' : 'var(--ef-canvas)',
+            border: `1px solid ${warningCount >= 2 ? 'var(--ef-danger-border)' : warningCount >= 1 ? 'var(--ef-warning-border)' : 'var(--ef-border)'}`,
             borderRadius: 2,
           }}
         >
           <Shield
             size={11}
             strokeWidth={1.5}
-            style={{ color: warningCount >= 2 ? '#9B2828' : warningCount >= 1 ? '#92680A' : '#6B6B66' }}
+            style={{ color: warningCount >= 2 ? 'var(--ef-danger)' : warningCount >= 1 ? 'var(--ef-warning)' : 'var(--ef-text-muted)' }}
           />
           <span
             className="text-xs"
-            style={{ color: warningCount >= 2 ? '#9B2828' : warningCount >= 1 ? '#92680A' : '#6B6B66' }}
+            style={{ color: warningCount >= 2 ? 'var(--ef-danger)' : warningCount >= 1 ? 'var(--ef-warning)' : 'var(--ef-text-muted)' }}
           >
             {warningCount}/{MAX_WARNINGS}
           </span>
@@ -3684,7 +3684,7 @@ export function ExamShell() {
           disabled={shellStatus !== 'ready'}
           className="flex items-center gap-1.5 text-xs px-4 py-2"
           style={{
-            background: '#0C0C0B', color: '#FFFFFF',
+            background: 'var(--ef-ink)', color: 'var(--ef-surface)',
             borderRadius: 2, cursor: 'pointer',
           }}
         >
@@ -3715,7 +3715,7 @@ export function ExamShell() {
           </div>
 
           {/* Webcam PiP */}
-          <div className="flex-shrink-0 p-3" style={{ borderTop: '1px solid #E3E1DB' }}>
+          <div className="flex-shrink-0 p-3" style={{ borderTop: '1px solid var(--ef-border)' }}>
             <FaceMonitor
               enabled={cameraGranted}
               active={isIntegrityActive}
@@ -3726,7 +3726,7 @@ export function ExamShell() {
         </div>
 
         {/* ── MAIN QUESTION AREA ── */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#FFFFFF' }}>
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--ef-surface)' }}>
 
           {currentQuestion ? (
             <>
@@ -3748,11 +3748,11 @@ export function ExamShell() {
               {/* Bottom navigation bar */}
               <div
                 className="flex items-center justify-between px-8 py-4 flex-shrink-0"
-                style={{ borderTop: '1px solid #F0EFEB' }}
+                style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
               >
                 {isLinear ? (
                   <span className="flex items-center gap-1.5 text-xs px-1 py-2"
-                    style={{ color: '#6B6B66' }}>
+                    style={{ color: 'var(--ef-text-muted)' }}>
                     <Shield size={12} strokeWidth={1.5} />
                     Answers are final — you cannot return to a question
                   </span>
@@ -3762,7 +3762,7 @@ export function ExamShell() {
                   disabled={currentQIdx === 0}
                   className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity"
                   style={{
-                    border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2,
+                    border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2,
                     opacity: currentQIdx === 0 ? 0.3 : 1,
                     cursor: currentQIdx === 0 ? 'not-allowed' : 'pointer',
                   }}
@@ -3776,16 +3776,16 @@ export function ExamShell() {
                 <div className="flex items-center gap-2">
                   {isLinear ? (
                     <>
-                      <span className="text-xs" style={{ color: '#6B6B66' }}>
+                      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                         Question {currentSectionQIds.length}
                       </span>
                       {qSecondsLeft !== null && (
                         <span className="flex items-center gap-1 text-xs px-2 py-0.5"
                           style={{
-                            background: qSecondsLeft <= 10 ? '#FBF3F3' : '#F0F9F4',
-                            border: `1px solid ${qSecondsLeft <= 10 ? '#E3C9C9' : '#B8E6C8'}`,
+                            background: qSecondsLeft <= 10 ? '#FBF3F3' : 'var(--ef-success-bg)',
+                            border: `1px solid ${qSecondsLeft <= 10 ? '#E3C9C9' : 'var(--ef-success-border)'}`,
                             borderRadius: 2,
-                            color: qSecondsLeft <= 10 ? '#9B2828' : '#1E7B3C',
+                            color: qSecondsLeft <= 10 ? 'var(--ef-danger)' : 'var(--ef-success-strong)',
                           }}>
                           <span className="text-[10px] uppercase" style={{ letterSpacing: '0.06em', opacity: 0.7 }}>
                             Per Q
@@ -3795,17 +3795,17 @@ export function ExamShell() {
                         </span>
                       )}
                       {linearError && (
-                        <span className="text-xs" style={{ color: '#9B2828' }}>{linearError}</span>
+                        <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>{linearError}</span>
                       )}
                     </>
                   ) : (
                     <>
-                      <span className="text-xs" style={{ color: '#6B6B66' }}>
+                      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                         {currentSectionQIds.length - unansweredInSection}
                         /{currentSectionQIds.length} answered in this section
                       </span>
                       {!isAnswerEmpty(localAnswers[currentQId!]) && (
-                        <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: '#1E7B3C' }} />
+                        <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
                       )}
                     </>
                   )}
@@ -3827,7 +3827,7 @@ export function ExamShell() {
                       setShowSubmitModal(true);
                     }}
                     className="flex items-center gap-1.5 text-xs px-4 py-2"
-                    style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: 'pointer' }}
+                    style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}
                   >
                     <Send size={11} strokeWidth={1.5} />
                     {isLinear && linearAdvancing
@@ -3844,9 +3844,9 @@ export function ExamShell() {
                     disabled={isLinear && linearAdvancing}
                     className="flex items-center gap-1.5 text-xs px-4 py-2"
                     style={{
-                      border: '1px solid #E3E1DB',
-                      color: isLinear ? '#FFFFFF' : '#4A4A45',
-                      background: isLinear ? '#0C0C0B' : 'transparent',
+                      border: '1px solid var(--ef-border)',
+                      color: isLinear ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
+                      background: isLinear ? 'var(--ef-ink)' : 'transparent',
                       borderRadius: 2,
                       opacity: isLinear && linearAdvancing ? 0.5 : 1,
                       cursor: isLinear && linearAdvancing ? 'default' : 'pointer',
@@ -3862,8 +3862,8 @@ export function ExamShell() {
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
-              <AlertTriangle size={16} strokeWidth={1} style={{ color: '#6B6B66' }} />
-              <p className="text-xs" style={{ color: '#6B6B66' }}>
+              <AlertTriangle size={16} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 No questions found in this section.
               </p>
             </div>

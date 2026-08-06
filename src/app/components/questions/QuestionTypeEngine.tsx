@@ -36,9 +36,9 @@ export type QuestionDraft = Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'u
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
 const inp: React.CSSProperties = {
-  background: '#FAFAF8',
-  border: '1px solid #E3E1DB',
-  color: '#0C0C0B',
+  background: 'var(--ef-canvas-raised)',
+  border: '1px solid var(--ef-border)',
+  color: 'var(--ef-ink)',
   borderRadius: 2,
   outline: 'none',
   fontSize: 13,
@@ -47,12 +47,12 @@ const inp: React.CSSProperties = {
 };
 
 function iFocus(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
-  e.target.style.borderColor = '#0C0C0B';
-  e.target.style.background  = '#FFFFFF';
+  e.target.style.borderColor = 'var(--ef-ink)';
+  e.target.style.background  = 'var(--ef-surface)';
 }
 function iBlur(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
-  e.target.style.borderColor = '#E3E1DB';
-  e.target.style.background  = '#FAFAF8';
+  e.target.style.borderColor = 'var(--ef-border)';
+  e.target.style.background  = 'var(--ef-canvas-raised)';
 }
 
 // ── Type options ──────────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ const TYPE_OPTIONS: TypeOption[] = [
 function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVariant) => void }) {
   return (
     <div>
-      <p className="text-xs mb-4" style={{ color: '#6B6B66' }}>
+      <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)' }}>
         Select a question type to continue.
       </p>
       <div className="grid grid-cols-2 gap-2">
@@ -90,26 +90,26 @@ function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVar
             type="button"
             onClick={() => onSelect(t.engine, t.variant)}
             className="text-left p-4 transition-all"
-            style={{ border: '1px solid #E3E1DB', borderRadius: 3, background: '#FFFFFF' }}
+            style={{ border: '1px solid var(--ef-border)', borderRadius: 3, background: 'var(--ef-surface)' }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B';
-              (e.currentTarget as HTMLElement).style.background  = '#FAFAF8';
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)';
+              (e.currentTarget as HTMLElement).style.background  = 'var(--ef-canvas-raised)';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB';
-              (e.currentTarget as HTMLElement).style.background  = '#FFFFFF';
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)';
+              (e.currentTarget as HTMLElement).style.background  = 'var(--ef-surface)';
             }}
           >
             <div className="flex items-center gap-2 mb-1.5">
               <span
                 className="text-xs px-1.5 py-0.5 select-none"
-                style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}
+                style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}
               >
                 {t.badge}
               </span>
-              <span className="text-xs" style={{ color: '#0C0C0B' }}>{t.label}</span>
+              <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{t.label}</span>
             </div>
-            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.5 }}>{t.description}</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>{t.description}</p>
           </button>
         ))}
       </div>
@@ -124,10 +124,10 @@ function Field({ label, error, hint, children }: {
 }) {
   return (
     <div className="mb-5">
-      <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
+      <label className="block text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>{label}</label>
       {children}
-      {hint  && <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>{hint}</p>}
-      {error && <p className="text-xs mt-1.5" style={{ color: '#9B2828' }}>{error}</p>}
+      {hint  && <p className="text-xs mt-1.5" style={{ color: 'var(--ef-text-muted)' }}>{hint}</p>}
+      {error && <p className="text-xs mt-1.5" style={{ color: 'var(--ef-danger)' }}>{error}</p>}
     </div>
   );
 }
@@ -152,13 +152,13 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
   return (
     <div
       className="flex flex-wrap gap-1.5 items-center p-2 min-h-10"
-      style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FAFAF8' }}
+      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-canvas-raised)' }}
     >
       {tags.map((tag) => (
         <span
           key={tag}
           className="flex items-center gap-1 px-2 py-0.5 text-xs select-none"
-          style={{ background: '#F0EFEB', borderRadius: 2, color: '#4A4A45' }}
+          style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)' }}
         >
           {tag}
           <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))} className="hover:opacity-60 transition-opacity">
@@ -173,7 +173,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
         onBlur={() => { if (input.trim()) commit(input); }}
         placeholder={tags.length === 0 ? 'Type and press Enter or comma…' : ''}
         className="flex-1 text-xs outline-none min-w-24"
-        style={{ background: 'transparent', color: '#0C0C0B', fontSize: 13 }}
+        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
       />
     </div>
   );
@@ -196,7 +196,7 @@ function StemField({
     <div className="mb-5">
       {/* Label row + math toolbar */}
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-xs" style={{ color: '#4A4A45' }}>Question stem *</label>
+        <label className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Question stem *</label>
         <MathToolbar textareaRef={textareaRef} onChange={onStemChange} />
       </div>
 
@@ -211,7 +211,7 @@ function StemField({
         onBlur={iBlur}
       />
 
-      {error && <p className="text-xs mt-1.5" style={{ color: '#9B2828' }}>{error}</p>}
+      {error && <p className="text-xs mt-1.5" style={{ color: 'var(--ef-danger)' }}>{error}</p>}
 
       {/* Image attach */}
       <div className="mt-2">
@@ -276,14 +276,14 @@ function MCQEngine({
   return (
     <div>
       {variant === 'fillblank' && (
-        <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+        <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
           Use{' '}
-          <code style={{ fontFamily: 'monospace', background: '#F0EFEB', padding: '1px 5px', borderRadius: 2 }}>___</code>
+          <code style={{ fontFamily: 'monospace', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2 }}>___</code>
           {' '}in the stem to mark the blank. Options below are answer candidates.
         </p>
       )}
       {isMulti && (
-        <p className="text-xs mb-3" style={{ color: '#6B6B66' }}>Mark all options that are correct.</p>
+        <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>Mark all options that are correct.</p>
       )}
 
       <div className="space-y-3">
@@ -302,19 +302,19 @@ function MCQEngine({
                   style={{
                     width: 18, height: 18,
                     borderRadius: isMulti ? 2 : '50%',
-                    border: `1.5px solid ${isCorrect ? '#0C0C0B' : '#6B6B66'}`,
-                    background: isCorrect ? '#0C0C0B' : 'transparent',
+                    border: `1.5px solid ${isCorrect ? 'var(--ef-ink)' : 'var(--ef-text-muted)'}`,
+                    background: isCorrect ? 'var(--ef-ink)' : 'transparent',
                     cursor: 'pointer',
                   }}
                 >
-                  {isCorrect && <Check size={10} strokeWidth={2.5} style={{ color: '#FFFFFF' }} />}
+                  {isCorrect && <Check size={10} strokeWidth={2.5} style={{ color: 'var(--ef-surface)' }} />}
                 </button>
 
                 {/* Text input */}
                 {isLocked ? (
                   <div
                     className="flex-1 px-3 py-2 text-xs select-none"
-                    style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66' }}
+                    style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}
                   >
                     {opt.text}
                   </div>
@@ -341,7 +341,7 @@ function MCQEngine({
                     type="button"
                     onClick={() => removeOption(opt.id)}
                     className="flex-shrink-0 transition-opacity hover:opacity-60"
-                    style={{ color: '#6B6B66' }}
+                    style={{ color: 'var(--ef-text-muted)' }}
                   >
                     <X size={13} strokeWidth={1.5} />
                   </button>
@@ -368,7 +368,7 @@ function MCQEngine({
           type="button"
           onClick={addOption}
           className="mt-3 flex items-center gap-1.5 text-xs transition-opacity hover:opacity-60"
-          style={{ color: '#6B6B66' }}
+          style={{ color: 'var(--ef-text-muted)' }}
         >
           <Plus size={12} strokeWidth={1.5} /> Add option
         </button>
@@ -391,7 +391,7 @@ function TextEngine({
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs" style={{ color: '#6B6B66' }}>Model answer</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Model answer</span>
         <MathToolbar textareaRef={textareaRef} onChange={onChange} />
       </div>
       <textarea
@@ -445,15 +445,15 @@ function MatchEngine({
 
   return (
     <div>
-      <p className="text-xs mb-3" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
         Each left item maps to the right item in the same row. Right column is shuffled during the quiz.
       </p>
 
       <div className="space-y-3">
         {pairs.map((pair, idx) => (
-          <div key={pair.leftId} className="p-3" style={{ border: '1px solid #F0EFEB', borderRadius: 3 }}>
+          <div key={pair.leftId} className="p-3" style={{ border: '1px solid var(--ef-border-subtle)', borderRadius: 3 }}>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs select-none" style={{ color: '#6B6B66', minWidth: 16 }}>{idx + 1}.</span>
+              <span className="text-xs select-none" style={{ color: 'var(--ef-text-muted)', minWidth: 16 }}>{idx + 1}.</span>
               {/* Left input */}
               <div className="flex items-center gap-1.5 flex-1">
                 <input
@@ -466,7 +466,7 @@ function MatchEngine({
                 />
                 <InlineMathButton onInsert={(m) => appendLeftMath(idx, m)} />
               </div>
-              <span style={{ color: '#6B6B66', flexShrink: 0, fontSize: 12 }}>→</span>
+              <span style={{ color: 'var(--ef-text-muted)', flexShrink: 0, fontSize: 12 }}>→</span>
               {/* Right input */}
               <div className="flex items-center gap-1.5 flex-1">
                 <input
@@ -484,7 +484,7 @@ function MatchEngine({
                   type="button"
                   onClick={() => removePair(idx)}
                   className="flex-shrink-0 transition-opacity hover:opacity-60"
-                  style={{ color: '#6B6B66' }}
+                  style={{ color: 'var(--ef-text-muted)' }}
                 >
                   <X size={13} strokeWidth={1.5} />
                 </button>
@@ -503,7 +503,7 @@ function MatchEngine({
         type="button"
         onClick={addPair}
         className="mt-3 flex items-center gap-1.5 text-xs transition-opacity hover:opacity-60"
-        style={{ color: '#6B6B66' }}
+        style={{ color: 'var(--ef-text-muted)' }}
       >
         <Plus size={12} strokeWidth={1.5} /> Add pair
       </button>
@@ -514,9 +514,9 @@ function MatchEngine({
 // ── Metadata ──────────────────────────────────────────────────────────────────
 
 const DIFFS: { v: Difficulty; label: string; active: string }[] = [
-  { v: 'easy',   label: 'Easy',   active: '#2A6B3A' },
-  { v: 'medium', label: 'Medium', active: '#8B5E1A' },
-  { v: 'hard',   label: 'Hard',   active: '#9B2828' },
+  { v: 'easy',   label: 'Easy',   active: 'var(--ef-success)' },
+  { v: 'medium', label: 'Medium', active: 'var(--ef-warning-strong)' },
+  { v: 'hard',   label: 'Hard',   active: 'var(--ef-danger)' },
 ];
 
 interface MetaProps {
@@ -534,8 +534,8 @@ function MetaSection(p: MetaProps) {
 
   return (
     <>
-      <div style={{ borderTop: '1px solid #F0EFEB', margin: '0 0 20px' }} />
-      <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>METADATA</p>
+      <div style={{ borderTop: '1px solid var(--ef-border-subtle)', margin: '0 0 20px' }} />
+      <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>METADATA</p>
 
       <SubjectTopicSelect
         subjectId={p.subjectId}
@@ -556,9 +556,9 @@ function MetaSection(p: MetaProps) {
               className="flex-1 text-xs py-2 transition-all"
               style={{
                 borderRadius: 2,
-                border: p.difficulty === d.v ? `1px solid ${d.active}` : '1px solid #E3E1DB',
-                background: p.difficulty === d.v ? d.active : '#FAFAF8',
-                color: p.difficulty === d.v ? '#FFFFFF' : '#4A4A45',
+                border: p.difficulty === d.v ? `1px solid ${d.active}` : '1px solid var(--ef-border)',
+                background: p.difficulty === d.v ? d.active : 'var(--ef-canvas-raised)',
+                color: p.difficulty === d.v ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
                 letterSpacing: '0.03em',
               }}
             >{d.label}</button>
@@ -569,7 +569,7 @@ function MetaSection(p: MetaProps) {
       {/* Explanation with math toolbar */}
       <div className="mb-5">
         <div className="flex items-center justify-between mb-1.5">
-          <label className="text-xs" style={{ color: '#4A4A45' }}>Explanation / Solution hint</label>
+          <label className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Explanation / Solution hint</label>
           <MathToolbar textareaRef={exRef} onChange={p.setExplanation} />
         </div>
         <textarea
@@ -581,7 +581,7 @@ function MetaSection(p: MetaProps) {
           style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }}
           onFocus={iFocus} onBlur={iBlur}
         />
-        <p className="text-xs mt-1.5" style={{ color: '#6B6B66' }}>
+        <p className="text-xs mt-1.5" style={{ color: 'var(--ef-text-muted)' }}>
           Faculty reference only — never shown to students.
         </p>
       </div>
@@ -750,12 +750,12 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <TypePicker onSelect={selectType} />
         </div>
-        <div className="flex-shrink-0 px-6 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+        <div className="flex-shrink-0 px-6 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
           <button type="button" onClick={onCancel}
             className="text-xs px-4 py-2.5 transition-colors"
-            style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}
+            style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-surface)')}
           >
             Cancel
           </button>
@@ -774,14 +774,14 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
           <div className="flex items-center gap-2 mb-5">
             <span
               className="text-xs px-1.5 py-0.5 select-none"
-              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}
             >
               {currentType.badge}
             </span>
-            <span className="text-xs" style={{ color: '#0C0C0B' }}>{currentType.label}</span>
+            <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{currentType.label}</span>
             <button type="button" onClick={() => setPhase('pick')}
               className="ml-auto flex items-center gap-1 text-xs transition-opacity hover:opacity-60"
-              style={{ color: '#6B6B66' }}
+              style={{ color: 'var(--ef-text-muted)' }}
             >
               <ChevronLeft size={11} strokeWidth={1.5} /> Change type
             </button>
@@ -877,12 +877,12 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
       )}
 
       {/* Fixed footer */}
-      <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3" style={{ borderTop: '1px solid #E3E1DB' }}>
+      <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3" style={{ borderTop: '1px solid var(--ef-border)' }}>
         <button
           type="button" onClick={handleSave} disabled={saving}
           className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
           style={{
-            background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF',
+            background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)',
             borderRadius: 2, letterSpacing: '0.03em',
             cursor: saving ? 'not-allowed' : 'pointer',
           }}
@@ -894,9 +894,9 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
         <button
           type="button" onClick={onCancel} disabled={saving}
           className="text-xs px-4 py-2.5 transition-colors"
-          style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}
+          style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-surface)')}
         >
           Cancel
         </button>
@@ -926,8 +926,8 @@ function DuplicateBanner({
   const verdict = verdictFor(score);
   const isBlock = verdict === 'block';
   const palette = isBlock
-    ? { bg: '#FDF5F5', border: '#F2CECE', text: '#9B2828', sub: '#A85050' }
-    : { bg: '#FFFBF0', border: '#F0DFA0', text: '#8B5E1A', sub: '#A07A3A' };
+    ? { bg: 'var(--ef-danger-bg)', border: 'var(--ef-danger-border)', text: 'var(--ef-danger)', sub: '#A85050' }
+    : { bg: '#FFFBF0', border: '#F0DFA0', text: 'var(--ef-warning-strong)', sub: '#A07A3A' };
 
   return (
     <div
@@ -946,7 +946,7 @@ function DuplicateBanner({
       <button
         type="button" onClick={onReview}
         className="flex items-center gap-1 text-xs px-3 py-1.5"
-        style={{ border: `1px solid ${palette.border}`, background: '#FFFFFF', color: palette.text, borderRadius: 2 }}
+        style={{ border: `1px solid ${palette.border}`, background: 'var(--ef-surface)', color: palette.text, borderRadius: 2 }}
       >
         <Eye size={11} strokeWidth={1.5} /> Review match
       </button>
@@ -954,7 +954,7 @@ function DuplicateBanner({
         <button
           type="button" onClick={onSaveAnyway}
           className="text-xs px-3 py-1.5"
-          style={{ background: palette.text, color: '#FFFFFF', borderRadius: 2 }}
+          style={{ background: palette.text, color: 'var(--ef-surface)', borderRadius: 2 }}
         >
           Save anyway
         </button>

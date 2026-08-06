@@ -63,39 +63,39 @@ export function DuplicateCompareModal({ row, pool, allRows, onClose }: Props) {
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="w-full flex flex-col"
-        style={{ maxWidth: 920, maxHeight: '88vh', background: '#FFFFFF', border: '1px solid #E3E1DB', borderRadius: 3 }}
+        style={{ maxWidth: 920, maxHeight: '88vh', background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid #E3E1DB' }}>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div>
-            <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>DUPLICATE COMPARISON</p>
-            <p className="text-sm mt-0.5" style={{ color: '#0C0C0B' }}>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>DUPLICATE COMPARISON</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--ef-ink)' }}>
               {score ? REASON_LABEL[score.matchedReason] : 'No match'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}>
+          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
             <X size={15} strokeWidth={1.5} />
           </button>
         </div>
 
         {/* Score strip */}
         {score && (
-          <div className="flex items-center gap-6 px-6 py-3 flex-shrink-0" style={{ background: '#FAFAF8', borderBottom: '1px solid #E3E1DB' }}>
+          <div className="flex items-center gap-6 px-6 py-3 flex-shrink-0" style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border)' }}>
             <ScorePill label="Stem similarity"    value={pct(score.stemSim)}    tone={toneFor(score.stemSim)} />
             <ScorePill label="Options similarity" value={pct(score.optionsSim)} tone={toneFor(score.optionsSim)} />
             <ScorePill label="Correct answer"     value={score.answerMatch ? 'Match' : 'Differs'} tone={score.answerMatch ? 'warn' : 'ok'} />
             <div style={{ flex: 1 }} />
             {matchedId && (
-              <span className="text-xs" style={{ color: '#6B6B66' }}>
-                Matched ID: <code style={{ fontFamily: 'monospace', background: '#F0EFEB', padding: '1px 5px', borderRadius: 2 }}>{matchedId}</code>
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                Matched ID: <code style={{ fontFamily: 'monospace', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2 }}>{matchedId}</code>
               </span>
             )}
           </div>
         )}
 
         {/* Side-by-side */}
-        <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-0" style={{ background: '#F7F6F3' }}>
+        <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-0" style={{ background: 'var(--ef-canvas)' }}>
           {/* New (incoming row) */}
           <Side
             heading="NEW (from upload)"
@@ -131,14 +131,14 @@ export function DuplicateCompareModal({ row, pool, allRows, onClose }: Props) {
             />
           ) : (
             <div className="px-5 py-6">
-              <p className="text-xs" style={{ color: '#6B6B66' }}>Matched question not found in pool.</p>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Matched question not found in pool.</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 flex items-center gap-3 flex-shrink-0" style={{ borderTop: '1px solid #E3E1DB' }}>
-          <div className="flex items-center gap-2" style={{ color: '#6B6B66' }}>
+        <div className="px-6 py-3 flex items-center gap-3 flex-shrink-0" style={{ borderTop: '1px solid var(--ef-border)' }}>
+          <div className="flex items-center gap-2" style={{ color: 'var(--ef-text-muted)' }}>
             <ArrowLeftRight size={12} strokeWidth={1.5} />
             <span className="text-xs">Same subject + topic only — cross-subject duplicates are not flagged.</span>
           </div>
@@ -146,7 +146,7 @@ export function DuplicateCompareModal({ row, pool, allRows, onClose }: Props) {
           <button
             onClick={onClose}
             className="text-xs px-4 py-2"
-            style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2 }}
+            style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2 }}
           >
             Close
           </button>
@@ -166,13 +166,13 @@ function toneFor(v: number): 'ok' | 'note' | 'warn' {
 
 function ScorePill({ label, value, tone }: { label: string; value: string; tone: 'ok' | 'note' | 'warn' }) {
   const palette = {
-    ok:   { bg: '#F0FBF4', border: '#C3E8CE', text: '#2A6B3A' },
-    note: { bg: '#FFFBF0', border: '#F0DFA0', text: '#8B5E1A' },
-    warn: { bg: '#FDF5F5', border: '#F2CECE', text: '#9B2828' },
+    ok:   { bg: '#F0FBF4', border: '#C3E8CE', text: 'var(--ef-success)' },
+    note: { bg: '#FFFBF0', border: '#F0DFA0', text: 'var(--ef-warning-strong)' },
+    warn: { bg: 'var(--ef-danger-bg)', border: 'var(--ef-danger-border)', text: 'var(--ef-danger)' },
   }[tone];
   return (
     <div className="flex flex-col">
-      <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em', fontSize: 10 }}>{label.toUpperCase()}</span>
+      <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 10 }}>{label.toUpperCase()}</span>
       <span
         className="text-xs px-2 py-0.5 mt-1 self-start"
         style={{ background: palette.bg, border: `1px solid ${palette.border}`, color: palette.text, borderRadius: 2 }}
@@ -199,30 +199,30 @@ function Side({
     <div
       className="px-5 py-5"
       style={{
-        background: '#FFFFFF',
-        borderRight: borderRight ? '1px solid #E3E1DB' : undefined,
+        background: 'var(--ef-surface)',
+        borderRight: borderRight ? '1px solid var(--ef-border)' : undefined,
       }}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em', fontSize: 10 }}>{heading}</span>
-        <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10 }}>{sheet}</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em', fontSize: 10 }}>{heading}</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{sheet}</span>
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {subject && (
-          <span className="text-xs px-2 py-0.5" style={{ background: '#F0EFEB', borderRadius: 2, color: '#4A4A45', fontSize: 11 }}>
+          <span className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)', fontSize: 11 }}>
             {subject}
           </span>
         )}
         {topic && (
-          <span className="text-xs px-2 py-0.5" style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', fontSize: 11 }}>
+          <span className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 11 }}>
             {topic}
           </span>
         )}
       </div>
 
-      <p className="text-xs mb-3" style={{ color: '#0C0C0B', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-        {stem || <em style={{ color: '#6B6B66' }}>No stem</em>}
+      <p className="text-xs mb-3" style={{ color: 'var(--ef-ink)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+        {stem || <em style={{ color: 'var(--ef-text-muted)' }}>No stem</em>}
       </p>
 
       {options.length > 0 && (
@@ -234,19 +234,19 @@ function Side({
                 key={i}
                 className="flex items-start gap-2 px-2.5 py-1.5"
                 style={{
-                  background: isCorrect ? '#F0FBF4' : '#FAFAF8',
-                  border: `1px solid ${isCorrect ? '#C3E8CE' : '#E3E1DB'}`,
+                  background: isCorrect ? '#F0FBF4' : 'var(--ef-canvas-raised)',
+                  border: `1px solid ${isCorrect ? '#C3E8CE' : 'var(--ef-border)'}`,
                   borderRadius: 2,
                 }}
               >
-                <span className="text-xs" style={{ color: '#6B6B66', fontSize: 10, minWidth: 14 }}>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10, minWidth: 14 }}>
                   {String.fromCharCode(65 + i)}.
                 </span>
-                <span className="text-xs flex-1" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
+                <span className="text-xs flex-1" style={{ color: 'var(--ef-ink)', lineHeight: 1.5 }}>
                   {opt}
                 </span>
                 {isCorrect && (
-                  <span className="text-xs flex-shrink-0" style={{ color: '#2A6B3A', fontSize: 10, letterSpacing: '0.04em' }}>
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-success)', fontSize: 10, letterSpacing: '0.04em' }}>
                     ✓ CORRECT
                   </span>
                 )}

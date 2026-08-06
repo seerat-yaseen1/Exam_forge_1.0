@@ -126,7 +126,7 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
           src={value}
           alt="Attached"
           className="max-h-48 max-w-full object-contain"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 3, display: 'block' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 3, display: 'block' }}
         />
         <button
           type="button"
@@ -135,7 +135,7 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
           className="absolute top-2 right-2 flex items-center justify-center transition-opacity hover:opacity-80"
           style={{
             width: 22, height: 22, borderRadius: '50%',
-            background: '#0C0C0B', color: '#FFFFFF',
+            background: 'var(--ef-ink)', color: 'var(--ef-surface)',
           }}
         >
           <X size={11} strokeWidth={2} />
@@ -149,23 +149,23 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
     return (
       <div
         className="flex flex-col items-center justify-center gap-2 py-4 px-4"
-        style={{ border: '1px dashed #E3E1DB', borderRadius: 3, background: '#FAFAF8' }}
+        style={{ border: '1px dashed var(--ef-border)', borderRadius: 3, background: 'var(--ef-canvas-raised)' }}
       >
-        <Loader2 size={16} className="animate-spin" style={{ color: '#6B6B66' }} />
+        <Loader2 size={16} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
         <div className="w-full" style={{ maxWidth: 140 }}>
-          <div style={{ height: 3, background: '#E3E1DB', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ height: 3, background: 'var(--ef-border)', borderRadius: 2, overflow: 'hidden' }}>
             <div
               style={{
                 height: '100%',
                 width: `${progress}%`,
-                background: '#0C0C0B',
+                background: 'var(--ef-ink)',
                 borderRadius: 2,
                 transition: 'width 0.2s ease',
               }}
             />
           </div>
         </div>
-        <p className="text-xs" style={{ color: '#6B6B66' }}>{progress}%</p>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{progress}%</p>
       </div>
     );
   }
@@ -183,26 +183,26 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
         onDrop={handleDrop}
         className="flex items-center gap-2.5 px-3 py-2.5 transition-all cursor-pointer"
         style={{
-          border: `1px dashed ${dragOver ? '#0C0C0B' : '#D1CFCA'}`,
+          border: `1px dashed ${dragOver ? 'var(--ef-ink)' : '#D1CFCA'}`,
           borderRadius: 3,
-          background: dragOver ? '#F7F6F3' : '#FAFAF8',
+          background: dragOver ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)',
           outline: 'none',
         }}
       >
         {dragOver
-          ? <Upload size={13} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
-          : <ImageIcon size={13} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+          ? <Upload size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
+          : <ImageIcon size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
         }
-        <span className="text-xs" style={{ color: '#6B6B66' }}>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           {dragOver ? 'Drop to upload' : label}
         </span>
-        <span className="text-xs ml-auto" style={{ color: '#6B6B66' }}>
+        <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
           {TYPE_LABEL} &lt;{SIZE_LABEL}
         </span>
       </div>
 
       {error && (
-        <p className="text-xs mt-1.5" style={{ color: '#9B2828' }}>{error}</p>
+        <p className="text-xs mt-1.5" style={{ color: 'var(--ef-danger)' }}>{error}</p>
       )}
 
       <input

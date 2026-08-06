@@ -46,7 +46,7 @@ export function FacultyQuestionRightsEditor({
 
   if (offerable.length === 0) {
     return (
-      <p className="text-xs" style={{ color: '#6B6B66' }}>
+      <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         This institute has no question rights enabled. Ask the Web Owner to raise the ceiling first.
       </p>
     );
@@ -88,13 +88,13 @@ export function FacultyQuestionRightsEditor({
 
   return (
     <div className="mt-2">
-      <p className="text-xs mb-2" style={{ color: '#6B6B66', letterSpacing: '0.05em' }}>QUESTION RIGHTS</p>
+      <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.05em' }}>QUESTION RIGHTS</p>
       {offerable.map((r) => {
         const modes = grantableModes(ceiling, r);
         const fr = rights[r];
         return (
           <div key={r} className="flex items-center justify-between gap-3 py-1.5">
-            <span className="text-xs" style={{ color: '#0C0C0B' }}>{LABEL[r]}</span>
+            <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{LABEL[r]}</span>
             <div className="flex items-center gap-2">
               {/* Mode selector — only when granted and >1 mode available */}
               {fr.granted && modes.length > 0 && (
@@ -108,10 +108,10 @@ export function FacultyQuestionRightsEditor({
                         disabled={saving}
                         className="text-xs px-2 py-0.5 transition-all select-none"
                         style={{
-                          border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
+                          border: `1px solid ${on ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
                           borderRadius: 2,
-                          background: on ? '#F0F7F2' : '#FFFFFF',
-                          color: on ? '#2A6B3A' : '#6B6B66',
+                          background: on ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
+                          color: on ? 'var(--ef-success)' : 'var(--ef-text-muted)',
                           cursor: saving ? 'not-allowed' : 'pointer',
                         }}
                         title={mode === 'request' ? 'Faculty raises a request you approve (approval workflow arrives in a later phase)' : undefined}
@@ -127,10 +127,10 @@ export function FacultyQuestionRightsEditor({
                 disabled={saving}
                 className="text-xs px-2.5 py-0.5 transition-all select-none"
                 style={{
-                  border: `1px solid ${fr.granted ? '#C6DECE' : '#E3E1DB'}`,
+                  border: `1px solid ${fr.granted ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
                   borderRadius: 2,
-                  background: fr.granted ? '#F0F7F2' : '#FFFFFF',
-                  color: fr.granted ? '#2A6B3A' : '#6B6B66',
+                  background: fr.granted ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
+                  color: fr.granted ? 'var(--ef-success)' : 'var(--ef-text-muted)',
                   cursor: saving ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -145,12 +145,12 @@ export function FacultyQuestionRightsEditor({
           onClick={save}
           disabled={saving}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity hover:opacity-80"
-          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}
         >
           {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
           Save rights
         </button>
-        {saved && <span className="text-xs" style={{ color: '#2A6B3A' }}>Saved.</span>}
+        {saved && <span className="text-xs" style={{ color: 'var(--ef-success)' }}>Saved.</span>}
       </div>
     </div>
   );

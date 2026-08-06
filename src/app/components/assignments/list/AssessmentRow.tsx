@@ -24,59 +24,59 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
 
   const meta = (
     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-      {assessment.subject && <span className="text-xs" style={{ color: '#6B6B66' }}>{assessment.subject}</span>}
-      <span className="text-xs" style={{ color: '#6B6B66' }}>
+      {assessment.subject && <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{assessment.subject}</span>}
+      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         · {assessment.questions.length} Q · {assessment.totalMarks} marks
       </span>
       {sectionCount && (
-        <span className="text-xs" style={{ color: '#6B6B66' }}>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           · {sectionCount} section{sectionCount !== 1 ? 's' : ''}
         </span>
       )}
-      <span className="text-xs" style={{ color: '#6B6B66' }}>· {describeAssignment(assessment)}</span>
+      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>· {describeAssignment(assessment)}</span>
     </div>
   );
 
   const dateBlock = assessment.startDate || assessment.endDate ? (
     <div className="flex items-center gap-1.5 md:justify-end">
-      <span className="text-xs" style={{ color: '#6B6B66' }}>{formatDateShort(assessment.startDate)}</span>
+      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{formatDateShort(assessment.startDate)}</span>
       {assessment.endDate && (
-        <><ArrowRight size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-        <span className="text-xs" style={{ color: '#6B6B66' }}>{formatDateShort(assessment.endDate)}</span></>
+        <><ArrowRight size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{formatDateShort(assessment.endDate)}</span></>
       )}
     </div>
-  ) : <span className="text-xs" style={{ color: '#6B6B66' }}>No date set</span>;
+  ) : <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>No date set</span>;
 
   const actions = (
     <div className="flex items-center gap-1 flex-shrink-0">
       {assessment.status !== 'draft' && (
         <button onClick={onRoster} title="Live Roster"
           className="flex items-center gap-1 text-xs px-2 py-1.5 transition-all"
-          style={{ border: '1px solid #E3E1DB', color: '#4A4A45', borderRadius: 2, background: '#FAFAF8' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B'; (e.currentTarget as HTMLElement).style.color = '#0C0C0B'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB'; (e.currentTarget as HTMLElement).style.color = '#4A4A45'; }}>
+          style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-canvas-raised)' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)'; (e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)'; }}>
           <Users size={11} strokeWidth={1.5} /> Roster
         </button>
       )}
-      <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}><Eye size={13} strokeWidth={1.5} /></button>
+      <button onClick={onPreview} title="Preview" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}><Eye size={13} strokeWidth={1.5} /></button>
       <EditMenu assessment={assessment} onPatched={onPatched} onOpenLegacyEditor={onOpenLegacyEditor} />
-      <button onClick={onDuplicate} title="Duplicate" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}><Copy size={13} strokeWidth={1.5} /></button>
-      <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: '#6B6B66' }}><Trash2 size={13} strokeWidth={1.5} /></button>
+      <button onClick={onDuplicate} title="Duplicate" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}><Copy size={13} strokeWidth={1.5} /></button>
+      <button onClick={onDelete} title="Delete" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}><Trash2 size={13} strokeWidth={1.5} /></button>
     </div>
   );
 
   return (
     <div
       className="px-4 py-4 md:px-5 md:py-3.5 transition-colors"
-      style={{ borderBottom: '1px solid #F0EFEB', background: hovered ? '#FAFAF8' : '#FFFFFF' }}
+      style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: hovered ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)' }}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     >
       {/* Desktop: single row */}
       <div className="hidden md:flex items-center gap-4">
         <div className="flex-shrink-0"><StatusBadgeChip status={assessment.status} /></div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs" style={{ color: '#0C0C0B', lineHeight: 1.5 }}>
-            {truncate(assessment.title, 80) || <em style={{ color: '#6B6B66' }}>Untitled Assessment</em>}
+          <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.5 }}>
+            {truncate(assessment.title, 80) || <em style={{ color: 'var(--ef-text-muted)' }}>Untitled Assessment</em>}
           </p>
           {meta}
         </div>
@@ -90,7 +90,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
         <p
           className="mb-2.5"
           style={{
-            color: '#0C0C0B',
+            color: 'var(--ef-ink)',
             fontSize: 14,
             lineHeight: 1.4,
             display: '-webkit-box',
@@ -99,7 +99,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
             overflow: 'hidden',
           }}
         >
-          {assessment.title || <em style={{ color: '#6B6B66' }}>Untitled Assessment</em>}
+          {assessment.title || <em style={{ color: 'var(--ef-text-muted)' }}>Untitled Assessment</em>}
         </p>
 
         {/* Pill strip: status + subject + target */}
@@ -108,14 +108,14 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
           {assessment.subject && (
             <span
               className="text-xs px-2 py-0.5"
-              style={{ background: '#F7F6F3', color: '#6B6B66', border: '1px solid #EEECEA', borderRadius: 2 }}
+              style={{ background: 'var(--ef-canvas)', color: 'var(--ef-text-muted)', border: '1px solid #EEECEA', borderRadius: 2 }}
             >
               {assessment.subject}
             </span>
           )}
           <span
             className="text-xs px-2 py-0.5"
-            style={{ background: '#F7F6F3', color: '#6B6B66', border: '1px solid #EEECEA', borderRadius: 2 }}
+            style={{ background: 'var(--ef-canvas)', color: 'var(--ef-text-muted)', border: '1px solid #EEECEA', borderRadius: 2 }}
           >
             {describeAssignment(assessment)}
           </span>
@@ -123,45 +123,45 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
 
         {/* Stats line — numbers + units */}
         <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-xs mb-2.5">
-          <span><span style={{ color: '#0C0C0B' }}>{assessment.questions.length}</span> <span style={{ color: '#6B6B66' }}>Q</span></span>
-          <span style={{ color: '#DDDBD5' }}>·</span>
-          <span><span style={{ color: '#0C0C0B' }}>{assessment.totalMarks}</span> <span style={{ color: '#6B6B66' }}>marks</span></span>
+          <span><span style={{ color: 'var(--ef-ink)' }}>{assessment.questions.length}</span> <span style={{ color: 'var(--ef-text-muted)' }}>Q</span></span>
+          <span style={{ color: 'var(--ef-border-muted)' }}>·</span>
+          <span><span style={{ color: 'var(--ef-ink)' }}>{assessment.totalMarks}</span> <span style={{ color: 'var(--ef-text-muted)' }}>marks</span></span>
           {sectionCount ? (
             <>
-              <span style={{ color: '#DDDBD5' }}>·</span>
+              <span style={{ color: 'var(--ef-border-muted)' }}>·</span>
               <span>
-                <span style={{ color: '#0C0C0B' }}>{sectionCount}</span>{' '}
-                <span style={{ color: '#6B6B66' }}>section{sectionCount !== 1 ? 's' : ''}</span>
+                <span style={{ color: 'var(--ef-ink)' }}>{sectionCount}</span>{' '}
+                <span style={{ color: 'var(--ef-text-muted)' }}>section{sectionCount !== 1 ? 's' : ''}</span>
               </span>
             </>
           ) : null}
         </div>
 
         {/* Schedule */}
-        <div className="flex items-center gap-1.5 flex-wrap text-xs mb-3" style={{ color: '#6B6B66' }}>
-          <Calendar size={11} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0 }} />
+        <div className="flex items-center gap-1.5 flex-wrap text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>
+          <Calendar size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
           {assessment.startDate || assessment.endDate ? (
             <>
               <span>{formatDateShort(assessment.startDate)}</span>
               {assessment.endDate && (
                 <>
-                  <ArrowRight size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+                  <ArrowRight size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
                   <span>{formatDateShort(assessment.endDate)}</span>
                 </>
               )}
             </>
           ) : (
-            <span style={{ color: '#6B6B66' }}>No schedule set</span>
+            <span style={{ color: 'var(--ef-text-muted)' }}>No schedule set</span>
           )}
         </div>
 
         {/* Action bar */}
-        <div className="flex items-center gap-2 pt-3" style={{ borderTop: '1px solid #F0EFEB' }}>
+        <div className="flex items-center gap-2 pt-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
           {assessment.status !== 'draft' ? (
             <button
               onClick={onRoster}
               className="flex items-center justify-center gap-1.5 text-xs flex-1 transition-opacity hover:opacity-80"
-              style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, height: 36, letterSpacing: '0.02em' }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, height: 36, letterSpacing: '0.02em' }}
             >
               <Users size={12} strokeWidth={1.5} /> Live Roster
             </button>
@@ -172,13 +172,13 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
             onClick={onPreview}
             aria-label="Preview"
             className="flex items-center justify-center transition-opacity hover:opacity-60"
-            style={{ width: 36, height: 36, color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+            style={{ width: 36, height: 36, color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
           >
             <Eye size={14} strokeWidth={1.5} />
           </button>
           <div
             className="flex items-center justify-center"
-            style={{ width: 36, height: 36, border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+            style={{ width: 36, height: 36, border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
           >
             <EditMenu assessment={assessment} onPatched={onPatched} onOpenLegacyEditor={onOpenLegacyEditor} />
           </div>
@@ -186,7 +186,7 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
             onClick={onDelete}
             aria-label="Delete"
             className="flex items-center justify-center transition-opacity hover:opacity-60"
-            style={{ width: 36, height: 36, color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
+            style={{ width: 36, height: 36, color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
           >
             <Trash2 size={14} strokeWidth={1.5} />
           </button>

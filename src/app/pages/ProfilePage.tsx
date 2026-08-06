@@ -56,14 +56,14 @@ export function ProfilePage() {
       className="max-w-[520px] mx-auto px-6 py-12"
     >
       {/* Section header */}
-      <div className="mb-8" style={{ borderBottom: '1px solid #E3E1DB', paddingBottom: 20 }}>
+      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
         <p
           className="text-xs mb-1"
-          style={{ color: '#6B6B66', letterSpacing: '0.1em' }}
+          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}
         >
           WEB OWNER
         </p>
-        <h1 className="text-base" style={{ color: '#0C0C0B' }}>
+        <h1 className="text-base" style={{ color: 'var(--ef-ink)' }}>
           Profile & Platform
         </h1>
       </div>
@@ -72,18 +72,18 @@ export function ProfilePage() {
       <div className="mb-8">
         <p
           className="text-xs mb-4"
-          style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
+          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}
         >
           ACCOUNT
         </p>
         <div className="grid gap-4">
           <div>
-            <p className="text-xs mb-1.5" style={{ color: '#4A4A45' }}>Name</p>
+            <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>Name</p>
             <div
               className="px-3.5 py-2.5 text-sm"
               style={{
-                background: '#F7F6F3',
-                border: '1px solid #E3E1DB',
+                background: 'var(--ef-canvas)',
+                border: '1px solid var(--ef-border)',
                 color: '#6B6B65',
                 borderRadius: 2,
               }}
@@ -92,19 +92,19 @@ export function ProfilePage() {
             </div>
           </div>
           <div>
-            <p className="text-xs mb-1.5" style={{ color: '#4A4A45' }}>Email</p>
+            <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>Email</p>
             <div
               className="px-3.5 py-2.5 text-sm"
               style={{
-                background: '#F7F6F3',
-                border: '1px solid #E3E1DB',
+                background: 'var(--ef-canvas)',
+                border: '1px solid var(--ef-border)',
                 color: '#6B6B65',
                 borderRadius: 2,
               }}
             >
               {user?.email}
             </div>
-            <p className="mt-1.5 text-xs" style={{ color: '#6B6B66' }}>
+            <p className="mt-1.5 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
               Email address cannot be changed.
             </p>
           </div>
@@ -112,20 +112,20 @@ export function ProfilePage() {
       </div>
 
       {/* Divider */}
-      <div style={{ borderTop: '1px solid #E3E1DB', marginBottom: 28 }} />
+      <div style={{ borderTop: '1px solid var(--ef-border)', marginBottom: 28 }} />
 
       {/* Platform settings */}
       <form onSubmit={handleSave}>
         <p
           className="text-xs mb-4"
-          style={{ color: '#6B6B66', letterSpacing: '0.08em' }}
+          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}
         >
           PLATFORM IDENTITY
         </p>
 
         {/* Logo */}
         <div className="mb-6">
-          <p className="text-xs mb-3" style={{ color: '#4A4A45' }}>
+          <p className="text-xs mb-3" style={{ color: 'var(--ef-text-subtle)' }}>
             Platform logo
           </p>
 
@@ -136,9 +136,9 @@ export function ProfilePage() {
               style={{
                 width: 64,
                 height: 64,
-                border: '1px solid #E3E1DB',
+                border: '1px solid var(--ef-border)',
                 borderRadius: 3,
-                background: '#FAFAF8',
+                background: 'var(--ef-canvas-raised)',
               }}
             >
               {logoPreview ? (
@@ -174,17 +174,17 @@ export function ProfilePage() {
                 onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
                 style={{
-                  border: '1px solid #E3E1DB',
+                  border: '1px solid var(--ef-border)',
                   color: '#2C2C2A',
-                  background: '#FFFFFF',
+                  background: 'var(--ef-surface)',
                   borderRadius: 2,
                   cursor: 'pointer',
                 }}
                 onMouseEnter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.borderColor = '#0C0C0B')
+                  ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')
                 }
                 onMouseLeave={(e) =>
-                  ((e.currentTarget as HTMLElement).style.borderColor = '#E3E1DB')
+                  ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')
                 }
               >
                 <Upload size={11} strokeWidth={1.5} />
@@ -196,24 +196,24 @@ export function ProfilePage() {
                   onClick={handleRemoveLogo}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
                   style={{
-                    border: '1px solid #E3E1DB',
-                    color: '#9B2828',
-                    background: '#FFFFFF',
+                    border: '1px solid var(--ef-border)',
+                    color: 'var(--ef-danger)',
+                    background: 'var(--ef-surface)',
                     borderRadius: 2,
                     cursor: 'pointer',
                   }}
                   onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = '#FDF5F5')
+                    ((e.currentTarget as HTMLElement).style.background = 'var(--ef-danger-bg)')
                   }
                   onMouseLeave={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')
+                    ((e.currentTarget as HTMLElement).style.background = 'var(--ef-surface)')
                   }
                 >
                   <X size={11} strokeWidth={1.5} />
                   Remove
                 </button>
               )}
-              <p className="text-xs" style={{ color: '#6B6B66' }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 PNG, SVG, or JPG. Reflects immediately.
               </p>
             </div>
@@ -225,7 +225,7 @@ export function ProfilePage() {
           <label
             htmlFor="platform-name"
             className="block text-xs mb-2"
-            style={{ color: '#4A4A45' }}
+            style={{ color: 'var(--ef-text-subtle)' }}
           >
             Platform name
           </label>
@@ -238,18 +238,18 @@ export function ProfilePage() {
             maxLength={32}
             className="w-full px-3.5 py-2.5 text-sm outline-none"
             style={{
-              background: '#FAFAF8',
-              border: '1px solid #E3E1DB',
-              color: '#0C0C0B',
+              background: 'var(--ef-canvas-raised)',
+              border: '1px solid var(--ef-border)',
+              color: 'var(--ef-ink)',
               borderRadius: 2,
             }}
             onFocus={(e) => {
-              e.target.style.borderColor = '#0C0C0B';
-              e.target.style.background = '#FFFFFF';
+              e.target.style.borderColor = 'var(--ef-ink)';
+              e.target.style.background = 'var(--ef-surface)';
             }}
             onBlur={(e) => {
-              e.target.style.borderColor = '#E3E1DB';
-              e.target.style.background = '#FAFAF8';
+              e.target.style.borderColor = 'var(--ef-border)';
+              e.target.style.background = 'var(--ef-canvas-raised)';
             }}
           />
         </div>
@@ -259,8 +259,8 @@ export function ProfilePage() {
           disabled={saving || !platformName.trim()}
           className="flex items-center gap-2 px-5 py-2.5 text-xs transition-colors"
           style={{
-            background: saving || !platformName.trim() ? '#C8C7C2' : '#0C0C0B',
-            color: '#FFFFFF',
+            background: saving || !platformName.trim() ? 'var(--ef-track)' : 'var(--ef-ink)',
+            color: 'var(--ef-surface)',
             borderRadius: 2,
             letterSpacing: '0.04em',
             cursor: saving || !platformName.trim() ? 'not-allowed' : 'pointer',

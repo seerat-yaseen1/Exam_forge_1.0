@@ -44,17 +44,17 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
       transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
       className="absolute right-0 top-full mt-2 w-48 bg-white z-50"
       style={{
-        border: '1px solid #E3E1DB',
+        border: '1px solid var(--ef-border)',
         boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
         borderRadius: 3,
       }}
     >
       {/* Account info */}
       <div className="px-4 py-3" style={{ borderBottom: '1px solid #F0EFEBdd' }}>
-        <p className="text-xs" style={{ color: '#0C0C0B' }}>
+        <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>
           {user?.name}
         </p>
-        <p className="text-xs mt-0.5 truncate" style={{ color: '#6B6B66' }}>
+        <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ef-text-muted)' }}>
           {user?.email}
         </p>
       </div>
@@ -66,13 +66,13 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
           style={{ color: '#2C2C2A' }}
           onMouseEnter={(e) =>
-            ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')
+            ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
           onMouseLeave={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'transparent')
           }
         >
-          <User size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          <User size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           Profile
         </button>
         <button
@@ -80,31 +80,31 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
           style={{ color: '#2C2C2A' }}
           onMouseEnter={(e) =>
-            ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')
+            ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
           onMouseLeave={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'transparent')
           }
         >
-          <Shield size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          <Shield size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           Security
         </button>
       </div>
 
       {/* Separator + logout */}
-      <div style={{ borderTop: '1px solid #F0EFEB' }} className="py-1">
+      <div style={{ borderTop: '1px solid var(--ef-border-subtle)' }} className="py-1">
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
           style={{ color: '#2C2C2A' }}
           onMouseEnter={(e) =>
-            ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')
+            ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
           onMouseLeave={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'transparent')
           }
         >
-          <LogOut size={13} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
+          <LogOut size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           Sign out
         </button>
       </div>
@@ -132,20 +132,20 @@ function SidebarNavItem({ to, icon, label, isActive }: NavItemProps) {
         style={{
           paddingLeft: isActive ? 18 : 20,
           paddingRight: 16,
-          color: isActive ? '#0C0C0B' : '#6B6B66',
-          background: isActive ? '#F7F6F3' : 'transparent',
-          borderLeft: isActive ? '2px solid #0C0C0B' : '2px solid transparent',
+          color: isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
+          background: isActive ? 'var(--ef-canvas)' : 'transparent',
+          borderLeft: isActive ? '2px solid var(--ef-ink)' : '2px solid transparent',
           letterSpacing: '0.01em',
         }}
         onMouseEnter={(e) => {
           if (!isActive) {
             (e.currentTarget as HTMLElement).style.color = '#2C2C2A';
-            (e.currentTarget as HTMLElement).style.background = '#F7F6F3';
+            (e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)';
           }
         }}
         onMouseLeave={(e) => {
           if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color = '#6B6B66';
+            (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)';
             (e.currentTarget as HTMLElement).style.background = 'transparent';
           }
         }}
@@ -197,14 +197,14 @@ export function DashboardLayout() {
   const isSebDiag = location.pathname.startsWith('/dashboard/seb');
 
   return (
-    <div className="min-h-screen" style={{ background: '#F7F6F3' }}>
+    <div className="min-h-screen" style={{ background: 'var(--ef-canvas)' }}>
       {/* ── Topbar ── */}
       <header
         className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 md:px-6"
         style={{
           height: 56,
-          background: '#FFFFFF',
-          borderBottom: '1px solid #E3E1DB',
+          background: 'var(--ef-surface)',
+          borderBottom: '1px solid var(--ef-border)',
         }}
       >
         {/* Left: Hamburger (phone) + Logo */}
@@ -212,7 +212,7 @@ export function DashboardLayout() {
           <button
             onClick={() => setNavOpen((v) => !v)}
             className="md:hidden p-1.5 -ml-1.5 transition-opacity hover:opacity-70"
-            style={{ color: '#0C0C0B', outline: 'none' }}
+            style={{ color: 'var(--ef-ink)', outline: 'none' }}
             aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
             aria-expanded={navOpen}
           >
@@ -220,7 +220,7 @@ export function DashboardLayout() {
           </button>
           <Link
             to="/dashboard"
-            style={{ textDecoration: 'none', color: '#0C0C0B' }}
+            style={{ textDecoration: 'none', color: 'var(--ef-ink)' }}
           >
             <PlatformLogo size="md" />
           </Link>
@@ -241,8 +241,8 @@ export function DashboardLayout() {
                 width: 32,
                 height: 32,
                 borderRadius: '50%',
-                background: '#0C0C0B',
-                color: '#FFFFFF',
+                background: 'var(--ef-ink)',
+                color: 'var(--ef-surface)',
                 letterSpacing: '0.04em',
               }}
             >
@@ -279,8 +279,8 @@ export function DashboardLayout() {
           left: 0,
           bottom: 0,
           width: SIDEBAR_W,
-          background: '#FFFFFF',
-          borderRight: '1px solid #E3E1DB',
+          background: 'var(--ef-surface)',
+          borderRight: '1px solid var(--ef-border)',
         }}
       >
         {/* Section label */}
@@ -288,7 +288,7 @@ export function DashboardLayout() {
           <p
             className="text-xs"
             style={{
-              color: '#6B6B66',
+              color: 'var(--ef-text-muted)',
               letterSpacing: '0.1em',
               marginBottom: 6,
             }}

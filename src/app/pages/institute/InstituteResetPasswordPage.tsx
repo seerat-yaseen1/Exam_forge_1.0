@@ -7,9 +7,9 @@ import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
 
 const inputStyle: React.CSSProperties = {
-  background: '#FAFAF8',
-  border: '1px solid #E3E1DB',
-  color: '#0C0C0B',
+  background: 'var(--ef-canvas-raised)',
+  border: '1px solid var(--ef-border)',
+  color: 'var(--ef-ink)',
   borderRadius: 2,
   width: '100%',
   outline: 'none',
@@ -17,12 +17,12 @@ const inputStyle: React.CSSProperties = {
   padding: '10px 14px',
 };
 const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#0C0C0B';
-  e.target.style.background = '#FFFFFF';
+  e.target.style.borderColor = 'var(--ef-ink)';
+  e.target.style.background = 'var(--ef-surface)';
 };
 const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#E3E1DB';
-  e.target.style.background = '#FAFAF8';
+  e.target.style.borderColor = 'var(--ef-border)';
+  e.target.style.background = 'var(--ef-canvas-raised)';
 };
 
 function StrengthBar({ password }: { password: string }) {
@@ -33,7 +33,7 @@ function StrengthBar({ password }: { password: string }) {
     /[^A-Za-z0-9]/.test(password),
     password.length >= 12,
   ].filter(Boolean).length;
-  const colors = ['#E3E1DB', '#D97A5A', '#D9A85A', '#7AB87A', '#2A6B3A'];
+  const colors = ['var(--ef-border)', '#D97A5A', '#D9A85A', '#7AB87A', 'var(--ef-success)'];
   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
   if (!password) return null;
   return (
@@ -41,7 +41,7 @@ function StrengthBar({ password }: { password: string }) {
       <div className="flex gap-1 mb-1">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="flex-1 h-0.5 rounded-full transition-all"
-            style={{ background: i <= score ? colors[score] : '#E3E1DB' }} />
+            style={{ background: i <= score ? colors[score] : 'var(--ef-border)' }} />
         ))}
       </div>
       {score > 0 && <p className="text-xs" style={{ color: colors[score] }}>{labels[score]}</p>}
@@ -85,7 +85,7 @@ export function InstituteResetPasswordPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: '#F7F6F3' }}>
+      style={{ background: 'var(--ef-canvas)' }}>
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -94,55 +94,55 @@ export function InstituteResetPasswordPage() {
       >
         {/* Platform identity */}
         <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: '#0C0C0B' }}>
+          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
             {platformSettings.logoUrl
               ? <img src={platformSettings.logoUrl} alt={platformSettings.name}
                   style={{ width: 36, height: 36, objectFit: 'contain' }} />
               : <LogoMark px={36} />}
           </div>
-          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: '#0C0C0B' }}>
+          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}>
             {platformSettings.name}
           </span>
-          <div className="mt-5 w-8" style={{ height: 1, background: '#DDDBD5' }} />
+          <div className="mt-5 w-8" style={{ height: 1, background: 'var(--ef-border-muted)' }} />
         </div>
 
         <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
-          style={{ border: '1px solid #E3E1DB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          style={{ border: '1px solid var(--ef-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
 
           {stage === 'success' ? (
             <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
               <div className="flex flex-col items-center py-6">
-                <CheckCircle2 size={32} strokeWidth={1} style={{ color: '#2A6B3A' }} />
-                <p className="text-sm mt-4" style={{ color: '#0C0C0B' }}>Password updated</p>
-                <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+                <CheckCircle2 size={32} strokeWidth={1} style={{ color: 'var(--ef-success)' }} />
+                <p className="text-sm mt-4" style={{ color: 'var(--ef-ink)' }}>Password updated</p>
+                <p className="text-xs mt-2 text-center" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                   Your password has been set. You may now sign in with your new credentials.
                 </p>
                 <button onClick={() => navigate('/institute/login', { replace: true })}
                   className="mt-6 w-full py-2.5 text-sm"
-                  style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em' }}>
+                  style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em' }}>
                   Sign in
                 </button>
               </div>
             </motion.div>
           ) : (
             <>
-              <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+              <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
                 RESET PASSWORD
               </p>
-              <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+              <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                 Enter the 16-character code from your email, then choose a new password.
               </p>
 
               {prefill?.instituteCode && (
-                <p className="text-xs mb-4" style={{ color: '#6B6B66' }}>
-                  Institute Code: <span style={{ color: '#4A4A45', fontFamily: 'monospace', letterSpacing: '0.12em' }}>{prefill.instituteCode}</span>
+                <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)' }}>
+                  Institute Code: <span style={{ color: 'var(--ef-text-subtle)', fontFamily: 'monospace', letterSpacing: '0.12em' }}>{prefill.instituteCode}</span>
                 </p>
               )}
 
               <form onSubmit={handleSubmit} noValidate>
                 {/* Reset code */}
                 <div className="mb-5">
-                  <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+                  <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
                     Reset code
                   </label>
                   <input type="text" autoFocus autoComplete="off" autoCapitalize="characters"
@@ -152,13 +152,13 @@ export function InstituteResetPasswordPage() {
                     style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '0.14em', fontSize: 12 }}
                     onFocus={onFocus} onBlur={onBlur} />
                   {code && code.length === 16 && (
-                    <p className="text-xs mt-1.5" style={{ color: '#2A6B3A' }}>Code format valid</p>
+                    <p className="text-xs mt-1.5" style={{ color: 'var(--ef-success)' }}>Code format valid</p>
                   )}
                 </div>
 
                 {/* New password */}
                 <div className="mb-4">
-                  <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+                  <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
                     New password
                   </label>
                   <div className="relative">
@@ -170,9 +170,9 @@ export function InstituteResetPasswordPage() {
                       onFocus={onFocus} onBlur={onBlur} />
                     <button type="button" tabIndex={-1} onClick={() => setShowNew((v) => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                      style={{ color: '#6B6B66' }}
-                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+                      style={{ color: 'var(--ef-text-muted)' }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
                       {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                     </button>
                   </div>
@@ -181,7 +181,7 @@ export function InstituteResetPasswordPage() {
 
                 {/* Confirm password */}
                 <div className="mb-6">
-                  <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+                  <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
                     Confirm new password
                   </label>
                   <div className="relative">
@@ -193,15 +193,15 @@ export function InstituteResetPasswordPage() {
                       onFocus={onFocus} onBlur={onBlur} />
                     <button type="button" tabIndex={-1} onClick={() => setShowConfirm((v) => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                      style={{ color: '#6B6B66' }}
-                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#4A4A45')}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+                      style={{ color: 'var(--ef-text-muted)' }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
                       {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
                     </button>
                   </div>
                   {confirmPassword && newPassword && (
                     <p className="text-xs mt-1.5" style={{
-                      color: confirmPassword === newPassword ? '#2A6B3A' : '#9B2828',
+                      color: confirmPassword === newPassword ? 'var(--ef-success)' : 'var(--ef-danger)',
                     }}>
                       {confirmPassword === newPassword ? 'Passwords match' : 'Passwords do not match'}
                     </p>
@@ -210,7 +210,7 @@ export function InstituteResetPasswordPage() {
 
                 {error && (
                   <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    className="text-xs mb-4 -mt-2" style={{ color: '#9B2828' }}>
+                    className="text-xs mb-4 -mt-2" style={{ color: 'var(--ef-danger)' }}>
                     {error}
                   </motion.p>
                 )}
@@ -218,8 +218,8 @@ export function InstituteResetPasswordPage() {
                 <button type="submit" disabled={!canSubmit}
                   className="w-full py-2.5 text-sm flex items-center justify-center gap-2 mb-3"
                   style={{
-                    background: canSubmit ? '#0C0C0B' : '#C8C7C2',
-                    color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em',
+                    background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
+                    color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em',
                     cursor: canSubmit ? 'pointer' : 'not-allowed',
                   }}>
                   {loading
@@ -233,9 +233,9 @@ export function InstituteResetPasswordPage() {
           {stage !== 'success' && (
             <Link to="/institute/login"
               className="flex items-center gap-1.5 text-xs transition-colors"
-              style={{ color: '#6B6B66', textDecoration: 'none' }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#0C0C0B')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#6B6B66')}>
+              style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
               <ArrowLeft size={12} strokeWidth={1.5} />Back to sign in
             </Link>
           )}

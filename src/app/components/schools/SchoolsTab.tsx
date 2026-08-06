@@ -440,10 +440,10 @@ export function SchoolsTab({ instituteId, instituteName, readOnly = false }: Pro
       {isRootView && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
           <div className="flex items-start gap-3 mt-6 px-4 py-3"
-            style={{ background: '#F7F6F3', borderRadius: 2, border: '1px solid #E3E1DB' }}>
-            <BookOpen size={12} strokeWidth={1.5} style={{ color: '#6B6B66', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
-              Build your academic hierarchy here: <strong style={{ color: '#4A4A45' }}>School → Level → Program → Session → Year → Semester → Course → Section → Group</strong>. Students can be assigned at any level. Semesters are optional per year.
+            style={{ background: 'var(--ef-canvas)', borderRadius: 2, border: '1px solid var(--ef-border)' }}>
+            <BookOpen size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+              Build your academic hierarchy here: <strong style={{ color: 'var(--ef-text-subtle)' }}>School → Level → Program → Session → Year → Semester → Course → Section → Group</strong>. Students can be assigned at any level. Semesters are optional per year.
             </p>
           </div>
         </motion.div>

@@ -28,9 +28,9 @@ import { LogoMark } from '../components/PlatformLogo';
 // ══════════════════════════════════════════════════════════════════
 
 const inputStyle: React.CSSProperties = {
-  background: '#FAFAF8',
-  border: '1px solid #E3E1DB',
-  color: '#0C0C0B',
+  background: 'var(--ef-canvas-raised)',
+  border: '1px solid var(--ef-border)',
+  color: 'var(--ef-ink)',
   borderRadius: 2,
   width: '100%',
   outline: 'none',
@@ -38,12 +38,12 @@ const inputStyle: React.CSSProperties = {
   padding: '10px 14px',
 };
 const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#0C0C0B';
-  e.target.style.background = '#FFFFFF';
+  e.target.style.borderColor = 'var(--ef-ink)';
+  e.target.style.background = 'var(--ef-surface)';
 };
 const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#E3E1DB';
-  e.target.style.background = '#FAFAF8';
+  e.target.style.borderColor = 'var(--ef-border)';
+  e.target.style.background = 'var(--ef-canvas-raised)';
 };
 
 function StrengthBar({ password }: { password: string }) {
@@ -54,7 +54,7 @@ function StrengthBar({ password }: { password: string }) {
     /[^A-Za-z0-9]/.test(password),
     password.length >= 12,
   ].filter(Boolean).length;
-  const colors = ['#E3E1DB', '#D97A5A', '#D9A85A', '#7AB87A', '#2A6B3A'];
+  const colors = ['var(--ef-border)', '#D97A5A', '#D9A85A', '#7AB87A', 'var(--ef-success)'];
   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
   if (!password) return null;
   return (
@@ -62,7 +62,7 @@ function StrengthBar({ password }: { password: string }) {
       <div className="flex gap-1 mb-1">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="flex-1 h-0.5 rounded-full transition-all"
-            style={{ background: i <= score ? colors[score] : '#E3E1DB' }} />
+            style={{ background: i <= score ? colors[score] : 'var(--ef-border)' }} />
         ))}
       </div>
       {score > 0 && <p className="text-xs" style={{ color: colors[score] }}>{labels[score]}</p>}
@@ -137,7 +137,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: '#F7F6F3' }}>
+      style={{ background: 'var(--ef-canvas)' }}>
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -146,40 +146,40 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
       >
         {/* Platform identity */}
         <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: '#0C0C0B' }}>
+          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
             {platformSettings.logoUrl
               ? <img src={platformSettings.logoUrl} alt={platformSettings.name}
                   style={{ width: 36, height: 36, objectFit: 'contain' }} />
               : <LogoMark px={36} />}
           </div>
-          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: '#0C0C0B' }}>
+          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}>
             {platformSettings.name}
           </span>
-          <div className="mt-5 w-8" style={{ height: 1, background: '#DDDBD5' }} />
+          <div className="mt-5 w-8" style={{ height: 1, background: 'var(--ef-border-muted)' }} />
         </div>
 
         <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
-          style={{ border: '1px solid #E3E1DB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          style={{ border: '1px solid var(--ef-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
 
           {stage === 'verifying' && (
             <div className="flex flex-col items-center py-8">
-              <Loader2 size={24} strokeWidth={1.5} className="animate-spin" style={{ color: '#6B6B66' }} />
-              <p className="text-xs mt-4" style={{ color: '#6B6B66' }}>Verifying your reset link…</p>
+              <Loader2 size={24} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+              <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Verifying your reset link…</p>
             </div>
           )}
 
           {stage === 'invalid' && (
             <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
               <div className="flex flex-col items-center py-6">
-                <AlertTriangle size={30} strokeWidth={1} style={{ color: '#9B2828' }} />
-                <p className="text-sm mt-4" style={{ color: '#0C0C0B' }}>Reset link expired</p>
-                <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+                <AlertTriangle size={30} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
+                <p className="text-sm mt-4" style={{ color: 'var(--ef-ink)' }}>Reset link expired</p>
+                <p className="text-xs mt-2 text-center" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                   This password-reset link is invalid, has expired, or has already been used.
                   Reset links can only be opened once. Please request a new one.
                 </p>
                 <button onClick={() => navigate(loginPath, { replace: true })}
                   className="w-full py-2.5 text-sm mt-6"
-                  style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', cursor: 'pointer' }}>
+                  style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', cursor: 'pointer' }}>
                   Back to sign in
                 </button>
               </div>
@@ -189,14 +189,14 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
           {stage === 'success' && (
             <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
               <div className="flex flex-col items-center py-6">
-                <CheckCircle2 size={32} strokeWidth={1} style={{ color: '#2A6B3A' }} />
-                <p className="text-sm mt-4" style={{ color: '#0C0C0B' }}>Password updated</p>
-                <p className="text-xs mt-2 text-center" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+                <CheckCircle2 size={32} strokeWidth={1} style={{ color: 'var(--ef-success)' }} />
+                <p className="text-sm mt-4" style={{ color: 'var(--ef-ink)' }}>Password updated</p>
+                <p className="text-xs mt-2 text-center" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                   Your password has been set. You may now sign in with your new credentials.
                 </p>
                 <button onClick={() => navigate(loginPath, { replace: true })}
                   className="w-full py-2.5 text-sm mt-6"
-                  style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em', cursor: 'pointer' }}>
+                  style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', cursor: 'pointer' }}>
                   Go to sign in
                 </button>
               </div>
@@ -205,16 +205,16 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
 
           {stage === 'form' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <p className="text-xs mb-1" style={{ color: '#6B6B66', letterSpacing: '0.08em' }}>
+              <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
                 SET A NEW PASSWORD
               </p>
-              <p className="text-xs mb-6" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
-                For <span style={{ color: '#4A4A45' }}>{accountEmail}</span>. Choose a strong password you haven't used before.
+              <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                For <span style={{ color: 'var(--ef-text-subtle)' }}>{accountEmail}</span>. Choose a strong password you haven't used before.
               </p>
 
               <form onSubmit={handleSubmit} noValidate>
                 <div className="mb-4">
-                  <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+                  <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
                     New Password
                   </label>
                   <div className="relative">
@@ -225,7 +225,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
                       style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
                     <button type="button" onClick={() => setShowNew((v) => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2"
-                      style={{ color: '#6B6B66' }} tabIndex={-1}>
+                      style={{ color: 'var(--ef-text-muted)' }} tabIndex={-1}>
                       {showNew ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   </div>
@@ -233,7 +233,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
                 </div>
 
                 <div className="mb-5">
-                  <label className="block text-xs mb-2" style={{ color: '#4A4A45', letterSpacing: '0.04em' }}>
+                  <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
                     Confirm Password
                   </label>
                   <div className="relative">
@@ -244,7 +244,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
                       style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
                     <button type="button" onClick={() => setShowConfirm((v) => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2"
-                      style={{ color: '#6B6B66' }} tabIndex={-1}>
+                      style={{ color: 'var(--ef-text-muted)' }} tabIndex={-1}>
                       {showConfirm ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   </div>
@@ -252,7 +252,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
 
                 {error && (
                   <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    className="text-xs mb-4 -mt-1" style={{ color: '#9B2828' }}>
+                    className="text-xs mb-4 -mt-1" style={{ color: 'var(--ef-danger)' }}>
                     {error}
                   </motion.p>
                 )}
@@ -260,8 +260,8 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
                 <button type="submit" disabled={!canSubmit}
                   className="w-full py-2.5 text-sm flex items-center justify-center gap-2"
                   style={{
-                    background: canSubmit ? '#0C0C0B' : '#C8C7C2',
-                    color: '#FFFFFF', borderRadius: 2, letterSpacing: '0.04em',
+                    background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
+                    color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em',
                     cursor: canSubmit ? 'pointer' : 'not-allowed',
                   }}>
                   {loading ? <Loader2 size={14} className="animate-spin" /> : null}
@@ -273,7 +273,7 @@ export function ResetPasswordActionPage({ role }: { role: Role }) {
 
           <Link to={loginPath}
             className="flex items-center justify-center gap-1.5 mt-5 text-xs"
-            style={{ color: '#6B6B66' }}>
+            style={{ color: 'var(--ef-text-muted)' }}>
             <ArrowLeft size={12} /> Back to sign in
           </Link>
         </div>

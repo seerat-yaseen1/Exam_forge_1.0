@@ -44,9 +44,9 @@ export const DIFF_LABEL: Record<Difficulty, string> = {
 };
 
 export const DIFF_COLORS: Record<Difficulty, { bg: string; text: string; border: string }> = {
-  easy:   { bg: '#F0F9F4', text: '#1E7B3C', border: '#B8E6C8' },
-  medium: { bg: '#FEF9EC', text: '#92680A', border: '#F5DFA0' },
-  hard:   { bg: '#FDF5F5', text: '#9B2828', border: '#F2CECE' },
+  easy:   { bg: 'var(--ef-success-bg)', text: 'var(--ef-success-strong)', border: 'var(--ef-success-border)' },
+  medium: { bg: '#FEF9EC', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)' },
+  hard:   { bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)' },
 };
 
 // ── Date/time helpers ─────────────────────────────────────────────

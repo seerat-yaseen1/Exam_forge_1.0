@@ -55,7 +55,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
 
   if (done) {
     return (
-      <span className="flex items-center gap-1.5 text-xs" style={{ color: '#2A6B3A' }}>
+      <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ef-success)' }}>
         <Check size={11} strokeWidth={2} /> Request logged.
       </span>
     );
@@ -66,7 +66,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
       <button
         onClick={() => setOpenForm(true)}
         className="flex items-center gap-1.5 text-xs px-2.5 py-1 self-start"
-        style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#6B6862' }}
+        style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: '#6B6862' }}
       >
         <FilePlus2 size={11} strokeWidth={1.5} /> Log a data request
       </button>
@@ -74,18 +74,18 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
   }
 
   const pill = (on: boolean) => ({
-    border: `1px solid ${on ? '#C6DECE' : '#E3E1DB'}`,
+    border: `1px solid ${on ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
     borderRadius: 2,
-    background: on ? '#F0F7F2' : '#FFFFFF',
-    color: on ? '#2A6B3A' : '#6B6B66',
+    background: on ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
+    color: on ? 'var(--ef-success)' : 'var(--ef-text-muted)',
     cursor: busy ? ('not-allowed' as const) : ('pointer' as const),
   });
 
   return (
     <div className="flex flex-col gap-2 px-2.5 py-2"
-      style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+      style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs" style={{ color: '#6B6B66', minWidth: 64 }}>They asked</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', minWidth: 64 }}>They asked</span>
         {(['access', 'erasure'] as SubjectRequestType[]).map((t) => (
           <button
             key={t}
@@ -100,16 +100,16 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs" style={{ color: '#6B6B66', minWidth: 64 }}>On</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', minWidth: 64 }}>On</span>
         <input
           type="date"
           value={receivedAt}
           onChange={(e) => setReceivedAt(e.target.value)}
           disabled={busy}
           className="text-xs px-2 py-1"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
         />
-        <span className="text-xs" style={{ color: '#6B6B66' }}>when they asked, not today</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>when they asked, not today</span>
       </div>
 
       <input
@@ -118,17 +118,17 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
         placeholder="What they asked for, in their words (optional)"
         disabled={busy}
         className="text-xs px-2 py-1.5 w-full"
-        style={{ border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF', color: '#0C0C0B' }}
+        style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
       />
 
-      {error && <p className="text-xs" style={{ color: '#9B2828' }}>{error}</p>}
+      {error && <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</p>}
 
       <div className="flex items-center gap-2">
         <button
           onClick={submit}
           disabled={busy}
           className="flex items-center gap-1.5 text-xs px-3 py-1"
-          style={{ background: '#0C0C0B', color: '#FFFFFF', borderRadius: 2, cursor: busy ? 'not-allowed' : 'pointer' }}
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: busy ? 'not-allowed' : 'pointer' }}
         >
           {busy ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} strokeWidth={2} />}
           Log it
@@ -137,7 +137,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
           onClick={() => { setOpenForm(false); setError(''); }}
           disabled={busy}
           className="text-xs px-3 py-1"
-          style={{ border: '1px solid #E3E1DB', borderRadius: 2, color: '#6B6B66', background: '#FFFFFF' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)' }}
         >
           Cancel
         </button>

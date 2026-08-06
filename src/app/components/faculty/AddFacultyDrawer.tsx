@@ -42,9 +42,9 @@ interface Props {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: '#FAFAF8',
-  border: '1px solid #E3E1DB',
-  color: '#0C0C0B',
+  background: 'var(--ef-canvas-raised)',
+  border: '1px solid var(--ef-border)',
+  color: 'var(--ef-ink)',
   borderRadius: 2,
   width: '100%',
   outline: 'none',
@@ -55,20 +55,20 @@ const inputStyle: React.CSSProperties = {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="mb-5">
-      <label className="block text-xs mb-1.5" style={{ color: '#4A4A45' }}>{label}</label>
+      <label className="block text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>{label}</label>
       {children}
-      {hint && <p className="mt-1.5 text-xs" style={{ color: '#6B6B66' }}>{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs" style={{ color: 'var(--ef-text-muted)' }}>{hint}</p>}
     </div>
   );
 }
 
 const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#0C0C0B';
-  e.target.style.background = '#FFFFFF';
+  e.target.style.borderColor = 'var(--ef-ink)';
+  e.target.style.background = 'var(--ef-surface)';
 };
 const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#E3E1DB';
-  e.target.style.background = '#FAFAF8';
+  e.target.style.borderColor = 'var(--ef-border)';
+  e.target.style.background = 'var(--ef-canvas-raised)';
 };
 
 export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instituteName }: Props) {
@@ -160,16 +160,16 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
             initial={{ x: 48, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 48, opacity: 0 }}
             transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
             className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:w-[400px] sm:max-w-full"
-            style={{ background: '#FFFFFF', borderLeft: '1px solid #E3E1DB' }}
+            style={{ background: 'var(--ef-surface)', borderLeft: '1px solid var(--ef-border)' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0"
-              style={{ borderBottom: '1px solid #E3E1DB' }}>
+              style={{ borderBottom: '1px solid var(--ef-border)' }}>
               <div>
-                <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>ADD FACULTY</p>
-                <p className="text-xs mt-0.5" style={{ color: '#6B6B66' }}>Single member onboarding</p>
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>ADD FACULTY</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>Single member onboarding</p>
               </div>
-              <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: '#6B6B66' }}>
+              <button onClick={onClose} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
                 <X size={15} strokeWidth={1.5} />
               </button>
             </div>
@@ -179,9 +179,9 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
 
               {/* Authority notice */}
               <div className="flex items-start gap-2.5 px-3 py-3 mb-6"
-                style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderLeft: '2px solid #6B6B66', borderRadius: 2 }}>
-                <UserCheck size={12} strokeWidth={1.5} style={{ color: '#6B6B66', marginTop: 1, flexShrink: 0 }} />
-                <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+                style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderLeft: '2px solid var(--ef-text-muted)', borderRadius: 2 }}>
+                <UserCheck size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', marginTop: 1, flexShrink: 0 }} />
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                   A password-setup link will be emailed directly to the faculty member. They set their own password before first login.
                 </p>
               </div>
@@ -203,12 +203,12 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
               {/* Role — fixed, non-editable */}
               <Field label="Role" hint="All accounts created here are Faculty accounts.">
                 <div className="flex items-center gap-2 px-3 py-2.5"
-                  style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}>
+                  style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                   <span className="text-xs px-2 py-0.5"
-                    style={{ background: '#EEECEA', color: '#4A4A45', borderRadius: 2, letterSpacing: '0.04em' }}>
+                    style={{ background: '#EEECEA', color: 'var(--ef-text-subtle)', borderRadius: 2, letterSpacing: '0.04em' }}>
                     Faculty
                   </span>
-                  <span className="text-xs ml-auto" style={{ color: '#6B6B66', letterSpacing: '0.06em' }}>FIXED</span>
+                  <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>FIXED</span>
                 </div>
               </Field>
 
@@ -220,9 +220,9 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
                       className="flex-1 text-xs py-2.5 transition-all"
                       style={{
                         borderRadius: 2,
-                        border: status === s ? '1px solid #0C0C0B' : '1px solid #E3E1DB',
-                        background: status === s ? '#0C0C0B' : '#FAFAF8',
-                        color: status === s ? '#FFFFFF' : '#4A4A45',
+                        border: status === s ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+                        background: status === s ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+                        color: status === s ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
                         letterSpacing: '0.04em',
                       }}>
                       {s === 'active' ? 'Active' : 'Disabled'}
@@ -233,14 +233,14 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 px-4 sm:px-6 py-4" style={{ borderTop: '1px solid #E3E1DB' }}>
+            <div className="flex-shrink-0 px-4 sm:px-6 py-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
               <AnimatePresence>
                 {error && (
                   <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                     className="flex items-start gap-2 mb-3 px-3 py-2.5"
-                    style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}>
-                    <AlertTriangle size={12} strokeWidth={1.5} style={{ color: '#9B2828', marginTop: 1, flexShrink: 0 }} />
-                    <p className="text-xs" style={{ color: '#9B2828' }}>{error}</p>
+                    style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+                    <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', marginTop: 1, flexShrink: 0 }} />
+                    <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</p>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -248,7 +248,7 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
                 <button onClick={handleSubmit} disabled={saving}
                   className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
                   style={{
-                    background: saving ? '#C8C7C2' : '#0C0C0B', color: '#FFFFFF',
+                    background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)',
                     borderRadius: 2, letterSpacing: '0.03em',
                     cursor: saving ? 'not-allowed' : 'pointer',
                   }}>
@@ -257,9 +257,9 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
                 </button>
                 <button onClick={onClose} disabled={saving}
                   className="text-xs px-4 py-2.5 transition-colors"
-                  style={{ color: '#6B6B66', border: '1px solid #E3E1DB', borderRadius: 2, background: '#FFFFFF' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F7F6F3')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}>
+                  style={{ color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-surface)')}>
                   Cancel
                 </button>
               </div>

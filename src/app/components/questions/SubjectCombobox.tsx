@@ -126,12 +126,12 @@ function stringSimilarity(a: string, b: string): number {
 function MatchKindBadge({ kind, alias }: { kind: 'exact' | 'alias' | 'fuzzy'; alias?: string }) {
   if (kind === 'exact')  return null;
   if (kind === 'alias')  return (
-    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: '#8B5E1A', fontSize: 10, letterSpacing: '0.06em' }}>
+    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: 'var(--ef-warning-strong)', fontSize: 10, letterSpacing: '0.06em' }}>
       alias: {alias}
     </span>
   );
   return (
-    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: '#6B6B66', fontSize: 10, letterSpacing: '0.06em' }}>
+    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.06em' }}>
       suggested
     </span>
   );
@@ -266,13 +266,13 @@ export function SubjectCombobox({
       <div
         className="flex items-center gap-2"
         style={{
-          border: `1px solid ${error ? '#F2CECE' : open ? '#0C0C0B' : '#E3E1DB'}`,
+          border: `1px solid ${error ? 'var(--ef-danger-border)' : open ? 'var(--ef-ink)' : 'var(--ef-border)'}`,
           borderRadius: 2,
-          background: disabled ? '#F7F6F3' : open ? '#FFFFFF' : '#FAFAF8',
+          background: disabled ? 'var(--ef-canvas)' : open ? 'var(--ef-surface)' : 'var(--ef-canvas-raised)',
           transition: 'border-color 0.15s, background 0.15s',
         }}
       >
-        <Tag size={12} strokeWidth={1.5} style={{ color: '#6B6B66', marginLeft: 10, flexShrink: 0 }} />
+        <Tag size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', marginLeft: 10, flexShrink: 0 }} />
         <input
           ref={inputRef}
           type="text"
@@ -285,30 +285,30 @@ export function SubjectCombobox({
           className="flex-1 text-xs outline-none py-2.5 pr-2"
           style={{
             background: 'transparent',
-            color: '#0C0C0B',
+            color: 'var(--ef-ink)',
             fontSize: 13,
             cursor: disabled ? 'not-allowed' : 'text',
           }}
         />
         {loading
-          ? <Loader2 size={12} className="animate-spin mr-2.5 flex-shrink-0" style={{ color: '#6B6B66' }} />
+          ? <Loader2 size={12} className="animate-spin mr-2.5 flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }} />
           : <ChevronDown
               size={12} strokeWidth={1.5} className="mr-2.5 flex-shrink-0 transition-transform"
-              style={{ color: '#6B6B66', transform: open ? 'rotate(180deg)' : 'none' }}
+              style={{ color: 'var(--ef-text-muted)', transform: open ? 'rotate(180deg)' : 'none' }}
             />
         }
       </div>
 
       {/* Error */}
-      {error && <p className="text-xs mt-1.5" style={{ color: '#9B2828' }}>{error}</p>}
+      {error && <p className="text-xs mt-1.5" style={{ color: 'var(--ef-danger)' }}>{error}</p>}
 
       {/* Dropdown */}
       {open && !disabled && (
         <div
           className="absolute left-0 right-0 z-50 mt-1 overflow-hidden"
           style={{
-            background: '#FFFFFF',
-            border: '1px solid #E3E1DB',
+            background: 'var(--ef-surface)',
+            border: '1px solid var(--ef-border)',
             borderRadius: 3,
             boxShadow: '0 6px 24px rgba(12,12,11,0.10)',
             maxHeight: 280,
@@ -317,19 +317,19 @@ export function SubjectCombobox({
         >
           {loading ? (
             <div className="flex items-center justify-center py-6 gap-2">
-              <Loader2 size={13} className="animate-spin" style={{ color: '#6B6B66' }} />
-              <span className="text-xs" style={{ color: '#6B6B66' }}>Loading subjects…</span>
+              <Loader2 size={13} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Loading subjects…</span>
             </div>
           ) : suggestions.length === 0 ? (
             <div className="px-4 py-6 text-center">
-              <p className="text-xs" style={{ color: '#6B6B66' }}>No subjects found.</p>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>No subjects found.</p>
               {inputVal.trim().length >= 2 && (
                 <button
                   type="button"
                   onClick={() => handleCreate(normalizeSubject(inputVal.trim()))}
                   disabled={creating}
                   className="mt-2 flex items-center gap-1.5 text-xs mx-auto transition-opacity hover:opacity-70"
-                  style={{ color: '#0C0C0B' }}
+                  style={{ color: 'var(--ef-ink)' }}
                 >
                   {creating ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} strokeWidth={2} />}
                   Create "{normalizeSubject(inputVal.trim())}"
@@ -341,8 +341,8 @@ export function SubjectCombobox({
               {/* Header hint */}
               {subjects.length > 0 && inputVal.trim() === '' && (
                 <div className="px-3 pt-2 pb-1.5 flex items-center gap-1.5">
-                  <Search size={10} strokeWidth={1.5} style={{ color: '#6B6B66' }} />
-                  <span className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.06em', fontSize: 10 }}>
+                  <Search size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 10 }}>
                     ALL SUBJECTS — type to search
                   </span>
                 </div>
@@ -361,19 +361,19 @@ export function SubjectCombobox({
                       disabled={creating}
                       className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors"
                       style={{
-                        borderTop: '1px solid #F0EFEB',
-                        background: isActive ? '#F7F6F3' : '#FFFFFF',
-                        color: '#0C0C0B',
+                        borderTop: '1px solid var(--ef-border-subtle)',
+                        background: isActive ? 'var(--ef-canvas)' : 'var(--ef-surface)',
+                        color: 'var(--ef-ink)',
                         cursor: creating ? 'not-allowed' : 'pointer',
                       }}
                     >
                       {creating
-                        ? <Loader2 size={13} className="animate-spin flex-shrink-0" style={{ color: '#6B6B66' }} />
-                        : <Plus size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: '#6B6B66' }} />
+                        ? <Loader2 size={13} className="animate-spin flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }} />
+                        : <Plus size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }} />
                       }
                       <span className="text-xs">
-                        Create <span style={{ color: '#0C0C0B' }}>"{s.name}"</span>
-                        <span style={{ color: '#6B6B66' }}> as new subject</span>
+                        Create <span style={{ color: 'var(--ef-ink)' }}>"{s.name}"</span>
+                        <span style={{ color: 'var(--ef-text-muted)' }}> as new subject</span>
                       </span>
                     </button>
                   );
@@ -388,18 +388,18 @@ export function SubjectCombobox({
                     onMouseDown={(e) => { e.preventDefault(); selectSubject(s.subject.name); }}
                     onMouseEnter={() => setActiveIdx(idx)}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors"
-                    style={{ background: isActive ? '#F7F6F3' : '#FFFFFF', cursor: 'pointer' }}
+                    style={{ background: isActive ? 'var(--ef-canvas)' : 'var(--ef-surface)', cursor: 'pointer' }}
                   >
                     {/* Selected indicator */}
                     <div
                       className="flex-shrink-0 flex items-center justify-center"
-                      style={{ width: 14, height: 14, borderRadius: '50%', background: selected ? '#0C0C0B' : 'transparent' }}
+                      style={{ width: 14, height: 14, borderRadius: '50%', background: selected ? 'var(--ef-ink)' : 'transparent' }}
                     >
-                      {selected && <Check size={8} strokeWidth={3} style={{ color: '#FFFFFF' }} />}
+                      {selected && <Check size={8} strokeWidth={3} style={{ color: 'var(--ef-surface)' }} />}
                     </div>
 
                     {/* Name + count */}
-                    <span className="flex-1 text-xs" style={{ color: '#0C0C0B' }}>
+                    <span className="flex-1 text-xs" style={{ color: 'var(--ef-ink)' }}>
                       {s.subject.name}
                     </span>
 
@@ -407,7 +407,7 @@ export function SubjectCombobox({
                     {s.subject.questionCount > 0 && (
                       <span
                         className="text-xs px-1.5 py-0.5 select-none flex-shrink-0"
-                        style={{ background: '#F0EFEB', color: '#6B6B66', borderRadius: 2, fontSize: 10 }}
+                        style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 2, fontSize: 10 }}
                       >
                         {s.subject.questionCount}
                       </span>

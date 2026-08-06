@@ -77,7 +77,7 @@ function OverlayCard({
   title,
   children,
   footer,
-  accent = '#F2CECE',
+  accent = 'var(--ef-danger-border)',
 }: {
   title: string;
   children: React.ReactNode;
@@ -92,8 +92,8 @@ function OverlayCard({
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
       style={{
         width: 420,
-        background: '#FFFFFF',
-        border: '1px solid #E3E1DB',
+        background: 'var(--ef-surface)',
+        border: '1px solid var(--ef-border)',
         borderTop: `3px solid ${accent}`,
         borderRadius: 4,
         boxShadow: '0 16px 48px rgba(0,0,0,0.22)',
@@ -101,7 +101,7 @@ function OverlayCard({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="px-6 py-5">
-        <p className="text-xs mb-4" style={{ color: '#6B6B66', letterSpacing: '0.1em' }}>
+        <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
           {title}
         </p>
         {children}
@@ -109,7 +109,7 @@ function OverlayCard({
       {footer && (
         <div
           className="flex items-center justify-end gap-3 px-6 py-4"
-          style={{ borderTop: '1px solid #F0EFEB' }}
+          style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
         >
           {footer}
         </div>
@@ -134,13 +134,13 @@ export function WarningOverlay({ violationType, warningNumber, onDismiss }: Warn
     <Backdrop>
       <OverlayCard
         title="INTEGRITY VIOLATION"
-        accent="#F5DFA0"
+        accent="var(--ef-warning-border)"
         footer={
           <button
             onClick={onDismiss}
             className="flex items-center gap-2 text-xs px-5 py-2.5"
             style={{
-              background: '#0C0C0B', color: '#FFFFFF',
+              background: 'var(--ef-ink)', color: 'var(--ef-surface)',
               borderRadius: 2, cursor: 'pointer',
             }}
           >
@@ -153,17 +153,17 @@ export function WarningOverlay({ violationType, warningNumber, onDismiss }: Warn
             className="flex items-center justify-center flex-shrink-0"
             style={{
               width: 40, height: 40, borderRadius: 3,
-              background: '#FEF9EC', border: '1px solid #F5DFA0',
-              color: '#92680A',
+              background: '#FEF9EC', border: '1px solid var(--ef-warning-border)',
+              color: 'var(--ef-warning)',
             }}
           >
             {VIOLATION_ICONS[violationType]}
           </div>
           <div>
-            <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>
+            <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>
               {VIOLATION_LABELS[violationType]}
             </p>
-            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
               Warning <strong>{warningNumber} of 3</strong>. You have{' '}
               <strong>{remaining} warning{remaining !== 1 ? 's' : ''}</strong> remaining before
               your exam is automatically terminated.
@@ -172,9 +172,9 @@ export function WarningOverlay({ violationType, warningNumber, onDismiss }: Warn
         </div>
         <div
           className="px-3 py-3"
-          style={{ background: '#FEF9EC', border: '1px solid #F5DFA0', borderRadius: 2 }}
+          style={{ background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}
         >
-          <p className="text-xs" style={{ color: '#92680A', lineHeight: 1.6 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-warning)', lineHeight: 1.6 }}>
             This incident has been recorded and will be visible to your examiner. Please
             stay focused on the exam window.
           </p>
@@ -206,23 +206,23 @@ export function FinalWarningOverlay({ violationType, onCountdownEnd }: FinalWarn
 
   return (
     <Backdrop dim={false}>
-      <OverlayCard title="FINAL WARNING" accent="#F2CECE">
+      <OverlayCard title="FINAL WARNING" accent="var(--ef-danger-border)">
         <div className="flex items-start gap-4 mb-5">
           <div
             className="flex items-center justify-center flex-shrink-0"
             style={{
               width: 40, height: 40, borderRadius: 3,
-              background: '#FDF5F5', border: '1px solid #F2CECE',
-              color: '#9B2828',
+              background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)',
+              color: 'var(--ef-danger)',
             }}
           >
             <XOctagon size={18} strokeWidth={1.5} />
           </div>
           <div>
-            <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>
+            <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>
               {VIOLATION_LABELS[violationType]}
             </p>
-            <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+            <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
               This is your <strong>third and final warning</strong>. Your exam will be
               automatically terminated in <strong>{countdown} second{countdown !== 1 ? 's' : ''}</strong>.
             </p>
@@ -232,13 +232,13 @@ export function FinalWarningOverlay({ violationType, onCountdownEnd }: FinalWarn
         {/* Countdown bar */}
         <div
           className="mb-4"
-          style={{ background: '#F0EFEB', borderRadius: 2, height: 6, overflow: 'hidden' }}
+          style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, height: 6, overflow: 'hidden' }}
         >
           <div
             style={{
               height: '100%',
               width: `${pct}%`,
-              background: countdown > 15 ? '#92680A' : '#9B2828',
+              background: countdown > 15 ? 'var(--ef-warning)' : 'var(--ef-danger)',
               transition: 'width 1s linear, background 0.3s',
               borderRadius: 2,
             }}
@@ -247,9 +247,9 @@ export function FinalWarningOverlay({ violationType, onCountdownEnd }: FinalWarn
 
         <div
           className="px-3 py-3"
-          style={{ background: '#FDF5F5', border: '1px solid #F2CECE', borderRadius: 2 }}
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}
         >
-          <p className="text-xs" style={{ color: '#9B2828', lineHeight: 1.6 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
             You cannot dismiss this dialog. Return to the exam window immediately to
             stop the countdown. If you are the only person in the room, ensure your
             face is visible to the camera.
@@ -279,7 +279,7 @@ export function FullscreenRequiredOverlay({ onReturnFullscreen }: FullscreenProp
             onClick={onReturnFullscreen}
             className="flex items-center gap-2 text-xs px-5 py-2.5"
             style={{
-              background: '#0C0C0B', color: '#FFFFFF',
+              background: 'var(--ef-ink)', color: 'var(--ef-surface)',
               borderRadius: 2, cursor: 'pointer',
             }}
           >
@@ -300,10 +300,10 @@ export function FullscreenRequiredOverlay({ onReturnFullscreen }: FullscreenProp
             <Maximize size={18} strokeWidth={1.5} />
           </div>
           <div>
-            <p className="text-sm mb-1" style={{ color: '#0C0C0B' }}>
+            <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>
               Fullscreen mode was exited
             </p>
-            <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
               This exam must be taken in fullscreen mode. This incident has been logged.
               Click the button below to return to fullscreen and continue your exam.
             </p>
@@ -311,9 +311,9 @@ export function FullscreenRequiredOverlay({ onReturnFullscreen }: FullscreenProp
         </div>
         <div
           className="px-3 py-3"
-          style={{ background: '#F7F6F3', border: '1px solid #E3E1DB', borderRadius: 2 }}
+          style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
         >
-          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.6 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
             All interactions are blocked until you return to fullscreen. If you repeatedly
             exit fullscreen, your exam may be terminated.
           </p>
@@ -344,19 +344,19 @@ export function TerminatedOverlay({ reason, onExitView, answersMayBeUnsaved }: T
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="fixed inset-0 z-[9999] flex items-center justify-center"
-      style={{ background: '#0C0C0B' }}
+      style={{ background: 'var(--ef-ink)' }}
     >
       <div style={{ maxWidth: 440, width: '100%', padding: '0 24px' }}>
         <div className="flex items-center gap-3 mb-6">
-          <XOctagon size={22} strokeWidth={1} style={{ color: '#9B2828' }} />
-          <p className="text-xs" style={{ color: '#6B6B66', letterSpacing: '0.12em' }}>
+          <XOctagon size={22} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.12em' }}>
             EXAM TERMINATED
           </p>
         </div>
-        <p className="text-2xl mb-3" style={{ color: '#FFFFFF', fontWeight: 300, lineHeight: 1.3 }}>
+        <p className="text-2xl mb-3" style={{ color: 'var(--ef-surface)', fontWeight: 300, lineHeight: 1.3 }}>
           Your exam has been terminated.
         </p>
-        <p className="text-sm mb-6" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
+        <p className="text-sm mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
           {reason}
         </p>
         {/* H2 (audit 2026-08-06): this panel used to promise "your answers
@@ -369,11 +369,11 @@ export function TerminatedOverlay({ reason, onExitView, answersMayBeUnsaved }: T
         <div
           className="px-4 py-4 mb-8"
           style={{
-            border: `1px solid ${answersMayBeUnsaved ? '#9B2828' : '#2C2C2A'}`,
+            border: `1px solid ${answersMayBeUnsaved ? 'var(--ef-danger)' : '#2C2C2A'}`,
             borderRadius: 3,
           }}
         >
-          <p className="text-xs" style={{ color: '#6B6B66', lineHeight: 1.7 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
             {answersMayBeUnsaved ? (
               <>
                 <span style={{ color: '#C86B6B' }}>
@@ -398,7 +398,7 @@ export function TerminatedOverlay({ reason, onExitView, answersMayBeUnsaved }: T
           onClick={onExitView}
           className="flex items-center gap-2 text-xs px-5 py-2.5"
           style={{
-            border: '1px solid #4A4A45', color: '#6B6B66',
+            border: '1px solid var(--ef-text-subtle)', color: 'var(--ef-text-muted)',
             borderRadius: 2, background: 'transparent', cursor: 'pointer',
           }}
         >

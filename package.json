@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "postinstall": "mkdir -p public/models && curl -fsSL https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/tiny_face_detector_model-weights_manifest.json -o public/models/tiny_face_detector_model-weights_manifest.json && curl -fsSL https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/tiny_face_detector_model-shard1 -o public/models/tiny_face_detector_model-shard1",
+    "typecheck": "tsc --noEmit",
     "build": "vite build",
     "dev": "vite"
   },

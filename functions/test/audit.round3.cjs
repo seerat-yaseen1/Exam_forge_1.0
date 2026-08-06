@@ -742,11 +742,11 @@ async function B16() {
     'disabled');
 
   KNOWN_GAPS.push(
-    'C1\'s PRIMARY fix is the firestore.rules change (institutes:161 is now webOwner-only, '
-    + 'instituteCredentials:178 whitelisted to firstLoginRequired). This harness has no rules '
-    + 'engine, so B-16 proves only the server-side half — it seeds hostile documents directly '
-    + 'and checks the callables refuse to act on them. That no rules test exists anywhere in '
-    + 'this repo is itself the gap: firestore.rules has zero coverage and needs the emulator.',
+    'B-16 proves only the SERVER half of C1 — it seeds hostile ceiling documents directly and '
+    + 'checks the callables refuse to act on them. This harness has no rules engine, so it '
+    + 'cannot prove the write is refused. That half now has its own suite: test/rules.suite.cjs '
+    + 'runs the real firestore.rules against the emulator (R-01 covers C1, R-02 covers H1). '
+    + 'The two are complementary and both are needed — keep them in step.',
   );
 }
 

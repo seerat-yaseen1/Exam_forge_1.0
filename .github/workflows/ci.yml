@@ -65,7 +65,7 @@ jobs:
       - name: tsc --noEmit
         run: npm run typecheck
 
-  # ── Functions: build, then the six suites ───────────────────────
+  # ── Functions: build, then the seven suites ─────────────────────
   functions:
     name: Functions build & tests
     runs-on: ubuntu-latest
@@ -84,6 +84,24 @@ jobs:
           cache: npm
           cache-dependency-path: functions/package-lock.json
 
+      # The rules suite runs the real firestore.rules against the Firestore
+      # emulator, which is a JAR. ubuntu-latest ships a JDK, but relying on
+      # that implicitly means a runner image change breaks the security suite
+      # with an error that looks nothing like its cause.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # ~60 MB, refetched on every run otherwise. Keyed on the CLI version
+      # because that is what decides which emulator build is pulled.
+      - name: Cache Firestore emulator
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('functions/package-lock.json') }}
+          restore-keys: firebase-emulators-
+
       # `npm ci` here, because functions/ DOES have a lockfile.
       - name: Install dependencies
         run: npm ci
@@ -91,10 +109,17 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Six suites: the timing property sweep, freeze, e2e, and three audit
-      # probe rounds. The scenario suites load the COMPILED handlers from
-      # lib/ (`require('../lib/index.js')`) rather than re-implementing their
+      # Seven suites: the timing property sweep, freeze, e2e, three audit
+      # probe rounds, and the rules suite.
+      #
+      # The scenario suites load the COMPILED handlers from lib/
+      # (`require('../lib/index.js')`) rather than re-implementing their
       # arithmetic, which is why the build step above is a prerequisite and
       # not a duplicate of it.
+      #
+      # The rules suite is the odd one out and deliberately so: it is the only
+      # suite that executes firestore.rules, and it needs the emulator rather
+      # than the in-memory fake the other six use. Before it existed a rule
+      # could be deleted outright and every suite would stay green.
       - name: Test
         run: npm test

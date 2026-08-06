@@ -158,7 +158,46 @@ service cloud.firestore {
       allow read:   if isWebOwner()
                        || (signedIn() && request.auth.token.instituteId == instituteId);
       allow create: if isWebOwner();
-      allow update: if isWebOwner() || isInstituteSelf(instituteId);
+      // C1 (audit 2026-08-06): WEBOWNER ONLY. `isInstituteSelf(instituteId)`
+      // used to sit on this line with no field whitelist, which made this
+      // document self-governing — the institute admin could write ANY field on
+      // the doc that governs them. Three separate escalations came out of that
+      // one clause:
+      //
+      //   SELF-REINSTATEMENT. `status` and `activeUntil` are the lifecycle
+      //   gates, and they are checked NOWHERE in these rules — `activeUntil`
+      //   appears in this file exactly once, in the read comment above. The
+      //   only enforcement was client-side, at InstituteAuthContext:88,
+      //   FacultyAuthContext:106 and StudentAuthContext:143. Disabling an
+      //   institute (UserManagementPage:598) is a bare updateDoc that does not
+      //   touch Firebase Auth — no updateUser({disabled}), no
+      //   revokeRefreshTokens — so a disabled or expired admin still holds a
+      //   valid token carrying role:'institute' + instituteId, which is
+      //   precisely what isInstituteSelf accepts. One updateDoc from the
+      //   console outside the UI restored their own access.
+      //
+      //   QUESTION-RIGHTS ESCALATION. assertQuestionRight (index.ts:9129)
+      //   reads `questionRightsCeiling` straight off this doc. A structurally
+      //   correct server-side check validating attacker-controlled input.
+      //
+      //   DELETION-RIGHTS ESCALATION. Same shape at index.ts:1903, :2309 and
+      //   :2453, all reading `deletionRightsCeiling` off this doc. Bounded by
+      //   WEBOWNER_ONLY_S (index.ts:371) — 'attempt' and 'institute' are
+      //   forced off regardless of the document — so attempts, and therefore
+      //   the exam audit trail, were never reachable this way. Faculty and
+      //   student deletion were.
+      //
+      // NO FIELD WHITELIST IS NEEDED HERE, because no legitimate write exists
+      // to whitelist. Verified exhaustively before locking: every writer of
+      // this collection in src/ is a Web Owner surface — updateInstitute is
+      // called only from UserManagementPage, and all ten governance setters
+      // (firebaseService:1319-1481) only from InstituteDetailPage and the two
+      // ceiling editors it renders. The institute admin's own surfaces write
+      // instituteLogos and instituteCredentials, never this document; the
+      // three auth contexts only getDoc it. lifecycleService goes through
+      // callables. Institute self-service, if it is ever wanted, belongs in a
+      // callable that can re-check the lifecycle it is subject to.
+      allow update: if isWebOwner();
       // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
       // removal now goes through the deleteAuthUser / purgeEntity callables,
       // which enforce the deletion-rights ceiling, write the audit row and
@@ -175,7 +214,26 @@ service cloud.firestore {
     match /instituteCredentials/{instituteId} {
       allow read:   if isWebOwner() || isInstituteSelf(instituteId);
       allow create: if isWebOwner();
-      allow update: if isWebOwner() || isInstituteSelf(instituteId);
+      // H1 (audit 2026-08-06): the identical unwhitelisted shape as
+      // institutes:161 sat here, on a credentials collection. Unlike that one
+      // this collection DOES have a legitimate institute-role write, so it
+      // gets a real whitelist rather than a lock.
+      //
+      // `firstLoginRequired` is the whole list. InstituteAuthContext:220 is
+      // the only institute-role writer in the codebase — it clears the flag
+      // after a successful forced password change — and it is the only field
+      // that write touches. The `password`/`email` fields still declared on
+      // the InstituteCredentials type are vestigial: nothing reads this
+      // document for authentication (getInstituteCredentials has zero callers
+      // platform-wide), so leaving them writable bought nothing and let an
+      // admin scribble over their own migration metadata.
+      //
+      // hasOnly() gates top-level keys, same mechanism as the attempts
+      // whitelists at :680 and :717.
+      allow update: if isWebOwner()
+                       || (isInstituteSelf(instituteId)
+                           && request.resource.data.diff(resource.data)
+                                .affectedKeys().hasOnly(['firstLoginRequired']));
       // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
       // removal now goes through the deleteAuthUser / purgeEntity callables,
       // which enforce the deletion-rights ceiling, write the audit row and

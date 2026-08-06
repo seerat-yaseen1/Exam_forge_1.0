@@ -741,6 +741,35 @@ async function B16() {
     () => call(fns.deleteAuthUser, { role: 'faculty', uid: 'fac_1' }, ADMIN()),
     'disabled');
 
+  // ── 5 · the fifth governance read (N1, audit 2026-08-06) ──────────
+  // C1 gated four of the five sites that read a ceiling off institutes/{id}.
+  // resolveQuestionRequest was the fifth and was missed, which let a disabled
+  // tenant approve queued requests and mutate its question bank. A pending
+  // request is precisely where a tenant is most likely to have been switched
+  // off since the request was raised, so it is the site that most needed it.
+  DB.seed('questionRequests', 'qr_1', {
+    id: 'qr_1', instituteId: 'inst_1', facultyId: 'fac_1',
+    type: 'create', status: 'pending',
+    payload: { question: newQuestion },
+    createdAt: at(VNOW - min(60)),
+  });
+  seedInstitute({
+    status: 'disabled',
+    questionRightsCeiling: { create: { allowed: true, modes: ['direct', 'request'] } },
+  });
+  await expectThrow('a disabled tenant cannot approve a queued question request',
+    () => call(fns.resolveQuestionRequest, { requestId: 'qr_1', decision: 'approve' }, ADMIN()),
+    'disabled');
+
+  // The control: live tenant, same request, same ceiling — it must work, or
+  // the assertion above would pass against a callable that refused everyone.
+  seedInstitute({
+    questionRightsCeiling: { create: { allowed: true, modes: ['direct', 'request'] } },
+  });
+  const approved = await call(fns.resolveQuestionRequest,
+    { requestId: 'qr_1', decision: 'approve' }, ADMIN());
+  check(approved?.ok === true, 'and a LIVE tenant still can — the gate is lifecycle, not a lockout');
+
   KNOWN_GAPS.push(
     'B-16 proves only the SERVER half of C1 — it seeds hostile ceiling documents directly and '
     + 'checks the callables refuse to act on them. This harness has no rules engine, so it '

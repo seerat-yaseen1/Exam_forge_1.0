@@ -19,6 +19,25 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Manual trigger. Added 2026-08-06 as a DIAGNOSTIC and worth keeping.
+  #
+  # This workflow has produced zero runs since it landed on main — through
+  # four merges and four pull requests — while every observable says it should
+  # be running: the file is on the default branch with correct triggers, the
+  # API reports state=active with no parse error, Actions permissions are
+  # "Allow all actions and reusable workflows", and the account has used 0 of
+  # 3,000 included minutes.
+  #
+  # push and pull_request give no feedback when they decline to schedule
+  # anything; there is no failed run to open and no message to read.
+  # workflow_dispatch does: the API either starts a run or returns an error
+  # naming the reason. That turns a silent non-event into something
+  # actionable.
+  #
+  # Keeping it after the diagnosis is settled costs nothing and means CI can
+  # be re-run on demand — useful when a run is cancelled by the concurrency
+  # rule above, or when re-checking a flake without an empty commit.
+  workflow_dispatch:
 
 # A new push supersedes an in-flight run for the same ref. Exam Forge is a
 # small repo; there is no value in finishing a run for a commit nobody will

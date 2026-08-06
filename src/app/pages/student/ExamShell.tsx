@@ -1256,6 +1256,11 @@ export function ExamShell() {
   // ── Answer state ───────────────────────────────────────────────
   const [localAnswers, setLocalAnswers] = useState<Record<string, AttemptAnswer>>({});
   const answerTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Set when the bounded flush in handleViolation did not confirm before the
+  // pre-countdown grade went out. A ref, not state, because writing it must
+  // not re-render the shell mid-termination — it is read once, 30 seconds
+  // later, by handleTerminate.
+  const preTerminateFlushFailedRef = useRef(false);
 
   // ── Flag/report state — buffered locally; written on final submit ──
   const [flagged, setFlagged] = useState<Record<string, ReportReason>>({});
@@ -2982,11 +2987,61 @@ export function ExamShell() {
       // countdown so killing the tab can't dodge termination. This goes through
       // gradeAttempt (Cloud Function, admin SDK) because student-side writes to
       // `status` are — correctly — denied by the tightened Firestore rules.
-      gradeAttempt({
-        attemptId: att.id,
-        reason: 'terminated',
-        terminateReason: 'Exam terminated due to repeated integrity violations.',
-      }).catch((e) => console.error('[ExamShell] pre-countdown terminate failed', e));
+      //
+      // ── Audit 2026-08-06: FLUSH FIRST, BUT BOUNDED ──────────────
+      //
+      // This used to call gradeAttempt with no flush at all, and the answer
+      // sitting in the 1.5s autosave debounce at the instant of the third
+      // violation was lost. Not as a race — deterministically.
+      //
+      // The reason it was deterministic is the SECOND grade. handleTerminate
+      // runs after the countdown, flushes, and calls gradeAttempt again — but
+      // that second call is an idempotent NO-OP ("a non-grader may never
+      // re-finalise a finished attempt", index.ts). The attempt was finalised
+      // here, 30 seconds earlier. So the flush down there wrote answers into
+      // an already-graded document: saved, and never marked. The terminated
+      // overlay then told the student their answers had been submitted, which
+      // was true of the write and false of the marking.
+      //
+      // WHY NOT JUST AWAIT THE FLUSH. Because the unflushed grade is not an
+      // oversight — it is the whole point of grading here rather than after
+      // the countdown. A student who sees the final warning and kills the tab
+      // must still be terminated. Awaiting an unbounded flush reopens exactly
+      // that hole: a dead network hangs the promise and the attempt is never
+      // finalised at all.
+      //
+      // So: race the flush against a timeout, then grade either way. The
+      // dodge window goes from 0 to at most 1.5s, and the answer survives in
+      // every case that isn't already a network failure. 1.5s rather than the
+      // 6s used elsewhere in this file because this budget is paid before a
+      // TERMINATION lands, not before a submit the student is waiting on.
+      //
+      // `.finally` not `.then` — a rejected or timed-out flush must still
+      // grade. Losing the answer is bad; failing to terminate is the thing
+      // this call exists to prevent.
+      const attemptId = att.id;
+      void (async () => {
+        // Which of the three outcomes we got matters, so the race resolves a
+        // TAG rather than just settling. A bare `.catch` would not see the
+        // timeout at all — the timer resolves, it does not reject.
+        const outcome = await Promise.race([
+          flushAnswers().then(() => 'flushed' as const).catch(() => 'failed' as const),
+          new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 1500)),
+        ]);
+        if (outcome !== 'flushed') {
+          // Recorded, not acted on. handleTerminate reads this 30 seconds
+          // later and tells the student, because THIS is the moment their
+          // last answer is at risk — not the no-op flush down there. Without
+          // it the overlay reassures on exactly the run where it shouldn't.
+          preTerminateFlushFailedRef.current = true;
+          console.error(`[ExamShell] flush before pre-countdown terminate: ${outcome}`);
+        }
+        gradeAttempt({
+          attemptId,
+          reason: 'terminated',
+          terminateReason: 'Exam terminated due to repeated integrity violations.',
+        }).catch((e) => console.error('[ExamShell] pre-countdown terminate failed', e));
+      })();
       setOverlay({ kind: 'final_warning', violationType: type });
     } else {
       setOverlay({
@@ -2995,7 +3050,11 @@ export function ExamShell() {
         warningNumber: newWarningCount as 1 | 2,
       });
     }
-  }, []);
+    // flushAnswers is itself useCallback(…, []) — one instance for the
+    // component's lifetime — so listing it cannot recreate this callback, and
+    // the closure above cannot capture a stale copy. Listed anyway so the
+    // dependency is declared rather than assumed.
+  }, [flushAnswers]);
 
   // ── Extension-freeze resume (Phase 1c) ─────────────────────────
   // Re-scan for the extension; if it's gone, report a passing check and
@@ -3084,7 +3143,13 @@ export function ExamShell() {
     // becomes evidence. It is logged, and the student is told plainly, because
     // termination is precisely the outcome they are least placed to dispute
     // and they need to know there is something to dispute.
-    let answersMayBeUnsaved = false;
+    // Seeded from the PRE-COUNTDOWN flush (handleViolation), because that is
+    // the one whose result decides whether the student's last answer was
+    // marked. By the time we get here the attempt was finalised 30 seconds
+    // ago and the gradeAttempt below is an idempotent no-op, so this flush
+    // can succeed while the answer it wrote goes unmarked. Reporting only on
+    // THIS flush would reassure on exactly the runs that need a warning.
+    let answersMayBeUnsaved = preTerminateFlushFailedRef.current;
     try {
       await flushAnswers();
     } catch (e) {

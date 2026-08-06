@@ -52,7 +52,7 @@ git diff --stat $BASE..HEAD -- \
 
 ```bash
 npx tsc --noEmit                    # frontend: expect 0 errors
-cd functions && npm install && npm test   # expect six green suites
+cd functions && npm install && npm test   # expect seven green suites
 ```
 
 CI runs both on every pull request (`.github/workflows/ci.yml`), so a green PR has already

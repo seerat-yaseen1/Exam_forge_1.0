@@ -1,1 +1,5 @@
 node_modules/
+
+# Firestore emulator writes this wherever it is started from.
+firestore-debug.log
+firebase-debug.log

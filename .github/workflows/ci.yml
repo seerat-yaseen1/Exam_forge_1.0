@@ -103,10 +103,11 @@ jobs:
           cache: npm
           cache-dependency-path: functions/package-lock.json
 
-      # The rules suite runs the real firestore.rules against the Firestore
-      # emulator, which is a JAR. ubuntu-latest ships a JDK, but relying on
-      # that implicitly means a runner image change breaks the security suite
-      # with an error that looks nothing like its cause.
+      # The rules suite runs the real firestore.rules AND storage.rules
+      # against the Firestore + Storage emulators, which are JARs.
+      # ubuntu-latest ships a JDK, but relying on that implicitly means a
+      # runner image change breaks the security suite with an error that looks
+      # nothing like its cause.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

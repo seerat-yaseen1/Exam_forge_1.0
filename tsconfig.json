@@ -11,11 +11,14 @@
     "jsx": "react-jsx",
     "noEmit": true,
     "skipLibCheck": true,
+    "types": [
+      "vite/client"
+    ],
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "strict": false,
+    "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "paths": {

@@ -3177,10 +3177,19 @@ export function ExamShell() {
     if (shellStatus !== 'ready') return;
     if (isFrozenRef.current) return;
     if (submittingRef.current) return;
+    // H4 (audit 2026-08-06): hoisted out of expiredClock, which already
+    // returns null for a null attempt (:407) — so `!expired` below has always
+    // covered this case and the deref at the getExamVerdict call was never
+    // reachable with null. The guard is here to make the invariant local and
+    // checkable rather than an inference across two functions; under
+    // `strict: true` this was the single genuine error in the whole
+    // application. An assertion would have silenced the compiler and left the
+    // reasoning where it was.
+    if (!attempt) return;
     const expired = expiredClock(
       attempt,
       Date.now(),
-      currentSection ? attempt?.sectionTimings?.[currentSection.id]?.startedAt : undefined,
+      currentSection ? attempt.sectionTimings?.[currentSection.id]?.startedAt : undefined,
     );
     if (!expired) return;
 

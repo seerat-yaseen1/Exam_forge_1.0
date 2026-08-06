@@ -12,6 +12,7 @@ import {
   increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { removeUndefined } from './firestoreSanitize';
 
 // ══════════════════════════════════════════════════════════════════
 // TYPES
@@ -196,7 +197,7 @@ export async function createSubject(rawName: string): Promise<Subject> {
     createdAt: now(),
     updatedAt: now(),
   };
-  await setDoc(doc(db, COL, id), subject);
+  await setDoc(doc(db, COL, id), removeUndefined(subject));
   console.log(`✅ [Subjects] createSubject → "${name}" (${id})`);
   return subject;
 }
@@ -233,7 +234,7 @@ export async function renameSubject(subjectId: string, newRawName: string): Prom
     aliases: Array.from(aliasesSet),
     updatedAt: now(),
   };
-  await updateDoc(doc(db, COL, subjectId), updated);
+  await updateDoc(doc(db, COL, subjectId), removeUndefined(updated));
   console.log(`✅ [Subjects] renameSubject → "${oldName}" → "${newName}"`);
   return { ...subj, ...updated } as Subject;
 }
@@ -469,7 +470,7 @@ export async function ensureSubject(
   const newSubject: Subject = {
     id, name, aliases: [], questionCount: 0, createdAt: now(), updatedAt: now(),
   };
-  await setDoc(doc(db, COL, id), newSubject);
+  await setDoc(doc(db, COL, id), removeUndefined(newSubject));
   subjectsCache.push(newSubject); // mutate cache so next call in batch sees it
   console.log(`✅ [Subjects] ensureSubject created → "${name}"`);
   return { canonicalName: name, wasCreated: true };
@@ -501,7 +502,7 @@ export async function createSubjectWithSlug(slugId: string, rawName: string): Pr
     createdAt: now(),
     updatedAt: now(),
   };
-  await setDoc(doc(db, COL, slugId), subject);
+  await setDoc(doc(db, COL, slugId), removeUndefined(subject));
   console.log(`✅ [Subjects] createSubjectWithSlug → ${slugId} "${name}"`);
   return subject;
 }
@@ -579,7 +580,7 @@ export async function createTopicWithSlug(
     createdAt: now(),
     updatedAt: now(),
   };
-  await setDoc(doc(db, TOPIC_COL, slugId), topic);
+  await setDoc(doc(db, TOPIC_COL, slugId), removeUndefined(topic));
   console.log(`✅ [Topics] createTopicWithSlug → ${slugId} "${name}" (subject ${subjectId})`);
   return topic;
 }

@@ -16,6 +16,7 @@
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, functions } from './firebase';
+import { removeUndefined } from './firestoreSanitize';
 
 export type ErasureMode = 'delete' | 'anonymize';
 
@@ -81,12 +82,12 @@ export async function setErasurePolicy(
   mode: ErasureMode,
   uid: string,
 ): Promise<void> {
-  await setDoc(doc(db, ...POLICY_DOC), {
+  await setDoc(doc(db, ...POLICY_DOC), removeUndefined({
     retentionYears,
     mode,
     configuredBy: uid,
     configuredAt: new Date().toISOString(),
-  }, { merge: true });
+  }), { merge: true });
 }
 
 export function policyIsConfigured(p: ErasurePolicy | null): boolean {

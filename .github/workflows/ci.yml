@@ -1,0 +1,100 @@
+# ══════════════════════════════════════════════════════════════════
+# CI — the gate that did not exist
+# ══════════════════════════════════════════════════════════════════
+#
+# Until this file, the only check on a pull request was a Vercel preview
+# deploy. That is not a gate on correctness: `vite build` transpiles
+# TypeScript with esbuild, which STRIPS types without checking them, so a
+# build can go green over code that `tsc` would reject outright. And nothing
+# anywhere ran the functions test suites — the 13,446-state timing sweep and
+# the five scenario suites were local-only, which meant "all green" was a
+# claim in a commit message rather than a fact about the branch.
+#
+# Two jobs, deliberately separate. They fail for unrelated reasons and a
+# reviewer should be able to see which half broke without opening a log.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push supersedes an in-flight run for the same ref. Exam Forge is a
+# small repo; there is no value in finishing a run for a commit nobody will
+# look at again.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Frontend: does it typecheck under `strict`? ─────────────────
+  typecheck:
+    name: Frontend typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # `npm install`, not `npm ci`: the root has no package-lock.json. That
+      # is worth fixing on its own (installs here are not reproducible, and a
+      # transitive bump can turn CI red with no commit behind it) but
+      # committing a lockfile is a change with its own blast radius and does
+      # not belong in the same PR as the gate that would catch the problem.
+      #
+      # --ignore-scripts skips the root postinstall, which curls face-api
+      # model weights from raw.githubusercontent.com. Those weights are a
+      # RUNTIME asset — the typecheck never touches them — so fetching them
+      # here buys nothing and puts a third-party host on the critical path of
+      # every CI run.
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      # This is the step that closes the verification gap the 2026-08-06
+      # audit had to leave open. `xlsx` installs from cdn.sheetjs.com, which
+      # was unreachable from the audit sandbox, so `strict: true` was
+      # validated against a hand-written type stub instead of the real
+      # package. A CI runner has open egress, so this is the first time the
+      # frontend is typechecked against the dependency it actually ships.
+      - name: tsc --noEmit
+        run: npm run typecheck
+
+  # ── Functions: build, then the six suites ───────────────────────
+  functions:
+    name: Functions build & tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+
+      # Matches functions/package.json engines.node — the deployed runtime is
+      # nodejs22 (firebase.json), and a suite that passes on a different major
+      # is not evidence about production.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      # `npm ci` here, because functions/ DOES have a lockfile.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Six suites: the timing property sweep, freeze, e2e, and three audit
+      # probe rounds. The scenario suites load the COMPILED handlers from
+      # lib/ (`require('../lib/index.js')`) rather than re-implementing their
+      # arithmetic, which is why the build step above is a prerequisite and
+      # not a duplicate of it.
+      - name: Test
+        run: npm test

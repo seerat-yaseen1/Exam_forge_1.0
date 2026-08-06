@@ -1,46 +1,80 @@
-# 🚀 Deploying the exam-integrity fixes
+# 🚀 Deploying
 
-> **What changed:** rounds 2 and 3 of the exam audit fixed 14 defects, **all of them in Cloud Functions**.
-> **What you need to deploy:** **functions only.** Not rules, not indexes, not storage.
-> **Data migration required:** **none.**
+> **Work out what to deploy from the diff — never from memory, and never from this file's
+> examples.** §1 is the procedure. §3 onwards is the reasoning from the rounds 2/3 deploy,
+> kept because the arguments are still instructive, but it describes THAT deploy, not yours.
 
 ---
 
-## 1 · The short answer
+## 0 · Read this before trusting any list below
+
+This document used to open with "**functions only.** Not rules, not indexes, not storage" and
+carried a table asserting `firestore.rules` → **no**, evidenced by a `git diff` against a
+hardcoded base commit.
+
+That was true for rounds 2 and 3. It stopped being true the moment a later change touched
+`firestore.rules` — and the next one did: the 2026-08-06 audit's C1/H1 fix, which lives
+**entirely** in that file. Anyone who followed the old table would have deployed functions,
+skipped rules, and left a privilege-escalation path open while believing they had closed it.
+
+The defect was not the answer. It was writing a **point-in-time answer where a procedure
+belonged**. Deploy targets are a property of your diff, so compute them from your diff.
+
+---
+
+## 1 · The procedure
+
+**Step 1 — find your base.** The last commit actually deployed to the project you are
+deploying to. Not `main`'s parent, not the last release tag — what is *live*.
 
 ```bash
-cd functions
-npm install
-npm test          # all six suites must be green before you deploy
-
-cd ..
-firebase deploy --only functions --project YOUR_PROJECT_ID
+BASE=<last-deployed-commit-sha>
 ```
 
-That is the whole deployment. Everything below is the reasoning, and the things **not** to do.
-
----
-
-## 2 · What does NOT need deploying, and how that was checked
-
-| Target | Deploy? | Evidence |
-|---|:---:|---|
-| **Cloud Functions** | ✅ **YES** | `functions/src/index.ts` changed in every fix |
-| `firestore.rules` | ❌ no | `git diff 62bf880..HEAD -- firestore.rules` → **empty** |
-| `firestore.indexes.json` | ❌ no | unchanged, and see §3 |
-| `storage.rules` | ❌ no | unchanged |
-| Hosting / frontend | ⚠️ separate | two client files changed — see §6 |
-
-Verify this yourself before deploying:
+**Step 2 — ask git what changed.**
 
 ```bash
-git diff --stat 62bf880..HEAD -- firestore.rules firestore.indexes.json storage.rules
-# empty output = nothing to deploy for these
+git diff --stat $BASE..HEAD -- \
+  firestore.rules firestore.indexes.json storage.rules functions/ src/
 ```
+
+**Step 3 — deploy exactly what that names.** Each path maps to one target:
+
+| If this changed | Deploy | Notes |
+|---|---|---|
+| `firestore.rules` | `firebase deploy --only firestore:rules` | Instant, no rollout window. **Never skip** — rules are usually the security-relevant target |
+| `firestore.indexes.json` | `firebase deploy --only firestore:indexes` | Index builds take minutes; deploy before the code that queries them |
+| `storage.rules` | `firebase deploy --only storage` | |
+| `functions/` | `firebase deploy --only functions` | See §5 — deploy all functions together, never cherry-pick |
+| `src/` | separate — see §6 | Frontend rides its own pipeline |
+
+**Step 4 — gate on the tests first.**
+
+```bash
+npx tsc --noEmit                    # frontend: expect 0 errors
+cd functions && npm install && npm test   # expect six green suites
+```
+
+CI runs both on every pull request (`.github/workflows/ci.yml`), so a green PR has already
+cleared this. Run it locally anyway when deploying from a machine rather than a merge.
+
+**Step 5 — record what you deployed.** Tag it, so the next person's `$BASE` is a fact rather
+than a guess:
+
+```bash
+git tag -f deployed/$(date +%Y-%m-%d) && git push -f origin deployed/$(date +%Y-%m-%d)
+```
+
+That last step is what stops this section rotting again.
 
 ---
 
-## 3 · Why no new Firestore index is needed
+## 3 · Why no new Firestore index was needed *for rounds 2/3*
+
+> **History, not instruction.** Sections 3–7 document the rounds 2/3 deploy against base
+> `62bf880`. The reasoning is worth keeping — it shows the standard of evidence a deploy
+> decision should meet — but do not read any of it as a statement about the change in front
+> of you. Run §1 for that.
 
 The B-03 fix added exactly one new query, in `getAnswerKeysForReview`:
 

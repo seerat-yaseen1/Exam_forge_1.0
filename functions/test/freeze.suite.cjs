@@ -150,10 +150,27 @@ function seedAttempt(overrides = {}) {
   // Materialise the birth locks exactly as startExam does.
   const secEnd = Date.parse(startedAt) + min(overrides._sectionLimit ?? 30) + sec(30);
   const ovrEnd = Date.parse(startedAt) + min(overrides._overallLimit ?? 60) + sec(30);
+  // ── The availability window belongs in this minimum (audit 2026-08-06) ──
+  //
+  // This line used to read Math.min(secEnd, ovrEnd), which stopped matching
+  // startExam when computeAttemptLocks folded the window in: INV-3 is
+  // min(section, overall, WINDOW). Every scenario got away with it because
+  // the default paper ends 600 minutes out, so the window was never the
+  // smallest — except FZ at :614, which sets a 20-minute endDate precisely to
+  // exercise that clamp, and there the fixture was 10 minutes adrift from
+  // what production would have written.
+  //
+  // Found by wiring auditTiming into freezeAttempt (M5): the invariant check
+  // reported INV-3 on att_1 from the first run. The comment above says these
+  // locks match startExam, so this makes that true rather than deleting the
+  // claim — a fixture that hand-rolls a production calculation is a second
+  // copy, and this is what a second copy does.
+  const seededAsmt = DB.read('assessments', 'asmt_1');
+  const winEnd = seededAsmt && seededAsmt.endDate ? Date.parse(seededAsmt.endDate) : Infinity;
   const { Timestamp } = require('firebase-admin/firestore');
   att.sectionLockedAfter = Timestamp.fromMillis(secEnd);
   att.overallLockedAfter = Timestamp.fromMillis(ovrEnd);
-  att.answersLockedAfter = Timestamp.fromMillis(Math.min(secEnd, ovrEnd));
+  att.answersLockedAfter = Timestamp.fromMillis(Math.min(secEnd, ovrEnd, winEnd));
   DB.seed('attempts', 'att_1', att);
   return att;
 }

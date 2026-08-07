@@ -144,6 +144,121 @@ export type Question = {
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
+
+  // ── Group membership (Phase 1) ────────────────────────────────────
+  // Set when this question is a CHILD of a QuestionGroup — one of the
+  // sub-questions hanging off a shared stimulus (DI table, RC passage,
+  // caselet, puzzle, seating arrangement).
+  //
+  // The child stays an ordinary question document with an ordinary engine.
+  // That is the entire point of the design: grading, answer-key storage in
+  // questionAnswers, the rights model, the tenant fence, duplicate detection
+  // and the bulk-upload path all keep working on children with no special
+  // case. Only the stimulus is new, and it lives on the group.
+  //
+  // groupOrder is the child's position within its group. QuestionGroup.childIds
+  // is the authoritative order; this field is the denormalized copy so a child
+  // read on its own still knows where it sits.
+  groupId?: string;
+  groupOrder?: number;
+};
+
+// ══════════════════════════════════════════════════════════════════
+// QUESTION GROUPS (Phase 1)
+// ══════════════════════════════════════════════════════════════════
+//
+// A group is a shared STIMULUS plus its dependent child questions.
+//
+// Data Interpretation, Reading Comprehension, caselets, puzzles and seating
+// arrangements are one model, not five. They are structurally identical —
+// one stimulus, N sub-questions that are unanswerable without it — and differ
+// only in what the stimulus CONTAINS. `kind` records which flavour it is, and
+// is used for filtering, labelling and rule targeting; it changes no logic.
+
+export type GroupKind =
+  | 'di'        // Data Interpretation — table / chart / mixed
+  | 'rc'        // Reading Comprehension — long passage
+  | 'caselet'   // short prose case, often with embedded figures
+  | 'puzzle'    // logical puzzle, sometimes with a diagram
+  | 'seating'   // seating arrangement, sometimes with a diagram
+  | 'generic';  // anything else sharing a stimulus
+
+export const GROUP_KINDS: GroupKind[] = ['di', 'rc', 'caselet', 'puzzle', 'seating', 'generic'];
+
+export const GROUP_KIND_LABEL: Record<GroupKind, string> = {
+  di:      'Data Interpretation',
+  rc:      'Reading Comprehension',
+  caselet: 'Caselet',
+  puzzle:  'Puzzle',
+  seating: 'Seating Arrangement',
+  generic: 'Grouped Set',
+};
+
+/**
+ * The shared stimulus.
+ *
+ * `format` says which fields carry the content; the others may be present but
+ * are ignored, so switching format in the authoring UI never destroys work.
+ *
+ * DI tables are STRUCTURAL (headers + rows), not an uploaded screenshot. An
+ * image of a table cannot reflow on a phone, cannot be read by a screen
+ * reader, and cannot be zoomed without losing the row a candidate was on —
+ * and this platform already runs exams on mobile for the 'normal' tier.
+ * `format: 'image'` remains available as the fallback for charts and diagrams
+ * that genuinely are pictures.
+ */
+export type GroupStimulus = {
+  format: 'richtext' | 'table' | 'image' | 'mixed';
+
+  /** Passage / caselet / puzzle prose. Rich text; KaTeX already supported. */
+  body?: string;
+
+  /** Firebase Storage download URLs — charts, diagrams, scanned figures. */
+  images?: string[];
+
+  /** Structural table for DI sets. */
+  table?: {
+    caption?: string;
+    headers: string[];
+    rows: string[][];
+  };
+};
+
+export type QuestionGroup = {
+  id: string;
+  kind: GroupKind;
+  title: string;              // internal label, e.g. "DI — Regional sales 2024"
+  stimulus: GroupStimulus;
+
+  // ── Metadata ──
+  // Mirrors Question exactly so the same subject/topic pickers, taxonomy
+  // canonicalisation and difficulty filters work on groups with no new UI.
+  subject: string;
+  topic: string;
+  subjectId?: string;
+  topicId?: string;
+  tags: string[];
+  // The GROUP's difficulty, which is what selection rules match on. Children
+  // may individually differ (a DI set usually ramps), and that is deliberate:
+  // matching on child difficulty would let a rule pull half a set.
+  difficulty: Difficulty;
+
+  /** Ordered child question ids. Authoritative — Question.groupOrder mirrors it. */
+  childIds: string[];
+
+  // ── Ownership ──
+  // Identical stamp semantics to Question: ownerType/ownerId identify the
+  // author, instituteId is the tenant stamp used by the read fence in
+  // firestore.rules. A group and its children ALWAYS carry the same stamps —
+  // a group readable by a tenant whose children are not would render a
+  // passage with no questions under it.
+  ownerType?: QuestionOwnerType;
+  ownerId?: string;
+  instituteId?: string;
+
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 // ── Question Bank document ────────────────────────────────────────
@@ -236,6 +351,7 @@ export type ResolvedFacultyAccess = {
 const COL = {
   questions:       'questions',
   questionAnswers: 'questionAnswers',
+  questionGroups:  'questionGroups',
   questionBanks:   'questionBanks',
   bankGrants:      'bankGrants',
   instituteGrants: 'instituteGrants',
@@ -752,6 +868,225 @@ export async function softDeleteQuestion(id: string): Promise<void> {
     await bumpTaxonomyCounts({ subjectId: prev.subjectId, topicId: prev.topicId }, -1);
   }
   console.log(`✅ [QB] softDeleteQuestion → ${id}`);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// QUESTION GROUP CRUD (Phase 1)
+// ══════════════════════════════════════════════════════════════════
+
+/** A child question as supplied to createQuestionGroup — no id yet. */
+export type GroupChildDraft = Omit<
+  Question,
+  'id' | 'isDeleted' | 'createdAt' | 'updatedAt' | 'groupId' | 'groupOrder'
+>;
+
+export function buildEmptyGroup(kind: GroupKind): Omit<
+  QuestionGroup, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'
+> {
+  // Default the stimulus format to the one each flavour almost always wants,
+  // so the author starts in the right editor instead of switching first.
+  const format: GroupStimulus['format'] =
+    kind === 'di' ? 'table' : 'richtext';
+  return {
+    kind,
+    title: '',
+    stimulus: { format, body: '', images: [], ...(format === 'table' ? { table: { headers: [''], rows: [['']] } } : {}) },
+    subject: '',
+    topic: '',
+    tags: [],
+    difficulty: 'medium',
+    childIds: [],
+  };
+}
+
+/**
+ * Create a group and its children in ONE batch.
+ *
+ * Atomicity is the requirement, not an optimisation: a group whose children
+ * failed to write is a passage with no questions, and a child whose group
+ * failed to write is an unanswerable orphan sitting in the bank waiting to be
+ * drawn into an exam by an ordinary topic rule. Firestore batches are
+ * all-or-nothing, so neither half can survive alone.
+ *
+ * Batch limit is 500 writes. Each child costs 2 (public + answer doc) and the
+ * group costs 1, so the ceiling is 249 children — far past any real DI set,
+ * but asserted rather than assumed.
+ */
+export async function createQuestionGroup(
+  data: Omit<QuestionGroup, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt' | 'childIds'>,
+  children: GroupChildDraft[],
+  opts?: { skipCounterBump?: boolean },
+): Promise<{ group: QuestionGroup; children: Question[] }> {
+  if (children.length === 0) {
+    throw new Error('A question group needs at least one child question.');
+  }
+  if (children.length > 249) {
+    throw new Error(`A question group can hold at most 249 questions (got ${children.length}).`);
+  }
+
+  const groupId = newId('grp');
+  const ts = now();
+  const batch = writeBatch(db);
+
+  // Stamps flow from the group to every child — see the QuestionGroup comment.
+  const ownerType = data.ownerType ?? 'webOwner';
+  const ownerId   = data.ownerId   ?? 'webOwner';
+
+  const built: Question[] = children.map((child, idx) => ({
+    ...child,
+    id: newId('q'),
+    ownerType,
+    ownerId,
+    instituteId: data.instituteId,
+    groupId,
+    groupOrder: idx,
+    isDeleted: false,
+    createdAt: ts,
+    updatedAt: ts,
+  }));
+
+  for (const q of built) {
+    batch.set(doc(db, COL.questions, q.id), removeUndefined({ ...sanitizePublic(q) } as any));
+    batch.set(
+      doc(db, COL.questionAnswers, q.id),
+      removeUndefined({
+        id: q.id,
+        ownerType,
+        ownerId,
+        ...emptyAnswerDefaults(),
+        ...pickAnswerFields(q),
+        updatedAt: ts,
+      } as any),
+    );
+  }
+
+  const group: QuestionGroup = {
+    ...data,
+    id: groupId,
+    ownerType,
+    ownerId,
+    childIds: built.map((q) => q.id),
+    isDeleted: false,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+  batch.set(doc(db, COL.questionGroups, groupId), removeUndefined(group as any));
+
+  await batch.commit();
+
+  // Children are ordinary questions and count toward the taxonomy totals the
+  // same way standalone ones do — the builder's availability numbers would
+  // under-report group content otherwise.
+  if (!opts?.skipCounterBump) {
+    for (const q of built) {
+      await bumpTaxonomyCounts({ subjectId: q.subjectId, topicId: q.topicId }, +1);
+    }
+  }
+
+  console.log(`✅ [QB] createQuestionGroup → ${groupId} (${built.length} children, ${ownerType}:${ownerId})`);
+  return { group, children: built };
+}
+
+export async function getQuestionGroup(id: string): Promise<QuestionGroup | null> {
+  const snap = await getDoc(doc(db, COL.questionGroups, id));
+  if (!snap.exists()) return null;
+  const g = snap.data() as QuestionGroup;
+  return g.isDeleted ? null : g;
+}
+
+/** Batch-load groups by id (chunked at Firestore's 30-value `in` limit). */
+export async function getQuestionGroupsByIds(ids: string[]): Promise<QuestionGroup[]> {
+  if (ids.length === 0) return [];
+  const out: QuestionGroup[] = [];
+  for (let i = 0; i < ids.length; i += 30) {
+    const chunk = ids.slice(i, i + 30);
+    const snap = await getDocs(query(collection(db, COL.questionGroups), where('id', 'in', chunk)));
+    snap.docs.forEach((d) => {
+      const g = d.data() as QuestionGroup;
+      if (!g.isDeleted) out.push(g);
+    });
+  }
+  return out;
+}
+
+export async function getAllQuestionGroups(): Promise<QuestionGroup[]> {
+  const snap = await getDocs(collection(db, COL.questionGroups));
+  return snap.docs.map((d) => d.data() as QuestionGroup).filter((g) => !g.isDeleted);
+}
+
+/**
+ * Owner-scoped group listing.
+ * The ownerType/ownerId equality filters are what make the query provable
+ * under the read fence in firestore.rules — same contract as
+ * getQuestionsByOwner. Dropping them turns this into an unfiltered scan,
+ * which rules reject for anyone but the webOwner.
+ */
+export async function getQuestionGroupsByOwner(
+  ownerType: QuestionOwnerType,
+  ownerId: string,
+): Promise<QuestionGroup[]> {
+  const snap = await getDocs(query(
+    collection(db, COL.questionGroups),
+    where('ownerType', '==', ownerType),
+    where('ownerId', '==', ownerId),
+  ));
+  return snap.docs.map((d) => d.data() as QuestionGroup).filter((g) => !g.isDeleted);
+}
+
+/** Load a group together with its child questions, in stored child order. */
+export async function getQuestionGroupWithChildren(
+  id: string,
+  opts: QuestionReadOpts = { includeAnswer: true },
+): Promise<{ group: QuestionGroup; children: Question[] } | null> {
+  const group = await getQuestionGroup(id);
+  if (!group) return null;
+  const children = await getQuestionsByIds(group.childIds, opts);
+  const byId = new Map(children.map((q) => [q.id, q]));
+  // Order by childIds, not by whatever the batch read returned, and skip ids
+  // that no longer resolve rather than rendering a hole.
+  const ordered = group.childIds.map((cid) => byId.get(cid)).filter((q): q is Question => !!q);
+  return { group, children: ordered };
+}
+
+export async function updateQuestionGroup(
+  id: string,
+  data: Partial<Omit<QuestionGroup, 'id' | 'createdAt'>>,
+): Promise<void> {
+  await updateDoc(doc(db, COL.questionGroups, id), removeUndefined({ ...data, updatedAt: now() } as any));
+  console.log(`✅ [QB] updateQuestionGroup → ${id}`);
+}
+
+/**
+ * Soft-delete a group AND its children.
+ *
+ * The cascade is mandatory, not a convenience. Children are ordinary question
+ * documents, so a child left alive after its group is deleted stays eligible
+ * for any ordinary topic rule — and would then be drawn into an exam with its
+ * stimulus gone, as an unanswerable question. Deleting the container has to
+ * delete what only made sense inside it.
+ */
+export async function softDeleteQuestionGroup(id: string): Promise<void> {
+  const snap = await getDoc(doc(db, COL.questionGroups, id));
+  if (!snap.exists()) return;
+  const group = snap.data() as QuestionGroup;
+  if (group.isDeleted) return;
+
+  const children = await getQuestionsByIds(group.childIds, { includeAnswer: false });
+  const ts = now();
+  const batch = writeBatch(db);
+
+  batch.update(doc(db, COL.questionGroups, id), { isDeleted: true, updatedAt: ts });
+  for (const child of children) {
+    batch.update(doc(db, COL.questions, child.id), { isDeleted: true, updatedAt: ts });
+  }
+  await batch.commit();
+
+  for (const child of children) {
+    if (!child.isDeleted) {
+      await bumpTaxonomyCounts({ subjectId: child.subjectId, topicId: child.topicId }, -1);
+    }
+  }
+  console.log(`✅ [QB] softDeleteQuestionGroup → ${id} (+${children.length} children)`);
 }
 
 // ══════════════════════════════════════════════════════════════════

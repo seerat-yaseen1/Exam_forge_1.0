@@ -3,17 +3,65 @@
  * assignments list and builder (Batch F1a: extracted verbatim from
  * AssignmentsPage.tsx; no logic changes).
  */
-import { type AssessmentStatus } from '../../../../lib/assessmentService';
+import { type AssessmentStatus, type RuleKind } from '../../../../lib/assessmentService';
+import { type GroupKind } from '../../../../lib/questionBankService';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
 export type RuleDraft = {
+  /** Absent = 'topic' — matches QuestionSelectionRule's legacy-safe default. */
+  kind?: RuleKind;
   subject: string;
   topic: string;           // specific topic within subject
   difficulty: Difficulty;
   count: string;           // string for <input> binding
   marksPerQuestion: string;
+
+  // ── Group-rule fields (kind === 'group') ──────────────────────────
+  // Strings for <input> binding, same as `count`.
+  groupKind?: GroupKind;
+  groupCount?: string;
+  /** '' or 'all' means every child of the drawn group. */
+  questionsPerGroup?: string;
+
+  // ── Hand-picked selection (either kind) ───────────────────────────
+  fixedQuestionIds?: string[];
+  fixedGroupIds?: string[];
 };
+
+/**
+ * How many questions a DRAFT rule contributes.
+ *
+ * The draft twin of ruleQuestionCount in assessmentService: same null-means-
+ * unknowable contract, because a group drawing 'all' of its children cannot be
+ * counted until the draw happens. Builder totals and the "at least 1 question"
+ * publish check both go through this so neither has to narrow the draft shape
+ * itself — and so neither silently counts a group rule as zero.
+ */
+export function draftQuestionCount(r: RuleDraft): number | null {
+  if (r.kind === 'group') {
+    const groups = parseInt(r.groupCount ?? '', 10) || 0;
+    const per = r.questionsPerGroup;
+    if (!per || per === 'all') return null;
+    const perN = parseInt(per, 10) || 0;
+    return groups * perN;
+  }
+  if (r.fixedQuestionIds && r.fixedQuestionIds.length > 0) return r.fixedQuestionIds.length;
+  return parseInt(r.count, 10) || 0;
+}
+
+/** True when the rule asks for anything at all — the "is this row live?" test. */
+export function draftIsLive(r: RuleDraft): boolean {
+  if (r.kind === 'group') return (parseInt(r.groupCount ?? '', 10) || 0) > 0;
+  if (r.fixedQuestionIds && r.fixedQuestionIds.length > 0) return true;
+  return (parseInt(r.count, 10) || 0) > 0;
+}
+
+/** Marks a draft rule contributes, or null when its count is unknowable. */
+export function draftTotalMarks(r: RuleDraft): number | null {
+  const n = draftQuestionCount(r);
+  return n === null ? null : n * (parseFloat(r.marksPerQuestion) || 0);
+}
 
 export type SectionDraft = {
   id: string;

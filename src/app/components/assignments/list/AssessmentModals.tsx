@@ -6,7 +6,8 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Trash2, Loader2, AlertTriangle, CalendarClock, Timer, CheckSquare, Square, Copy } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
-import { type DuplicateOptions, describeAssignment, type Assessment } from '../../../../lib/assessmentService';
+import { type DuplicateOptions, describeAssignment, isGroupRule, ruleQuestionCount, type Assessment } from '../../../../lib/assessmentService';
+import { GROUP_KIND_LABEL } from '../../../../lib/questionBankService';
 import { type Subject } from '../../../../lib/subjectService';
 import { Difficulty, DIFF_COLORS, formatDateTime, formatDateShort, truncate } from '../builder/shared';
 import { StatusBadgeChip, MetaItem } from './ListChrome';
@@ -248,7 +249,7 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
                     </div>
                     {sec.rules.length > 0 && (
                       <div className="px-3 py-2.5 space-y-1">
-                        {sec.rules.filter(r => r.count > 0).map((r, ri) => {
+                        {sec.rules.filter(r => (ruleQuestionCount(r) ?? 1) > 0).map((r, ri) => {
                           const dc = DIFF_COLORS[r.difficulty as Difficulty];
                           return (
                             <div key={ri} className="flex items-center justify-between text-xs py-0.5">
@@ -257,11 +258,22 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
                                   style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 10 }}>
                                   {r.difficulty}
                                 </span>
+                                {isGroupRule(r) && (
+                                  <span
+                                    title="Grouped set — shared passage, chart or scenario"
+                                    style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10, padding: '1px 5px' }}>
+                                    {r.groupKind ? GROUP_KIND_LABEL[r.groupKind] : 'Grouped Set'}
+                                  </span>
+                                )}
                                 <span style={{ color: 'var(--ef-text-muted)' }}>{r.subject}</span>
                                 <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>›</span>
                                 <span style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>{r.topic}</span>
                               </div>
-                              <span style={{ color: 'var(--ef-text-muted)' }}>{r.count} × {r.marksPerQuestion} mk</span>
+                              <span style={{ color: 'var(--ef-text-muted)' }}>
+                                {isGroupRule(r)
+                                  ? `${r.groupCount} × ${r.questionsPerGroup === 'all' ? 'all' : r.questionsPerGroup} Q × ${r.marksPerQuestion} mk`
+                                  : `${ruleQuestionCount(r) ?? 0} × ${r.marksPerQuestion} mk`}
+                              </span>
                             </div>
                           );
                         })}

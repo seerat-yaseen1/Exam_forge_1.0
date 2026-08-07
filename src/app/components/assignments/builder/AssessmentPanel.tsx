@@ -6,11 +6,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ChevronRight, Lock } from 'lucide-react';
-import { type Assessment, type AssessmentDraft, type AssessmentStatus } from '../../../../lib/assessmentService';
-import { type Question } from '../../../../lib/questionBankService';
+import { type Assessment, type AssessmentDraft, type AssessmentStatus, isGroupRule } from '../../../../lib/assessmentService';
+import { type Question, type QuestionGroup } from '../../../../lib/questionBankService';
 import { type Subject } from '../../../../lib/subjectService';
 import { type AllocationNodeType } from '../../../../lib/allocationService';
-import { makeSectionId, type SectionDraft } from './shared';
+import { makeSectionId, draftQuestionCount, draftTotalMarks, type RuleDraft, type SectionDraft } from './shared';
 import { SetupStep } from './SetupStep';
 import { DetailsStep } from './DetailsStep';
 
@@ -18,10 +18,12 @@ import { DetailsStep } from './DetailsStep';
 // ASSESSMENT PANEL — full-page orchestrator
 // ══════════════════════════════════════════════════════════════════
 
-export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClose }: {
+export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = [], onSave, onClose }: {
   mode: 'create' | 'edit';
   assessment: Assessment | null;
   allQuestions: Question[];
+  /** Question groups visible to the author — the pool group rules draw from. */
+  allGroups?: QuestionGroup[];
   onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }, allocation: { mode: 'legacy' | 'rules'; nodeType: AllocationNodeType | ''; nodeIds: string[]; expectedVersion: number }) => Promise<void>;
   onClose: () => void;
 }) {
@@ -70,13 +72,32 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
         questionTimeLimit: sec.questionTimeLimit?.toString() ?? '',
         // Restore assigned topics; fall back to inferring from existing rules for old assessments
         assignedTopics: sec.assignedTopics ?? [...new Set(sec.rules.map((r) => `${r.subject}::${r.topic}`))],
-        rules: sec.rules.map((r) => ({
-          subject: r.subject,
-          topic: r.topic,
-          difficulty: r.difficulty,
-          count: r.count.toString(),
-          marksPerQuestion: r.marksPerQuestion.toString(),
-        })),
+        // Both rule kinds round-trip. A group rule that came back as a topic
+        // draft would be silently rewritten into a random topic draw the next
+        // time the author saved — losing the set structure without telling
+        // them — so the discriminant is carried explicitly.
+        rules: sec.rules.map((r): RuleDraft => isGroupRule(r)
+          ? {
+              kind: 'group',
+              subject: r.subject,
+              topic: r.topic,
+              difficulty: r.difficulty,
+              count: '',
+              marksPerQuestion: r.marksPerQuestion.toString(),
+              groupKind: r.groupKind,
+              groupCount: r.groupCount.toString(),
+              questionsPerGroup: r.questionsPerGroup === 'all' ? 'all' : r.questionsPerGroup.toString(),
+              ...(r.fixedGroupIds ? { fixedGroupIds: r.fixedGroupIds } : {}),
+            }
+          : {
+              kind: 'topic',
+              subject: r.subject,
+              topic: r.topic,
+              difficulty: r.difficulty,
+              count: r.count.toString(),
+              marksPerQuestion: r.marksPerQuestion.toString(),
+              ...(r.fixedQuestionIds ? { fixedQuestionIds: r.fixedQuestionIds } : {}),
+            }),
         breakAfterMinutes: sec.breakAfter?.durationMinutes?.toString() ?? '',
         breakMandatory: sec.breakAfter?.mandatory ?? false,
       }));
@@ -93,8 +114,14 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
     }];
   });
 
-  const grandTotalQ = sections.reduce((s, sec) => s + sec.rules.reduce((ss, r) => ss + (parseInt(r.count, 10) || 0), 0), 0);
-  const grandTotalMarks = sections.reduce((s, sec) => sec.rules.reduce((ss, r) => ss + (parseInt(r.count, 10) || 0) * (parseFloat(r.marksPerQuestion) || 0), s), 0);
+  // A group rule set to "all children" has no knowable count until the draw
+  // happens at publish. Rather than counting it as zero — which would show a
+  // confidently wrong total — those rules are excluded from the sum and the
+  // total is marked approximate.
+  const allRules = sections.flatMap((sec) => sec.rules);
+  const hasUnknownCount = allRules.some((r) => draftQuestionCount(r) === null);
+  const grandTotalQ = allRules.reduce((s, r) => s + (draftQuestionCount(r) ?? 0), 0);
+  const grandTotalMarks = allRules.reduce((s, r) => s + (draftTotalMarks(r) ?? 0), 0);
 
   return (
     <motion.div
@@ -137,7 +164,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
         {step >= 2 && grandTotalQ > 0 && (
           <span className="text-xs px-2.5 py-1"
             style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}>
-            {sections.length} section{sections.length !== 1 ? 's' : ''} · {grandTotalQ} Q · {grandTotalMarks} marks
+            {sections.length} section{sections.length !== 1 ? 's' : ''} · {hasUnknownCount ? '≥ ' : ''}{grandTotalQ} Q · {hasUnknownCount ? '≥ ' : ''}{grandTotalMarks} marks
           </span>
         )}
 
@@ -184,6 +211,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, onSave, onClos
               <DetailsStep
                 mode={mode} assessment={assessment} originalStatus={assessment?.status}
                 allQuestions={allQuestions}
+                allGroups={allGroups}
                 sections={sections} setSections={setSections}
                 onBack={() => setStep(1)} onSave={onSave}
                 title={title} description={description} subject={subject} status={status}

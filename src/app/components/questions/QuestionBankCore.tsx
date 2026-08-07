@@ -721,7 +721,14 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
       if (!silent) setLoading(true);
       try {
         const [qs, subjs, tops, grps] = await Promise.all([
-          getAllQuestions(), getAllSubjects(), getAllTopics(), getAllQuestionGroups(),
+          getAllQuestions(), getAllSubjects(), getAllTopics(),
+          // FAILS SOFT — see the identical catch in AssignmentsPage. Grouped
+          // sets are additive; an unreadable /questionGroups must never empty
+          // the question bank sitting beside it in this Promise.all.
+          getAllQuestionGroups().catch((e) => {
+            console.warn('[question bank] question groups unavailable — continuing without them', e);
+            return [];
+          }),
         ]);
         setQuestions(qs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
         setSubjects(subjs);

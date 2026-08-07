@@ -12,6 +12,11 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { ensureSebToken } from './assessmentService';
 import { db, functions } from './firebase';
+import {
+  ITEM_TYPE_BY_ID,
+  ITEM_TYPE_FOR_GROUP_KIND,
+  itemTypeForQuestion,
+} from './itemTypes';
 import { bumpTaxonomyCounts } from './subjectService';
 import { getFlatReceivedQuestions } from './questionShareService';
 
@@ -185,13 +190,20 @@ export type GroupKind =
 
 export const GROUP_KINDS: GroupKind[] = ['di', 'rc', 'caselet', 'puzzle', 'seating', 'generic'];
 
+/**
+ * Display name per kind, taken from the item-type registry so a group kind and
+ * the taxonomy entry it implements can never be called two different things in
+ * two different panels. `generic` reads as "Multi-question Passage" — that is
+ * what the taxonomy calls a shared stimulus with no more specific flavour.
+ * Use `ITEM_TYPE_BY_ID[...].badge` where a short chip is wanted instead.
+ */
 export const GROUP_KIND_LABEL: Record<GroupKind, string> = {
-  di:      'Data Interpretation',
-  rc:      'Reading Comprehension',
-  caselet: 'Caselet',
-  puzzle:  'Puzzle',
-  seating: 'Seating Arrangement',
-  generic: 'Grouped Set',
+  di:      ITEM_TYPE_BY_ID[ITEM_TYPE_FOR_GROUP_KIND.di].label,
+  rc:      ITEM_TYPE_BY_ID[ITEM_TYPE_FOR_GROUP_KIND.rc].label,
+  caselet: ITEM_TYPE_BY_ID[ITEM_TYPE_FOR_GROUP_KIND.caselet].label,
+  puzzle:  ITEM_TYPE_BY_ID[ITEM_TYPE_FOR_GROUP_KIND.puzzle].label,
+  seating: ITEM_TYPE_BY_ID[ITEM_TYPE_FOR_GROUP_KIND.seating].label,
+  generic: ITEM_TYPE_BY_ID[ITEM_TYPE_FOR_GROUP_KIND.generic].label,
 };
 
 /**
@@ -1561,36 +1573,24 @@ export async function getFlatQuestionsForFaculty(
 // DISPLAY HELPERS
 // ══════════════════════════════════════════════════════════════════
 
+// Both helpers resolve through the item-type registry (src/lib/itemTypes.ts),
+// which is the single place item types are named. They keep their old
+// signatures because every caller has an engine + variant in hand and no
+// reason to learn about ids; callers that want the richer record — category,
+// scoring, status — should call `itemTypeForQuestion` directly.
+//
+// An unknown engine/variant pair resolves to null rather than throwing: the
+// bank lists whatever Firestore returns, and one malformed document must not
+// take the page down. It renders as 'Unknown' / '—', exactly as before.
+
 /** Human-readable label for a question engine + variant combination. */
 export function questionTypeLabel(engine: QuestionEngine, variant: QuestionVariant): string {
-  if (engine === 'mcq') {
-    if (variant === 'single')    return 'MCQ — Single Correct';
-    if (variant === 'multi')     return 'MCQ — Multi Correct';
-    if (variant === 'truefalse') return 'True / False';
-    if (variant === 'fillblank') return 'Fill in the Blank';
-  }
-  if (engine === 'text') {
-    if (variant === 'short') return 'Short Answer';
-    if (variant === 'long')  return 'Long / Essay';
-  }
-  if (engine === 'match') return 'Match the Following';
-  return 'Unknown';
+  return itemTypeForQuestion(engine, variant)?.label ?? 'Unknown';
 }
 
 /** Short badge label (for chips / pills). */
 export function questionTypeBadge(engine: QuestionEngine, variant: QuestionVariant): string {
-  if (engine === 'mcq') {
-    if (variant === 'single')    return 'MCQ';
-    if (variant === 'multi')     return 'Multi';
-    if (variant === 'truefalse') return 'T/F';
-    if (variant === 'fillblank') return 'Fill';
-  }
-  if (engine === 'text') {
-    if (variant === 'short') return 'Short';
-    if (variant === 'long')  return 'Essay';
-  }
-  if (engine === 'match') return 'Match';
-  return '—';
+  return itemTypeForQuestion(engine, variant)?.badge ?? '—';
 }
 
 /** Colour token for difficulty badge. */

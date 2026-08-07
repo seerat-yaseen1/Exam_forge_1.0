@@ -155,19 +155,27 @@ type ItemTypeSpec = {
  */
 const ITEM_TYPE_SPECS = {
   // ── Objective ───────────────────────────────────────────────────
-  'mcq': {
+  //
+  // MCQ is ONE type in two forms, not two types. Both are multiple-choice
+  // questions; they differ in how many options are correct, and the interface
+  // has to say which form the candidate is looking at before they answer —
+  // single renders round radio indicators, multiple renders square checkboxes
+  // and states outright that more than one option is correct. A candidate who
+  // picks one answer to a multiple-correct question because nothing told them
+  // otherwise has been failed by the interface, not by their knowledge.
+  'mcq-single': {
     category: 'objective',
     label: 'MCQ — Single Correct',
     badge: 'MCQ',
     scoring: 'auto',
-    summary: 'One correct answer from multiple options.',
+    summary: 'Exactly one option is correct. Shown as radio buttons.',
   },
-  'msq': {
+  'mcq-multi': {
     category: 'objective',
-    label: 'MSQ — Multiple Select',
+    label: 'MCQ — Multiple Correct',
     badge: 'Multi',
     scoring: 'auto',
-    summary: 'One or more options may be correct; partial credit applies.',
+    summary: 'More than one option is correct. Shown as checkboxes, labelled as such, and given partial credit.',
   },
   'true-false': {
     category: 'objective',
@@ -607,8 +615,8 @@ export const ITEM_TYPES: ItemTypeDef[] = ITEM_TYPE_IDS.map((id) => ITEM_TYPE_BY_
 // member names the taxonomy entry it satisfies.
 
 export const ITEM_TYPE_FOR_MCQ_VARIANT: Record<MCQVariant, ItemTypeId> = {
-  single:    'mcq',
-  multi:     'msq',
+  single:    'mcq-single',
+  multi:     'mcq-multi',
   truefalse: 'true-false',
   fillblank: 'fill-blank',
 };

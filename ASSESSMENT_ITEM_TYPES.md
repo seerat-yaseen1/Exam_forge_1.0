@@ -26,7 +26,7 @@ Assessment Item
 │
 ├── Objective
 │   ├── ✅ MCQ — Single Correct
-│   ├── ✅ MSQ — Multiple Select
+│   ├── ✅ MCQ — Multiple Correct
 │   ├── ✅ True / False
 │   ├── ✅ Match the Following
 │   ├── ◻ Sequence / Ordering
@@ -102,7 +102,7 @@ are ordinary questions.
 | Taxonomy entry | Binding | Scoring |
 |---|---|---|
 | MCQ — Single Correct | `mcq` / `single` | auto |
-| MSQ — Multiple Select | `mcq` / `multi` | auto, partial credit |
+| MCQ — Multiple Correct | `mcq` / `multi` | auto, partial credit |
 | True / False | `mcq` / `truefalse` | auto |
 | Fill in the Blank | `mcq` / `fillblank` | auto |
 | Match the Following | `match` / `null` | auto, proportional |
@@ -119,7 +119,25 @@ Grouped sets say "auto" because their children are MCQs in practice — a child
 is an ordinary question with an ordinary engine, so a Long Answer child is
 graded by hand exactly like a standalone one.
 
-### Four mapping decisions worth stating outright
+### Five mapping decisions worth stating outright
+
+**MCQ is one type in two forms, not two types.** Single Correct and Multiple
+Correct are both multiple-choice questions; they differ in how many options are
+correct. What matters is that the candidate knows which form they are looking at
+*before* they answer, so the two are separated by affordance and by wording:
+
+| | Single Correct | Multiple Correct |
+|---|---|---|
+| Indicator | round radio | square checkbox |
+| Instruction | none needed | **"More than one option is correct — select all that apply."** |
+| Selection | replaces the previous one | toggles independently |
+| Scoring | right or wrong | partial credit, `(hits − wrongs) / correct` |
+
+"Select all that apply" on its own was not enough. It reads as "tick any that
+happen to fit", which a candidate can satisfy with one box and move on — and the
+checkbox shape is then the only remaining signal, which is easy to miss on a
+phone. The instruction now states the fact rather than the interface, and is set
+in ink rather than muted grey because it is a rule of the question.
 
 **Fill in the Blank is option-based, not free-entry.** The stem carries `___`
 and the candidate picks from supplied answer candidates. A true typed-response
@@ -340,7 +358,8 @@ Three labels move to the taxonomy's vocabulary:
 | Where | Was | Now |
 |---|---|---|
 | `text`/`long`, everywhere | "Long / Essay" (badge "Essay") | "Long Answer" (badge "Long") |
-| `mcq`/`multi`, everywhere | "MCQ — Multi Correct" | "MSQ — Multiple Select" |
+| `mcq`/`multi`, everywhere | "MCQ — Multi Correct" | "MCQ — Multiple Correct" |
+| `mcq`/`multi`, in the exam | "Select all that apply." (muted) | "More than one option is correct — select all that apply." (ink) |
 | group kind `generic` | "Grouped Set" | "Multi-question Passage" |
 | `match` in the type picker | "Match the Columns" | "Match the Following" (the name the rest of the app already used) |
 
@@ -350,7 +369,7 @@ rather than its own shorter variant of it ("MCQ — Single Correct", not "MCQ").
 ## 9 · Open questions
 
 1. **Section-to-type locking.** The builder plan locks a section to one item
-   type. At what granularity — engine (`mcq`), taxonomy entry (`msq`), or
+   type. At what granularity — engine (`mcq`), taxonomy entry (`mcq-multi`), or
    category (`objective`)? Category is the most useful and the least
    restrictive; entry is what the plan literally says.
 2. **Matrix / Grid's answer shape** decides whether "one question, one answer

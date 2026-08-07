@@ -4628,6 +4628,11 @@ function sanitizeQuestionForStudent(q: Record<string, unknown>, includeExplanati
     topicId:     q.topicId ?? null,
     tags:        Array.isArray(q.tags) ? q.tags : [],
     difficulty:  q.difficulty ?? 'medium',
+    // Group membership (Phase 1). Without these two the exam shell cannot
+    // tell which questions share a stimulus, and every grouped question
+    // renders as a standalone one with its passage missing.
+    groupId:     q.groupId ?? null,
+    groupOrder:  typeof q.groupOrder === 'number' ? q.groupOrder : null,
     explanation: includeExplanation ? (q.explanation ?? '') : '',
     correctIds:   [] as string[],
     correctPairs: [] as CorrectPair[],
@@ -4635,6 +4640,45 @@ function sanitizeQuestionForStudent(q: Record<string, unknown>, includeExplanati
     isDeleted:   false,
     createdAt:   q.createdAt ?? '',
     updatedAt:   q.updatedAt ?? '',
+  };
+}
+
+// ── Shared student-facing GROUP sanitizer (Phase 1) ───────────────
+// The stimulus half of the whitelist. Same contract as
+// sanitizeQuestionForStudent: an explicit allow-list, so a field added to
+// group documents later cannot reach a student by default.
+//
+// Notably ABSENT and deliberately so:
+//   • childIds — the group's full membership. A paper may use 3 of 8
+//     children; handing over all 8 ids tells a candidate exactly how much of
+//     the set they were not asked, and hands anyone scraping the payload a
+//     map of the bank's structure. The student's own paper already tells
+//     them which questions they have.
+//   • ownerType / ownerId / instituteId — tenant internals.
+//   • isDeleted, createdAt, updatedAt — bank bookkeeping.
+function sanitizeGroupForStudent(g: Record<string, unknown>) {
+  const stimulus = (g.stimulus ?? {}) as Record<string, unknown>;
+  const table = stimulus.table as Record<string, unknown> | undefined;
+  return {
+    id:    g.id,
+    kind:  g.kind ?? 'generic',
+    // title is the author's INTERNAL label ("DI — hard set, reuse Q3") and is
+    // not written for candidates. The stimulus speaks for itself.
+    stimulus: {
+      format: stimulus.format ?? 'richtext',
+      body:   stimulus.body ?? '',
+      images: Array.isArray(stimulus.images) ? stimulus.images : [],
+      // Rows are `{ cells: [...] }` objects, not a 2-D array: Firestore
+      // rejects nested arrays outright, so this is the only shape that can
+      // have been stored. Passed through as-is.
+      table:  table
+        ? {
+            caption: table.caption ?? '',
+            headers: Array.isArray(table.headers) ? table.headers : [],
+            rows:    Array.isArray(table.rows) ? table.rows : [],
+          }
+        : null,
+    },
   };
 }
 
@@ -4850,7 +4894,42 @@ export const getExamQuestions = onCall<GetExamQuestionsData>(
       .filter((q) => q.isDeleted !== true)
       .map((q) => sanitizeQuestionForStudent(q, includeExplanation));
 
-    return { ok: true, questions };
+    // ── Shared stimulus for grouped questions (Phase 1) ──────────────
+    // Fetched HERE rather than by the client for the same reason the
+    // questions are: /questionGroups denies students outright, because a
+    // reading passage is content worth as much as an answer key — a leaked
+    // passage burns the whole set. This is the only path stimulus reaches a
+    // student, it is scoped to their own paper, and it is whitelisted.
+    //
+    // Only groups actually referenced by the questions above are loaded, so a
+    // paper with no grouped questions costs no extra reads and returns [].
+    const groupIds = Array.from(new Set(
+      questions
+        .map((q) => q.groupId)
+        .filter((g): g is string => typeof g === 'string' && g.length > 0),
+    ));
+
+    let groups: ReturnType<typeof sanitizeGroupForStudent>[] = [];
+    if (groupIds.length > 0) {
+      const gSnaps: FirebaseFirestore.DocumentSnapshot[] = [];
+      for (let i = 0; i < groupIds.length; i += 300) {
+        const refs = groupIds.slice(i, i + 300).map((id) => db.collection('questionGroups').doc(id));
+        gSnaps.push(...await db.getAll(...refs));
+      }
+      groups = gSnaps
+        .filter((s) => s.exists)
+        .map((s) => s.data() as Record<string, unknown>)
+        // isDeleted is NOT filtered here, unlike the questions above. If a
+        // child question survived on the paper, its stimulus must be served
+        // with it — withholding the passage of a question the student is
+        // still being asked leaves them an unanswerable item. Deleting a
+        // group normally cascades to its children, so they drop out together
+        // and this list simply comes back empty; this branch covers the case
+        // where they did not.
+        .map((g) => sanitizeGroupForStudent(g));
+    }
+
+    return { ok: true, questions, groups };
   }
 );
 
@@ -7712,18 +7791,52 @@ export const startExam = onCall<StartExamData>(
     }
     const sectionIds = ordered.map((s) => s.id);
 
+    // ── Question order, with grouped sets kept intact (Phase 1) ──────
+    //
+    // Shuffling is per-question EXCEPT across a group. A grouped set — a DI
+    // chart, an RC passage, a caselet, a seating scenario — is one unit of
+    // work: its questions are written to be read together, often ramp in
+    // difficulty, and routinely refer to each other ("in the year identified
+    // in Q2..."). A flat Fisher-Yates over the section would scatter them
+    // between unrelated questions and reorder them internally, which is not a
+    // harder paper, it is a broken one.
+    //
+    // So: build blocks, where a standalone question is a block of one and a
+    // group is a block of all its questions in groupOrder. Shuffle the BLOCKS.
+    // Group members stay contiguous and stay in their authored order.
+    //
+    // Unchanged for every pre-Phase-1 paper: with no groupId anywhere, every
+    // block has length 1 and this is exactly the old per-question shuffle.
     const questionOrder: Record<string, string[]> = {};
     for (const sec of ordered) {
-      const qids = [...sec.questions]
-        .sort((x, y) => (x.order ?? 0) - (y.order ?? 0))
-        .map((q) => q.questionId);
+      const sorted = [...sec.questions].sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
+
+      // Blocks, in first-appearance order.
+      const blocks: string[][] = [];
+      const blockByGroup = new Map<string, string[]>();
+      for (const q of sorted) {
+        const gid = (q as { groupId?: string }).groupId;
+        if (!gid) {
+          blocks.push([q.questionId]);
+          continue;
+        }
+        let block = blockByGroup.get(gid);
+        if (!block) {
+          block = [];
+          blockByGroup.set(gid, block);
+          blocks.push(block);
+        }
+        block.push(q.questionId);
+      }
+
       if (shuffleQuestions) {
-        for (let i = qids.length - 1; i > 0; i--) {
+        for (let i = blocks.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
-          [qids[i], qids[j]] = [qids[j], qids[i]];
+          [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
         }
       }
-      questionOrder[sec.id] = qids;
+
+      questionOrder[sec.id] = blocks.flat();
     }
 
     // ── Served-question sequence (Phase 0) ────────────────────────
@@ -9799,6 +9912,221 @@ export const deleteQuestionAsRole = onCall<{ id?: string; subjectId?: string | n
       topicId:   request.data?.topicId ?? null,
     });
     return { ok: true };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
+// QUESTION GROUPS — role-gated writes (Phase 1)
+// ══════════════════════════════════════════════════════════════════
+//
+// firestore.rules allows direct writes to /questionGroups for the webOwner
+// only, for the same reason /questions does: the questionRightsCeiling and
+// Faculty.questionRights model lives inside assertQuestionRight, and a rule
+// that authorized by identity alone would let anyone with DevTools skip it.
+// These callables are therefore the ONLY way institute and faculty content
+// reaches the collection.
+//
+// They deliberately reuse the EXISTING create/edit/delete question rights
+// rather than introducing group-specific ones. Authoring a DI set is authoring
+// questions; a separate right would mean every ceiling already configured on
+// the platform silently failed to cover the new content type.
+
+interface GroupWritePayload {
+  id?: string;
+  /** Group fields the client assembled, minus owner/stamp (server assigns). */
+  group?: Record<string, unknown>;
+  /** Child questions, in order. Create only. */
+  children?: Record<string, unknown>[];
+  subjectId?: string | null;
+  topicId?: string | null;
+}
+
+/** Batch-write ceiling: each child costs 2 writes, the group 1. */
+const MAX_GROUP_CHILDREN = 249;
+
+/**
+ * Create a group and its children as institute/faculty.
+ *
+ * The group and every child are committed in ONE batch. A half-written group
+ * is not a degraded result, it is two distinct bugs: a stimulus with no
+ * questions, or — worse — children with no stimulus, which stay eligible for
+ * ordinary topic rules and can be drawn into an exam as unanswerable items.
+ */
+export const createQuestionGroupAsRole = onCall<GroupWritePayload>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, 'create');
+
+    const src = request.data?.group;
+    const children = request.data?.children;
+    if (!src || typeof src !== 'object') {
+      throw new HttpsError('invalid-argument', 'Missing group payload.');
+    }
+    if (!Array.isArray(children) || children.length === 0) {
+      throw new HttpsError('invalid-argument', 'A question group needs at least one child question.');
+    }
+    if (children.length > MAX_GROUP_CHILDREN) {
+      throw new HttpsError('invalid-argument',
+        `A question group can hold at most ${MAX_GROUP_CHILDREN} questions (got ${children.length}).`);
+    }
+
+    const nowIso = new Date().toISOString();
+    const groupId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const batch = db.batch();
+
+    // Children carry the group's id and their position, and inherit the
+    // owner/tenant stamps from buildQuestionDocs — the same stamps the group
+    // gets below. Divergent stamps would leave a group and its children on
+    // opposite sides of the tenant fence.
+    const childIds: string[] = [];
+    children.forEach((child, idx) => {
+      const { id, publicDoc, answerDoc } = buildQuestionDocs(
+        owner,
+        { ...child, groupId, groupOrder: idx },
+        idx,
+      );
+      childIds.push(id);
+      batch.set(db.collection('questions').doc(id), publicDoc);
+      batch.set(db.collection('questionAnswers').doc(id), answerDoc);
+    });
+
+    const groupDoc = stripUndefined({
+      ...src,
+      id: groupId,
+      childIds,
+      ownerType: owner.ownerType,
+      ownerId:   owner.ownerId,
+      instituteId: owner.instituteId,
+      isDeleted: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    batch.set(db.collection('questionGroups').doc(groupId), groupDoc);
+
+    await batch.commit();
+
+    // Children are ordinary questions and count toward taxonomy totals like
+    // any other, so the builder's availability numbers stay truthful.
+    try {
+      const n = childIds.length;
+      const { subjectId, topicId } = request.data ?? {};
+      if (subjectId) await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(n) });
+      if (topicId)   await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(n) });
+    } catch (e) { console.warn('[createQuestionGroupAsRole] counter bump skipped', e); }
+
+    return { ok: true, id: groupId, childIds };
+  },
+);
+
+/**
+ * Edit a group's own fields (stimulus, metadata) as institute/faculty.
+ * Child questions are edited through editQuestionAsRole like any other
+ * question — this callable does not touch them.
+ */
+export const editQuestionGroupAsRole = onCall<GroupWritePayload>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, 'edit');
+
+    const id = request.data?.id;
+    if (!id) throw new HttpsError('invalid-argument', 'Missing group id.');
+    const src = request.data?.group;
+    if (!src || typeof src !== 'object') throw new HttpsError('invalid-argument', 'Missing group payload.');
+
+    // Ownership: edit is OWN-content-only, same as execEditQuestion.
+    const existing = await db.collection('questionGroups').doc(id).get();
+    if (!existing.exists) throw new HttpsError('not-found', 'Question group not found.');
+    if (existing.get('ownerType') !== owner.ownerType || existing.get('ownerId') !== owner.ownerId) {
+      throw new HttpsError('permission-denied', 'You can only edit your own question groups.');
+    }
+
+    const patch = { ...src };
+    // Server-owned fields are never taken from the client. childIds is in this
+    // list on purpose: membership changes by creating or deleting children,
+    // not by rewriting the array, so accepting it here would let a caller
+    // adopt questions they do not own into their own group.
+    for (const k of ['id', 'ownerType', 'ownerId', 'instituteId', 'createdAt', 'childIds']) {
+      delete patch[k];
+    }
+
+    await db.collection('questionGroups').doc(id).update(
+      stripUndefined({ ...patch, updatedAt: new Date().toISOString() }),
+    );
+    return { ok: true };
+  },
+);
+
+/**
+ * Soft-delete a group AND its children as institute/faculty.
+ *
+ * The cascade is mandatory. Children are ordinary question documents, so a
+ * child left alive after its group is gone stays eligible for any topic rule
+ * and would be drawn into an exam with its stimulus missing. Deleting the
+ * container deletes what only made sense inside it.
+ */
+export const deleteQuestionGroupAsRole = onCall<{ id?: string; subjectId?: string | null; topicId?: string | null }>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const db = getFirestore();
+    const role        = request.auth.token.role        as string | undefined;
+    const instituteId = request.auth.token.instituteId as string | undefined;
+    const facultyId   = request.auth.token.facultyId   as string | undefined;
+
+    const owner = await assertQuestionRight(db, role, instituteId, facultyId, 'delete');
+
+    const id = request.data?.id;
+    if (!id) throw new HttpsError('invalid-argument', 'Missing group id.');
+
+    const snap = await db.collection('questionGroups').doc(id).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Question group not found.');
+    if (snap.get('ownerType') !== owner.ownerType || snap.get('ownerId') !== owner.ownerId) {
+      throw new HttpsError('permission-denied', 'You can only delete your own question groups.');
+    }
+    if (snap.get('isDeleted') === true) return { ok: true, deletedChildren: 0 };
+
+    const childIds: string[] = Array.isArray(snap.get('childIds')) ? snap.get('childIds') : [];
+    const nowIso = new Date().toISOString();
+    const batch = db.batch();
+    batch.update(db.collection('questionGroups').doc(id), { isDeleted: true, updatedAt: nowIso });
+
+    // Only children that are actually still live and actually still point at
+    // this group — a child moved out or already deleted is not ours to touch,
+    // and counting it would corrupt the taxonomy totals below.
+    let deleted = 0;
+    const childSnaps = childIds.length > 0
+      ? await db.getAll(...childIds.map((cid) => db.collection('questions').doc(cid)))
+      : [];
+    for (const child of childSnaps) {
+      if (!child.exists) continue;
+      if (child.get('isDeleted') === true) continue;
+      if (child.get('groupId') !== id) continue;
+      batch.update(child.ref, { isDeleted: true, updatedAt: nowIso });
+      deleted++;
+    }
+    await batch.commit();
+
+    try {
+      const { subjectId, topicId } = request.data ?? {};
+      if (deleted > 0) {
+        if (subjectId) await db.collection('subjects').doc(String(subjectId)).update({ questionCount: FieldValue.increment(-deleted) });
+        if (topicId)   await db.collection('topics').doc(String(topicId)).update({ questionCount: FieldValue.increment(-deleted) });
+      }
+    } catch (e) { console.warn('[deleteQuestionGroupAsRole] counter bump skipped', e); }
+
+    return { ok: true, deletedChildren: deleted };
   },
 );
 

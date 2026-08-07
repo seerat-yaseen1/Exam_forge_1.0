@@ -216,13 +216,32 @@ export type GroupStimulus = {
   /** Firebase Storage download URLs — charts, diagrams, scanned figures. */
   images?: string[];
 
-  /** Structural table for DI sets. */
+  /**
+   * Structural table for DI sets.
+   *
+   * Rows are `{ cells: [...] }` rather than the obvious `string[][]` because
+   * FIRESTORE CANNOT STORE NESTED ARRAYS — a document containing an array of
+   * arrays is rejected outright by the SDK ("Nested arrays are not
+   * supported"), not silently flattened. Wrapping each row in an object is the
+   * standard workaround and the only shape that persists.
+   */
   table?: {
     caption?: string;
     headers: string[];
-    rows: string[][];
+    rows: GroupTableRow[];
   };
 };
+
+export type GroupTableRow = { cells: string[] };
+
+/** Convenience for callers that think in plain 2-D arrays. */
+export function toTableRows(rows: string[][]): GroupTableRow[] {
+  return rows.map((cells) => ({ cells }));
+}
+
+export function fromTableRows(rows: GroupTableRow[] | undefined): string[][] {
+  return (rows ?? []).map((r) => r.cells ?? []);
+}
 
 export type QuestionGroup = {
   id: string;
@@ -890,7 +909,12 @@ export function buildEmptyGroup(kind: GroupKind): Omit<
   return {
     kind,
     title: '',
-    stimulus: { format, body: '', images: [], ...(format === 'table' ? { table: { headers: [''], rows: [['']] } } : {}) },
+    stimulus: {
+      format,
+      body: '',
+      images: [],
+      ...(format === 'table' ? { table: { headers: [''], rows: [{ cells: [''] }] } } : {}),
+    },
     subject: '',
     topic: '',
     tags: [],

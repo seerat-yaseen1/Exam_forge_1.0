@@ -1056,6 +1056,22 @@ export async function getQuestionGroupsByIds(ids: string[]): Promise<QuestionGro
   return out;
 }
 
+/**
+ * All groups, unfiltered.
+ *
+ * webOwner surfaces only, like getAllQuestions beside it: an unfiltered query
+ * is only provable under the read fence in firestore.rules for the webOwner
+ * branch, so institute/faculty callers must use getQuestionGroupsByOwner.
+ *
+ * CALLERS MUST FAIL SOFT. This read can be denied for reasons that have
+ * nothing to do with the caller's own work — rules not yet deployed being the
+ * plain case, since Firestore denies any collection with no matching rule.
+ * Grouped sets are ADDITIVE content, so an unreadable /questionGroups must
+ * never take down whatever is being loaded alongside it. Putting this bare
+ * into a Promise.all with getAllQuestions/getAllAssessments is precisely the
+ * bug that emptied the assignments page and the question bank; both call sites
+ * now carry an explicit .catch(() => []) and any new one needs the same.
+ */
 export async function getAllQuestionGroups(): Promise<QuestionGroup[]> {
   const snap = await getDocs(collection(db, COL.questionGroups));
   return snap.docs.map((d) => d.data() as QuestionGroup).filter((g) => !g.isDeleted);

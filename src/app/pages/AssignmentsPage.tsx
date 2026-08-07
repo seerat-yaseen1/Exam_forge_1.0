@@ -99,7 +99,23 @@ export function AssignmentsPage() {
     if (!silent) setLoading(true);
     try {
       const [assessData, questionsData, groupsData] = await Promise.all([
-        getAllAssessments(), getAllQuestions(), getAllQuestionGroups(),
+        getAllAssessments(),
+        getAllQuestions(),
+        // FAILS SOFT, and must. Grouped sets are additive content: a paper can
+        // be built entirely without them, so failing to read them may never
+        // cost the caller the assessments list or the question bank alongside.
+        //
+        // This is not hypothetical — it is the bug this catch was added for.
+        // A bare read here took down the whole Promise.all whenever
+        // /questionGroups was unreadable (rules not yet deployed being the
+        // obvious case, since Firestore denies any collection with no matching
+        // rule), so setAssessments and setAllQuestions never ran. The page
+        // rendered zero assessments and zero topics against a database that
+        // had lost nothing. Same reasoning as the session claim in ExamShell.
+        getAllQuestionGroups().catch((e) => {
+          console.warn('[assignments] question groups unavailable — continuing without them', e);
+          return [];
+        }),
       ]);
       setAssessments(assessData.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       setAllQuestions(questionsData);

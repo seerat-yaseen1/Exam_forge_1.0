@@ -2,15 +2,18 @@ import React, {
   useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle,
 } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Eye, Pencil, Trash2, Loader2, AlertTriangle, Search } from 'lucide-react';
+import { Plus, X, Eye, Pencil, Trash2, Loader2, AlertTriangle, Search, Layers, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   getAllQuestions,
   createQuestion, updateQuestion, softDeleteQuestion,
+  getAllQuestionGroups, createQuestionGroup, updateQuestionGroup, softDeleteQuestionGroup,
   questionTypeBadge, difficultyColor,
-  type Question, type Difficulty,
+  GROUP_KIND_LABEL,
+  type Question, type Difficulty, type QuestionGroup,
 } from '../../../lib/questionBankService';
 import { getAllSubjects, getAllTopics, type Subject, type Topic } from '../../../lib/subjectService';
 import { QuestionTypeEngine, type QuestionDraft } from './QuestionTypeEngine';
+import { QuestionGroupEditor, type GroupEditorSave } from './QuestionGroupEditor';
 import { QuestionPreview } from './QuestionPreview';
 
 // ══════════════════════════════════════════════════════════════════
@@ -474,6 +477,211 @@ function QuestionPanel({
   );
 }
 
+// ── Grouped sets ──────────────────────────────────────────────────────────────
+
+/**
+ * One grouped set in the bank list, expandable to show its questions.
+ *
+ * Sets get their own section rather than being mixed into the flat question
+ * list, because they are selected as units: a rule asks for "2 DI sets", never
+ * for "10 DI questions". Listing the children loose alongside standalone
+ * questions would suggest they can be picked individually, which is the exact
+ * mistake the resolver refuses to make.
+ */
+function GroupRow({
+  group, childQuestions, onEdit, onDelete, onPreviewChild,
+}: {
+  group: QuestionGroup;
+  /** Named `childQuestions`, not `children` — that name is JSX's, and
+      shadowing it here would make the component read as if it accepted
+      nested elements when it does not. */
+  childQuestions: Question[];
+  onEdit: () => void;
+  onDelete: () => void;
+  onPreviewChild: (q: Question) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const dc = difficultyColor(group.difficulty);
+
+  return (
+    <div style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
+      <div className="flex items-center gap-3 px-5 py-3">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex-shrink-0 p-0.5 transition-opacity hover:opacity-60"
+          style={{ color: 'var(--ef-text-muted)' }}
+          aria-expanded={open}
+          title={open ? 'Collapse' : 'Expand'}
+        >
+          {open ? <ChevronDown size={13} strokeWidth={1.5} /> : <ChevronRight size={13} strokeWidth={1.5} />}
+        </button>
+
+        <span
+          className="flex-shrink-0 text-xs px-1.5 py-0.5"
+          style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10 }}
+        >
+          {GROUP_KIND_LABEL[group.kind] ?? 'Set'}
+        </span>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>{group.title || '(untitled set)'}</p>
+          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+            {group.subject} › {group.topic} · {childQuestions.length} question{childQuestions.length === 1 ? '' : 's'}
+          </p>
+        </div>
+
+        <span
+          className="flex-shrink-0 text-xs px-1.5 py-0.5 capitalize"
+          style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 10 }}
+        >
+          {group.difficulty}
+        </span>
+
+        <div className="flex-shrink-0 flex items-center gap-1">
+          <button onClick={onEdit} title="Edit stimulus" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
+            <Pencil size={13} strokeWidth={1.5} />
+          </button>
+          <button onClick={onDelete} title="Delete set" className="p-1.5 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
+            <Trash2 size={13} strokeWidth={1.5} />
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="px-5 pb-3" style={{ background: 'var(--ef-canvas-raised)' }}>
+          {childQuestions.length === 0 ? (
+            <p className="text-xs py-2" style={{ color: 'var(--ef-danger)' }}>
+              This set has no questions left — it cannot be drawn into a paper.
+            </p>
+          ) : (
+            <div className="space-y-1 pt-2">
+              {childQuestions.map((q, i) => (
+                <button
+                  key={q.id}
+                  onClick={() => onPreviewChild(q)}
+                  className="w-full flex items-center gap-3 px-2 py-1.5 text-left transition-opacity hover:opacity-70"
+                  style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}
+                >
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', minWidth: 16 }}>{i + 1}</span>
+                  <span className="text-xs flex-1 truncate" style={{ color: 'var(--ef-ink)' }}>{truncate(q.stem, 90)}</span>
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+                    {questionTypeBadge(q.engine, q.variant)} · {q.difficulty}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Deleting a set takes its questions with it — say the number out loud. */
+function DeleteGroupModal({
+  group, childCount, onConfirm, onCancel, deleting,
+}: {
+  group: QuestionGroup;
+  childCount: number;
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50" style={{ background: 'rgba(12,12,11,0.28)' }} onClick={onCancel}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.18 }}
+        className="fixed z-50 left-1/2 top-1/2 w-full max-w-md px-6 py-5"
+        style={{
+          transform: 'translate(-50%,-50%)', background: 'var(--ef-surface)',
+          border: '1px solid var(--ef-border)', borderRadius: 3,
+        }}
+      >
+        <div className="flex items-start gap-3 mb-4">
+          <AlertTriangle size={16} strokeWidth={1.5} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--ef-danger)' }} />
+          <div>
+            <p className="text-xs mb-1" style={{ color: 'var(--ef-ink)' }}>Delete this set?</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.65 }}>
+              <strong style={{ color: 'var(--ef-ink)' }}>{group.title || '(untitled set)'}</strong>{' '}
+              and its {childCount} question{childCount === 1 ? '' : 's'} will be deleted together.
+              A question kept without its {group.kind === 'rc' ? 'passage' : 'stimulus'} would be
+              unanswerable, so they cannot be separated.
+            </p>
+            <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.65 }}>
+              Papers already published keep the questions they froze at publish time.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 justify-end">
+          <button onClick={onCancel} className="text-xs px-4 py-2"
+            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2 }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={deleting}
+            className="flex items-center gap-2 text-xs px-4 py-2 disabled:opacity-40"
+            style={{ background: 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2 }}>
+            {deleting && <Loader2 size={12} className="animate-spin" />}
+            Delete set
+          </button>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+/** Slide-over housing the group editor — same chrome as QuestionPanel. */
+function GroupPanel({
+  mode, group, childCount, onSave, onClose,
+}: {
+  mode: 'create' | 'edit';
+  group: QuestionGroup | null;
+  childCount?: number;
+  onSave: (payload: GroupEditorSave) => Promise<void>;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <motion.div
+        key="grp-backdrop"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 z-50"
+        style={{ background: 'rgba(12,12,11,0.18)' }}
+        onClick={onClose}
+      />
+      <motion.div
+        key="grp-body"
+        initial={{ x: 48, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 48, opacity: 0 }}
+        transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+        className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:w-[620px] sm:max-w-full"
+        style={{ background: 'var(--ef-surface)', borderLeft: '1px solid var(--ef-border)' }}
+      >
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border)' }}>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
+            {mode === 'create' ? 'NEW GROUPED SET' : 'EDIT SET'}
+          </p>
+          <button onClick={onClose} className="p-1 transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
+            <X size={15} strokeWidth={1.5} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <QuestionGroupEditor
+            initialGroup={group}
+            existingChildCount={childCount}
+            onSave={onSave}
+            onCancel={onClose}
+          />
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
 // ── Core ──────────────────────────────────────────────────────────────────────
 
 export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankCoreProps>(
@@ -494,6 +702,14 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
     const [deleteTarget, setDeleteTarget] = useState<Question | null>(null);
     const [deleting,     setDeleting]     = useState(false);
 
+    // Grouped sets (Phase 1)
+    const [groups,            setGroups]            = useState<QuestionGroup[]>([]);
+    const [groupPanelOpen,    setGroupPanelOpen]    = useState(false);
+    const [groupPanelMode,    setGroupPanelMode]    = useState<'create' | 'edit'>('create');
+    const [groupEditTarget,   setGroupEditTarget]   = useState<QuestionGroup | null>(null);
+    const [groupDeleteTarget, setGroupDeleteTarget] = useState<QuestionGroup | null>(null);
+    const [deletingGroup,     setDeletingGroup]     = useState(false);
+
     // Filters — taxonomy seeded from the lock when scoped to a topic
     const [search,     setSearch]     = useState('');
     const [typeFilter, setTypeFilter] = useState('');
@@ -504,10 +720,13 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
     const fetchAll = useCallback(async (silent = false) => {
       if (!silent) setLoading(true);
       try {
-        const [qs, subjs, tops] = await Promise.all([getAllQuestions(), getAllSubjects(), getAllTopics()]);
+        const [qs, subjs, tops, grps] = await Promise.all([
+          getAllQuestions(), getAllSubjects(), getAllTopics(), getAllQuestionGroups(),
+        ]);
         setQuestions(qs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
         setSubjects(subjs);
         setTopics(tops);
+        setGroups(grps.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       } finally {
         if (!silent) setLoading(false);
       }
@@ -552,6 +771,55 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
       }
     };
 
+    // ── Grouped-set handlers ──────────────────────────────────────
+    const openGroupCreate = () => { setGroupEditTarget(null); setGroupPanelMode('create'); setGroupPanelOpen(true); };
+    const openGroupEdit = (g: QuestionGroup) => { setGroupEditTarget(g); setGroupPanelMode('edit'); setGroupPanelOpen(true); };
+
+    const handleGroupSave = async ({ group, children }: GroupEditorSave) => {
+      if (groupPanelMode === 'create') {
+        // One batch — a half-written set is a stimulus with no questions, or
+        // orphan children that ordinary topic rules can still draw.
+        const { group: saved, children: savedChildren } = await createQuestionGroup(group, children);
+        setGroups((prev) => [saved, ...prev]);
+        setQuestions((prev) => [...savedChildren, ...prev]);
+      } else if (groupEditTarget) {
+        await updateQuestionGroup(groupEditTarget.id, group);
+        setGroups((prev) => prev.map((g) => (
+          g.id === groupEditTarget.id
+            ? { ...g, ...group, updatedAt: new Date().toISOString() }
+            : g
+        )));
+      }
+      setGroupPanelOpen(false);
+      setGroupEditTarget(null);
+      onChanged?.();
+    };
+
+    const handleGroupDelete = async () => {
+      if (!groupDeleteTarget) return;
+      setDeletingGroup(true);
+      try {
+        await softDeleteQuestionGroup(groupDeleteTarget.id);
+        const goneIds = new Set(groupDeleteTarget.childIds);
+        setGroups((prev) => prev.filter((g) => g.id !== groupDeleteTarget.id));
+        // The cascade removed the children server-side; mirror it locally so
+        // the flat list does not keep showing questions that no longer exist.
+        setQuestions((prev) => prev.filter((q) => !goneIds.has(q.id)));
+        setGroupDeleteTarget(null);
+        onChanged?.();
+      } finally {
+        setDeletingGroup(false);
+      }
+    };
+
+    /** questionId → its live children, in stored order. */
+    const childrenOf = useCallback((g: QuestionGroup): Question[] => {
+      const byId = new Map(questions.map((q) => [q.id, q]));
+      return g.childIds
+        .map((cid) => byId.get(cid))
+        .filter((q): q is Question => !!q && !q.isDeleted);
+    }, [questions]);
+
     // Name → slug fallback so legacy questions (no subjectId yet) still match.
     const subjectNameToId = useMemo(
       () => new Map(subjects.map((s) => [s.name.trim().toLowerCase(), s.id])), [subjects]);
@@ -559,6 +827,11 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
       () => new Map(topics.map((t) => [`${t.subjectId}::${t.name.trim().toLowerCase()}`, t.id])), [topics]);
 
     const filtered = questions.filter((q) => {
+      // Group children live inside their set's row, not loose in the flat
+      // list. Showing them in both places would imply they can be picked
+      // individually — which the resolver refuses to do, because a DI
+      // question without its chart is unanswerable.
+      if (q.groupId) return false;
       if (typeFilter) { const b = questionTypeBadge(q.engine, q.variant); if (b !== typeFilter) return false; }
       if (diffFilter && q.difficulty !== diffFilter) return false;
 
@@ -574,6 +847,34 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
       if (search) {
         const s = search.toLowerCase();
         if (!q.stem.toLowerCase().includes(s) && !q.subject.toLowerCase().includes(s) && !q.topic.toLowerCase().includes(s)) return false;
+      }
+      return true;
+    });
+
+    // Grouped sets, under the same taxonomy/difficulty/search filters as the
+    // flat list. The TYPE filter deliberately does not apply: it filters by
+    // question engine, and a set has no single engine — its children may mix
+    // MCQ, multi and short text.
+    const visibleGroups = groups.filter((g) => {
+      if (diffFilter && g.difficulty !== diffFilter) return false;
+
+      if (subjectId) {
+        const gSubjectId = g.subjectId ?? subjectNameToId.get((g.subject ?? '').trim().toLowerCase());
+        if (gSubjectId !== subjectId) return false;
+      }
+      if (topicId) {
+        const gTopicId = g.topicId ?? topicNameToId.get(`${subjectId}::${(g.topic ?? '').trim().toLowerCase()}`);
+        if (gTopicId !== topicId) return false;
+      }
+
+      if (search) {
+        const s2 = search.toLowerCase();
+        const inTitle = (g.title ?? '').toLowerCase().includes(s2);
+        const inTax = (g.subject ?? '').toLowerCase().includes(s2) || (g.topic ?? '').toLowerCase().includes(s2);
+        // Also match a set whose CHILD stem matches — an author searching for
+        // a question they remember writing should find the set holding it.
+        const inChild = childrenOf(g).some((c) => c.stem.toLowerCase().includes(s2));
+        if (!inTitle && !inTax && !inChild) return false;
       }
       return true;
     });
@@ -600,13 +901,23 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
         {showAddButton && (
           <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
             <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>QUESTIONS</span>
-            <button
-              onClick={openCreate}
-              className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
-              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em', minHeight: 36 }}
-            >
-              <Plus size={12} strokeWidth={2} /> Add Question
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={openGroupCreate}
+                title="A shared passage, chart or scenario with its own questions"
+                className="flex items-center gap-1.5 text-xs px-3 py-2.5 transition-opacity hover:opacity-80"
+                style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, letterSpacing: '0.03em', minHeight: 36 }}
+              >
+                <Layers size={12} strokeWidth={1.75} /> New Set
+              </button>
+              <button
+                onClick={openCreate}
+                className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
+                style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em', minHeight: 36 }}
+              >
+                <Plus size={12} strokeWidth={2} /> Add Question
+              </button>
+            </div>
           </div>
         )}
 
@@ -619,6 +930,35 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
           subjects={subjects}     topics={topics}
           hideTaxonomy={locked}
         />
+
+        {/* ── Grouped sets ──
+            Their own section, above the flat list. Sets are selected as units
+            — a rule asks for "2 DI sets", never "10 DI questions" — so listing
+            their children loose among standalone questions would suggest they
+            can be picked individually, which the resolver refuses to do. */}
+        {!loading && visibleGroups.length > 0 && (
+          <>
+            <div className="flex items-center gap-2 px-5 py-2" style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border-subtle)' }}>
+              <Layers size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
+                GROUPED SETS
+              </span>
+              <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
+                {visibleGroups.length}
+              </span>
+            </div>
+            {visibleGroups.map((g) => (
+              <GroupRow
+                key={g.id}
+                group={g}
+                childQuestions={childrenOf(g)}
+                onEdit={() => openGroupEdit(g)}
+                onDelete={() => setGroupDeleteTarget(g)}
+                onPreviewChild={(q) => setPreviewQ(q)}
+              />
+            ))}
+          </>
+        )}
 
         {/* Column headers (desktop) */}
         {!loading && filtered.length > 0 && (
@@ -642,7 +982,9 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
           />
         ))}
 
-        {!loading && filtered.length === 0 && <EmptyState filtered={hasClearableFilters} onAdd={openCreate} />}
+        {!loading && filtered.length === 0 && visibleGroups.length === 0 && (
+          <EmptyState filtered={hasClearableFilters} onAdd={openCreate} />
+        )}
 
         {!loading && filtered.length > 0 && (
           <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
@@ -679,6 +1021,32 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
         <AnimatePresence>
           {deleteTarget && (
             <DeleteModal question={deleteTarget} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} deleting={deleting} />
+          )}
+        </AnimatePresence>
+
+        {/* Grouped-set panel */}
+        <AnimatePresence>
+          {groupPanelOpen && (
+            <GroupPanel
+              mode={groupPanelMode}
+              group={groupPanelMode === 'edit' ? groupEditTarget : null}
+              childCount={groupEditTarget ? childrenOf(groupEditTarget).length : undefined}
+              onSave={handleGroupSave}
+              onClose={() => { setGroupPanelOpen(false); setGroupEditTarget(null); }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Grouped-set delete confirm */}
+        <AnimatePresence>
+          {groupDeleteTarget && (
+            <DeleteGroupModal
+              group={groupDeleteTarget}
+              childCount={childrenOf(groupDeleteTarget).length}
+              onConfirm={handleGroupDelete}
+              onCancel={() => setGroupDeleteTarget(null)}
+              deleting={deletingGroup}
+            />
           )}
         </AnimatePresence>
       </>

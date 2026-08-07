@@ -7,9 +7,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Loader2, CheckCircle2, Timer, ChevronRight, Layers, CheckSquare, Square, BookOpen, Lock, AlertCircle } from 'lucide-react';
-import { type Question } from '../../../../lib/questionBankService';
+import { type Question, type QuestionGroup } from '../../../../lib/questionBankService';
 import { type Subject } from '../../../../lib/subjectService';
 import { DIFFICULTIES, type Difficulty, type RuleDraft, type SectionDraft } from './shared';
+import { GroupRulePanel } from './groupRulePicker';
 import { DifficultyRow, PenaltyInput } from './controls';
 import { type GradingPolicy } from '../../../../lib/assessmentService';
 
@@ -19,6 +20,7 @@ export function RuleBuilderPanel({
   setActiveSectionIdx,
   setSections,
   allQuestions,
+  allGroups = [],
   locked,
   subjectPoolNames,
   topicPool,
@@ -31,6 +33,8 @@ export function RuleBuilderPanel({
   setActiveSectionIdx: (i: number) => void;
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
   allQuestions: Question[];
+  /** Grouped sets visible to the author — the pool group rules draw from. */
+  allGroups?: QuestionGroup[];
   locked?: boolean;
   subjectPoolNames?: string[];
   topicPool?: string[];
@@ -84,6 +88,19 @@ export function RuleBuilderPanel({
     }
     return { subjectTopics: sorted, bankCount: countMap };
   }, [allQuestions, subjectNameById, topicNameById]);
+
+  // Live child count per set. Counted from the QUESTION bank rather than from
+  // childIds.length, because a child can be deleted individually — and a set
+  // whose questions are gone cannot be drawn, however long its childIds array
+  // still is.
+  const childCountByGroupId = useMemo(() => {
+    const out: Record<string, number> = {};
+    allQuestions.forEach((q) => {
+      if (q.isDeleted || !q.groupId) return;
+      out[q.groupId] = (out[q.groupId] ?? 0) + 1;
+    });
+    return out;
+  }, [allQuestions]);
 
   // ── Filter by this section's assigned topics ────────────────────
   // If assignedTopics is non-empty, only show those subject/topic pairs.
@@ -567,6 +584,23 @@ export function RuleBuilderPanel({
           </div>
         );
       })()}
+
+      {/* ── Grouped sets ──
+          Below the per-difficulty topic rows, because the UNIT differs: a
+          topic row asks for N questions, a group row for N sets. Renders
+          nothing when the bank holds no sets. */}
+      <GroupRulePanel
+        sections={sections}
+        activeSectionIdx={activeSectionIdx}
+        setSections={setSections}
+        allGroups={allGroups}
+        childCountByGroupId={childCountByGroupId}
+        locked={locked}
+        subjectPoolNames={subjectPoolNames}
+        topicPool={topicPool}
+        subjectNameById={subjectNameById}
+        topicNameById={topicNameById}
+      />
 
       {/* ── Footer: per-section total ── */}
       {sectionTotalQ > 0 && (

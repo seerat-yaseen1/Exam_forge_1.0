@@ -1344,6 +1344,7 @@ export function DetailsStep({
         setActiveSectionIdx={setActiveSectionIdx}
         setSections={setSections}
         allQuestions={allQuestions}
+        allGroups={allGroups}
         locked={!mut.sections}
         subjectPoolNames={subjectPoolNames}
         topicPool={topicPool}

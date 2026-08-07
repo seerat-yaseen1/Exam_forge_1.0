@@ -1812,6 +1812,101 @@ export async function deleteQuestionAsRole(
   await call({ id, subjectId: taxonomy?.subjectId ?? null, topicId: taxonomy?.topicId ?? null });
 }
 
+// ── Question groups as institute/faculty (Phase 1) ────────────────
+// firestore.rules allows direct /questionGroups writes for the webOwner
+// only, so institute and faculty go through these callables — which is where
+// assertQuestionRight enforces the rights ceiling. They reuse the EXISTING
+// create/edit/delete question rights: authoring a DI set is authoring
+// questions, and a group-specific right would mean every ceiling already
+// configured on the platform silently failed to cover the new content type.
+
+export async function createQuestionGroupAsRole(
+  group: Omit<QuestionGroup, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt' | 'childIds'>,
+  children: GroupChildDraft[],
+): Promise<{ id: string; childIds: string[] }> {
+  const call = httpsCallable<
+    { group: typeof group; children: GroupChildDraft[]; subjectId?: string | null; topicId?: string | null },
+    { ok: boolean; id: string; childIds: string[] }
+  >(functions, 'createQuestionGroupAsRole');
+  const res = await call({
+    group,
+    children,
+    subjectId: group.subjectId ?? null,
+    topicId:   group.topicId ?? null,
+  });
+  return { id: res.data.id, childIds: res.data.childIds };
+}
+
+export async function editQuestionGroupAsRole(
+  id: string,
+  group: Partial<Omit<QuestionGroup, 'id' | 'createdAt' | 'childIds'>>,
+): Promise<void> {
+  const call = httpsCallable<{ id: string; group: typeof group }, { ok: boolean }>(
+    functions, 'editQuestionGroupAsRole',
+  );
+  await call({ id, group });
+}
+
+export async function deleteQuestionGroupAsRole(
+  id: string,
+  taxonomy?: { subjectId?: string | null; topicId?: string | null },
+): Promise<{ deletedChildren: number }> {
+  const call = httpsCallable<
+    { id: string; subjectId?: string | null; topicId?: string | null },
+    { ok: boolean; deletedChildren: number }
+  >(functions, 'deleteQuestionGroupAsRole');
+  const res = await call({
+    id,
+    subjectId: taxonomy?.subjectId ?? null,
+    topicId:   taxonomy?.topicId ?? null,
+  });
+  return { deletedChildren: res.data.deletedChildren };
+}
+
+/**
+ * Create a group as whichever role the caller holds.
+ *
+ * The webOwner writes directly (rules permit it and there is no ceiling to
+ * enforce against the platform owner — assertQuestionRight has no webOwner
+ * branch by design); institute and faculty go through the callable. Same
+ * split as the question path, kept here so callers do not each re-derive it.
+ */
+export async function saveQuestionGroupForRole(
+  ownerType: QuestionOwnerType,
+  group: Omit<QuestionGroup, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt' | 'childIds'>,
+  children: GroupChildDraft[],
+): Promise<{ id: string; childIds: string[] }> {
+  if (ownerType === 'webOwner') {
+    const res = await createQuestionGroup(group, children);
+    return { id: res.group.id, childIds: res.children.map((c) => c.id) };
+  }
+  return createQuestionGroupAsRole(group, children);
+}
+
+export async function deleteQuestionGroupForRole(
+  ownerType: QuestionOwnerType,
+  id: string,
+  taxonomy?: { subjectId?: string | null; topicId?: string | null },
+): Promise<void> {
+  if (ownerType === 'webOwner') {
+    await softDeleteQuestionGroup(id);
+    return;
+  }
+  await deleteQuestionGroupAsRole(id, taxonomy);
+}
+
+export async function updateQuestionGroupForRole(
+  ownerType: QuestionOwnerType,
+  id: string,
+  group: Partial<Omit<QuestionGroup, 'id' | 'createdAt' | 'childIds'>>,
+): Promise<void> {
+  if (ownerType === 'webOwner') {
+    await updateQuestionGroup(id, group);
+    return;
+  }
+  await editQuestionGroupAsRole(id, group);
+}
+
 export async function shareQuestionsAsRole(
   questionIds: string[],
   recipients: Array<{ id: string; type: 'faculty' | 'institute' }>,

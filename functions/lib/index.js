@@ -2706,12 +2706,23 @@ function penaltyFor(policy, questionMarks) {
     return Math.max(0, policy.penaltyValue);
 }
 function scoreMCQMultiplier(q, ans, value) {
-    if (q.variant === 'single' || q.variant === 'truefalse' || q.variant === 'fillblank') {
-        const selected = typeof value === 'string' ? value : '';
-        const isCorrect = ans.correctIds.includes(selected);
-        // One selection: "any correct content" and "correct" are the same question.
-        return { multiplier: isCorrect ? 1 : 0, isCorrect, anyCorrect: isCorrect };
-    }
+    // MULTI IS THE SPECIAL CASE; EVERY OTHER MCQ VARIANT IS ONE SELECTION.
+    //
+    // This used to be the other way round — an allow-list of 'single' |
+    // 'truefalse' | 'fillblank', with anything else falling through to a
+    // multiplier of 0. That is the worst possible default: add an mcq variant
+    // (as 'outputpred' just was) and forget this function, and every candidate
+    // who answers it CORRECTLY is silently marked zero. Nothing surfaces —
+    // not a crash, not a warning, just a paper full of wrong marks.
+    //
+    // Inverted, a forgotten variant is scored as the single-selection question
+    // that every mcq variant except 'multi' actually is. That is right for any
+    // future keyed one-of-N variant and merely wrong-shaped for anything else,
+    // which is a far better failure than confidently wrong marks.
+    //
+    // This file cannot import the client's MCQVariant union, so a runtime
+    // default is the only lever available here; the client side gets its
+    // exhaustiveness from the registry's binding tables instead.
     if (q.variant === 'multi') {
         const selected = Array.isArray(value) ? value : [];
         const correct = new Set(ans.correctIds);
@@ -2730,7 +2741,12 @@ function scoreMCQMultiplier(q, ans, value) {
         // the penalty is reserved for knowing nothing.
         return { multiplier: mult, isCorrect: mult === 1, anyCorrect: hits > 0 };
     }
-    return { multiplier: 0, isCorrect: false, anyCorrect: false };
+    // Single selection — 'single', 'truefalse', 'fillblank', 'outputpred', and
+    // any keyed one-of-N variant added later.
+    const selected = typeof value === 'string' ? value : '';
+    const isCorrect = ans.correctIds.includes(selected);
+    // One selection: "any correct content" and "correct" are the same question.
+    return { multiplier: isCorrect ? 1 : 0, isCorrect, anyCorrect: isCorrect };
 }
 function scoreMatchMultiplier(ans, value) {
     if (typeof value !== 'object' || Array.isArray(value)) {

@@ -217,9 +217,38 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
 
       try {
         await updatePassword(fbUser, newPassword);
-        await updateDoc(doc(db, 'instituteCredentials', session.instituteId), {
-          firstLoginRequired: false,
-        });
+        // BOOKKEEPING, NOT THE OPERATION — and it must not be able to fail
+        // the operation (audit 2026-08-07).
+        //
+        // This was a bare `await` inside the same try as updatePassword, so a
+        // rejection here reported "Failed to change password" AFTER the
+        // password had already been changed, and — worse — skipped the
+        // revokeOtherSessionsKeepCurrent below, which is the whole security
+        // point of this flow: signing out anyone still holding the old or
+        // provisioned credential.
+        //
+        // It rejects routinely. updateDoc REQUIRES the document to exist, and
+        // instituteCredentials is empty — createAuthUser stopped writing
+        // credential docs when the plaintext password was removed, so only
+        // pre-migration accounts have one. Verified against the live project:
+        // purge-legacy-credentials --dry reports 0 documents in all three
+        // credential collections.
+        //
+        // A not-found is also HARMLESS, which is why warning is the right
+        // response rather than repairing the document. Every auth context
+        // reads this flag as `credSnap.exists() ? Boolean(...) : false`, so an
+        // absent document already means firstLoginRequired === false — the
+        // exact state this write was trying to reach.
+        try {
+          await updateDoc(doc(db, 'instituteCredentials', session.instituteId), {
+            firstLoginRequired: false,
+          });
+        } catch (e) {
+          console.warn(
+            '[InstituteAuth] could not clear firstLoginRequired — the password change stands',
+            e,
+          );
+        }
         setSession((prev) => (prev ? { ...prev, firstLoginRequired: false } : null));
         // C'-1 (scoped): the credential changed — sign out every other
         // session (covers first-login forced changes too, killing anyone

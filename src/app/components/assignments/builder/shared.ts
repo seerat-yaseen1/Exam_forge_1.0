@@ -4,6 +4,7 @@
  * AssignmentsPage.tsx; no logic changes).
  */
 import { type AssessmentStatus, type RuleKind } from '../../../../lib/assessmentService';
+import { type ExecutionEngine } from '../../../../lib/itemTypes';
 import { type GroupKind } from '../../../../lib/questionBankService';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -72,6 +73,13 @@ export type SectionDraft = {
   assignedTopics: string[]; // "subject::topic" keys pre-assigned in Step 1
   breakAfterMinutes: string;  // empty = no break
   breakMandatory: boolean;
+
+  /**
+   * Execution engines this section accepts — the draft twin of
+   * AssessmentSection.engines. Empty = unlocked, which is both the default for
+   * a new section and what every existing assessment loads as.
+   */
+  engines: ExecutionEngine[];
 };
 
 export function makeSectionId() {

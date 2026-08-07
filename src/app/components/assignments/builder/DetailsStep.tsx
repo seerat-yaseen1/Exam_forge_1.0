@@ -369,6 +369,10 @@ export function DetailsStep({
       if (tl > 0) out.timeLimit = tl;
       const qtl = parseInt(sec.questionTimeLimit, 10);
       if (qtl > 0) out.questionTimeLimit = qtl;
+      // Only written when the author actually locked the section. An empty
+      // array is the unlocked state and is left OFF the document, so a section
+      // nobody locked is byte-identical to one written before locking existed.
+      if (sec.engines.length > 0) out.engines = [...sec.engines];
       if (idx < sectionDrafts.length - 1 && breakMins > 0) {
         out.breakAfter = { durationMinutes: breakMins, mandatory: sec.breakMandatory };
       }

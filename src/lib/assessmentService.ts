@@ -17,7 +17,17 @@ import { db, functions, auth, storage } from './firebase';
 // TYPE-ONLY on purpose: questionBankService imports ensureSebToken from this
 // module at runtime, so a value import here would close a cycle. `import type`
 // is erased at compile time and cannot.
-import type { GroupKind } from './questionBankService';
+import type { GroupKind, QuestionEngine, QuestionVariant } from './questionBankService';
+// Safe as a VALUE import: itemTypes has no runtime imports of its own (it
+// type-imports questionBankService, which is erased), so it cannot close a
+// cycle back to here.
+import {
+  executionEngineForGroupKind,
+  executionEngineForQuestion,
+  sectionAcceptsEngine,
+  EXECUTION_ENGINE_LABEL,
+  type ExecutionEngine,
+} from './itemTypes';
 import {
   ref as storageRef,
   uploadBytes,
@@ -326,6 +336,27 @@ export type AssessmentSection = {
   assignedTopics?: string[];       // "subject::topic" keys pre-assigned in Step 1
   breakAfter?: SectionBreak;       // optional break inserted before the next section
 
+  // ── Execution-engine lock ─────────────────────────────────────────
+  //
+  // Which delivery runtimes this section accepts. An item may be drawn into
+  // this section only if its execution engine (see src/lib/itemTypes.ts) is in
+  // this list — so a section locked to ['choice'] admits MCQ, True/False and
+  // Fill in the Blank together, and refuses a Short Answer, without anyone
+  // having had to enumerate that.
+  //
+  // ABSENT OR EMPTY = UNLOCKED, and admits everything. That is the legacy
+  // shape: every assessment written before section locking existed has no
+  // `engines` field, so it keeps resolving exactly as it did and no backfill
+  // runs. Read it through `sectionAcceptsEngine()` rather than testing the
+  // array directly, so the absent case is handled in one place.
+  //
+  // The lock is on the RUNTIME, not on the item type or its category,
+  // because that is the only one of the three with a mechanical answer: can
+  // this section actually run this item? It is also the extensible one — a
+  // future item type joins an existing section by declaring an engine that
+  // already exists, and the builder is not touched.
+  engines?: ExecutionEngine[];
+
   // ── Reserved (Phase 0) — not yet enforced ─────────────────────────
   // Later flexibility: min/max time per section. maxTimeMinutes mirrors the
   // existing timeLimit as the hard cap; minTimeMinutes would prevent leaving
@@ -348,6 +379,16 @@ type BankQuestion = {
   topic: string;       // needed for topic-level filtering
   difficulty: string;
   isDeleted: boolean;
+
+  // Storage shape, from which the item's execution engine is derived for the
+  // section lock. Optional so the resolver's contract is unchanged for any
+  // caller that builds a trimmed bank by hand — every real caller passes whole
+  // `Question` documents, which carry both. A question missing them cannot be
+  // placed in a LOCKED section (the engine is unknowable, and guessing would
+  // put an item on a paper the shell may not render); an unlocked section is
+  // unaffected, so nothing regresses.
+  engine?: QuestionEngine;
+  variant?: QuestionVariant;
   // Slug links to the taxonomy docs. PREFERRED over the name strings above:
   // renaming a subject/topic updates the doc but NOT the name stored on old
   // questions, so name-only matching silently drops renamed questions from
@@ -391,6 +432,42 @@ export type TaxonomyMaps = {
   subjectNameById: Record<string, string>;  // subjectId → current Subject.name
   topicNameById: Record<string, string>;    // topicId   → current Topic.name
 };
+
+// ── Execution-engine admission ────────────────────────────────────
+//
+// The single place the section lock is applied. Both the resolver and the
+// validator go through these, because a question counted as available by one
+// and rejected by the other is exactly how a "valid" blueprint still produces
+// a short paper — the same trap the group-child exclusion above documents.
+
+/** The runtime a bank question needs, or null when it cannot be determined. */
+function questionExecutionEngine(q: BankQuestion): ExecutionEngine | null {
+  if (!q.engine) return null;
+  return executionEngineForQuestion(q.engine, q.variant ?? null);
+}
+
+/** Can a section accepting `engines` deliver this question? */
+function sectionAdmitsQuestion(
+  engines: ExecutionEngine[] | undefined,
+  q: BankQuestion,
+): boolean {
+  return sectionAcceptsEngine(engines, questionExecutionEngine(q));
+}
+
+/**
+ * Can a section accepting `engines` deliver this group?
+ *
+ * Read through the registry rather than hardcoding 'stimulus' so that a future
+ * group kind mapped to a different runtime is picked up here for free. A group
+ * with no kind is treated as `generic`, which is what the resolver's own
+ * matcher already assumes.
+ */
+function sectionAdmitsGroup(
+  engines: ExecutionEngine[] | undefined,
+  g: BankGroup,
+): boolean {
+  return sectionAcceptsEngine(engines, executionEngineForGroupKind(g.kind ?? 'generic'));
+}
 
 function canonicalSubject(q: BankQuestion, maps?: TaxonomyMaps): string {
   if (maps && q.subjectId && maps.subjectNameById[q.subjectId]) {
@@ -449,6 +526,7 @@ export function resolveQuestionsForSections(
         const matches = (g: BankGroup): boolean =>
           !g.isDeleted &&
           !usedGroupIds.has(g.id) &&
+          sectionAdmitsGroup(section.engines, g) &&
           canonicalSubject(g, taxonomy) === rule.subject &&
           canonicalTopic(g, taxonomy) === rule.topic &&
           g.difficulty === rule.difficulty &&
@@ -516,10 +594,18 @@ export function resolveQuestionsForSections(
       // stimulus is not decoration. Children are reachable only through a group
       // rule, which brings the stimulus with them. This filter is a no-op for
       // every pre-Phase-1 bank, where no question carries a groupId.
+      //
+      // The section's execution-engine lock narrows the pool here, and this is
+      // the whole mechanism: a topic rule does not name an item type, it names
+      // a taxonomy cell, so "this section is Choice only" is expressed by
+      // refusing to draw anything the section cannot run. An unlocked section
+      // admits everything, which is every assessment built before the lock
+      // existed.
       const basePool = allQuestions.filter(
         (q) =>
           !q.isDeleted &&
           !q.groupId &&
+          sectionAdmitsQuestion(section.engines, q) &&
           canonicalSubject(q, taxonomy) === rule.subject &&
           canonicalTopic(q, taxonomy) === rule.topic &&
           q.difficulty === rule.difficulty &&
@@ -600,6 +686,20 @@ export function groupDeliveryBlocker(
   section: AssessmentSection,
   deliveryMode: 'standard' | 'linear' | 'adaptive' | undefined,
 ): string | null {
+  // The section's own engine lock, checked first because it is a statement the
+  // author made about this section rather than a platform limitation — telling
+  // them "grouped sets don't work with linear delivery" when the real reason is
+  // that they locked the section to Choice would send them to fix the wrong
+  // thing.
+  if (!sectionAcceptsEngine(section.engines, 'stimulus')) {
+    const accepted = (section.engines ?? [])
+      .map((e) => EXECUTION_ENGINE_LABEL[e])
+      .join(', ');
+    return `This section accepts ${accepted} only, and a grouped set needs the `
+         + `${EXECUTION_ENGINE_LABEL.stimulus} engine to keep its passage or `
+         + 'chart on screen. Add Shared Stimulus to the section, or remove the '
+         + 'group rule.';
+  }
   if (deliveryMode === 'linear' || deliveryMode === 'adaptive') {
     return `Grouped questions can't be used with ${deliveryMode} delivery — `
          + 'the shared passage or chart would be shown once and then become '
@@ -627,18 +727,23 @@ export function validateSelectionRules(
   const key = (subject: string, topic: string, diff: string) =>
     `${subject}::${topic}::${diff}`;
 
-  // Pre-compute total available per subject+topic+difficulty, keyed by the
-  // CURRENT canonical name (same resolution the pool uses), so the count a
-  // rule sees matches what resolveQuestionsForSections will actually draw.
+  // Bucket the drawable bank by subject+topic+difficulty, keyed by the CURRENT
+  // canonical name (same resolution the pool uses), so the count a rule sees
+  // matches what resolveQuestionsForSections will actually draw.
   //
   // Group children are excluded here for the same reason the resolver's pool
   // excludes them: they are not drawable by a topic rule, so counting them as
   // available would promise questions the draw will never hand over.
-  const totalAvailable: Record<string, number> = {};
+  //
+  // Buckets hold the QUESTIONS rather than a count, because availability is no
+  // longer a property of the cell alone — a section with an execution-engine
+  // lock can only draw the part of the cell it can actually run, so the count
+  // has to be taken per rule, against that section's lock.
+  const cellQuestions: Record<string, BankQuestion[]> = {};
   for (const q of allQuestions) {
     if (q.isDeleted || q.groupId) continue;
     const k = key(canonicalSubject(q, taxonomy), canonicalTopic(q, taxonomy), q.difficulty);
-    totalAvailable[k] = (totalAvailable[k] ?? 0) + 1;
+    (cellQuestions[k] ??= []).push(q);
   }
 
   const questionById = new Map(allQuestions.map((q) => [q.id, q]));
@@ -662,6 +767,7 @@ export function validateSelectionRules(
         // produces a short paper.
         const eligible = allGroups.filter((g) =>
           !g.isDeleted &&
+          sectionAdmitsGroup(section.engines, g) &&
           canonicalSubject(g, taxonomy) === rule.subject &&
           canonicalTopic(g, taxonomy) === rule.topic &&
           g.difficulty === rule.difficulty &&
@@ -698,9 +804,22 @@ export function validateSelectionRules(
       if (requested <= 0) continue;
 
       const k = key(rule.subject, rule.topic, rule.difficulty);
-      const total = totalAvailable[k] ?? 0;
+      // Only the part of the cell THIS section can run.
+      const total = (cellQuestions[k] ?? [])
+        .filter((q) => sectionAdmitsQuestion(section.engines, q)).length;
+      // Usage stays per cell rather than per cell-and-engine. A question
+      // consumed by an earlier section is gone whatever engine it ran on, and
+      // we cannot know which specific ones the draw took — so subtracting all
+      // prior usage can UNDER-report a locked section's availability when an
+      // earlier section drew from the same cell on a different engine.
+      //
+      // That direction is deliberate. Under-reporting refuses a publish that
+      // would in fact have worked, which the author sees and can act on;
+      // over-reporting ships a short paper to candidates, which nobody sees
+      // until the exam is running. This whole pass exists to prevent the
+      // second failure, so it accepts the first.
       const alreadyUsed = usedCounts[k] ?? 0;
-      const effectiveAvailable = total - alreadyUsed;
+      const effectiveAvailable = Math.max(0, total - alreadyUsed);
       const ok = requested <= effectiveAvailable;
       results.push({
         subject: rule.subject,

@@ -237,7 +237,7 @@ live type has to satisfy — the list is derived from what `mcq`, `text` and
 
 | # | Point | Where | Needed when |
 |---|---|---|---|
-| 1 | Taxonomy entry | `src/lib/itemTypes.ts` | always |
+| 1 | Taxonomy entry + execution engine | `src/lib/itemTypes.ts` | always — and if the engine already exists, §5a is free |
 | 2 | Engine / variant union | `questionBankService.ts:85–88` | new engine or variant |
 | 3 | Question field storage | `Question` type, `questionBankService.ts:106` | new response shape |
 | 4 | Empty-draft factory | `buildEmptyMCQ` / `Text` / `Match`, `:1615+` | always |
@@ -262,6 +262,83 @@ insists coding and games are engines rather than block types: ship one as a
 block type and the exam renders a blank card.
 
 ---
+
+## 5a · Execution engines, and the section lock
+
+Every item type declares one **execution engine** — the runtime the exam shell
+needs in order to put that item in front of a candidate and get an answer back.
+
+**This is not `QuestionEngine`.** That union (`mcq` | `text` | `match`) is a
+*storage* discriminant: which fields on the question document are populated.
+This is a *delivery capability*. The two look alike today only because the three
+things the platform can store are also the three things it can run; the first
+code sandbox or game canvas breaks that correspondence in both directions.
+
+| Engine | What the shell must be able to do | Item types | Live |
+|---|---|---|---|
+| `choice` | present options, take a selection | MCQ ×2, True/False, Fill in the Blank, Matrix/Grid, Psychometric, Adaptive | ✅ |
+| `composition` | take extended prose, route it to a grader | Short Answer, Long Answer, Essay, Case Analysis, Code Review | ✅ |
+| `mapping` | pair, order or place supplied items | Match the Following, Sequence, Drag & Drop | ✅ |
+| `stimulus` | hold a passage/table on screen across its questions | all 8 grouped types | ✅ |
+| `entry` | take a short typed value, check it against a key | Numeric Answer, Output Prediction | ◻ |
+| `canvas` | pointer/coordinate input on a surface | Hotspot, Image Annotation, Whiteboard | ◻ |
+| `code` | run code or a query against test cases | Coding Challenge, SQL Challenge, Debugging | ◻ |
+| `game` | run a timed interactive task with its own clock | all 8 games | ◻ |
+| `capture` | record device audio/video | Audio, Video, Speech Recording | ◻ |
+| `upload` | accept a file submission | File Upload | ◻ |
+| `environment` | embed a tool or simulated system | Simulation, Virtual Lab, Spreadsheet, Design, Workflow | ◻ |
+| `external` | launch elsewhere and score back | AI Interview, Live Interview, External Assessment | ◻ |
+
+An engine is live when at least one live item type sits on it — derived, like
+every other liveness statement here, so the section picker cannot offer a
+runtime that nothing can run in yet.
+
+### The section lock
+
+`AssessmentSection.engines` is the set of engines a section accepts. **Absent or
+empty means unlocked** — accepts everything — which is every assessment written
+before this existed, so no migration runs and the field is left off the document
+entirely when unused.
+
+Locking on the *runtime* rather than on the item type or the category was a
+deliberate choice, and it is the one of the three with a mechanical answer:
+**can this section actually run this item?** Category would be a judgement about
+subject matter; exact item type would make a three-format objective section need
+three sections. Runtime asks only what the shell can do.
+
+It is also the extensible axis. **A new item type joins by naming its engine.**
+If that engine already exists, every section that accepts it can use the new
+type on day one and the builder is not touched at all. Only a genuinely new
+runtime costs a new member — and that cost is honest, because a new runtime
+really is new delivery work.
+
+### How it is enforced
+
+The lock does not add a rule kind. It **narrows the pool a rule draws from**:
+
+- `resolveQuestionsForSections` filters the candidate pool by the section's
+  engines, so a Choice-only section draws only choice items from a taxonomy cell
+  that also holds Short Answers.
+- `validateSelectionRules` applies the identical filter to its availability
+  count. A question counted as available by one and rejected by the other is
+  exactly how a "valid" blueprint still produces a short paper.
+- `groupDeliveryBlocker` refuses a group rule in a section that does not accept
+  `stimulus`, and says so in those terms — checked *before* the delivery-mode
+  reasons, so an author who locked the section to Choice is not told the problem
+  is linear delivery.
+
+One deliberate imprecision: prior sections' usage is tracked per taxonomy cell,
+not per cell-and-engine, because the validator cannot know which specific
+questions the draw will take. So a locked section's availability can be
+**under**-reported when an earlier section drew from the same cell on a
+different engine. That direction is chosen: under-reporting refuses a publish
+that would have worked, which the author sees and can act on; over-reporting
+ships a short paper, which nobody sees until the exam is running.
+
+A question that carries no `engine` — a malformed or far-future document —
+**cannot enter a locked section**. Its runtime is unknowable, and guessing would
+put an item on a paper the shell may not be able to render. Unlocked sections
+are unaffected.
 
 ## 6 · The tracks
 
@@ -344,12 +421,14 @@ one-at-a-time delivery are a delivery-engine change, not an item type.
 - **No new engine, variant or group kind.** Nothing about how a question is
   stored, selected, rendered or graded changed. The registry names things; it
   does not implement them.
-- **No selection-rule change.** `RuleKind` stays `topic | group`. Sections still
-  cannot be locked to a single item type — the builder plan's Step 1 — because
-  that is a rule-level change and belongs with the section-builder work.
+- **No selection-rule change.** `RuleKind` stays `topic | group`. The section
+  lock (§5a) needed no new rule kind — it narrows the pool a rule draws from
+  rather than changing what a rule can say.
 - **No migration.** Nothing reads a stored item-type id, because nothing stores
   one. The ids exist so that future per-type config, analytics dimensions and
-  blueprint rules have a stable key to hang off.
+  blueprint rules have a stable key to hang off. `AssessmentSection.engines` is
+  omitted entirely when a section is unlocked, so an unlocked section's document
+  is byte-identical to one written before locking existed.
 
 ## 8 · Visible changes
 
@@ -368,10 +447,10 @@ rather than its own shorter variant of it ("MCQ — Single Correct", not "MCQ").
 
 ## 9 · Open questions
 
-1. **Section-to-type locking.** The builder plan locks a section to one item
-   type. At what granularity — engine (`mcq`), taxonomy entry (`mcq-multi`), or
-   category (`objective`)? Category is the most useful and the least
-   restrictive; entry is what the plan literally says.
+1. **Whether an unlocked section should stay the default.** Today a new section
+   accepts everything and the author opts into a lock. The opposite — every
+   section locked to Choice unless widened — would catch more mistakes but would
+   change the shape of the very first screen a faculty member sees.
 2. **Matrix / Grid's answer shape** decides whether "one question, one answer
    value" survives. Answer it before building any of Matrix, Drag & Drop or
    Hotspot, because all three push on it.

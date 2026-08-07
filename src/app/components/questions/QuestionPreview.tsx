@@ -157,7 +157,9 @@ function TextPreview({ modelAnswer, variant }: { modelAnswer: string; variant: Q
       style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
     >
       <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-        {variant === 'long' ? 'RUBRIC / KEY POINTS' : 'EXPECTED ANSWER'}
+        {variant === 'codereview' ? 'WHAT THE REVIEW SHOULD CATCH'
+          : variant === 'long' ? 'RUBRIC / KEY POINTS'
+          : 'EXPECTED ANSWER'}
       </p>
       <RichText text={modelAnswer} className="text-xs" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.7, display: 'block' }} />
     </div>

@@ -111,7 +111,10 @@ function newOptId(letter: string): string {
 // MCQ PARSER
 // ══════════════════════════════════════════════════════════════════
 
-const MCQ_TYPES = ['single', 'multi', 'truefalse', 'fillblank'];
+// Keep in step with MCQVariant in questionBankService. 'outputpred' needs no
+// extra column: its code snippet travels inside the ordinary `stem` cell as a
+// ```lang fenced block, which is exactly how it is stored.
+const MCQ_TYPES = ['single', 'multi', 'truefalse', 'fillblank', 'outputpred'];
 const OPT_LETTERS = ['a', 'b', 'c', 'd', 'e'];
 
 function parseMCQRow(raw: Record<string, string>, rowIndex: number): ParsedRow {
@@ -121,7 +124,7 @@ function parseMCQRow(raw: Record<string, string>, rowIndex: number): ParsedRow {
   // type
   const typeRaw = cellStr(raw, 'type').toLowerCase();
   if (!MCQ_TYPES.includes(typeRaw)) {
-    errors.push({ field: 'type', message: `Invalid type "${cellStr(raw, 'type')}". Must be: single, multi, truefalse, fillblank.` });
+    errors.push({ field: 'type', message: `Invalid type "${cellStr(raw, 'type')}". Must be: ${MCQ_TYPES.join(', ')}.` });
   }
   const variant = MCQ_TYPES.includes(typeRaw) ? typeRaw as any : null;
   const isTF = variant === 'truefalse';
@@ -228,7 +231,9 @@ function parseMCQRow(raw: Record<string, string>, rowIndex: number): ParsedRow {
 // TEXT PARSER
 // ══════════════════════════════════════════════════════════════════
 
-const TEXT_TYPES = ['short', 'long'];
+// Keep in step with TextVariant. Same note as MCQ_TYPES: 'codereview' carries
+// its snippet in the `stem` cell as a fenced block, so no new column.
+const TEXT_TYPES = ['short', 'long', 'codereview'];
 
 function parseTextRow(raw: Record<string, string>, rowIndex: number): ParsedRow {
   const errors:   RowError[]   = [];
@@ -236,7 +241,7 @@ function parseTextRow(raw: Record<string, string>, rowIndex: number): ParsedRow 
 
   const typeRaw = cellStr(raw, 'type').toLowerCase();
   if (!TEXT_TYPES.includes(typeRaw))
-    errors.push({ field: 'type', message: `Invalid type "${cellStr(raw, 'type')}". Must be: short, long.` });
+    errors.push({ field: 'type', message: `Invalid type "${cellStr(raw, 'type')}". Must be: ${TEXT_TYPES.join(', ')}.` });
   const variant = TEXT_TYPES.includes(typeRaw) ? typeRaw as any : 'short';
 
   const stem = cellStr(raw, 'stem');

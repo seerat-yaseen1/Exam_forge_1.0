@@ -72,20 +72,31 @@ export type CorrectPair = {
 //
 //  engine  │  variant
 //  ────────┼───────────────────────────────────────────────────────
-//  mcq     │  'single'    — exactly one correct option
-//          │  'multi'     — one or more correct options
-//          │  'truefalse' — options locked to ["True","False"]
-//          │  'fillblank' — stem has ___ marker; options are candidates
+//  mcq     │  'single'     — exactly one correct option
+//          │  'multi'      — one or more correct options
+//          │  'truefalse'  — options locked to ["True","False"]
+//          │  'fillblank'  — stem has ___ marker; options are candidates
+//          │  'outputpred' — stem carries a code snippet; options are outputs
 //  ────────┼──────────────────────────────────────────────────────
-//  text    │  'short'     — expected short response
-//          │  'long'      — extended / essay response
+//  text    │  'short'      — expected short response
+//          │  'long'       — extended / essay response
+//          │  'codereview' — stem carries a snippet; response critiques it
 //  ────────┼───────────────────────────────────────────────────────
-//  match   │  null        — left ↔ right column pairs
+//  match   │  null         — left ↔ right column pairs
+//
+// CODE-BEARING VARIANTS ('outputpred', 'codereview') STORE NO NEW FIELD. The
+// snippet lives in the stem as a ```lang fenced block, which RichText renders
+// as a code block. That is not a shortcut — it means the server field
+// whitelist, the firestore rules, duplicate detection, bulk upload and export
+// all keep working untouched, because there is nothing new to let through.
+// They differ from their plain siblings ('single', 'long') only in what they
+// declare themselves to be, which is what lets a section rule, a bank filter
+// or a future analytics cut target them.
 
 export type QuestionEngine = 'mcq' | 'text' | 'match';
 
-export type MCQVariant     = 'single' | 'multi' | 'truefalse' | 'fillblank';
-export type TextVariant    = 'short' | 'long';
+export type MCQVariant     = 'single' | 'multi' | 'truefalse' | 'fillblank' | 'outputpred';
+export type TextVariant    = 'short' | 'long' | 'codereview';
 export type QuestionVariant = MCQVariant | TextVariant | null;
 
 // ── Difficulty & shared metadata ──────────────────────────────────
@@ -1613,6 +1624,10 @@ const emptyBase = {
 };
 
 export function buildEmptyMCQ(variant: MCQVariant): Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'> {
+  // 'outputpred' takes the ordinary 4-option skeleton: its options are candidate
+  // outputs, and the snippet it asks about lives in the stem. Nothing to prefill
+  // there — a stem seeded with an empty ``` fence would satisfy the "stem is
+  // required" check while still saying nothing.
   const isTF = variant === 'truefalse';
   return {
     ...emptyBase,

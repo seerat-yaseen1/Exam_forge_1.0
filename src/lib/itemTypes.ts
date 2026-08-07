@@ -517,15 +517,16 @@ const ITEM_TYPE_SPECS = {
     summary: 'Fix broken code until the supplied tests pass.',
     phase: 'Extension Phase 2 — Coding',
   },
+  // Output Prediction and Code Review are the two coding types that need NO
+  // sandbox — one is a keyed answer about a snippet, the other is prose about
+  // one — so they ship ahead of the code engine rather than waiting on it.
   'output-prediction': {
     category: 'coding',
     executionEngine: 'objective',
     label: 'Output Prediction',
     badge: 'Output',
     scoring: 'auto',
-    summary: 'State what a given program prints.',
-    phase: 'Extension Phase 2 — Coding',
-    today: 'Author it as an MCQ or Short Answer with the snippet in the stem.',
+    summary: 'Read a snippet and choose what it prints. The code goes in the stem as a fenced block.',
   },
   'code-review': {
     category: 'coding',
@@ -533,9 +534,7 @@ const ITEM_TYPE_SPECS = {
     label: 'Code Review',
     badge: 'Review',
     scoring: 'manual',
-    summary: 'Critique a diff or snippet — correctness, style, risk.',
-    phase: 'Extension Phase 2 — Coding',
-    today: 'Author it as a Long Answer with the snippet in the stem.',
+    summary: 'Critique a snippet — correctness, style, risk. The code goes in the stem as a fenced block.',
   },
 
   // ── Cognitive Game ──────────────────────────────────────────────
@@ -786,15 +785,17 @@ export const ITEM_TYPES: ItemTypeDef[] = ITEM_TYPE_IDS.map((id) => ITEM_TYPE_BY_
 // member names the taxonomy entry it satisfies.
 
 export const ITEM_TYPE_FOR_MCQ_VARIANT: Record<MCQVariant, ItemTypeId> = {
-  single:    'mcq-single',
-  multi:     'mcq-multi',
-  truefalse: 'true-false',
-  fillblank: 'fill-blank',
+  single:     'mcq-single',
+  multi:      'mcq-multi',
+  truefalse:  'true-false',
+  fillblank:  'fill-blank',
+  outputpred: 'output-prediction',
 };
 
 export const ITEM_TYPE_FOR_TEXT_VARIANT: Record<TextVariant, ItemTypeId> = {
-  short: 'short-answer',
-  long:  'long-answer',
+  short:      'short-answer',
+  long:       'long-answer',
+  codereview: 'code-review',
 };
 
 /** The match engine has no variants — one engine, one taxonomy entry. */

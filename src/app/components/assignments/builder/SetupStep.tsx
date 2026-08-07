@@ -10,9 +10,35 @@ import { type Student } from '../../../../lib/firebaseService';
 import { type Assessment, type AssessmentStatus } from '../../../../lib/assessmentService';
 import { type Question } from '../../../../lib/questionBankService';
 import { getAllSubjects, loadTaxonomyNameMaps, type Subject, type TaxonomyNameMaps } from '../../../../lib/subjectService';
+import {
+  EXECUTION_ENGINE_LABEL,
+  EXECUTION_ENGINE_SUMMARY,
+  isItemTypeLive,
+  itemTypesForExecutionEngine,
+  liveExecutionEngines,
+  type ExecutionEngine,
+} from '../../../../lib/itemTypes';
 import { makeSectionId, SECTION_LETTERS, defaultSectionName, mutabilityFor, type SectionDraft } from './shared';
 import { Field, SectionLabel, inputStyle } from './controls';
 import { SectionTopicPicker, SubjectPickerPhase, TopicPickerPhase } from './topicPickers';
+
+/**
+ * Engines a section can be locked to.
+ *
+ * Only the ones something can actually run in today — derived, so a runtime
+ * appears here the moment the first item type on it goes live and never a
+ * release before. Offering `code` now would let an author build a section that
+ * resolves to nothing at publish.
+ */
+const SECTION_ENGINE_OPTIONS: ExecutionEngine[] = liveExecutionEngines();
+
+/** How many live item types a lock admits — the author's sanity check. */
+function sectionAcceptedTypeCount(engines: ExecutionEngine[]): number {
+  return engines.reduce(
+    (n, e) => n + itemTypesForExecutionEngine(e).filter((t) => isItemTypeLive(t.id)).length,
+    0,
+  );
+}
 
 export function SetupStep({
   title, setTitle, description, setDescription,
@@ -176,8 +202,27 @@ export function SetupStep({
   const addSection = () => {
     setSections((prev) => [
       ...prev,
-      { id: makeSectionId(), name: defaultSectionName(prev.length), timeLimit: '', questionTimeLimit: '', rules: [], assignedTopics: [], breakAfterMinutes: '', breakMandatory: false },
+      { id: makeSectionId(), name: defaultSectionName(prev.length), timeLimit: '', questionTimeLimit: '', rules: [], assignedTopics: [], breakAfterMinutes: '', breakMandatory: false, engines: [] },
     ]);
+  };
+
+  /**
+   * Toggle one execution engine on a section.
+   *
+   * Clearing the last engine returns the section to UNLOCKED (accepts
+   * everything) rather than to "accepts nothing" — a section that admits no
+   * item at all is never what an author means by unticking the last box, and
+   * it would resolve to an empty section at publish.
+   */
+  const toggleSectionEngine = (idx: number, engine: ExecutionEngine) => {
+    setSections((prev) => prev.map((s, i) => {
+      if (i !== idx) return s;
+      const has = s.engines.includes(engine);
+      return {
+        ...s,
+        engines: has ? s.engines.filter((e) => e !== engine) : [...s.engines, engine],
+      };
+    }));
   };
 
   const removeSection = (idx: number) => {
@@ -460,6 +505,56 @@ export function SetupStep({
                             >
                               <X size={12} strokeWidth={1.5} />
                             </button>
+                          </div>
+
+                          {/* ── Accepted-engines row ──────────────────────────
+                              The section's item-type lock, expressed on the only
+                              axis with a mechanical answer: which delivery
+                              runtimes can this section run? Ticking Choice lets
+                              MCQ, True/False and Fill in the Blank sit together
+                              without anyone enumerating that, and a future item
+                              type on an existing engine joins for free.
+
+                              Nothing ticked = unlocked, which is the default and
+                              what every pre-existing assessment loads as — so
+                              this row is opt-in and changes nothing until used. */}
+                          <div
+                            className="flex items-center flex-wrap"
+                            style={{
+                              gap: 6,
+                              padding: '6px 10px 8px 44px',
+                              background: 'var(--ef-surface)',
+                              borderTop: '1px dashed var(--ef-border-subtle)',
+                            }}
+                          >
+                            <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
+                              Accepts
+                            </span>
+                            {SECTION_ENGINE_OPTIONS.map((eng) => {
+                              const on = sec.engines.includes(eng);
+                              return (
+                                <button
+                                  key={eng}
+                                  type="button"
+                                  onClick={() => toggleSectionEngine(idx, eng)}
+                                  title={EXECUTION_ENGINE_SUMMARY[eng]}
+                                  className="text-xs px-2 py-1 transition-all"
+                                  style={{
+                                    borderRadius: 2,
+                                    border: on ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
+                                    background: on ? 'var(--ef-ink)' : 'var(--ef-canvas-raised)',
+                                    color: on ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
+                                  }}
+                                >
+                                  {EXECUTION_ENGINE_LABEL[eng]}
+                                </button>
+                              );
+                            })}
+                            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                              {sec.engines.length === 0
+                                ? '— any item type'
+                                : `— ${sectionAcceptedTypeCount(sec.engines)} item types`}
+                            </span>
                           </div>
 
                           {/* Break-after-section row (hidden on last section) */}

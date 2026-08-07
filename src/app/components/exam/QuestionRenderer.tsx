@@ -131,8 +131,17 @@ function MCQMultiEngine({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>
-        Select all that apply.
+      {/* "Select all that apply" alone reads as "tick any that happen to fit",
+          which a candidate can satisfy with a single box and move on. The
+          checkbox shape is the only other signal, and it is easy to miss on a
+          phone. So the instruction states the fact — more than one option IS
+          correct — and is set in ink rather than muted grey, because it is a
+          rule of the question, not a hint about the interface. */}
+      <p
+        className="text-xs mb-3"
+        style={{ color: 'var(--ef-ink)', fontWeight: 500 }}
+      >
+        More than one option is correct — select all that apply.
       </p>
       {options.map((opt, idx) => {
         const isSelected = selected.includes(opt.id);

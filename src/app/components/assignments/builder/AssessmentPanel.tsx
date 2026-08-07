@@ -100,6 +100,9 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
             }),
         breakAfterMinutes: sec.breakAfter?.durationMinutes?.toString() ?? '',
         breakMandatory: sec.breakAfter?.mandatory ?? false,
+        // Absent on every assessment built before section locking — loads as
+        // unlocked, which is exactly how it has been behaving.
+        engines: sec.engines ?? [],
       }));
     }
     return [{
@@ -111,6 +114,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
       breakAfterMinutes: '',
       questionTimeLimit: '',
       breakMandatory: false,
+      engines: [],
     }];
   });
 

@@ -39,12 +39,13 @@ on:
   # rule above, or when re-checking a flake without an empty commit.
   workflow_dispatch:
 
-# A new push supersedes an in-flight run for the same ref. Exam Forge is a
-# small repo; there is no value in finishing a run for a commit nobody will
-# look at again.
+# For pull requests, a new push supersedes an in-flight run for the same ref.
+# For pushes to main, each commit gets its own run (no cancellation) so that
+# merging multiple PRs in quick succession doesn't leave CI with zero completed
+# runs.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read

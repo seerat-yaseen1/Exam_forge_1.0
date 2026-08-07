@@ -9,6 +9,7 @@
 import { motion } from 'motion/react';
 import { CheckCircle2 } from 'lucide-react';
 import type { AttemptAnswer } from '../../../lib/submissionService';
+import type { GroupKind } from '../../../lib/questionBankService';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -27,6 +28,79 @@ interface QuestionNavigatorProps {
   totalSections: number;
   /** 1-based index of the current section. */
   currentSectionNumber: number;
+
+  // ── Grouped sets (Phase 1) ────────────────────────────────────────
+  /** questionId → the group it belongs to, when it belongs to one. */
+  groupIdByQuestion?: Record<string, string | null | undefined>;
+  /** groupId → its kind, for the band label. */
+  groupKindById?: Record<string, GroupKind>;
+}
+
+// ── Chip runs (Phase 1) ────────────────────────────────────────────
+//
+// The navigator's whole job is telling a candidate where they are. Without
+// banding, a grouped set is eight identical chips and nothing says questions
+// 4-8 share a passage — so a candidate who answers 4 and jumps to 12 has no
+// way to know they abandoned a set halfway, and no way to find their way back
+// to it except by clicking through.
+//
+// Group members are contiguous in questionIds (startExam guarantees it), so a
+// single pass over the list produces the runs.
+
+type ChipRun =
+  | { kind: 'solo'; ids: string[]; startIdx: number }
+  | { kind: 'group'; ids: string[]; startIdx: number; groupId: string; groupKind?: GroupKind; ordinal: number };
+
+function buildRuns(
+  questionIds: string[],
+  groupIdByQuestion: Record<string, string | null | undefined> | undefined,
+  groupKindById: Record<string, GroupKind> | undefined,
+): ChipRun[] {
+  const runs: ChipRun[] = [];
+  const ordinalByGroup = new Map<string, number>();
+
+  questionIds.forEach((qid, idx) => {
+    const gid = groupIdByQuestion?.[qid] || null;
+    const last = runs[runs.length - 1];
+
+    if (!gid) {
+      if (last && last.kind === 'solo') last.ids.push(qid);
+      else runs.push({ kind: 'solo', ids: [qid], startIdx: idx });
+      return;
+    }
+
+    if (last && last.kind === 'group' && last.groupId === gid) {
+      last.ids.push(qid);
+      return;
+    }
+
+    if (!ordinalByGroup.has(gid)) ordinalByGroup.set(gid, ordinalByGroup.size + 1);
+    runs.push({
+      kind: 'group',
+      ids: [qid],
+      startIdx: idx,
+      groupId: gid,
+      groupKind: groupKindById?.[gid],
+      ordinal: ordinalByGroup.get(gid)!,
+    });
+  });
+
+  return runs;
+}
+
+/** "Passage 2 · Q7–11" — short enough for a 200px rail. */
+function runLabel(run: Extract<ChipRun, { kind: 'group' }>): string {
+  const noun =
+    run.groupKind === 'rc' ? 'Passage'
+    : run.groupKind === 'di' ? 'Data set'
+    : run.groupKind === 'caselet' ? 'Caselet'
+    : run.groupKind === 'puzzle' ? 'Puzzle'
+    : run.groupKind === 'seating' ? 'Arrangement'
+    : 'Set';
+  const first = run.startIdx + 1;
+  const last = run.startIdx + run.ids.length;
+  const span = first === last ? `Q${first}` : `Q${first}–${last}`;
+  return `${noun} ${run.ordinal} · ${span}`;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -64,9 +138,63 @@ export function QuestionNavigator({
   sectionName,
   totalSections,
   currentSectionNumber,
+  groupIdByQuestion,
+  groupKindById,
 }: QuestionNavigatorProps) {
   const answered = questionIds.filter((id) => isAnswered(id, answers)).length;
   const total = questionIds.length;
+
+  const runs = buildRuns(questionIds, groupIdByQuestion, groupKindById);
+  const hasGroups = runs.some((r) => r.kind === 'group');
+
+  // One chip. Identical in both layouts — banding changes the surroundings,
+  // never the chip itself, so a candidate reads position the same way.
+  const renderChip = (qId: string, idx: number) => {
+    const isAns = isAnswered(qId, answers);
+    const isCurrent = idx === currentQIdx;
+    return (
+      <motion.button
+        key={qId}
+        onClick={() => onSelectQ(idx)}
+        whileTap={{ scale: 0.92 }}
+        title={`Question ${idx + 1}${isAns ? ' (answered)' : ' (unanswered)'}`}
+        className="relative flex items-center justify-center text-xs transition-all"
+        style={{
+          height: 32,
+          borderRadius: 2,
+          cursor: 'pointer',
+          border: isCurrent
+            ? '2px solid var(--ef-ink)'
+            : isAns
+              ? '1px solid var(--ef-success-border)'
+              : '1px solid var(--ef-border)',
+          background: isCurrent
+            ? 'var(--ef-ink)'
+            : isAns
+              ? 'var(--ef-success-bg)'
+              : 'var(--ef-surface)',
+          color: isCurrent
+            ? 'var(--ef-surface)'
+            : isAns
+              ? 'var(--ef-success-strong)'
+              : 'var(--ef-text-muted)',
+        }}
+      >
+        {idx + 1}
+        {isAns && !isCurrent && (
+          <span
+            className="absolute"
+            style={{
+              top: 2, right: 2,
+              width: 4, height: 4,
+              borderRadius: '50%',
+              background: 'var(--ef-success-strong)',
+            }}
+          />
+        )}
+      </motion.button>
+    );
+  };
 
   const progressPct = total > 0 ? (answered / total) * 100 : 0;
 
@@ -115,58 +243,43 @@ export function QuestionNavigator({
 
       {/* Question chips — scrollable */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div
-          className="grid gap-1.5"
-          style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
-        >
-          {questionIds.map((qId, idx) => {
-            const answered = isAnswered(qId, answers);
-            const isCurrent = idx === currentQIdx;
-
-            return (
-              <motion.button
-                key={qId}
-                onClick={() => onSelectQ(idx)}
-                whileTap={{ scale: 0.92 }}
-                title={`Question ${idx + 1}${answered ? ' (answered)' : ' (unanswered)'}`}
-                className="relative flex items-center justify-center text-xs transition-all"
+        {/* Runs: standalone questions in a plain grid, grouped sets banded so
+            a candidate can see at a glance which questions share a stimulus. */}
+        <div className="space-y-2">
+          {runs.map((run, ri) =>
+            run.kind === 'solo' ? (
+              <div
+                key={`solo-${ri}`}
+                className="grid gap-1.5"
+                style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
+              >
+                {run.ids.map((qId, i) => renderChip(qId, run.startIdx + i))}
+              </div>
+            ) : (
+              <div
+                key={`grp-${run.groupId}-${ri}`}
                 style={{
-                  height: 32,
+                  border: '1px solid var(--ef-border)',
                   borderRadius: 2,
-                  cursor: 'pointer',
-                  border: isCurrent
-                    ? '2px solid var(--ef-ink)'
-                    : answered
-                      ? '1px solid var(--ef-success-border)'
-                      : '1px solid var(--ef-border)',
-                  background: isCurrent
-                    ? 'var(--ef-ink)'
-                    : answered
-                      ? 'var(--ef-success-bg)'
-                      : 'var(--ef-surface)',
-                  color: isCurrent
-                    ? 'var(--ef-surface)'
-                    : answered
-                      ? 'var(--ef-success-strong)'
-                      : 'var(--ef-text-muted)',
+                  background: 'var(--ef-canvas)',
+                  padding: 6,
                 }}
               >
-                {idx + 1}
-                {/* Answered dot */}
-                {answered && !isCurrent && (
-                  <span
-                    className="absolute"
-                    style={{
-                      top: 2, right: 2,
-                      width: 4, height: 4,
-                      borderRadius: '50%',
-                      background: 'var(--ef-success-strong)',
-                    }}
-                  />
-                )}
-              </motion.button>
-            );
-          })}
+                <p
+                  className="text-xs mb-1.5 px-0.5"
+                  style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.04em' }}
+                >
+                  {runLabel(run)}
+                </p>
+                <div
+                  className="grid gap-1.5"
+                  style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
+                >
+                  {run.ids.map((qId, i) => renderChip(qId, run.startIdx + i))}
+                </div>
+              </div>
+            ),
+          )}
         </div>
 
         {/* Legend */}
@@ -183,6 +296,12 @@ export function QuestionNavigator({
             <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', flexShrink: 0 }} />
             <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Unanswered</span>
           </div>
+          {hasGroups && (
+            <div className="flex items-center gap-2">
+              <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', flexShrink: 0 }} />
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Shared passage / data</span>
+            </div>
+          )}
         </div>
       </div>
 

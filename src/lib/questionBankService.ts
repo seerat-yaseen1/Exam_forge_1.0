@@ -693,19 +693,42 @@ export async function getQuestionsByIdsForReview(
  * has a finished attempt. One call for the whole paper (previously one
  * read per question).
  */
+/**
+ * The stimulus half of the exam payload, as students receive it.
+ *
+ * A narrower type than QuestionGroup on purpose: it is the shape
+ * sanitizeGroupForStudent actually returns. childIds, the internal title and
+ * every ownership field are withheld server-side, so they are absent here too
+ * — if this type claimed them, client code would compile against fields that
+ * are always undefined at runtime.
+ */
+export type ExamQuestionGroup = {
+  id: string;
+  kind: GroupKind;
+  stimulus: {
+    format: GroupStimulus['format'];
+    body: string;
+    images: string[];
+    table: { caption: string; headers: string[]; rows: GroupTableRow[] } | null;
+  };
+};
+
 export async function getExamQuestionsForStudent(
   assessmentId: string,
   mode: 'exam' | 'review',
-): Promise<Question[]> {
+): Promise<{ questions: Question[]; groups: ExamQuestionGroup[] }> {
   const call = httpsCallable<
     { assessmentId: string; mode: 'exam' | 'review'; sebToken?: string },
-    { ok: true; questions: Question[] }
+    { ok: true; questions: Question[]; groups?: ExamQuestionGroup[] }
   >(functions, 'getExamQuestions');
   // Phase 3: the live exam fetch carries the SEB proof. Review mode does not
   // require it (the student has quit SEB by then) but passing it is harmless.
   const sebToken = await ensureSebToken();
   const res = await call({ assessmentId, mode, sebToken });
-  return res.data.questions;
+  // `groups` is optional in the response type so a client running against a
+  // not-yet-deployed function still parses — it just gets no stimulus, which
+  // degrades to the pre-Phase-1 rendering rather than throwing mid-exam.
+  return { questions: res.data.questions, groups: res.data.groups ?? [] };
 }
 
 /**

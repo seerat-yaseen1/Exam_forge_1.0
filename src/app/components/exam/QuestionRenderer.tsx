@@ -13,9 +13,11 @@ import { useMemo, useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckSquare, Square, ChevronDown, Flag } from 'lucide-react';
 import { RichText } from '../questions/RichText';
-import type { Question, MCQOption, MatchPair } from '../../../lib/questionBankService';
+import { GROUP_KIND_LABEL } from '../../../lib/questionBankService';
+import type { Question, MCQOption, MatchPair, ExamQuestionGroup } from '../../../lib/questionBankService';
 import type { AnswerValue } from '../../../lib/submissionService';
 import type { ReportReason } from '../../../lib/questionReportService';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 // ── Shared styles ─────────────────────────────────────────────────
 
@@ -383,6 +385,171 @@ interface QuestionRendererProps {
   // Optional report-this-question controls — buffered in ExamShell
   flagReason?: ReportReason | null;
   onFlagChange?: (reason: ReportReason | null) => void;
+
+  // ── Grouped sets (Phase 1) ────────────────────────────────────────
+  /** The shared stimulus, when this question belongs to a group. */
+  group?: ExamQuestionGroup | null;
+  /** This question's 1-based position within its set, and the set's size. */
+  groupPosition?: { index: number; total: number } | null;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// STIMULUS PANEL (Phase 1)
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * A DI table.
+ *
+ * Rendered from structure rather than shown as an image so it can reflow,
+ * be zoomed without losing the row the candidate was on, and be read aloud.
+ * Rows arrive as `{ cells: [...] }` because Firestore cannot store nested
+ * arrays. Scrolls inside its own container: a wide table must never push the
+ * page sideways, and on a phone it will be wider than the viewport.
+ */
+function StimulusTable({ table }: { table: NonNullable<ExamQuestionGroup['stimulus']['table']> }) {
+  return (
+    <figure className="my-3">
+      {table.caption && (
+        <figcaption className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)' }}>
+          {table.caption}
+        </figcaption>
+      )}
+      <div style={{ overflowX: 'auto', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
+          {table.headers.length > 0 && (
+            <thead>
+              <tr>
+                {table.headers.map((h, i) => (
+                  <th
+                    key={i}
+                    scope="col"
+                    style={{
+                      textAlign: 'left', padding: '7px 10px', whiteSpace: 'nowrap',
+                      background: 'var(--ef-canvas)', color: 'var(--ef-ink)',
+                      borderBottom: '1px solid var(--ef-border)', fontWeight: 600,
+                    }}
+                  >
+                    <RichText text={h} style={{ fontSize: 13 }} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          )}
+          <tbody>
+            {table.rows.map((row, ri) => (
+              <tr key={ri}>
+                {(row.cells ?? []).map((cell, ci) => (
+                  <td
+                    key={ci}
+                    style={{
+                      padding: '7px 10px', color: 'var(--ef-ink)',
+                      borderBottom: ri === table.rows.length - 1 ? 'none' : '1px solid var(--ef-border)',
+                    }}
+                  >
+                    <RichText text={cell} style={{ fontSize: 13 }} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </figure>
+  );
+}
+
+/** The shared stimulus itself — passage, table, figures, or a mix. */
+export function StimulusBody({ group }: { group: ExamQuestionGroup }) {
+  const { stimulus } = group;
+  return (
+    <>
+      {stimulus.body && (
+        <RichText
+          text={stimulus.body}
+          style={{ fontSize: 14.5, color: 'var(--ef-ink)', lineHeight: '1.8', display: 'block' }}
+        />
+      )}
+      {stimulus.table && <StimulusTable table={stimulus.table} />}
+      {stimulus.images.map((src, i) => (
+        <img
+          key={i}
+          src={src}
+          alt=""
+          className="my-3"
+          style={{ maxWidth: '100%', height: 'auto', display: 'block', borderRadius: 2 }}
+        />
+      ))}
+    </>
+  );
+}
+
+/** Header line shared by both stimulus layouts. */
+export function StimulusHeading({
+  group, groupPosition,
+}: { group: ExamQuestionGroup; groupPosition?: { index: number; total: number } | null }) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span
+        className="text-xs px-2 py-0.5 select-none"
+        style={{
+          background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)',
+          borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10,
+          letterSpacing: '0.04em',
+        }}
+      >
+        {GROUP_KIND_LABEL[group.kind] ?? 'Grouped Set'}
+      </span>
+      {groupPosition && (
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+          Question {groupPosition.index} of {groupPosition.total} in this set
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phone layout: the stimulus collapses.
+ *
+ * Side-by-side is impossible below ~768px, and stacking a 600-word passage
+ * above the options would put the answer area off-screen on every question of
+ * the set. It starts OPEN, because a candidate meeting the set for the first
+ * time needs to read it, and closing is one tap once they have.
+ */
+function CollapsibleStimulus({
+  group, groupPosition,
+}: { group: ExamQuestionGroup; groupPosition?: { index: number; total: number } | null }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div
+      className="mb-5"
+      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-canvas-raised)' }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left"
+      >
+        <StimulusHeading group={group} groupPosition={groupPosition} />
+        <ChevronDown
+          size={16}
+          style={{
+            color: 'var(--ef-text-muted)', flexShrink: 0,
+            transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s',
+          }}
+        />
+      </button>
+      {open && (
+        <div
+          className="px-3 pb-3"
+          style={{ maxHeight: '45vh', overflowY: 'auto', borderTop: '1px solid var(--ef-border)', paddingTop: 12 }}
+        >
+          <StimulusBody group={group} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 const REPORT_OPTIONS: Array<{ value: ReportReason; label: string }> = [
@@ -493,7 +660,11 @@ export function QuestionRenderer({
   onAnswer,
   flagReason,
   onFlagChange,
+  group,
+  groupPosition,
 }: QuestionRendererProps) {
+  const isMobile = useIsMobile();
+
   // ── Derive current answer in typed form ───────────────────────
 
   const mcqSingleValue = (typeof answer === 'string' ? answer : '') as string;
@@ -516,9 +687,17 @@ export function QuestionRenderer({
         ? question.variant === 'long' ? 'Essay' : 'Short Answer'
         : 'Match';
 
-  return (
-    <div className="flex flex-col h-full overflow-y-auto">
-      <div className="px-8 py-6 flex-1">
+  // ── Question column ───────────────────────────────────────────
+  // Everything below the stimulus: header, stem, answer area. Extracted so
+  // the two layouts (side-by-side on desktop, stacked on phones) can share it
+  // verbatim rather than duplicating the answer engines.
+  const questionColumn = (
+    <div className="px-8 py-6 flex-1">
+
+        {/* Phone: the stimulus sits above the question and collapses. */}
+        {group && isMobile && (
+          <CollapsibleStimulus group={group} groupPosition={groupPosition} />
+        )}
 
         {/* Question header */}
         <div className="flex items-start justify-between gap-4 mb-5">
@@ -608,6 +787,45 @@ export function QuestionRenderer({
           )}
         </div>
 
+    </div>
+  );
+
+  // ── Standalone question, or a phone ───────────────────────────
+  // One scrolling column, exactly as before Phase 1.
+  if (!group || isMobile) {
+    return (
+      <div className="flex flex-col h-full overflow-y-auto">
+        {questionColumn}
+      </div>
+    );
+  }
+
+  // ── Grouped set on a wide screen: split pane ──────────────────
+  //
+  // The two panes scroll INDEPENDENTLY, which is the entire point. Stacking
+  // them in one scroller means a candidate on question 4 of a DI set has to
+  // scroll the chart back into view for every question, and loses their place
+  // in the options each time they do. Side-by-side keeps the stimulus fixed
+  // while the questions change under it — which is how the paper reads on
+  // paper, and what the format assumes.
+  return (
+    <div className="flex h-full" style={{ minHeight: 0 }}>
+      <div
+        className="overflow-y-auto px-8 py-6"
+        style={{
+          flex: '0 0 44%',
+          minWidth: 0,
+          borderRight: '1px solid var(--ef-border)',
+          background: 'var(--ef-canvas-raised)',
+        }}
+      >
+        <div className="mb-4">
+          <StimulusHeading group={group} groupPosition={groupPosition} />
+        </div>
+        <StimulusBody group={group} />
+      </div>
+      <div className="flex-1 overflow-y-auto" style={{ minWidth: 0 }}>
+        {questionColumn}
       </div>
     </div>
   );

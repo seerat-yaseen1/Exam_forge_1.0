@@ -340,9 +340,9 @@ export type AssessmentSection = {
   //
   // Which delivery runtimes this section accepts. An item may be drawn into
   // this section only if its execution engine (see src/lib/itemTypes.ts) is in
-  // this list — so a section locked to ['choice'] admits MCQ, True/False and
-  // Fill in the Blank together, and refuses a Short Answer, without anyone
-  // having had to enumerate that.
+  // this list — so a section locked to ['objective'] admits MCQ, True/False,
+  // Match and (once it ships) Numeric together, and refuses a Short Answer,
+  // without anyone having had to enumerate that.
   //
   // ABSENT OR EMPTY = UNLOCKED, and admits everything. That is the legacy
   // shape: every assessment written before section locking existed has no
@@ -457,7 +457,7 @@ function sectionAdmitsQuestion(
 /**
  * Can a section accepting `engines` deliver this group?
  *
- * Read through the registry rather than hardcoding 'stimulus' so that a future
+ * Read through the registry rather than hardcoding 'grouped' so that a future
  * group kind mapped to a different runtime is picked up here for free. A group
  * with no kind is treated as `generic`, which is what the resolver's own
  * matcher already assumes.
@@ -689,16 +689,16 @@ export function groupDeliveryBlocker(
   // The section's own engine lock, checked first because it is a statement the
   // author made about this section rather than a platform limitation — telling
   // them "grouped sets don't work with linear delivery" when the real reason is
-  // that they locked the section to Choice would send them to fix the wrong
+  // that they locked the section to Objective would send them to fix the wrong
   // thing.
-  if (!sectionAcceptsEngine(section.engines, 'stimulus')) {
+  if (!sectionAcceptsEngine(section.engines, 'grouped')) {
     const accepted = (section.engines ?? [])
       .map((e) => EXECUTION_ENGINE_LABEL[e])
       .join(', ');
     return `This section accepts ${accepted} only, and a grouped set needs the `
-         + `${EXECUTION_ENGINE_LABEL.stimulus} engine to keep its passage or `
-         + 'chart on screen. Add Shared Stimulus to the section, or remove the '
-         + 'group rule.';
+         + `${EXECUTION_ENGINE_LABEL.grouped} engine to keep its passage or `
+         + `chart on screen. Add ${EXECUTION_ENGINE_LABEL.grouped} to the `
+         + 'section, or remove the group rule.';
   }
   if (deliveryMode === 'linear' || deliveryMode === 'adaptive') {
     return `Grouped questions can't be used with ${deliveryMode} delivery — `

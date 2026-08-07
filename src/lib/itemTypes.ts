@@ -137,68 +137,100 @@ export type ItemScoring = 'auto' | 'manual' | 'hybrid';
 // WHY THIS IS THE AXIS SECTIONS LOCK ON
 //
 // A section declares the engines it accepts (`AssessmentSection.engines`). Any
-// item whose engine is in that set can sit in the section alongside any other —
-// MCQ, True/False and Fill in the Blank coexist naturally because all three are
-// 'choice', and nothing had to enumerate that fact. Locking to a category would
-// be a judgement about subject matter; locking to an exact item type would make
-// a three-format objective section need three sections. Locking to the runtime
-// asks the only question that has a mechanical answer: **can this section
-// actually run this item?**
+// item whose engine is in that set can sit in the section alongside any other.
+// Locking to a category would be a judgement about subject matter; locking to
+// an exact item type would make a three-format objective section need three
+// sections. Locking to the runtime asks the only question with a mechanical
+// answer: **can this section actually run this item?**
 //
 // It is also the extensible axis. A new item type joins by naming its engine.
 // If that engine already exists, every section that accepts it can use the new
 // type on day one and the builder is not touched at all. Only a genuinely new
 // runtime — the first game, the first code sandbox — costs a new member here,
 // and that cost is honest, because a new runtime really is new delivery work.
+//
+// ── GRANULARITY: A RENDERER IS NOT A RUNTIME ──────────────────────
+//
+// The engine is the CAPABILITY ENVELOPE, not the widget. MCQ, MSQ, True/False,
+// Numeric and Match all render differently, and all of them ask the same three
+// things of the shell: show one item, take one discrete response, score it from
+// a key with no sandbox, no clock of its own and no device permission. They are
+// compatible renderers inside one engine, and an author who wants an objective
+// section should tick ONE box, not five.
+//
+// An earlier cut of this file split them ('choice', 'entry', 'mapping', …) and
+// that was a mistake worth naming: it encoded the shape of the answer widget,
+// which changes with every new item type, instead of the shape of the delivery
+// contract, which does not. Numeric Answer needs a text box rather than radio
+// buttons — that is a renderer difference. It needs nothing of the exam shell
+// that MCQ does not, so it is not an engine difference, and a section built
+// before Numeric existed should be able to hold one the day it ships.
+//
+// The line is drawn where the shell genuinely has to do something new:
+//   • hold a stimulus across several questions  → 'grouped'
+//   • run untrusted code                        → 'coding'
+//   • surrender the clock to the item           → 'game'
+//   • ask the OS for camera / mic / a file      → 'media'
+//   • embed a third-party tool                  → 'practical'
+//   • hand the candidate off entirely           → 'external'
+//   • hold free text for a human to read later  → 'subjective'
+//
+// ── ENGINES vs CATEGORIES ─────────────────────────────────────────
+//
+// Six of these names also exist in `ItemCategory`, and near-agreement is the
+// point: the taxonomy was organised by delivery family all along. But they are
+// NOT the same axis and they disagree where it matters —
+//
+//   Code Review          category 'coding'      engine 'subjective' (no sandbox)
+//   Output Prediction    category 'coding'      engine 'objective'  (no sandbox)
+//   File Upload          category 'subjective'  engine 'media'      (file intake)
+//   Image Annotation     category 'multimedia'  engine 'media'
+//   Psychometric / Adaptive  category 'future'  engine 'objective'
+//   AI / Live Interview  category 'future'      engine 'external'
+//
+// Category answers "what kind of question is this?" and drives how the
+// authoring picker groups things. Engine answers "what must the shell do?" and
+// drives the section lock. The two unions are not mutually assignable —
+// 'multimedia' and 'future' are categories with no engine, 'media' and
+// 'external' are engines with no category — so the compiler rejects passing one
+// where the other belongs.
 
 export type ExecutionEngine =
-  | 'choice'       // select from supplied options
-  | 'entry'        // type a short, machine-checkable value
-  | 'composition'  // write extended prose for a human to grade
-  | 'mapping'      // pair, order or place supplied items
-  | 'canvas'       // point, mark or draw on a coordinate surface
-  | 'stimulus'     // a shared stimulus held across dependent questions
-  | 'code'         // sandboxed code or query execution
-  | 'game'         // timed interactive game runtime
-  | 'capture'      // device audio / video capture
-  | 'upload'       // file submission
-  | 'environment'  // an embedded tool or simulated system
-  | 'external';    // conducted outside the platform, scored back in
+  | 'objective'   // one discrete response, scored from a key
+  | 'subjective'  // free text held for a human grader
+  | 'grouped'     // a shared stimulus held across dependent questions
+  | 'coding'      // sandboxed code or query execution
+  | 'game'        // the item owns the clock and the mechanics
+  | 'media'       // device capture, drawing surface or file intake
+  | 'practical'   // an embedded tool or simulated system
+  | 'external';   // conducted outside the platform, scored back in
 
 /** Display order — live engines first, then by how far off they are. */
 export const EXECUTION_ENGINES: ExecutionEngine[] = [
-  'choice', 'composition', 'mapping', 'stimulus',
-  'entry', 'canvas', 'code', 'game', 'capture', 'upload', 'environment', 'external',
+  'objective', 'subjective', 'grouped',
+  'coding', 'game', 'media', 'practical', 'external',
 ];
 
 export const EXECUTION_ENGINE_LABEL: Record<ExecutionEngine, string> = {
-  choice:      'Choice',
-  entry:       'Short Entry',
-  composition: 'Written Response',
-  mapping:     'Mapping & Ordering',
-  canvas:      'Canvas',
-  stimulus:    'Shared Stimulus',
-  code:        'Code Execution',
-  game:        'Game Runtime',
-  capture:     'Media Capture',
-  upload:      'File Upload',
-  environment: 'Simulated Environment',
-  external:    'External',
+  objective:  'Objective',
+  subjective: 'Subjective',
+  grouped:    'Grouped',
+  coding:     'Coding',
+  game:       'Game',
+  media:      'Media',
+  practical:  'Practical',
+  external:   'External',
 };
 
 export const EXECUTION_ENGINE_SUMMARY: Record<ExecutionEngine, string> = {
-  choice:      'The candidate picks from options the item supplies.',
-  entry:       'The candidate types a short value checked against a key.',
-  composition: 'The candidate writes at length; a grader awards the marks.',
-  mapping:     'The candidate pairs, orders or places supplied items.',
-  canvas:      'The candidate points at, marks or draws on a surface.',
-  stimulus:    'A passage, table or chart stays on screen across its questions.',
-  code:        'The candidate writes code or a query, run against test cases.',
-  game:        'A timed interactive task with its own clock and mechanics.',
-  capture:     'The candidate records audio or video from their device.',
-  upload:      'The candidate submits a file as the answer.',
-  environment: 'The candidate works inside an embedded tool or simulation.',
-  external:    'The assessment happens outside the platform and reports back.',
+  objective:  'One item, one discrete response, scored from a key. MCQ, True/False, Match, Numeric and anything else that fits that contract.',
+  subjective: 'Free text captured and held for a human grader.',
+  grouped:    'A passage, table or chart stays on screen across its questions.',
+  coding:     'Code or a query run in a sandbox against test cases.',
+  game:       'A timed interactive task that owns its own clock and mechanics.',
+  media:      'Audio, video, drawing or a file submitted from the candidate’s device.',
+  practical:  'Work done inside an embedded tool or simulated system.',
+  external:   'The assessment happens outside the platform and reports back.',
 };
 
 type ItemTypeSpec = {
@@ -253,7 +285,7 @@ const ITEM_TYPE_SPECS = {
   // otherwise has been failed by the interface, not by their knowledge.
   'mcq-single': {
     category: 'objective',
-    executionEngine: 'choice',
+    executionEngine: 'objective',
     label: 'MCQ — Single Correct',
     badge: 'MCQ',
     scoring: 'auto',
@@ -261,7 +293,7 @@ const ITEM_TYPE_SPECS = {
   },
   'mcq-multi': {
     category: 'objective',
-    executionEngine: 'choice',
+    executionEngine: 'objective',
     label: 'MCQ — Multiple Correct',
     badge: 'Multi',
     scoring: 'auto',
@@ -269,7 +301,7 @@ const ITEM_TYPE_SPECS = {
   },
   'true-false': {
     category: 'objective',
-    executionEngine: 'choice',
+    executionEngine: 'objective',
     label: 'True / False',
     badge: 'T/F',
     scoring: 'auto',
@@ -277,7 +309,7 @@ const ITEM_TYPE_SPECS = {
   },
   'match-the-following': {
     category: 'objective',
-    executionEngine: 'mapping',
+    executionEngine: 'objective',
     label: 'Match the Following',
     badge: 'Match',
     scoring: 'auto',
@@ -285,7 +317,7 @@ const ITEM_TYPE_SPECS = {
   },
   'sequence': {
     category: 'objective',
-    executionEngine: 'mapping',
+    executionEngine: 'objective',
     label: 'Sequence / Ordering',
     badge: 'Seq',
     scoring: 'auto',
@@ -295,7 +327,7 @@ const ITEM_TYPE_SPECS = {
   },
   'fill-blank': {
     category: 'objective',
-    executionEngine: 'choice',
+    executionEngine: 'objective',
     label: 'Fill in the Blank',
     badge: 'Fill',
     scoring: 'auto',
@@ -303,7 +335,7 @@ const ITEM_TYPE_SPECS = {
   },
   'numeric': {
     category: 'objective',
-    executionEngine: 'entry',
+    executionEngine: 'objective',
     label: 'Numeric Answer',
     badge: 'Num',
     scoring: 'auto',
@@ -313,7 +345,7 @@ const ITEM_TYPE_SPECS = {
   },
   'hotspot': {
     category: 'objective',
-    executionEngine: 'canvas',
+    executionEngine: 'objective',
     label: 'Hotspot',
     badge: 'Spot',
     scoring: 'auto',
@@ -322,7 +354,7 @@ const ITEM_TYPE_SPECS = {
   },
   'drag-drop': {
     category: 'objective',
-    executionEngine: 'mapping',
+    executionEngine: 'objective',
     label: 'Drag & Drop',
     badge: 'Drag',
     scoring: 'auto',
@@ -331,7 +363,7 @@ const ITEM_TYPE_SPECS = {
   },
   'matrix-grid': {
     category: 'objective',
-    executionEngine: 'choice',
+    executionEngine: 'objective',
     label: 'Matrix / Grid',
     badge: 'Grid',
     scoring: 'auto',
@@ -343,7 +375,7 @@ const ITEM_TYPE_SPECS = {
   // ── Subjective ──────────────────────────────────────────────────
   'short-answer': {
     category: 'subjective',
-    executionEngine: 'composition',
+    executionEngine: 'subjective',
     label: 'Short Answer',
     badge: 'Short',
     scoring: 'manual',
@@ -351,7 +383,7 @@ const ITEM_TYPE_SPECS = {
   },
   'long-answer': {
     category: 'subjective',
-    executionEngine: 'composition',
+    executionEngine: 'subjective',
     label: 'Long Answer',
     badge: 'Long',
     scoring: 'manual',
@@ -359,7 +391,7 @@ const ITEM_TYPE_SPECS = {
   },
   'essay': {
     category: 'subjective',
-    executionEngine: 'composition',
+    executionEngine: 'subjective',
     label: 'Essay',
     badge: 'Essay',
     scoring: 'manual',
@@ -369,7 +401,7 @@ const ITEM_TYPE_SPECS = {
   },
   'case-analysis': {
     category: 'subjective',
-    executionEngine: 'composition',
+    executionEngine: 'subjective',
     label: 'Case Analysis',
     badge: 'Case',
     scoring: 'manual',
@@ -379,7 +411,7 @@ const ITEM_TYPE_SPECS = {
   },
   'file-upload': {
     category: 'subjective',
-    executionEngine: 'upload',
+    executionEngine: 'media',
     label: 'File Upload',
     badge: 'File',
     scoring: 'manual',
@@ -390,7 +422,7 @@ const ITEM_TYPE_SPECS = {
   // ── Grouped Item ────────────────────────────────────────────────
   'reading-comprehension': {
     category: 'grouped',
-    executionEngine: 'stimulus',
+    executionEngine: 'grouped',
     label: 'Reading Comprehension',
     badge: 'RC',
     scoring: 'auto',
@@ -398,7 +430,7 @@ const ITEM_TYPE_SPECS = {
   },
   'data-interpretation': {
     category: 'grouped',
-    executionEngine: 'stimulus',
+    executionEngine: 'grouped',
     label: 'Data Interpretation',
     badge: 'DI',
     scoring: 'auto',
@@ -406,7 +438,7 @@ const ITEM_TYPE_SPECS = {
   },
   'seating-arrangement': {
     category: 'grouped',
-    executionEngine: 'stimulus',
+    executionEngine: 'grouped',
     label: 'Seating Arrangement',
     badge: 'Seat',
     scoring: 'auto',
@@ -414,7 +446,7 @@ const ITEM_TYPE_SPECS = {
   },
   'blood-relation': {
     category: 'grouped',
-    executionEngine: 'stimulus',
+    executionEngine: 'grouped',
     label: 'Blood Relation',
     badge: 'Rel',
     scoring: 'auto',
@@ -424,7 +456,7 @@ const ITEM_TYPE_SPECS = {
   },
   'puzzle': {
     category: 'grouped',
-    executionEngine: 'stimulus',
+    executionEngine: 'grouped',
     label: 'Puzzle',
     badge: 'Puzzle',
     scoring: 'auto',
@@ -432,7 +464,7 @@ const ITEM_TYPE_SPECS = {
   },
   'caselet': {
     category: 'grouped',
-    executionEngine: 'stimulus',
+    executionEngine: 'grouped',
     label: 'Caselet',
     badge: 'Caselet',
     scoring: 'auto',
@@ -440,7 +472,7 @@ const ITEM_TYPE_SPECS = {
   },
   'logical-set': {
     category: 'grouped',
-    executionEngine: 'stimulus',
+    executionEngine: 'grouped',
     label: 'Logical Set',
     badge: 'Logic',
     scoring: 'auto',
@@ -450,7 +482,7 @@ const ITEM_TYPE_SPECS = {
   },
   'multi-question-passage': {
     category: 'grouped',
-    executionEngine: 'stimulus',
+    executionEngine: 'grouped',
     label: 'Multi-question Passage',
     badge: 'Set',
     scoring: 'auto',
@@ -460,7 +492,7 @@ const ITEM_TYPE_SPECS = {
   // ── Coding ──────────────────────────────────────────────────────
   'coding-challenge': {
     category: 'coding',
-    executionEngine: 'code',
+    executionEngine: 'coding',
     label: 'Coding Challenge',
     badge: 'Code',
     scoring: 'hybrid',
@@ -469,7 +501,7 @@ const ITEM_TYPE_SPECS = {
   },
   'sql-challenge': {
     category: 'coding',
-    executionEngine: 'code',
+    executionEngine: 'coding',
     label: 'SQL Challenge',
     badge: 'SQL',
     scoring: 'hybrid',
@@ -478,7 +510,7 @@ const ITEM_TYPE_SPECS = {
   },
   'debugging': {
     category: 'coding',
-    executionEngine: 'code',
+    executionEngine: 'coding',
     label: 'Debugging',
     badge: 'Debug',
     scoring: 'hybrid',
@@ -487,7 +519,7 @@ const ITEM_TYPE_SPECS = {
   },
   'output-prediction': {
     category: 'coding',
-    executionEngine: 'entry',
+    executionEngine: 'objective',
     label: 'Output Prediction',
     badge: 'Output',
     scoring: 'auto',
@@ -497,7 +529,7 @@ const ITEM_TYPE_SPECS = {
   },
   'code-review': {
     category: 'coding',
-    executionEngine: 'composition',
+    executionEngine: 'subjective',
     label: 'Code Review',
     badge: 'Review',
     scoring: 'manual',
@@ -583,7 +615,7 @@ const ITEM_TYPE_SPECS = {
   // ── Multimedia ──────────────────────────────────────────────────
   'audio-response': {
     category: 'multimedia',
-    executionEngine: 'capture',
+    executionEngine: 'media',
     label: 'Audio Response',
     badge: 'Audio',
     scoring: 'manual',
@@ -592,7 +624,7 @@ const ITEM_TYPE_SPECS = {
   },
   'video-response': {
     category: 'multimedia',
-    executionEngine: 'capture',
+    executionEngine: 'media',
     label: 'Video Response',
     badge: 'Video',
     scoring: 'manual',
@@ -601,7 +633,7 @@ const ITEM_TYPE_SPECS = {
   },
   'image-annotation': {
     category: 'multimedia',
-    executionEngine: 'canvas',
+    executionEngine: 'media',
     label: 'Image Annotation',
     badge: 'Annot',
     scoring: 'manual',
@@ -610,7 +642,7 @@ const ITEM_TYPE_SPECS = {
   },
   'speech-recording': {
     category: 'multimedia',
-    executionEngine: 'capture',
+    executionEngine: 'media',
     label: 'Speech Recording',
     badge: 'Speech',
     scoring: 'hybrid',
@@ -619,7 +651,7 @@ const ITEM_TYPE_SPECS = {
   },
   'whiteboard': {
     category: 'multimedia',
-    executionEngine: 'canvas',
+    executionEngine: 'media',
     label: 'Whiteboard',
     badge: 'Board',
     scoring: 'manual',
@@ -630,7 +662,7 @@ const ITEM_TYPE_SPECS = {
   // ── Practical ───────────────────────────────────────────────────
   'simulation': {
     category: 'practical',
-    executionEngine: 'environment',
+    executionEngine: 'practical',
     label: 'Simulation',
     badge: 'Sim',
     scoring: 'hybrid',
@@ -639,7 +671,7 @@ const ITEM_TYPE_SPECS = {
   },
   'virtual-lab': {
     category: 'practical',
-    executionEngine: 'environment',
+    executionEngine: 'practical',
     label: 'Virtual Lab',
     badge: 'Lab',
     scoring: 'hybrid',
@@ -648,7 +680,7 @@ const ITEM_TYPE_SPECS = {
   },
   'spreadsheet-exercise': {
     category: 'practical',
-    executionEngine: 'environment',
+    executionEngine: 'practical',
     label: 'Spreadsheet Exercise',
     badge: 'Sheet',
     scoring: 'hybrid',
@@ -657,7 +689,7 @@ const ITEM_TYPE_SPECS = {
   },
   'design-exercise': {
     category: 'practical',
-    executionEngine: 'environment',
+    executionEngine: 'practical',
     label: 'Design Exercise',
     badge: 'Design',
     scoring: 'manual',
@@ -666,7 +698,7 @@ const ITEM_TYPE_SPECS = {
   },
   'workflow-task': {
     category: 'practical',
-    executionEngine: 'environment',
+    executionEngine: 'practical',
     label: 'Workflow Task',
     badge: 'Flow',
     scoring: 'hybrid',
@@ -704,7 +736,7 @@ const ITEM_TYPE_SPECS = {
   },
   'psychometric-inventory': {
     category: 'future',
-    executionEngine: 'choice',
+    executionEngine: 'objective',
     label: 'Psychometric Inventory',
     badge: 'Psych',
     scoring: 'auto',
@@ -712,7 +744,7 @@ const ITEM_TYPE_SPECS = {
   },
   'adaptive-item': {
     category: 'future',
-    executionEngine: 'choice',
+    executionEngine: 'objective',
     label: 'Adaptive Item',
     badge: 'Adapt',
     scoring: 'auto',

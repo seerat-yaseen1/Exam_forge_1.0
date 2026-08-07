@@ -276,22 +276,56 @@ code sandbox or game canvas breaks that correspondence in both directions.
 
 | Engine | What the shell must be able to do | Item types | Live |
 |---|---|---|---|
-| `choice` | present options, take a selection | MCQ ×2, True/False, Fill in the Blank, Matrix/Grid, Psychometric, Adaptive | ✅ |
-| `composition` | take extended prose, route it to a grader | Short Answer, Long Answer, Essay, Case Analysis, Code Review | ✅ |
-| `mapping` | pair, order or place supplied items | Match the Following, Sequence, Drag & Drop | ✅ |
-| `stimulus` | hold a passage/table on screen across its questions | all 8 grouped types | ✅ |
-| `entry` | take a short typed value, check it against a key | Numeric Answer, Output Prediction | ◻ |
-| `canvas` | pointer/coordinate input on a surface | Hotspot, Image Annotation, Whiteboard | ◻ |
-| `code` | run code or a query against test cases | Coding Challenge, SQL Challenge, Debugging | ◻ |
-| `game` | run a timed interactive task with its own clock | all 8 games | ◻ |
-| `capture` | record device audio/video | Audio, Video, Speech Recording | ◻ |
-| `upload` | accept a file submission | File Upload | ◻ |
-| `environment` | embed a tool or simulated system | Simulation, Virtual Lab, Spreadsheet, Design, Workflow | ◻ |
-| `external` | launch elsewhere and score back | AI Interview, Live Interview, External Assessment | ◻ |
+| `objective` | show one item, take one discrete response, score from a key | MCQ ×2, True/False, Fill in the Blank, **Match**, Sequence, **Numeric**, Hotspot, Drag & Drop, Matrix/Grid, Output Prediction, Psychometric, Adaptive — 13 | ✅ |
+| `subjective` | hold free text for a human grader | Short Answer, Long Answer, Essay, Case Analysis, Code Review — 5 | ✅ |
+| `grouped` | hold a passage/table on screen across its questions | all 8 grouped types | ✅ |
+| `coding` | run untrusted code or a query against test cases | Coding Challenge, SQL Challenge, Debugging | ◻ |
+| `game` | surrender the clock — the item owns its own timing | all 8 games | ◻ |
+| `media` | ask the OS for camera, mic, a drawing surface or a file | Audio, Video, Speech, Image Annotation, Whiteboard, File Upload | ◻ |
+| `practical` | embed a third-party tool or simulated system | Simulation, Virtual Lab, Spreadsheet, Design, Workflow | ◻ |
+| `external` | hand the candidate off entirely and score back | AI Interview, Live Interview, External Assessment | ◻ |
 
 An engine is live when at least one live item type sits on it — derived, like
 every other liveness statement here, so the section picker cannot offer a
-runtime that nothing can run in yet.
+runtime that nothing can run in yet. Three are live, so a section lock is
+usually **one tick**.
+
+### A renderer is not a runtime
+
+The engine is the capability envelope, not the widget. MCQ, MSQ, True/False,
+Numeric and Match render completely differently and ask the shell for exactly
+the same three things: show one item, take one discrete response, score it from
+a key — no sandbox, no clock of its own, no device permission. They are
+compatible renderers inside one engine.
+
+An earlier cut of this design split them (`choice` / `entry` / `mapping` /
+`canvas`) and that was the wrong line. It encoded the shape of the *answer
+widget*, which changes with every new item type, instead of the shape of the
+*delivery contract*, which does not — so an author wanting an ordinary objective
+section had to tick five boxes, and a section built today could not hold a
+Numeric Answer the day Numeric ships. The engine boundary now sits only where
+the shell genuinely has to do something new.
+
+### Engines are not categories
+
+Six engine names also exist as categories, and the near-agreement is itself the
+finding: **the taxonomy was organised by delivery family all along.** But they
+are different axes and they disagree where it counts:
+
+| Item type | Category | Engine | Why they differ |
+|---|---|---|---|
+| Code Review | `coding` | `subjective` | critiquing a diff needs no sandbox |
+| Output Prediction | `coding` | `objective` | it is a keyed answer about a snippet |
+| File Upload | `subjective` | `media` | needs file intake, not a text box |
+| Image Annotation | `multimedia` | `media` | — |
+| Psychometric, Adaptive | `future` | `objective` | keyed responses, novel *delivery* |
+| AI / Live Interview | `future` | `external` | — |
+
+Category answers "what kind of question is this?" and groups the authoring
+picker. Engine answers "what must the shell do?" and drives the section lock.
+The two unions are not mutually assignable — `multimedia` and `future` are
+categories with no engine, `media` and `external` are engines with no category —
+so the compiler rejects passing one where the other belongs.
 
 ### The section lock
 
@@ -317,15 +351,15 @@ really is new delivery work.
 The lock does not add a rule kind. It **narrows the pool a rule draws from**:
 
 - `resolveQuestionsForSections` filters the candidate pool by the section's
-  engines, so a Choice-only section draws only choice items from a taxonomy cell
-  that also holds Short Answers.
+  engines, so an Objective-only section draws only objective items from a
+  taxonomy cell that also holds Short Answers.
 - `validateSelectionRules` applies the identical filter to its availability
   count. A question counted as available by one and rejected by the other is
   exactly how a "valid" blueprint still produces a short paper.
 - `groupDeliveryBlocker` refuses a group rule in a section that does not accept
-  `stimulus`, and says so in those terms — checked *before* the delivery-mode
-  reasons, so an author who locked the section to Choice is not told the problem
-  is linear delivery.
+  `grouped`, and says so in those terms — checked *before* the delivery-mode
+  reasons, so an author who locked the section to Objective is not told the
+  problem is linear delivery.
 
 One deliberate imprecision: prior sections' usage is tracked per taxonomy cell,
 not per cell-and-engine, because the validator cannot know which specific
@@ -449,7 +483,7 @@ rather than its own shorter variant of it ("MCQ — Single Correct", not "MCQ").
 
 1. **Whether an unlocked section should stay the default.** Today a new section
    accepts everything and the author opts into a lock. The opposite — every
-   section locked to Choice unless widened — would catch more mistakes but would
+   section locked to Objective unless widened — would catch more mistakes but would
    change the shape of the very first screen a faculty member sees.
 2. **Matrix / Grid's answer shape** decides whether "one question, one answer
    value" survives. Answer it before building any of Matrix, Drag & Drop or

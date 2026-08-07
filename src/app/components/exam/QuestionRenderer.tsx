@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { CheckSquare, Square, ChevronDown, Flag } from 'lucide-react';
 import { RichText } from '../questions/RichText';
 import { GROUP_KIND_LABEL } from '../../../lib/questionBankService';
+import { itemTypeForQuestion } from '../../../lib/itemTypes';
 import type { Question, MCQOption, MatchPair, ExamQuestionGroup } from '../../../lib/questionBankService';
 import type { AnswerValue } from '../../../lib/submissionService';
 import type { ReportReason } from '../../../lib/questionReportService';
@@ -678,14 +679,12 @@ export function QuestionRenderer({
 
   // ── Engine badge ──────────────────────────────────────────────
 
-  const badgeText =
-    question.engine === 'mcq'
-      ? question.variant === 'multi' ? 'MCQ Multi' :
-        question.variant === 'truefalse' ? 'True / False' :
-        question.variant === 'fillblank' ? 'Fill in the Blank' : 'MCQ'
-      : question.engine === 'text'
-        ? question.variant === 'long' ? 'Essay' : 'Short Answer'
-        : 'Match';
+  // Named from the item-type registry, so the chip a candidate reads mid-exam
+  // says the same thing the author picked in the question bank. Falls back to
+  // the engine name for a shape the registry doesn't know — a blank chip in a
+  // live exam is worse than a rough one.
+  const badgeText = itemTypeForQuestion(question.engine, question.variant)?.label
+    ?? question.engine.toUpperCase();
 
   // ── Question column ───────────────────────────────────────────
   // Everything below the stimulus: header, stem, answer area. Extracted so

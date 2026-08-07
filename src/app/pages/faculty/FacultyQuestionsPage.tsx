@@ -10,6 +10,7 @@ import {
   questionTypeBadge, difficultyColor,
   type Question, type Difficulty,
 } from '../../../lib/questionBankService';
+import { itemTypeIdForQuestion, liveQuestionItemTypes } from '../../../lib/itemTypes';
 import { getFaculty, getInstitute, type FacultyQuestionRights, type QuestionRightsCeiling } from '../../../lib/firebaseService';
 import { effectiveFacultyMode } from '../../../lib/questionRights';
 import { submitQuestionRequest } from '../../../lib/questionRequestService';
@@ -135,15 +136,11 @@ function TabBar({ active, onChange, showRequests }: { active: Tab; onChange: (t:
 
 // ── Filter bar ─────────────────────────────────────────────────────────────────
 
+// Registry-derived; filters on the type ID, not on the badge text. See the
+// same constant in QuestionBankCore for why the two were split apart.
 const TYPE_FILTERS = [
-  { label: 'All',   value: '' },
-  { label: 'MCQ',   value: 'MCQ' },
-  { label: 'Multi', value: 'Multi' },
-  { label: 'T/F',   value: 'T/F' },
-  { label: 'Fill',  value: 'Fill' },
-  { label: 'Short', value: 'Short' },
-  { label: 'Essay', value: 'Essay' },
-  { label: 'Match', value: 'Match' },
+  { label: 'All', value: '' },
+  ...liveQuestionItemTypes().map(({ def }) => ({ label: def.badge, value: def.id as string })),
 ];
 
 const DIFF_FILTERS = [
@@ -653,7 +650,7 @@ export function FacultyQuestionsPage() {
 
   // ── Filter logic ──────────────────────────────────────────────────
   const filtered = questions.filter((q) => {
-    if (typeFilter) { const b = questionTypeBadge(q.engine, q.variant); if (b !== typeFilter) return false; }
+    if (typeFilter && itemTypeIdForQuestion(q.engine, q.variant) !== typeFilter) return false;
     if (diffFilter && q.difficulty !== diffFilter) return false;
     if (search) {
       const s = search.toLowerCase();

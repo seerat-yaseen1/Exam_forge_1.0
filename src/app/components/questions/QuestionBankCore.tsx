@@ -11,6 +11,7 @@ import {
   GROUP_KIND_LABEL,
   type Question, type Difficulty, type QuestionGroup,
 } from '../../../lib/questionBankService';
+import { itemTypeIdForQuestion, liveQuestionItemTypes } from '../../../lib/itemTypes';
 import { getAllSubjects, getAllTopics, type Subject, type Topic } from '../../../lib/subjectService';
 import { QuestionTypeEngine, type QuestionDraft } from './QuestionTypeEngine';
 import { QuestionGroupEditor, type GroupEditorSave } from './QuestionGroupEditor';
@@ -87,10 +88,12 @@ function SkeletonRow() {
 
 // ── Filter bar ────────────────────────────────────────────────────────────────
 
+// Derived from the item-type registry, and filtering on the type ID rather
+// than on the badge text. The badge is a display string — when it was also the
+// filter value, renaming a badge silently produced a chip that matched nothing.
 const TYPE_FILTERS = [
-  { label: 'All', value: '' }, { label: 'MCQ', value: 'MCQ' }, { label: 'Multi', value: 'Multi' },
-  { label: 'T/F', value: 'T/F' }, { label: 'Fill', value: 'Fill' }, { label: 'Short', value: 'Short' },
-  { label: 'Essay', value: 'Essay' }, { label: 'Match', value: 'Match' },
+  { label: 'All', value: '' },
+  ...liveQuestionItemTypes().map(({ def }) => ({ label: def.badge, value: def.id as string })),
 ];
 
 const DIFF_FILTERS = [
@@ -839,7 +842,7 @@ export const QuestionBankCore = forwardRef<QuestionBankCoreHandle, QuestionBankC
       // individually — which the resolver refuses to do, because a DI
       // question without its chart is unanswerable.
       if (q.groupId) return false;
-      if (typeFilter) { const b = questionTypeBadge(q.engine, q.variant); if (b !== typeFilter) return false; }
+      if (typeFilter && itemTypeIdForQuestion(q.engine, q.variant) !== typeFilter) return false;
       if (diffFilter && q.difficulty !== diffFilter) return false;
 
       if (subjectId) {

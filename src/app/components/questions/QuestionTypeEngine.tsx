@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, X, Check, ChevronLeft, Loader2, AlertTriangle, Eye } from 'lucide-react';
+import { Plus, X, Check, ChevronDown, ChevronLeft, Loader2, AlertTriangle, Eye } from 'lucide-react';
 import {
   type Question,
   type QuestionEngine,
@@ -17,6 +17,14 @@ import {
   getDuplicateCheckPool,
   findDuplicateCandidates,
 } from '../../../lib/questionBankService';
+import {
+  ITEM_CATEGORY_LABEL,
+  isItemTypeLive,
+  itemTypesInCategory,
+  liveQuestionItemTypes,
+  populatedCategories,
+  type ItemTypeId,
+} from '../../../lib/itemTypes';
 import {
   scoreAgainstPool,
   verdictFor,
@@ -56,28 +64,62 @@ function iBlur(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
 }
 
 // ── Type options ──────────────────────────────────────────────────────────────
+//
+// Built from the item-type registry (src/lib/itemTypes.ts) rather than typed
+// out here, so this drawer offers exactly the types an engine can actually
+// build — no more (a card for something half-implemented) and no fewer (a new
+// variant that nobody remembered to add to this array).
+//
+// A few stem-level authoring notes have no place in the registry — "use ___ to
+// mark the blank" is advice about this editor, not a property of the item type
+// — so they are kept here and appended to the registry's summary.
 
 interface TypeOption {
   engine: QuestionEngine;
   variant: QuestionVariant;
+  id: ItemTypeId;
   label: string;
   badge: string;
   description: string;
 }
 
-const TYPE_OPTIONS: TypeOption[] = [
-  { engine: 'mcq',   variant: 'single',    label: 'MCQ — Single Correct',  badge: 'MCQ',   description: 'One correct answer from multiple options' },
-  { engine: 'mcq',   variant: 'multi',     label: 'MCQ — Multi Correct',   badge: 'Multi', description: 'One or more answers may be correct' },
-  { engine: 'mcq',   variant: 'truefalse', label: 'True / False',          badge: 'T/F',   description: 'Binary choice — True or False' },
-  { engine: 'mcq',   variant: 'fillblank', label: 'Fill in the Blank',     badge: 'Fill',  description: 'Use ___ in the stem to mark the blank' },
-  { engine: 'text',  variant: 'short',     label: 'Short Answer',          badge: 'Short', description: 'Brief written response expected' },
-  { engine: 'text',  variant: 'long',      label: 'Long / Essay',          badge: 'Essay', description: 'Extended written or analytical response' },
-  { engine: 'match', variant: null,        label: 'Match the Columns',     badge: 'Match', description: 'Pair items from two columns' },
-];
+const AUTHORING_HINT: Partial<Record<ItemTypeId, string>> = {
+  'fill-blank': 'Use ___ in the stem to mark the blank.',
+};
+
+const TYPE_OPTIONS: TypeOption[] = liveQuestionItemTypes().map(({ def, engine, variant }) => ({
+  engine,
+  variant,
+  id: def.id,
+  label: def.label,
+  badge: def.badge,
+  description: [def.summary, AUTHORING_HINT[def.id]].filter(Boolean).join(' '),
+}));
+
+/**
+ * Everything in the taxonomy this drawer cannot build yet.
+ *
+ * Shown, collapsed, rather than hidden. Faculty asking "where is Numeric
+ * Answer?" currently have no way to tell the difference between a type that is
+ * missing and one they cannot find, and the honest answer — not built, here is
+ * what to use instead — is short enough to just say. Live grouped types are
+ * excluded: those exist, they are simply authored from the Sets tab.
+ */
+const UPCOMING_BY_CATEGORY = populatedCategories()
+  .map((category) => ({
+    category,
+    label: ITEM_CATEGORY_LABEL[category],
+    types: itemTypesInCategory(category).filter((t) => !isItemTypeLive(t.id)),
+  }))
+  .filter((row) => row.types.length > 0);
+
+const UPCOMING_COUNT = UPCOMING_BY_CATEGORY.reduce((n, row) => n + row.types.length, 0);
 
 // ── Type Picker ───────────────────────────────────────────────────────────────
 
 function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVariant) => void }) {
+  const [showUpcoming, setShowUpcoming] = useState(false);
+
   return (
     <div>
       <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)' }}>
@@ -86,7 +128,7 @@ function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVar
       <div className="grid grid-cols-2 gap-2">
         {TYPE_OPTIONS.map((t) => (
           <button
-            key={`${t.engine}-${t.variant}`}
+            key={t.id}
             type="button"
             onClick={() => onSelect(t.engine, t.variant)}
             className="text-left p-4 transition-all"
@@ -113,6 +155,64 @@ function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVar
           </button>
         ))}
       </div>
+
+      <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
+        Grouped sets — passages, data interpretation, caselets — are authored from the
+        Sets tab, not here.
+      </p>
+
+      {UPCOMING_COUNT > 0 && (
+        <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--ef-border)' }}>
+          <button
+            type="button"
+            onClick={() => setShowUpcoming((v) => !v)}
+            className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-60"
+            style={{ color: 'var(--ef-text-muted)' }}
+          >
+            <ChevronDown
+              size={11}
+              strokeWidth={1.5}
+              style={{
+                transform: showUpcoming ? 'rotate(0deg)' : 'rotate(-90deg)',
+                transition: 'transform 120ms ease',
+              }}
+            />
+            Not yet available — {UPCOMING_COUNT} more item types in the taxonomy
+          </button>
+
+          {showUpcoming && (
+            <div className="mt-3 flex flex-col gap-3">
+              {UPCOMING_BY_CATEGORY.map((row) => (
+                <div key={row.category}>
+                  <div
+                    className="text-xs mb-1.5 select-none"
+                    style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 10, textTransform: 'uppercase' }}
+                  >
+                    {row.label}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {row.types.map((t) => (
+                      <span
+                        key={t.id}
+                        title={t.today ? `${t.summary} Today: ${t.today}` : t.summary}
+                        className="text-xs px-2 py-1 select-none"
+                        style={{
+                          border: '1px dashed var(--ef-border)',
+                          borderRadius: 2,
+                          color: 'var(--ef-text-muted)',
+                          background: 'var(--ef-canvas-raised)',
+                        }}
+                      >
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

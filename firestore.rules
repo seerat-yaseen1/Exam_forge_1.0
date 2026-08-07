@@ -136,7 +136,27 @@ service cloud.firestore {
     }
 
     match /webowners/{ownerId} {
-      allow read:   if isWebOwner();
+      // SELF-READ BY UID is deliberate, and it fixes a bootstrap circularity.
+      //
+      // isWebOwner() reads request.auth.token.role, so gating the profile read
+      // on it alone means: you may read your own webOwner document only if you
+      // already carry the webOwner claim. Custom claims are set at account
+      // creation (createUserWithRole) or by scripts/migrate-webowners.ts —
+      // never on sign-in. An account that somehow lacks the claim therefore
+      // cannot read its own profile, so AuthContext.loadProfile returns null,
+      // so setUser(null) runs, so the route guard bounces back to the login
+      // page. Password and TOTP both SUCCEED and the user still lands back at
+      // the start — a permanent lockout with no self-service way out, because
+      // the only fix requires Admin SDK access the locked-out person may not
+      // have. Use scripts/grant-webowner-claim.ts when that is the state.
+      //
+      // The extra clause leaks nothing. Documents in this collection are keyed
+      // by uid, so `request.auth.uid == ownerId` can only ever match the
+      // caller's OWN document, and a non-webOwner's uid has no document here
+      // to find. It also does not enable enumeration: an unfiltered query over
+      // the collection stays unprovable and is still refused. Cross-owner
+      // reads remain webOwner-only, exactly as before.
+      allow read:   if isWebOwner() || (signedIn() && request.auth.uid == ownerId);
       allow create: if isWebOwner() && str(request.resource.data.email) && str(request.resource.data.name);
       // A web owner may only update their OWN doc — prevents one admin from
       // overwriting another's name / email if multi-owner is ever enabled.

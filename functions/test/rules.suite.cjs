@@ -387,6 +387,57 @@ async function R06() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// R-07 · webowners — self-read by uid, without leaking the directory
+//
+// The bootstrap circularity this closes: gating the profile read on
+// isWebOwner() alone means you may read your own webOwner document only if you
+// already carry the webOwner claim. Claims are set at account creation or by a
+// migration script, never on sign-in, so an account missing the claim
+// authenticates fine — password and TOTP both pass — and then cannot read its
+// own profile. AuthContext.loadProfile returns null, setUser(null) runs, and
+// the route guard bounces back to the login page. A permanent lockout that
+// looks exactly like a login loop, recoverable only with Admin SDK access.
+//
+// The fix has to be proven not to open the directory, which is what the second
+// half of this scenario is for.
+// ═══════════════════════════════════════════════════════════════════
+async function R07() {
+  await seed(async (db) => {
+    await setDoc(doc(db, 'webowners/wo_1'), { email: 'owner@example.com', name: 'Owner One' });
+    await setDoc(doc(db, 'webowners/wo_2'), { email: 'other@example.com', name: 'Owner Two' });
+  });
+
+  // The claim-carrying owner keeps full access, exactly as before.
+  await allowed('a claimed webOwner reads its own profile',
+    () => getDoc(doc(asWebOwner(), 'webowners/wo_1')));
+
+  // The bootstrap case: signed in, NO role claim at all. This is the account
+  // state that produced the loop; it must now be able to read its own doc.
+  const unclaimed = env.authenticatedContext('wo_1', {}).firestore();
+  await allowed('an account with no role claim can still read its OWN profile',
+    () => getDoc(doc(unclaimed, 'webowners/wo_1')));
+
+  // ── The half that keeps this from being a leak ──
+  await denied('...but not another owner\'s profile',
+    () => getDoc(doc(unclaimed, 'webowners/wo_2')));
+
+  const student = asStudent('stu_1', 'inst_1');
+  await denied('a student cannot read an owner profile by guessing the id',
+    () => getDoc(doc(student, 'webowners/wo_1')));
+  await denied('nor can an institute admin',
+    () => getDoc(doc(asInstitute('inst_1'), 'webowners/wo_1')));
+  await denied('nor an unauthenticated caller reading its way in',
+    () => getDoc(doc(env.unauthenticatedContext().firestore(), 'webowners/wo_1')));
+
+  // Writes are untouched by the read fix — assert it, because a loosened read
+  // sitting next to an unchanged write is exactly where a mistake would hide.
+  await denied('the self-read does not imply a self-write',
+    () => setDoc(doc(unclaimed, 'webowners/wo_1'), { name: 'Renamed' }));
+  await denied('a student cannot write an owner profile',
+    () => setDoc(doc(student, 'webowners/wo_1'), { name: 'Hostile' }));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['R-01', 'C1 — an institute cannot rewrite its own governance document', R01],
   ['R-02', 'H1 — instituteCredentials is whitelisted, both directions', R02],
@@ -394,6 +445,7 @@ const SCENARIOS = [
   ['R-04', 'attempts — answers writable, authority fields not', R04],
   ['R-05', 'storage.rules — the question bank\'s second door', R05],
   ['R-06', 'questionGroups — the stimulus is bank content, not public', R06],
+  ['R-07', 'webowners — self-read by uid, without leaking the directory', R07],
 ];
 
 (async () => {

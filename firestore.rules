@@ -968,6 +968,60 @@ service cloud.firestore {
       allow update, delete: if isWebOwner()
                                && resource.data.get('ownerType', 'webOwner') == 'webOwner';
     }
+
+    // ── Question groups (Phase 1) ─────────────────────────────────
+    //
+    // A group holds the SHARED STIMULUS for a set of questions — a DI table,
+    // a reading passage, a caselet, a puzzle or seating scenario. Its children
+    // are ordinary documents in /questions and are governed by the block
+    // above; this collection governs the stimulus alone.
+    //
+    // The rules here MIRROR /questions deliberately, clause for clause. The
+    // stimulus is not lesser content than the questions hanging off it: a
+    // leaked reading passage burns the whole set just as surely as a leaked
+    // answer key does, because the set cannot be reused once candidates have
+    // seen the passage. Anywhere the two blocks diverge is a bug — a group
+    // readable by a tenant whose children are not renders a passage with no
+    // questions under it, and the reverse renders questions with no passage.
+    //
+    //   • STUDENTS ARE DENIED, exactly as for /questions. Published
+    //     assessments expose question ids, and a group id is one hop away, so
+    //     a signedIn() read here would let any student pull every passage and
+    //     chart in the bank from the console. Students receive stimulus
+    //     content ONLY through the getExamQuestions Cloud Function, which
+    //     whitelists fields and scopes to the caller's own paper.
+    //   • TENANT FENCE — staff read webOwner content plus anything authored
+    //     inside their OWN institute; cross-institute content is unreadable.
+    //     instituteId is the tenant stamp, absent on webOwner content, and a
+    //     group always carries the same stamps as its children.
+    //   • WRITES are webOwner-only, for the same reason as /questions: the
+    //     entire questionRightsCeiling / Faculty.questionRights model lives
+    //     inside assertQuestionRight, which only runs when a client calls a
+    //     callable. A direct client write path would bypass the ceiling
+    //     wholesale for anyone willing to open DevTools.
+    //
+    // KEEP IN SYNC: every institute/faculty write must go through a callable
+    // (createQuestionGroupAsRole / editQuestionGroupAsRole /
+    // deleteQuestionGroupAsRole). A new client-side write to this collection
+    // will fail silently for every role except webOwner — intended, not a bug
+    // to route around by loosening this rule.
+    match /questionGroups/{id} {
+      allow read: if isWebOwner()
+                  || (role() == 'institute'
+                      && (resource.data.get('ownerType', 'webOwner') == 'webOwner'
+                          || resource.data.get('instituteId', '') == request.auth.token.instituteId
+                          || (resource.data.get('ownerType', '') == 'institute'
+                              && resource.data.get('ownerId', '') == request.auth.token.instituteId)))
+                  || (role() == 'faculty'
+                      && (resource.data.get('ownerType', 'webOwner') == 'webOwner'
+                          || resource.data.get('instituteId', '') == request.auth.token.instituteId
+                          || (resource.data.get('ownerType', '') == 'faculty'
+                              && resource.data.get('ownerId', '') == request.auth.token.facultyId)));
+      allow create: if isWebOwner()
+                       && request.resource.data.get('ownerType', 'webOwner') == 'webOwner';
+      allow update, delete: if isWebOwner()
+                               && resource.data.get('ownerType', 'webOwner') == 'webOwner';
+    }
     // correctPairs / modelAnswer for each question.
     //
     // READ — owner-scoped (was: any signed-in non-student, which let ANY

@@ -43,7 +43,7 @@ import {
   type VisibilityAudience,
 } from '../../lib/visibility';
 import { AudienceSelector } from '../components/assignments/AudienceSelector';
-import { getAllQuestions, type Question } from '../../lib/questionBankService';
+import { getAllQuestions, getAllQuestionGroups, type Question, type QuestionGroup } from '../../lib/questionBankService';
 import { getAllSubjects, type Subject } from '../../lib/subjectService';
 import { AllocationPanelCore } from '../components/assignments/allocation/AllocationPanelCore';
 import { emptyAllocationDraft, getAllocation, commitAllocation, type AllocationDraft, type AllocationNodeType } from '../../lib/allocationService';
@@ -79,6 +79,7 @@ export function AssignmentsPage() {
   const navigate = useNavigate();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+  const [allGroups, setAllGroups] = useState<QuestionGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -97,9 +98,12 @@ export function AssignmentsPage() {
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [assessData, questionsData] = await Promise.all([getAllAssessments(), getAllQuestions()]);
+      const [assessData, questionsData, groupsData] = await Promise.all([
+        getAllAssessments(), getAllQuestions(), getAllQuestionGroups(),
+      ]);
       setAssessments(assessData.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       setAllQuestions(questionsData);
+      setAllGroups(groupsData);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -307,7 +311,7 @@ export function AssignmentsPage() {
       {/* Full-page panel */}
       <AnimatePresence>
         {panelOpen && (
-          <AssessmentPanel mode={panelMode} assessment={editTarget} allQuestions={allQuestions}
+          <AssessmentPanel mode={panelMode} assessment={editTarget} allQuestions={allQuestions} allGroups={allGroups}
             onSave={handleSave} onClose={() => { setPanelOpen(false); setEditTarget(null); }} />
         )}
       </AnimatePresence>

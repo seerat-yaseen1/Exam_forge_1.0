@@ -25,7 +25,8 @@ import {
   type AttemptAnswer,
   type GradedAnswer,
 } from '../../../lib/submissionService';
-import { getExamQuestionsForStudent, type Question } from '../../../lib/questionBankService';
+import { getExamQuestionsForStudent, type Question, type ExamQuestionGroup } from '../../../lib/questionBankService';
+import { StimulusBody, StimulusHeading } from '../../components/exam/QuestionRenderer';
 import {
   listReportsByAttempt,
   type QuestionReport,
@@ -100,12 +101,15 @@ function ReviewQuestion({
   graded,
   marks,
   qNumber,
+  group,
 }: {
   question: Question;
   answer: AttemptAnswer | undefined;
   graded: GradedAnswer | undefined;
   marks: number;
   qNumber: number;
+  /** Shared stimulus, when this question came from a grouped set. */
+  group?: ExamQuestionGroup | null;
 }) {
   // Correct-answer data comes from the server-populated gradedAnswers map
   // (questionAnswers itself is denied to students by Firestore rules). Falls
@@ -211,6 +215,27 @@ function ReviewQuestion({
             style={{ overflow: 'hidden' }}
           >
             <div className="px-4 py-4 space-y-4" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
+
+              {/* Shared stimulus, when this question came from a set */}
+              {group && (
+                <div>
+                  <div className="mb-2">
+                    <StimulusHeading group={group} />
+                  </div>
+                  <div
+                    className="px-3 py-3"
+                    style={{
+                      background: 'var(--ef-canvas-raised)',
+                      border: '1px solid var(--ef-border)',
+                      borderRadius: 2,
+                      maxHeight: '40vh',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    <StimulusBody group={group} />
+                  </div>
+                </div>
+              )}
 
               {/* Full stem */}
               <div>
@@ -319,6 +344,7 @@ export function ExamResultsPage() {
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [attempt, setAttempt]       = useState<Attempt | null>(null);
   const [questionMap, setQuestionMap] = useState<Map<string, Question>>(new Map());
+  const [groupMap, setGroupMap] = useState<Map<string, ExamQuestionGroup>>(new Map());
   const [reports, setReports] = useState<QuestionReport[]>([]);
 
   useEffect(() => {
@@ -345,8 +371,15 @@ export function ExamResultsPage() {
           ]);
           const paper = await getExamQuestionsForStudent(a.id, 'review');
           const map = new Map<string, Question>();
-          paper.forEach((q) => { if (allQIds.has(q.id)) map.set(q.id, q); });
+          paper.questions.forEach((q) => { if (allQIds.has(q.id)) map.set(q.id, q); });
           setQuestionMap(map);
+          // Review has to show the stimulus too. A candidate re-reading "which
+          // year had the highest growth?" without the table in front of them
+          // cannot tell why their answer was wrong, which is the entire
+          // purpose of review.
+          const gMap = new Map<string, ExamQuestionGroup>();
+          paper.groups.forEach((g) => gMap.set(g.id, g));
+          setGroupMap(gMap);
         }
 
         // Load any reports the student raised on this attempt
@@ -739,6 +772,7 @@ export function ExamResultsPage() {
                           graded={attempt.gradedAnswers?.[qId]}
                           marks={marksMap.get(qId) ?? 1}
                           qNumber={globalIdx + 1}
+                          group={q.groupId ? groupMap.get(q.groupId) ?? null : null}
                         />
                       );
                     })

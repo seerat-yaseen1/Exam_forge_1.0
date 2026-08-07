@@ -8,14 +8,14 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { X, Loader2, ClipboardList, Clock, Calendar, AlertTriangle, CheckCircle2, FileText, Timer, Award, ChevronRight, AlertCircle, Shuffle, BarChart2, BookOpen, Shield, Upload } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
-import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection, type AssessmentGradingConfig, type GradingPolicy, type PenaltyType } from '../../../../lib/assessmentService';
+import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection, type AssessmentGradingConfig, type GradingPolicy, type PenaltyType, type QuestionSelectionRule } from '../../../../lib/assessmentService';
 import { deriveShowResultsTo, deriveAllowReviewTo, DEFAULT_SHOW_RESULTS_TO, DEFAULT_ALLOW_REVIEW_TO, type VisibilityAudience } from '../../../../lib/visibility';
 import { AudienceSelector } from '../AudienceSelector';
-import { type Question } from '../../../../lib/questionBankService';
+import { type Question, type QuestionGroup } from '../../../../lib/questionBankService';
 import { getAllSubjects, loadTaxonomyNameMaps, type Subject, type TaxonomyNameMaps } from '../../../../lib/subjectService';
 import { AllocationPanelCore } from '../allocation/AllocationPanelCore';
 import { emptyAllocationDraft, getAllocation, type AllocationDraft, type AllocationNodeType } from '../../../../lib/allocationService';
-import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, computeAutoOverallLimit, sumSectionsAndBreaksMinutes, DEFAULT_OVERALL_GRACE_SECONDS, type SectionDraft } from './shared';
+import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, computeAutoOverallLimit, sumSectionsAndBreaksMinutes, draftIsLive, draftQuestionCount, DEFAULT_OVERALL_GRACE_SECONDS, type SectionDraft } from './shared';
 import { Field, SectionLabel, selectStyle, DurationIndicator, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle, PenaltyInput } from './controls';
 import { RuleBuilderPanel } from './topicPickers';
 import { InstitutePicker, StudentPicker } from './targetPickers';
@@ -86,7 +86,7 @@ function parsePositiveIntOrUndefined(raw: string): number | undefined {
 }
 
 export function DetailsStep({
-  mode, assessment, originalStatus, allQuestions, sections, setSections, onBack, onSave,
+  mode, assessment, originalStatus, allQuestions, allGroups = [], sections, setSections, onBack, onSave,
   title, description, subject, status,
   targetType, setTargetType,
   selectedInstituteIds, setSelectedInstituteIds,
@@ -99,6 +99,8 @@ export function DetailsStep({
   assessment: Assessment | null;
   originalStatus?: AssessmentStatus;
   allQuestions: Question[];
+  /** Question groups visible to the author — the pool group rules draw from. */
+  allGroups?: QuestionGroup[];
   sections: SectionDraft[];
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
   onBack: () => void;
@@ -337,14 +339,30 @@ export function DetailsStep({
         name: sec.name,
         assignedTopics: sec.assignedTopics,
         rules: sec.rules
-          .filter((r) => (parseInt(r.count, 10) || 0) > 0)
-          .map((r) => ({
-            subject: r.subject,
-            topic: r.topic,
-            difficulty: r.difficulty,
-            count: parseInt(r.count, 10),
-            marksPerQuestion: parseFloat(r.marksPerQuestion) || 1,
-          })),
+          .filter(draftIsLive)
+          .map((r): QuestionSelectionRule => r.kind === 'group'
+            ? {
+                kind: 'group',
+                subject: r.subject,
+                topic: r.topic,
+                difficulty: r.difficulty,
+                groupCount: parseInt(r.groupCount ?? '', 10) || 0,
+                questionsPerGroup: !r.questionsPerGroup || r.questionsPerGroup === 'all'
+                  ? 'all'
+                  : parseInt(r.questionsPerGroup, 10) || 1,
+                marksPerQuestion: parseFloat(r.marksPerQuestion) || 1,
+                ...(r.groupKind ? { groupKind: r.groupKind } : {}),
+                ...(r.fixedGroupIds?.length ? { fixedGroupIds: r.fixedGroupIds } : {}),
+              }
+            : {
+                kind: 'topic',
+                subject: r.subject,
+                topic: r.topic,
+                difficulty: r.difficulty,
+                count: parseInt(r.count, 10) || 0,
+                marksPerQuestion: parseFloat(r.marksPerQuestion) || 1,
+                ...(r.fixedQuestionIds?.length ? { fixedQuestionIds: r.fixedQuestionIds } : {}),
+              }),
         questions: [],
       };
       const tl = parseInt(sec.timeLimit, 10);
@@ -413,19 +431,38 @@ export function DetailsStep({
     if (targetStatus === 'active') {
       const errors: string[] = [];
 
-      // Each section must request at least 1 question.
+      // Each section must request at least 1 question. A group rule drawing
+      // "all" children has no knowable count yet, so it counts as live rather
+      // than as zero — otherwise a section made entirely of DI sets would be
+      // rejected for being empty.
       sections.forEach((s) => {
-        const total = s.rules.reduce((sum, r) => sum + (parseInt(r.count, 10) || 0), 0);
-        if (total < 1) {
+        const anyLive = s.rules.some(draftIsLive);
+        const known = s.rules.reduce((sum, r) => sum + (draftQuestionCount(r) ?? 0), 0);
+        if (!anyLive || (known < 1 && !s.rules.some((r) => draftQuestionCount(r) === null))) {
           errors.push(`${s.name || 'Untitled section'} must have at least 1 question.`);
         }
       });
 
-      const { valid, results } = validateSelectionRules(builtSections, allQuestions, taxonomyMaps);
+      const { valid, results } = validateSelectionRules(
+        builtSections, allQuestions, taxonomyMaps, allGroups, deliveryMode,
+      );
       if (!valid) {
         results
           .filter((r) => !r.ok)
-          .forEach((r) => errors.push(`${r.sectionName}: ${r.subject} › ${r.topic} (${r.difficulty}) — requested ${r.requested}, only ${r.available} available`));
+          .forEach((r) => {
+            // A blocked rule is a structural refusal, not a shortage — say so
+            // instead of reporting an availability number that isn't the point.
+            if (r.blocked) {
+              errors.push(`${r.sectionName}: ${r.blocked}`);
+              return;
+            }
+            const unit = r.unit === 'groups' ? 'set' : 'question';
+            const plural = r.requested === 1 ? '' : 's';
+            errors.push(
+              `${r.sectionName}: ${r.subject} › ${r.topic} (${r.difficulty}) — `
+              + `requested ${r.requested} ${unit}${plural}, only ${r.available} available`,
+            );
+          });
       }
 
       if (errors.length > 0) {
@@ -495,7 +532,7 @@ export function DetailsStep({
       let flatQuestions = builtSections.flatMap((s) => s.questions);
 
       if (targetStatus === 'active') {
-        const resolved = resolveQuestionsForSections(builtSections, allQuestions, taxonomyMaps);
+        const resolved = resolveQuestionsForSections(builtSections, allQuestions, taxonomyMaps, allGroups);
         finalSections = resolved.sections;
         flatQuestions = resolved.flatQuestions;
       }
@@ -1307,6 +1344,7 @@ export function DetailsStep({
         setActiveSectionIdx={setActiveSectionIdx}
         setSections={setSections}
         allQuestions={allQuestions}
+        allGroups={allGroups}
         locked={!mut.sections}
         subjectPoolNames={subjectPoolNames}
         topicPool={topicPool}

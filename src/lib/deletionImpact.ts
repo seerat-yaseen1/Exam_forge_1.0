@@ -79,6 +79,7 @@ const LABELS: Record<string, string> = {
   programs:      'Programs',
   courses:       'Courses',
   questions:     'Questions',
+  questionGroups: 'Grouped sets',
   questionBanks: 'Question banks',
   mappings:      'Academic mappings',
   memberships:   'Exam allocations',

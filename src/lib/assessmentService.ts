@@ -14,6 +14,10 @@ import {
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, auth, storage } from './firebase';
+// TYPE-ONLY on purpose: questionBankService imports ensureSebToken from this
+// module at runtime, so a value import here would close a cycle. `import type`
+// is erased at compile time and cannot.
+import type { GroupKind } from './questionBankService';
 import {
   ref as storageRef,
   uploadBytes,
@@ -186,19 +190,127 @@ export type AssessmentQuestion = {
   questionId: string;
   marks: number;           // points awarded for this question
   order: number;           // display order in the test
+
+  // ── Group membership (Phase 1) ────────────────────────────────────
+  // Set when this question was drawn as part of a QuestionGroup (a DI set,
+  // an RC passage, a caselet, a puzzle, a seating arrangement).
+  //
+  // Recorded on the FROZEN paper deliberately: the exam shell, the shuffle in
+  // startExam and the navigator all need to know which questions share a
+  // stimulus, and none of them may re-read the bank to find out. The bank can
+  // change after publish — a question can be moved out of its group or the
+  // group soft-deleted — and the paper a student sits must not shift under
+  // them. Absent = a standalone question (every pre-Phase-1 paper).
+  groupId?: string;
+  groupOrder?: number;     // position within the group; children stay contiguous
 };
 
 // ── Assessment section ────────────────────────────────────────────
 // An assessment can have multiple ordered sections.
 // Each section has its own time limit and question list.
 
-export type QuestionSelectionRule = {
+// ── Selection rules (Phase 1: widened to a discriminated union) ────
+//
+// A rule is a "draw this much of that" instruction, resolved into concrete
+// questions once, at publish time. Until Phase 1 there was exactly one shape
+// — N random questions at one subject/topic/difficulty — so the shape WAS the
+// type. Groups, and later coding and games, need to say different things, so
+// `kind` now discriminates.
+//
+// BACK-COMPAT IS STRUCTURAL, NOT MIGRATED: `kind` is optional on the topic
+// rule and absent means 'topic'. Every assessment document already in
+// Firestore therefore keeps parsing and resolving exactly as before, and no
+// backfill runs. Read the discriminant through `ruleKind()` below rather than
+// touching `rule.kind` directly, so the absent case is handled in one place.
+
+export type RuleKind = 'topic' | 'group';
+
+/** The original rule: N random standalone questions from one taxonomy cell. */
+export type TopicSelectionRule = {
+  kind?: 'topic';      // absent === 'topic' (every legacy document)
   subject: string;
   topic: string;       // specific topic within the subject
   difficulty: 'easy' | 'medium' | 'hard';
   count: number;
   marksPerQuestion: number;
+
+  /**
+   * Hand-picked question ids. When present and non-empty, these are used
+   * INSTEAD of a random draw and `count` is ignored (the list length is the
+   * count). This is the report's "Manual Block" — it needs no rule kind of its
+   * own, because a fixed list is just a draw whose randomness was resolved by
+   * the author rather than the engine.
+   *
+   * Ids that no longer resolve (deleted, or outside the author's visibility at
+   * publish time) are dropped, and validateSelectionRules reports the shortfall
+   * rather than letting a short section reach candidates.
+   */
+  fixedQuestionIds?: string[];
 };
+
+/**
+ * Draw whole question GROUPS — a shared stimulus plus its dependent children.
+ *
+ * The unit of selection is the group, not the question: you ask for 2 DI sets,
+ * not 10 DI questions, because a DI question without its table is unanswerable.
+ * `questionsPerGroup` then says how many of each group's children to use.
+ */
+export type GroupSelectionRule = {
+  kind: 'group';
+  groupKind?: GroupKind;   // 'di' | 'rc' | 'caselet' | 'puzzle' | 'seating' | 'generic'; absent = any
+  subject: string;
+  topic: string;
+  difficulty: 'easy' | 'medium' | 'hard';   // the GROUP's difficulty, not the children's
+  groupCount: number;                        // how many groups to draw
+  questionsPerGroup: number | 'all';         // how many children from each group
+  marksPerQuestion: number;
+
+  /** Hand-picked group ids — the group equivalent of fixedQuestionIds. */
+  fixedGroupIds?: string[];
+};
+
+export type QuestionSelectionRule = TopicSelectionRule | GroupSelectionRule;
+
+/**
+ * The discriminant, with the legacy absent case resolved.
+ * ALWAYS read the kind through this — `rule.kind === 'topic'` is false for
+ * every document written before Phase 1, which is the whole back-compat trap.
+ */
+export function ruleKind(rule: QuestionSelectionRule): RuleKind {
+  return rule.kind ?? 'topic';
+}
+
+export function isGroupRule(rule: QuestionSelectionRule): rule is GroupSelectionRule {
+  return rule.kind === 'group';
+}
+
+/**
+ * How many QUESTIONS this rule contributes to the paper.
+ *
+ * Exists so callers that only want a headline number (builder totals, the
+ * assessment summary modal, marks roll-ups) don't each have to narrow the
+ * union. A group rule contributes groupCount × questionsPerGroup — and when
+ * questionsPerGroup is 'all' that product is not knowable from the rule alone,
+ * so this returns null and the caller decides what to show. Returning 0 would
+ * silently under-report a section's size, which is exactly the kind of quiet
+ * wrongness the marks-drift risk in the extension plan is about.
+ */
+export function ruleQuestionCount(rule: QuestionSelectionRule): number | null {
+  if (isGroupRule(rule)) {
+    if (rule.questionsPerGroup === 'all') return null;
+    return Math.max(0, rule.groupCount) * Math.max(0, rule.questionsPerGroup);
+  }
+  if (rule.fixedQuestionIds && rule.fixedQuestionIds.length > 0) {
+    return rule.fixedQuestionIds.length;
+  }
+  return Math.max(0, rule.count);
+}
+
+/** Marks this rule contributes, or null when its question count is unknowable. */
+export function ruleTotalMarks(rule: QuestionSelectionRule): number | null {
+  const n = ruleQuestionCount(rule);
+  return n === null ? null : n * (rule.marksPerQuestion || 0);
+}
 
 export type SectionBreak = {
   durationMinutes: number;  // length of the break
@@ -243,6 +355,25 @@ type BankQuestion = {
   // CURRENT canonical name so a rename can never orphan a question.
   subjectId?: string;
   topicId?: string;
+
+  // Group membership (Phase 1). Present on children of a QuestionGroup.
+  // Topic rules EXCLUDE these — see the pool filter in
+  // resolveQuestionsForSections for why.
+  groupId?: string;
+  groupOrder?: number;
+};
+
+/** A group as the resolver sees it — the selection-relevant fields only. */
+export type BankGroup = {
+  id: string;
+  kind?: GroupKind;
+  subject: string;
+  topic: string;
+  difficulty: string;
+  childIds: string[];
+  isDeleted: boolean;
+  subjectId?: string;
+  topicId?: string;
 };
 
 // ── Taxonomy canonicalisation (rename-proof matching) ─────────────
@@ -275,41 +406,135 @@ function canonicalTopic(q: BankQuestion, maps?: TaxonomyMaps): string {
   return q.topic;
 }
 
+/** Fisher-Yates, on a copy. */
+function shuffled<T>(items: readonly T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 export function resolveQuestionsForSections(
   sections: AssessmentSection[],
   allQuestions: BankQuestion[],
-  taxonomy?: TaxonomyMaps
+  taxonomy?: TaxonomyMaps,
+  allGroups: BankGroup[] = [],
 ): { sections: AssessmentSection[]; flatQuestions: AssessmentQuestion[] } {
   const usedIds = new Set<string>();
+  const usedGroupIds = new Set<string>();
   let globalOrder = 0;
+
+  const questionById = new Map(allQuestions.map((q) => [q.id, q]));
 
   const resolvedSections: AssessmentSection[] = sections.map((section) => {
     const sectionQuestions: AssessmentQuestion[] = [];
 
     for (const rule of section.rules) {
-      if (rule.count <= 0) continue;
+      // ── Group rule ────────────────────────────────────────────────
+      if (isGroupRule(rule)) {
+        if (rule.groupCount <= 0) continue;
 
+        // Eligible children of a group: present in the bank, not deleted, not
+        // already used by an earlier rule, and actually belonging to THIS group.
+        const eligibleChildren = (g: BankGroup): BankQuestion[] =>
+          g.childIds
+            .map((cid) => questionById.get(cid))
+            .filter((q): q is BankQuestion =>
+              !!q && !q.isDeleted && !usedIds.has(q.id) && q.groupId === g.id);
+
+        const wanted = rule.questionsPerGroup;
+
+        const matches = (g: BankGroup): boolean =>
+          !g.isDeleted &&
+          !usedGroupIds.has(g.id) &&
+          canonicalSubject(g, taxonomy) === rule.subject &&
+          canonicalTopic(g, taxonomy) === rule.topic &&
+          g.difficulty === rule.difficulty &&
+          (!rule.groupKind || g.kind === rule.groupKind) &&
+          // A group that cannot supply the requested number of children is
+          // NOT a partial match — it is ineligible. Drawing 3 of a set that
+          // can only field 2 would silently shorten the paper, and a short
+          // paper is the failure mode the whole validation pass exists to
+          // prevent.
+          (wanted === 'all'
+            ? eligibleChildren(g).length > 0
+            : eligibleChildren(g).length >= wanted);
+
+        // Hand-picked groups bypass the draw but NOT the eligibility test:
+        // an author's saved list can rot (a group deleted, a child moved out)
+        // between saving and publishing.
+        const candidates = rule.fixedGroupIds && rule.fixedGroupIds.length > 0
+          ? rule.fixedGroupIds
+              .map((gid) => allGroups.find((g) => g.id === gid))
+              .filter((g): g is BankGroup => !!g && matches(g))
+          : shuffled(allGroups.filter(matches));
+
+        const pickedGroups = candidates.slice(0, rule.groupCount);
+
+        for (const group of pickedGroups) {
+          const children = eligibleChildren(group);
+
+          // Which children to use. For a subset we draw at random (so two
+          // papers built from the same bank differ) but then restore the
+          // author's child order, because a DI/RC set is usually written to
+          // ramp and presenting it shuffled reads as a mistake.
+          const chosen = wanted === 'all'
+            ? children
+            : shuffled(children)
+                .slice(0, wanted)
+                .sort((a, b) => (a.groupOrder ?? 0) - (b.groupOrder ?? 0));
+
+          usedGroupIds.add(group.id);
+          chosen.forEach((q, idx) => {
+            usedIds.add(q.id);
+            sectionQuestions.push({
+              questionId: q.id,
+              marks: rule.marksPerQuestion,
+              order: globalOrder++,
+              groupId: group.id,
+              // Re-index from 0 over the CHOSEN children, not the group's own
+              // childIds. When only 3 of 8 are used, the paper's positions are
+              // 0,1,2 — the original indices would leave gaps that the shuffle
+              // and the navigator would then have to reason about.
+              groupOrder: idx,
+            });
+          });
+        }
+        continue;
+      }
+
+      // ── Topic rule (the legacy shape) ─────────────────────────────
       // Build pool: matching subject + topic + difficulty, not deleted, not yet
       // used. Subject/topic are compared against each question's CURRENT
       // canonical name (resolved from its slug ID when taxonomy maps are given),
       // so a renamed subject/topic still matches its old questions.
-      const pool = allQuestions.filter(
+      //
+      // GROUP CHILDREN ARE EXCLUDED (Phase 1). A DI sub-question drawn without
+      // its table, or an RC question without its passage, is unanswerable — the
+      // stimulus is not decoration. Children are reachable only through a group
+      // rule, which brings the stimulus with them. This filter is a no-op for
+      // every pre-Phase-1 bank, where no question carries a groupId.
+      const basePool = allQuestions.filter(
         (q) =>
           !q.isDeleted &&
+          !q.groupId &&
           canonicalSubject(q, taxonomy) === rule.subject &&
           canonicalTopic(q, taxonomy) === rule.topic &&
           q.difficulty === rule.difficulty &&
           !usedIds.has(q.id)
       );
 
-      // Fisher-Yates shuffle for true randomness
-      const shuffled = [...pool];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
+      // Hand-picked ids bypass the draw; same rot check as fixed groups.
+      const picked = rule.fixedQuestionIds && rule.fixedQuestionIds.length > 0
+        ? rule.fixedQuestionIds
+            .map((qid) => basePool.find((q) => q.id === qid))
+            .filter((q): q is BankQuestion => !!q)
+        : rule.count > 0
+          ? shuffled(basePool).slice(0, rule.count)
+          : [];
 
-      const picked = shuffled.slice(0, rule.count);
       picked.forEach((q) => {
         usedIds.add(q.id);
         sectionQuestions.push({
@@ -338,14 +563,65 @@ export type RuleValidationResult = {
   requested: number;
   available: number;   // after prior sections' usage
   ok: boolean;
+
+  // ── Phase 1 ────────────────────────────────────────────────────────
+  /** What `requested`/`available` are counted in. Absent = 'questions'. */
+  unit?: 'questions' | 'groups';
+  /** Group rules only — which flavour was asked for, for the message text. */
+  groupKind?: GroupKind;
+  /**
+   * A structural problem with the rule itself rather than a shortage of
+   * content: a group rule in a section that cannot present groups. Carries
+   * its own message because "0 of 2 available" would be a lie — the content
+   * may well exist, it just cannot be delivered here.
+   */
+  blocked?: string;
 };
+
+/**
+ * Section-level delivery constraints that a group rule cannot satisfy.
+ *
+ * Both are v1 limitations recorded honestly rather than worked around:
+ *
+ *  • LINEAR / ADAPTIVE delivery serves one question at a time and never lets
+ *    the student back. A student would meet the passage on the first question
+ *    of the set and lose it on the second, which makes every remaining
+ *    question in that set unanswerable.
+ *
+ *  • PER-QUESTION TIMERS charge the whole reading cost of a passage to
+ *    whichever question happens to come first. A 90-second cap that includes
+ *    reading 600 words of comprehension is not the same cap as the one the
+ *    author thought they were setting.
+ *
+ * Both are lifted by later work (serve-the-group-as-a-unit, group-level
+ * timers). Until then this is a publish-time refusal, not a runtime surprise.
+ */
+export function groupDeliveryBlocker(
+  section: AssessmentSection,
+  deliveryMode: 'standard' | 'linear' | 'adaptive' | undefined,
+): string | null {
+  if (deliveryMode === 'linear' || deliveryMode === 'adaptive') {
+    return `Grouped questions can't be used with ${deliveryMode} delivery — `
+         + 'the shared passage or chart would be shown once and then become '
+         + 'unreachable. Use Standard delivery, or remove the group rule.';
+  }
+  if (section.questionTimeLimit && section.questionTimeLimit > 0) {
+    return 'Grouped questions can\'t be used in a section with a per-question '
+         + 'timer — the first question of each set would absorb the whole '
+         + 'reading time. Clear the per-question limit, or remove the group rule.';
+  }
+  return null;
+}
 
 export function validateSelectionRules(
   sections: AssessmentSection[],
   allQuestions: BankQuestion[],
-  taxonomy?: TaxonomyMaps
+  taxonomy?: TaxonomyMaps,
+  allGroups: BankGroup[] = [],
+  deliveryMode?: 'standard' | 'linear' | 'adaptive',
 ): { valid: boolean; results: RuleValidationResult[] } {
   const usedCounts: Record<string, number> = {};
+  const usedGroupCounts: Record<string, number> = {};
   const results: RuleValidationResult[] = [];
 
   const key = (subject: string, topic: string, diff: string) =>
@@ -354,32 +630,90 @@ export function validateSelectionRules(
   // Pre-compute total available per subject+topic+difficulty, keyed by the
   // CURRENT canonical name (same resolution the pool uses), so the count a
   // rule sees matches what resolveQuestionsForSections will actually draw.
+  //
+  // Group children are excluded here for the same reason the resolver's pool
+  // excludes them: they are not drawable by a topic rule, so counting them as
+  // available would promise questions the draw will never hand over.
   const totalAvailable: Record<string, number> = {};
   for (const q of allQuestions) {
-    if (q.isDeleted) continue;
+    if (q.isDeleted || q.groupId) continue;
     const k = key(canonicalSubject(q, taxonomy), canonicalTopic(q, taxonomy), q.difficulty);
     totalAvailable[k] = (totalAvailable[k] ?? 0) + 1;
   }
 
+  const questionById = new Map(allQuestions.map((q) => [q.id, q]));
+  const liveChildCount = (g: BankGroup): number =>
+    g.childIds.filter((cid) => {
+      const q = questionById.get(cid);
+      return !!q && !q.isDeleted && q.groupId === g.id;
+    }).length;
+
   for (const section of sections) {
     for (const rule of section.rules) {
-      if (rule.count <= 0) continue;
+      if (isGroupRule(rule)) {
+        if (rule.groupCount <= 0) continue;
+
+        const gk = key(rule.subject, rule.topic, rule.difficulty)
+                 + `::${rule.groupKind ?? '*'}`;
+        const wanted = rule.questionsPerGroup;
+
+        // Mirror the resolver's eligibility test exactly — a group counted as
+        // available here but rejected there is how a "valid" blueprint still
+        // produces a short paper.
+        const eligible = allGroups.filter((g) =>
+          !g.isDeleted &&
+          canonicalSubject(g, taxonomy) === rule.subject &&
+          canonicalTopic(g, taxonomy) === rule.topic &&
+          g.difficulty === rule.difficulty &&
+          (!rule.groupKind || g.kind === rule.groupKind) &&
+          (wanted === 'all' ? liveChildCount(g) > 0 : liveChildCount(g) >= wanted));
+
+        const alreadyUsed = usedGroupCounts[gk] ?? 0;
+        const effectiveAvailable = eligible.length - alreadyUsed;
+        const blocked = groupDeliveryBlocker(section, deliveryMode);
+        const ok = !blocked && rule.groupCount <= effectiveAvailable;
+
+        results.push({
+          subject: rule.subject,
+          topic: rule.topic,
+          difficulty: rule.difficulty,
+          sectionName: section.name,
+          requested: rule.groupCount,
+          available: effectiveAvailable,
+          ok,
+          unit: 'groups',
+          groupKind: rule.groupKind,
+          ...(blocked ? { blocked } : {}),
+        });
+
+        if (ok) usedGroupCounts[gk] = alreadyUsed + rule.groupCount;
+        continue;
+      }
+
+      // ── Topic rule ────────────────────────────────────────────────
+      // A fixed list states its own count; a random draw uses `count`.
+      const requested = rule.fixedQuestionIds && rule.fixedQuestionIds.length > 0
+        ? rule.fixedQuestionIds.length
+        : rule.count;
+      if (requested <= 0) continue;
+
       const k = key(rule.subject, rule.topic, rule.difficulty);
       const total = totalAvailable[k] ?? 0;
       const alreadyUsed = usedCounts[k] ?? 0;
       const effectiveAvailable = total - alreadyUsed;
-      const ok = rule.count <= effectiveAvailable;
+      const ok = requested <= effectiveAvailable;
       results.push({
         subject: rule.subject,
         topic: rule.topic,
         difficulty: rule.difficulty,
         sectionName: section.name,
-        requested: rule.count,
+        requested,
         available: effectiveAvailable,
         ok,
+        unit: 'questions',
       });
       if (ok) {
-        usedCounts[k] = alreadyUsed + rule.count;
+        usedCounts[k] = alreadyUsed + requested;
       }
     }
   }

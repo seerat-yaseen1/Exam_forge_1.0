@@ -301,12 +301,99 @@ async function R05() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// R-06 · questionGroups — the stimulus is bank content, not public
+//
+// Phase 1 added a collection holding the SHARED STIMULUS of a grouped set: a
+// DI table, a reading passage, a caselet, a seating scenario. Its rules mirror
+// /questions clause for clause, and this asserts the mirror actually holds —
+// because the failure mode is quiet. A group readable where its children are
+// not renders a passage with no questions under it; the reverse renders
+// questions with no passage, which is an unanswerable paper.
+//
+// The student clause matters most. Published assessments expose question ids
+// and a group id is one hop away, so a signedIn() read here would let any
+// student pull every passage and chart in the bank from the console. A leaked
+// passage burns the whole set exactly as a leaked answer key does — the set
+// cannot be reused once candidates have seen it. Students get stimulus only
+// through getExamQuestions, which whitelists fields and scopes to their paper.
+// ═══════════════════════════════════════════════════════════════════
+async function R06() {
+  await seed(async (db) => {
+    await setDoc(doc(db, 'questionGroups/grp_platform'), {
+      id: 'grp_platform', kind: 'rc',
+      stimulus: { format: 'richtext', body: 'Platform passage.' },
+      ownerType: 'webOwner', ownerId: 'webOwner', isDeleted: false,
+    });
+    await setDoc(doc(db, 'questionGroups/grp_inst1'), {
+      id: 'grp_inst1', kind: 'di',
+      stimulus: { format: 'table', table: { headers: ['A'], rows: [{ cells: ['1'] }] } },
+      ownerType: 'institute', ownerId: 'inst_1', instituteId: 'inst_1', isDeleted: false,
+    });
+    await setDoc(doc(db, 'questionGroups/grp_inst2'), {
+      id: 'grp_inst2', kind: 'di',
+      stimulus: { format: 'table', table: { headers: ['B'], rows: [{ cells: ['2'] }] } },
+      ownerType: 'institute', ownerId: 'inst_2', instituteId: 'inst_2', isDeleted: false,
+    });
+  });
+
+  // ── Students: denied outright, exactly as for /questions ──
+  await denied('a student cannot read a platform group',
+    () => getDoc(doc(asStudent(), 'questionGroups/grp_platform')));
+  await denied('a student cannot read their own institute\'s group either',
+    () => getDoc(doc(asStudent('stu_1', 'inst_1'), 'questionGroups/grp_inst1')));
+
+  // ── The tenant fence ──
+  await allowed('an institute can read platform content',
+    () => getDoc(doc(asInstitute('inst_1'), 'questionGroups/grp_platform')));
+  await allowed('an institute can read its own group',
+    () => getDoc(doc(asInstitute('inst_1'), 'questionGroups/grp_inst1')));
+  await denied('an institute cannot read another tenant\'s group',
+    () => getDoc(doc(asInstitute('inst_1'), 'questionGroups/grp_inst2')));
+  await allowed('faculty can read content authored inside their institute',
+    () => getDoc(doc(asFaculty('fac_1', 'inst_1'), 'questionGroups/grp_inst1')));
+  await denied('faculty cannot read across the tenant fence',
+    () => getDoc(doc(asFaculty('fac_1', 'inst_1'), 'questionGroups/grp_inst2')));
+
+  // ── Writes: webOwner only. Everyone else goes through the callables,
+  // because that is where assertQuestionRight enforces the rights ceiling.
+  await denied('an institute cannot write a group directly',
+    () => setDoc(doc(asInstitute('inst_1'), 'questionGroups/grp_new'), {
+      id: 'grp_new', kind: 'rc', ownerType: 'institute', ownerId: 'inst_1', instituteId: 'inst_1',
+    }));
+  await denied('faculty cannot write a group directly',
+    () => setDoc(doc(asFaculty(), 'questionGroups/grp_new2'), {
+      id: 'grp_new2', kind: 'rc', ownerType: 'faculty', ownerId: 'fac_1', instituteId: 'inst_1',
+    }));
+  await denied('an institute cannot edit its own group directly',
+    () => updateDoc(doc(asInstitute('inst_1'), 'questionGroups/grp_inst1'), { kind: 'rc' }));
+  await denied('a student cannot write at all',
+    () => setDoc(doc(asStudent(), 'questionGroups/grp_evil'), { id: 'grp_evil' }));
+
+  await allowed('the Web Owner can create platform content',
+    () => setDoc(doc(asWebOwner(), 'questionGroups/grp_wo'), {
+      id: 'grp_wo', kind: 'rc', ownerType: 'webOwner', ownerId: 'webOwner', isDeleted: false,
+    }));
+  await allowed('and can edit it',
+    () => updateDoc(doc(asWebOwner(), 'questionGroups/grp_wo'), { kind: 'caselet' }));
+  // Preserved exactly from /questions: the webOwner branch is scoped to
+  // webOwner-OWNED docs, so this stays a restriction rather than becoming a
+  // privilege expansion smuggled in alongside one.
+  await denied('the Web Owner cannot directly write tenant-authored content',
+    () => updateDoc(doc(asWebOwner(), 'questionGroups/grp_inst1'), { kind: 'rc' }));
+  await denied('nor forge a group stamped as another tenant\'s',
+    () => setDoc(doc(asWebOwner(), 'questionGroups/grp_forged'), {
+      id: 'grp_forged', ownerType: 'institute', ownerId: 'inst_1', instituteId: 'inst_1',
+    }));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['R-01', 'C1 — an institute cannot rewrite its own governance document', R01],
   ['R-02', 'H1 — instituteCredentials is whitelisted, both directions', R02],
   ['R-03', 'the tenancy boundary around both collections', R03],
   ['R-04', 'attempts — answers writable, authority fields not', R04],
   ['R-05', 'storage.rules — the question bank\'s second door', R05],
+  ['R-06', 'questionGroups — the stimulus is bank content, not public', R06],
 ];
 
 (async () => {

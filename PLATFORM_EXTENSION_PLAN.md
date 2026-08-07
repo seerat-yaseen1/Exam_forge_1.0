@@ -2,6 +2,11 @@
 
 **Fit & gap analysis against the current codebase**, and the concrete change list per phase.
 
+> **Status — Phase 1 is implemented.** Stages 0 and 1a–1d have shipped on
+> `claude/platform-extension-phases-rh66rv`. See §9 for what landed, what was
+> decided along the way, and the three items deliberately left for a follow-up.
+> Phases 2 and 3 remain as designed below.
+
 > Companion to `deepresearchreportv2.md` (the blueprint-engine research report).
 > This document is the reconciliation: what that report proposes, what Exam Forge
 > already has, where the two agree, and where the report has to change because it
@@ -454,15 +459,67 @@ which fails silently as an empty question card in a live exam.
 
 ## 8 · Open decisions
 
-These need an answer before Phase 1 code starts; each changes the schema:
+These needed an answer before Phase 1 code started; each changes the schema.
+**Decisions 1–4 were taken as recommended and are now implemented** (§9).
+Decision 5 is still open and belongs to Phase 3.
 
-1. **Per-question timers on group sections** — exclude, or apply to the group?
-2. **Group difficulty** — does the group carry it (used for selection), or is it
-   derived from children? *(Recommended: the group carries it; children may vary.)*
-3. **`questionsPerGroup` < children** — allowed (draw a subset) or all-or-nothing?
-   *(Recommended: allow the subset; it's what Remindo's "3 of 8" does, and it's
-   the cheapest exposure control available without a usage counter.)*
-4. **DI tables** — structural (`table.headers/rows`, accessible, responsive) or
-   image-only (faster to build, unusable on mobile, unreadable to screen readers)?
-   *(Recommended: structural, with image as a fallback format.)*
-5. **Games** — inside mixed papers (A) or standalone batteries (B)?
+1. **Per-question timers on group sections** — *Resolved: excluded.* A group
+   rule is refused at publish time in a section carrying a per-question timer.
+2. **Group difficulty** — *Resolved: the group carries it.* Rules match on the
+   group's difficulty; children may vary, and sets routinely ramp.
+3. **`questionsPerGroup` < children** — *Resolved: subsets allowed.* A group
+   that cannot supply the requested number is ineligible rather than a partial
+   match, so a short set cannot quietly shorten the paper.
+4. **DI tables** — *Resolved: structural, with `format: 'image'` as fallback.*
+5. **Games** — inside mixed papers (A) or standalone batteries (B)? *Still open.*
+
+---
+
+## 9 · Phase 1 — what shipped
+
+Five commits on `claude/platform-extension-phases-rh66rv`. Client typecheck and
+build clean; the full `functions` suite green, including the emulator-backed
+rules and concurrency suites.
+
+### Landed
+
+| Area | What |
+|---|---|
+| Rules | `QuestionSelectionRule` is a union (`kind` absent = `'topic'`, so no migration). `GroupSelectionRule` draws whole sets. `fixedQuestionIds` / `fixedGroupIds` cover the report's "Manual Block" without a rule kind of their own. |
+| Model | `questionGroups` collection; `groupId`/`groupOrder` on `Question`; `groupId`/`groupOrder` on the frozen `AssessmentQuestion`. |
+| Security | `/questionGroups` in `firestore.rules`, mirroring `/questions` clause for clause — students denied, tenant fence, webOwner-only direct writes. Three callables gated by the **existing** `assertQuestionRight`. |
+| Resolution | Group branch in `resolveQuestionsForSections` / `validateSelectionRules`; topic rules now exclude group children; publish-time refusal for linear/adaptive and per-question-timer sections. |
+| Delivery | Group-atomic shuffle in `startExam`; `getExamQuestions` returns `{ questions, groups }` through a new `sanitizeGroupForStudent` whitelist. |
+| Exam UI | Split-pane stimulus (collapsible below 768px), structural table rendering, navigator banding, in-set position derived from served order. Review shows the stimulus too. |
+| Authoring | `QuestionGroupEditor` (stimulus → children, children buffered for atomic write), grouped-sets section in the bank, `GroupRulePanel` in the builder. |
+| Tests | `functions/test/groups.suite.cjs` — 8 scenarios, 109 assertions. `R-06` added to the rules suite. |
+
+### Two things worth knowing
+
+**A real defect was caught by the emulator, not by typecheck.** DI table rows
+were first modelled as `string[][]`. **Firestore rejects nested arrays
+outright** — that shape could never have persisted. Rows are
+`{ cells: string[] }`. This is the argument for the rules suite existing: five
+in-memory suites were green against a model the database would have refused.
+
+**The group-aware shuffle was verified by mutation.** `G-01` runs 60
+independent sittings and asserts set contiguity, internal order, *and* that
+blocks genuinely move — a shuffle that "protected" groups by not shuffling at
+all would pass a contiguity check alone. The test was confirmed to fail when
+the compiled handler is reverted to a flat Fisher-Yates.
+
+### Deliberately not done
+
+Each is additive and blocks nothing that shipped:
+
+1. **Bulk upload / export for groups.** No `Groups` sheet and no `groupRef`
+   column yet, so sets are authored one at a time in the UI. This is the
+   largest remaining convenience gap for anyone migrating an existing bank.
+2. **Group picking in `QuestionPickerModal`.** `fixedGroupIds` is supported by
+   the model, the resolver and the validator, but nothing in the UI writes it —
+   group rules are random-draw only for now.
+3. **Editing children from inside the set editor.** Children are ordinary
+   questions and are edited in the bank, which already has the full per-engine
+   editor, duplicate detection and rights plumbing. Rebuilding that inside the
+   group editor would be a second copy of the most safety-critical form in the
+   app; the set editor links the intent instead.

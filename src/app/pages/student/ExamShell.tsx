@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, getSEBPublicInfo, type Assessment, type AssessmentSection, type SectionBreak, getSebToken, setSebRequired } from '../../../lib/assessmentService';
-import { getExamQuestionsForStudent, type Question } from '../../../lib/questionBankService';
+import { getExamQuestionsForStudent, type Question, type ExamQuestionGroup, type GroupKind } from '../../../lib/questionBankService';
 import {
   startAttempt,
   saveAnswer,
@@ -1101,6 +1101,10 @@ export function ExamShell() {
   const [effectiveSections, setEffectiveSections] = useState<AssessmentSection[]>([]);
   const [attempt, setAttempt]               = useState<Attempt | null>(null);
   const [questionMap, setQuestionMap]       = useState<Map<string, Question>>(new Map());
+  // Shared stimulus for grouped sets (Phase 1). Arrives on the SAME
+  // getExamQuestions call as the questions — one round trip, not two — and is
+  // keyed by group id. Empty for every paper with no grouped questions.
+  const [groupMap, setGroupMap]             = useState<Map<string, ExamQuestionGroup>>(new Map());
   const [marksMap, setMarksMap]             = useState<Map<string, number>>(new Map());
 
   // ── Server clock skew (serverNow - clientNow, ms) ──────────────
@@ -1501,7 +1505,12 @@ export function ExamShell() {
 
         const qMap = new Map<string, Question>();
         const wanted = new Set(allQIds);
-        paper.forEach((q) => { if (wanted.has(q.id)) qMap.set(q.id, q); });
+        paper.questions.forEach((q) => { if (wanted.has(q.id)) qMap.set(q.id, q); });
+
+        // Stimulus, keyed by group id. Not filtered against `wanted`: the
+        // server only returns groups referenced by this paper's questions.
+        const gMap = new Map<string, ExamQuestionGroup>();
+        paper.groups.forEach((g) => gMap.set(g.id, g));
 
         // 5. Build marks map
         const mMap = new Map<string, number>();
@@ -1537,6 +1546,7 @@ export function ExamShell() {
         // a resumed sitting does not open reporting every prior answer unsaved.
         confirmFromServer(att.answers);
         setQuestionMap(qMap);
+        setGroupMap(gMap);
         setMarksMap(mMap);
         setLocalAnswers({ ...att.answers });
         setCurrentSectionIdx(att.currentSectionIdx);
@@ -1803,6 +1813,42 @@ export function ExamShell() {
 
   const currentQId = currentSectionQIds[currentQIdx] ?? null;
   const currentQuestion = currentQId ? questionMap.get(currentQId) ?? null : null;
+
+  // ── Grouped-set context for the current question (Phase 1) ──────
+  // The stimulus to show beside it, and where it sits within its set.
+  //
+  // The position is computed from the SERVED ORDER rather than the question's
+  // stored groupOrder, because the two can disagree: a rule may draw 3 of a
+  // set's 8 children, so the paper's members carry positions 0,1,2 while the
+  // authored set numbered them differently. What a candidate needs to read is
+  // "question 2 of 3 in this set" — the set as it appears on THEIR paper.
+  const currentGroup = currentQuestion?.groupId
+    ? groupMap.get(currentQuestion.groupId) ?? null
+    : null;
+
+  const currentGroupPosition = useMemo(() => {
+    if (!currentQuestion?.groupId || !currentQId) return null;
+    const siblings = currentSectionQIds.filter(
+      (qid) => questionMap.get(qid)?.groupId === currentQuestion.groupId,
+    );
+    const idx = siblings.indexOf(currentQId);
+    if (idx < 0 || siblings.length === 0) return null;
+    return { index: idx + 1, total: siblings.length };
+  }, [currentQuestion, currentQId, currentSectionQIds, questionMap]);
+
+  // Lookup maps the navigator needs to band grouped runs. Derived rather than
+  // stored so they cannot drift from questionMap/groupMap.
+  const groupIdByQuestion = useMemo(() => {
+    const out: Record<string, string | null | undefined> = {};
+    currentSectionQIds.forEach((qid) => { out[qid] = questionMap.get(qid)?.groupId; });
+    return out;
+  }, [currentSectionQIds, questionMap]);
+
+  const groupKindById = useMemo(() => {
+    const out: Record<string, GroupKind> = {};
+    groupMap.forEach((g, id) => { out[id] = g.kind; });
+    return out;
+  }, [groupMap]);
 
   // ── Counter denominator ─────────────────────────────────────────
   // In linear/adaptive delivery currentSectionQIds only contains what has
@@ -3710,6 +3756,8 @@ export function ExamShell() {
               sectionName={currentSection.name}
               totalSections={totalSections}
               currentSectionNumber={currentSectionIdx + 1}
+              groupIdByQuestion={groupIdByQuestion}
+              groupKindById={groupKindById}
             />
             )}
           </div>
@@ -3742,6 +3790,8 @@ export function ExamShell() {
                   onAnswer={(value) => handleAnswer(currentQId!, value)}
                   flagReason={flagged[currentQId!] ?? null}
                   onFlagChange={(reason) => handleFlagChange(currentQId!, reason)}
+                  group={currentGroup}
+                  groupPosition={currentGroupPosition}
                 />
               </div>
 

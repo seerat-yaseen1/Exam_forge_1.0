@@ -2576,12 +2576,20 @@ exports.getDeletionImpact = (0, https_1.onCall)({ region: 'us-central1' }, async
         // No academicMappings row here: that collection is student-only (see the
         // note in performAccountDeletion). Counting it for faculty would query a
         // field that does not exist and render a permanent, meaningless "0".
-        const [assessments, questions, banks] = await Promise.all([
+        // questionGroups is counted SEPARATELY from questions, not folded into it.
+        // The `questions` count already includes group children — they are
+        // ordinary question documents — so a faculty member with 12 DI sets of 5
+        // shows 60 questions either way. What the number of SETS adds is the shape
+        // of that content: 60 loose questions and 12 sets are very different
+        // things to reassign to a successor, and the succession decision is what
+        // this impact panel exists to inform.
+        const [assessments, questions, banks, groups] = await Promise.all([
             countWhere(db, 'assessments', 'ownerId', entityId),
             countWhere(db, 'questions', 'ownerId', entityId),
             countWhere(db, 'questionBanks', 'ownerId', entityId),
+            countWhere(db, 'questionGroups', 'ownerId', entityId),
         ]);
-        Object.assign(counts, { assessments, questions, questionBanks: banks });
+        Object.assign(counts, { assessments, questions, questionBanks: banks, questionGroups: groups });
     }
     else if (entityType === 'student') {
         const snap = await db.collection('students').doc(entityId).get();

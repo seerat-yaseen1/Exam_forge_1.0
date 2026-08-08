@@ -85,6 +85,26 @@ function seedQ(id, o = {}) {
   DB.seed('questionAnswers', id, {
     id, correctIds: o.correctIds ?? ['alpha'],
     correctPairs: o.correctPairs ?? [], modelAnswer: o.modelAnswer ?? '',
+    ...(o.tests ? { tests: o.tests } : {}),
+  });
+}
+
+// ── Coding fixtures ───────────────────────────────────────────────
+// A hidden suite of n tests, and a verdict passing the first k of them.
+const suite = (n) => Array.from({ length: n }, (_, i) => ({
+  id: `h${i}`, stdin: '', expected: String(i), visible: false,
+}));
+const completed = (n, k) => ({
+  status: 'completed',
+  results: Array.from({ length: n }, (_, i) => ({
+    testId: `h${i}`, status: i < k ? 'passed' : 'wrong_answer',
+  })),
+  adapter: 'test', judgedAt: at(VNOW),
+});
+/** Verdicts live in their own staff-only collection, keyed attempt__question. */
+function seedVerdict(attemptId, qid, verdict) {
+  DB.seed('attemptVerdicts', `${attemptId}__${qid}`, {
+    attemptId, questionId: qid, instituteId: 'inst_1', verdict,
   });
 }
 
@@ -475,6 +495,176 @@ async function G10() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// G-11 · a coding answer with no verdict yet
+//
+// The judge is asynchronous, so a paper is finalised BEFORE its coding marks
+// exist. The question this asks is whether that gap is honest: an unjudged
+// coding answer must read as "not marked yet", never as "wrong".
+// ═══════════════════════════════════════════════════════════════════
+async function G11() {
+  seedQ('c1', { engine: 'code', tests: suite(10) });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  advance(min(1));
+  answer(id, 'c1', { language: 'python3', source: 'print(1)' }, 'SA', 'code');
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+
+  const s = A(id).scores;
+  eq(s.requiresManualReview, true, 'an unjudged coding answer flags the paper');
+  eq(s.total, 0, 'nothing is awarded yet');
+  eq(s.available, 10, 'but the marks stay in the denominator');
+  eq(s.passed, null, 'and no pass/fail verdict is issued while a mark is outstanding');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-12 · the verdict lands, and a regrade turns it into a mark
+//
+// This is the whole asynchronous path end to end: finalise → judge → regrade.
+// 7 of 10 hidden tests is 7 of 10 marks, through the same awardFor every other
+// engine uses.
+// ═══════════════════════════════════════════════════════════════════
+async function G12() {
+  seedQ('c1', { engine: 'code', tests: suite(10) });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  advance(min(1));
+  answer(id, 'c1', { language: 'python3', source: 'solve()' }, 'SA', 'code');
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+  eq(A(id).scores.requiresManualReview, true, 'flagged before the judge replies');
+
+  seedVerdict(id, 'c1', completed(10, 7));
+  await call(fns.regradeAttempts, { assessmentId: 'asmt_1' }, OWNER());
+
+  const s = A(id).scores;
+  eq(s.total, 7, '7 of 10 hidden tests awards 7 of 10 marks');
+  eq(s.requiresManualReview, false, 'and the paper is no longer awaiting a mark');
+  eq(s.passed, true, 'so a real verdict can finally be issued');
+  eq(A(id).gradedAnswers.c1.isCorrect, false, 'partial credit is not a correct answer');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-13 · THE RULE — a judge outage is never a candidate's zero
+//
+// The failure this exists to catch is silent: a judge that dies mid-exam,
+// every paper marked zero, every downstream number well-formed. Negative
+// marking is switched on here too, because scoring an outage as "fully wrong"
+// would not merely award zero — it would go NEGATIVE.
+// ═══════════════════════════════════════════════════════════════════
+async function G13() {
+  seedQ('c1', { engine: 'code', tests: suite(10) });
+  seedQ('m1');
+  seedExam([
+    { questionId: 'm1', marks: 10, order: 0 },
+    { questionId: 'c1', marks: 10, order: 1 },
+  ], {
+    gradingConfig: {
+      exam: { negativeMarking: true, penaltyType: 'fixed', penaltyValue: 4 },
+      // The coding section opts IN, so this test exercises the penalty path
+      // rather than the default-off path (which G-14 covers).
+      sections: { SA: { section: { negativeMarking: true } } },
+    },
+  });
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  advance(min(1));
+  answer(id, 'm1', 'alpha', 'SA');
+  answer(id, 'c1', { language: 'python3', source: 'whatever' }, 'SA', 'code');
+
+  seedVerdict(id, 'c1', {
+    status: 'judge_unavailable', failureReason: 'connect ETIMEDOUT',
+    results: [], adapter: 'judge0', judgedAt: at(VNOW),
+  });
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+
+  const s = A(id).scores;
+  eq(s.requiresManualReview, true, 'an outage sends the paper to manual review');
+  eq(s.total, 10, 'the MCQ mark stands and the coding question costs nothing');
+  eq(s.passed, null, 'no verdict while the judge still owes an answer');
+  check(s.total >= 0, 'and above all: the outage did NOT go negative', `total ${s.total}`);
+  eq(A(id).gradedAnswers.c1.marksAwarded, 0, 'no marks moved on the unjudged question');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-14 · the settled negative-marking policy, at the integration level
+//
+// Three claims in one paper: partial credit is never penalised, a compile
+// error IS a penalty-eligible zero, and a coding section does not inherit the
+// exam's negative marking — it has to opt in.
+// ═══════════════════════════════════════════════════════════════════
+async function G14() {
+  seedQ('c1', { engine: 'code', tests: suite(10) });   // partial pass
+  seedQ('c2', { engine: 'code', tests: suite(10) });   // compile error
+  seedExam([
+    { questionId: 'c1', marks: 10, order: 0 },
+    { questionId: 'c2', marks: 10, order: 1 },
+  ], {
+    // Switched ON at the exam, and left unset on the section.
+    gradingConfig: { exam: { negativeMarking: true, penaltyType: 'fixed', penaltyValue: 4 } },
+  });
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  advance(min(1));
+  answer(id, 'c1', { language: 'python3', source: 'partial()' }, 'SA', 'code');
+  answer(id, 'c2', { language: 'python3', source: 'syntax error' }, 'SA', 'code');
+  seedVerdict(id, 'c1', completed(10, 7));
+  seedVerdict(id, 'c2', {
+    status: 'compile_error', compileMessage: "error: invalid syntax",
+    results: [], adapter: 'judge0', judgedAt: at(VNOW),
+  });
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+
+  const g = A(id).gradedAnswers;
+  eq(g.c1.marksAwarded, 7, '7 of 10 tests keeps its 7 marks, untouched by the penalty');
+  eq(g.c2.marksAwarded, 0,
+    'a compile error is a real zero — and takes NO penalty, because the coding '
+    + 'section never opted in to the exam-level negative marking');
+  eq(A(id).scores.total, 7, 'so the paper totals 7, not 3');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-15 · the same paper, with the coding section opting IN
+//
+// The other half of G-14: an institution that requires negative marking sets
+// it on the coding section, and it applies — but ONLY to the submission that
+// passed nothing. Partial credit stays exactly where it was.
+//
+// The opt-in is seeded before the attempt starts, because the policy is frozen
+// onto the attempt at that moment; editing the assessment afterwards cannot
+// reach an attempt already sat, and a regrade honours the frozen copy.
+// ═══════════════════════════════════════════════════════════════════
+async function G15() {
+  seedQ('c1', { engine: 'code', tests: suite(10) });   // 7/10 — partial credit
+  seedQ('c2', { engine: 'code', tests: suite(10) });   // compile error — nothing right
+  seedExam([
+    { questionId: 'c1', marks: 10, order: 0 },
+    { questionId: 'c2', marks: 10, order: 1 },
+  ], {
+    gradingConfig: {
+      exam: { negativeMarking: true, penaltyType: 'fixed', penaltyValue: 4 },
+      sections: { SA: { section: { negativeMarking: true } } },   // explicit opt-in
+    },
+  });
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  advance(min(1));
+  answer(id, 'c1', { language: 'python3', source: 'partial()' }, 'SA', 'code');
+  answer(id, 'c2', { language: 'python3', source: 'syntax error' }, 'SA', 'code');
+  seedVerdict(id, 'c1', completed(10, 7));
+  seedVerdict(id, 'c2', {
+    status: 'compile_error', compileMessage: 'error: invalid syntax',
+    results: [], adapter: 'judge0', judgedAt: at(VNOW),
+  });
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+
+  const g = A(id).gradedAnswers;
+  eq(g.c1.marksAwarded, 7, 'partial credit is untouched even with the penalty enabled');
+  eq(g.c2.marksAwarded, -4, 'and only the submission that passed nothing takes it');
+  eq(A(id).scores.total, 3, '7 − 4 = 3');
+}
+
 const SCENARIOS = [
   ['G-01', 'a text answer can be marked by a human', G01],
   ['G-02', 'no FAILED verdict on a half-marked paper', G02],
@@ -486,6 +676,11 @@ const SCENARIOS = [
   ['G-08', 'an out-of-paper answer is ignored', G08],
   ['G-09', 'a blank paper scores zero, never negative', G09],
   ['G-10', 'every finalisation path reaches the same mark', G10],
+  ['G-11', 'an unjudged coding answer is unmarked, not wrong', G11],
+  ['G-12', 'a verdict lands and a regrade turns it into a mark', G12],
+  ['G-13', 'THE RULE — a judge outage is never a candidate\'s zero', G13],
+  ['G-14', 'a coding section does not inherit the exam\'s negative marking', G14],
+  ['G-15', 'and applies it, to a total failure only, when it opts in', G15],
 ];
 
 (async () => {

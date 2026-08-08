@@ -160,6 +160,10 @@ export function resolveGradingPolicy(
   config: AssessmentGradingConfig | undefined,
   sectionId: string,
   difficulty: 'easy' | 'medium' | 'hard',
+  // Coding items default negative marking OFF and opt in instead of
+  // inheriting — see the note at `negOn` below. Optional so every existing
+  // caller keeps its exact behaviour.
+  isCoding = false,
 ): ResolvedGradingPolicy {
   const exam = config?.exam;
   // HARD GATE: master off (or unset) → no penalty anywhere. blankScore still
@@ -183,7 +187,22 @@ export function resolveGradingPolicy(
   // Gate open: a level may still opt OUT of negative marking for its scope by
   // setting negativeMarking:false at the row/section. Resolve that flag the
   // same first-defined-wins way.
-  const negOn = pick('negativeMarking') ?? true;   // gate open + no explicit flag below → on
+  // CODING INHERITS NOTHING; IT OPTS IN.
+  //
+  // Every other engine takes the exam-level switch as its default — a teacher
+  // who turned negative marking on at the exam meant it for the paper. Coding's
+  // settled policy is the reverse: default off, enabled per coding section by
+  // an institution that asks for it. So coding resolves the flag from the
+  // SECTION AND ROW ONLY, skipping the exam level `pick` would supply.
+  //
+  // A `pick(...) ?? false` would NOT achieve this: the gate above already
+  // requires exam.negativeMarking === true, so pick cannot return undefined
+  // here and any fallback after it is dead code.
+  //
+  // Keep in EXACT sync with the server twin in functions/src/index.ts.
+  const negOn = isCoding
+    ? (rowPol?.negativeMarking ?? sectionPol?.section?.negativeMarking ?? false)
+    : (pick('negativeMarking') ?? true);
   if (!negOn) {
     return { negativeMarking: false, penaltyType: 'fixed', penaltyValue: 0, blankScore };
   }

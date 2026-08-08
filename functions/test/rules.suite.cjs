@@ -257,6 +257,53 @@ async function R04() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// R-08 · attemptVerdicts — the candidate must not read their own judging
+//
+// This collection exists ONLY because a student may read their own attempt
+// document. A judge verdict carries hidden-test output, and even the per-test
+// pass/fail list is an oracle: run, see which hidden test flipped, and the
+// suite is reconstructable by bisection without its text ever being shown.
+//
+// So the claim under test is not "verdicts are tidy" — it is that the student
+// whose verdict this is cannot read it. If that ever passes, storing verdicts
+// on the attempt would have been just as safe and this collection is pointless.
+// ═══════════════════════════════════════════════════════════════════
+async function R08() {
+  await seed(async (db) => {
+    await setDoc(doc(db, 'attemptVerdicts/att_1__q_code'), {
+      attemptId: 'att_1', questionId: 'q_code', instituteId: 'inst_1',
+      verdict: {
+        status: 'completed', adapter: 'judge0', judgedAt: '2026-08-01T09:00:00.000Z',
+        results: [{ testId: 'h1', status: 'wrong_answer', stdout: 'HIDDEN OUTPUT' }],
+      },
+    });
+  });
+
+  await denied('THE POINT — the student who sat the attempt cannot read its verdict',
+    () => getDoc(doc(asStudent('stu_1', 'inst_1'), 'attemptVerdicts/att_1__q_code')));
+  await denied('nor can any other student',
+    () => getDoc(doc(asStudent('stu_2', 'inst_1'), 'attemptVerdicts/att_1__q_code')));
+
+  await allowed('faculty of the owning institute CAN review it',
+    () => getDoc(doc(asFaculty('fac_1', 'inst_1'), 'attemptVerdicts/att_1__q_code')));
+  await denied('faculty of another institute cannot — tenancy still applies',
+    () => getDoc(doc(asFaculty('fac_2', 'inst_2'), 'attemptVerdicts/att_1__q_code')));
+
+  // Writes are server-only. The Admin SDK bypasses rules, so denying every
+  // client write costs the judge nothing and closes the path where a candidate
+  // posts their own passing verdict.
+  await denied('a student cannot forge a passing verdict',
+    () => setDoc(doc(asStudent('stu_1', 'inst_1'), 'attemptVerdicts/att_1__q_code'), {
+      instituteId: 'inst_1',
+      verdict: { status: 'completed', adapter: 'x', judgedAt: 'now', results: [] },
+    }));
+  await denied('not even the webOwner writes one from a client',
+    () => updateDoc(doc(asWebOwner(), 'attemptVerdicts/att_1__q_code'), {
+      verdict: { status: 'completed', adapter: 'x', judgedAt: 'now', results: [] },
+    }));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // R-05 · storage.rules — the question bank's second door
 //
 // N3 (audit 2026-08-06). question-images read was `request.auth != null`, so
@@ -443,6 +490,7 @@ const SCENARIOS = [
   ['R-02', 'H1 — instituteCredentials is whitelisted, both directions', R02],
   ['R-03', 'the tenancy boundary around both collections', R03],
   ['R-04', 'attempts — answers writable, authority fields not', R04],
+  ['R-08', 'attemptVerdicts — the candidate cannot read their own judging', R08],
   ['R-05', 'storage.rules — the question bank\'s second door', R05],
   ['R-06', 'questionGroups — the stimulus is bank content, not public', R06],
   ['R-07', 'webowners — self-read by uid, without leaking the directory', R07],

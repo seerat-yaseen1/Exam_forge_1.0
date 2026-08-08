@@ -121,6 +121,11 @@ import {
   type CoreSelectedNode,
   type SubNodeType,
 } from './allocationCore';
+import {
+  JudgeTest,
+  JudgeVerdict,
+  outcomeFor as codeOutcomeFor,
+} from './judgeCore';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 
@@ -1649,6 +1654,7 @@ export const scheduledCloseExpiredAttempts = onSchedule(
             sections: attemptSections,
             questionMap: paper.questionMap,
             answerMap: paper.answerMap,
+            codeVerdicts: await loadCodeVerdicts(db, item.doc.id, paper.questionMap),
             answers: att.answers,
             passingScore: paper.assessment.passingScore,
             exposeKeysToStudent: paper.exposeKeysToStudent,
@@ -3449,7 +3455,7 @@ type MCQOption   = { id: string; text: string };
 
 interface QuestionDoc {
   id: string;
-  engine: 'mcq' | 'text' | 'match';
+  engine: 'mcq' | 'text' | 'match' | 'code';
   variant: string | null;
   options: MCQOption[];
   difficulty?: 'easy' | 'medium' | 'hard';   // server-read; used for per-row grading policy
@@ -3486,6 +3492,7 @@ function resolveGradingPolicyS(
   config: AssessmentGradingConfigS | undefined,
   sectionId: string,
   difficulty: 'easy' | 'medium' | 'hard',
+  isCoding = false,
 ): ResolvedGradingPolicyS {
   const exam = config?.exam;
   const gateOpen = exam?.negativeMarking === true;
@@ -3498,7 +3505,25 @@ function resolveGradingPolicyS(
   if (!gateOpen) {
     return { negativeMarking: false, penaltyType: 'fixed', penaltyValue: 0, blankScore };
   }
-  const negOn = pick('negativeMarking') ?? true;
+  // CODING INHERITS NOTHING; IT OPTS IN.
+  //
+  // Every other engine takes the exam-level switch as its default: a teacher
+  // who turned negative marking on at the exam meant it for the paper. Coding's
+  // settled policy is the reverse — default off, enabled per coding section by
+  // an institution that asks for it.
+  //
+  // So coding resolves the flag from the SECTION AND ROW ONLY, deliberately
+  // skipping the exam level that `pick` would otherwise supply. Note that a
+  // `pick(...) ?? false` would not do this: the gate above already requires
+  // exam.negativeMarking === true, so pick can never return undefined here and
+  // any fallback after it is dead code.
+  //
+  // The consequence is intended and worth surfacing in the builder: one exam
+  // can penalise its MCQ sections by inheritance while its coding section does
+  // not, until someone sets the flag on that section.
+  const negOn = isCoding
+    ? (rowPol?.negativeMarking ?? sectionPol?.section?.negativeMarking ?? false)
+    : (pick('negativeMarking') ?? true);
   if (!negOn) {
     return { negativeMarking: false, penaltyType: 'fixed', penaltyValue: 0, blankScore };
   }
@@ -3556,10 +3581,21 @@ interface QuestionAnswerDoc {
   correctIds: string[];
   correctPairs: CorrectPair[];
   modelAnswer: string;
+  /**
+   * The test suite for a coding question — hidden cases included.
+   *
+   * Lives here, beside correctIds, for exactly the same reason: this is the
+   * one collection a student cannot read (firestore.rules restricts it to the
+   * owner and webOwner). Putting the suite on the question document instead
+   * would ship the entire answer key to the browser inside the exam payload.
+   */
+  tests?: JudgeTest[];
 }
 
 interface AttemptAnswerDoc {
-  type: 'mcq' | 'text' | 'match';
+  type: 'mcq' | 'text' | 'match' | 'code';
+  // 'code' answers are { language, source }, which the existing
+  // Record<string, string> arm already admits — the value union does not widen.
   value: string | string[] | Record<string, string>;
 }
 
@@ -3790,6 +3826,59 @@ async function loadQuestionAndAnswerMaps(
   return { questionMap, answerMap };
 }
 
+/**
+ * Deterministic id for one attempt's verdict on one question.
+ *
+ * A composite doc id rather than a query, so the load is a `getAll` on known
+ * refs — the same pattern as the question/answer maps, and it keeps the read
+ * cost proportional to the paper rather than to the collection.
+ */
+export function codeVerdictDocId(attemptId: string, questionId: string): string {
+  return `${attemptId}__${questionId}`;
+}
+
+/**
+ * Load the judge verdicts for one attempt.
+ *
+ * WHY THESE ARE NOT ON THE ATTEMPT DOCUMENT: firestore.rules lets a student
+ * read their own attempt. A verdict carries hidden-test output, and even the
+ * per-test pass/fail list is an oracle — run, see which hidden test flipped,
+ * and the suite can be reconstructed by bisection without its text ever being
+ * shown. So verdicts live in their own collection, readable by staff only,
+ * for exactly the reason `questionAnswers` is a separate collection from
+ * `questions`.
+ *
+ * A missing verdict is NOT an error and NOT a zero: it means the judge has not
+ * finished (or has not run). The grading pass reads that absence as manual
+ * review, and a later regrade picks up the verdict once it lands.
+ */
+async function loadCodeVerdicts(
+  db: FirebaseFirestore.Firestore,
+  attemptId: string,
+  questionMap: Map<string, QuestionDoc>,
+): Promise<Map<string, JudgeVerdict>> {
+  const out = new Map<string, JudgeVerdict>();
+  // Only coding questions can have a verdict, and a paper with none must cost
+  // nothing extra — this is on the path every attempt in the platform takes.
+  const qIds: string[] = [];
+  questionMap.forEach((q, id) => { if (q.engine === 'code') qIds.push(id); });
+  if (qIds.length === 0) return out;
+
+  const byDocId = new Map(qIds.map((qid) => [codeVerdictDocId(attemptId, qid), qid]));
+  const ids = Array.from(byDocId.keys());
+  for (let i = 0; i < ids.length; i += 300) {
+    const refs = ids.slice(i, i + 300).map((id) => db.collection('attemptVerdicts').doc(id));
+    const snaps = await db.getAll(...refs);
+    snaps.forEach((snap) => {
+      if (!snap.exists) return;
+      const qid = byDocId.get(snap.id);
+      const data = snap.data() as { verdict?: JudgeVerdict } | undefined;
+      if (qid && data?.verdict) out.set(qid, data.verdict);
+    });
+  }
+  return out;
+}
+
 interface GradedAnswerOut {
   isCorrect: boolean | null;
   marksAwarded: number;
@@ -3851,8 +3940,18 @@ function scoreAttemptAnswers(params: {
   // Frozen grading policy (negative marking + blank handling). Absent = legacy
   // scoring (no penalty, blank = 0), so existing exams are unaffected.
   gradingConfig?: AssessmentGradingConfigS;
+  /**
+   * Judge verdicts for this attempt's coding answers, keyed by question id.
+   *
+   * OPTIONAL, AND ABSENT MEANS "NOT JUDGED YET" — never "scored zero". A
+   * caller that does not load verdicts (any of the non-finalising score paths)
+   * therefore sends coding questions to manual review rather than marking them
+   * wrong, which is the same safe direction the judge outage takes.
+   */
+  codeVerdicts?: Map<string, JudgeVerdict>;
 }): { scores: ScoresOut; gradedAnswers: Record<string, GradedAnswerOut> } {
   const { sections, questionMap, answerMap, answers, passingScore, exposeKeysToStudent } = params;
+  const codeVerdicts = params.codeVerdicts ?? new Map<string, JudgeVerdict>();
   const invalidated = params.invalidatedQuestionIds ?? new Set<string>();
   const gradingConfig = params.gradingConfig;
 
@@ -3903,7 +4002,7 @@ function scoreAttemptAnswers(params: {
       // Difficulty is read from the server-fetched question doc (trustworthy),
       // defaulting to 'medium' when absent. No config → NO_PENALTY equivalent.
       const difficulty = (q?.difficulty === 'easy' || q?.difficulty === 'hard') ? q.difficulty : 'medium';
-      const policy = resolveGradingPolicyS(gradingConfig, sec.id, difficulty);
+      const policy = resolveGradingPolicyS(gradingConfig, sec.id, difficulty, q?.engine === 'code');
 
       const exposed: GradedAnswerOut = {
         isCorrect: null,
@@ -3939,6 +4038,40 @@ function scoreAttemptAnswers(params: {
           totalAwarded   += award;
           exposed.marksAwarded = award;
           exposed.isCorrect    = outcome.isCorrect;
+        } else if (q.engine === 'code') {
+          // ── Coding: graded from a judge verdict, or not at all ──────
+          //
+          // Three outcomes, and only one of them awards marks:
+          //
+          //   • a real verdict over a gradable suite → partial credit from the
+          //     pass rate, through the SAME awardFor the other engines use;
+          //   • no verdict yet (async judge still running, or this call path
+          //     never loaded them) → manual review;
+          //   • a verdict that is not a verdict — judge unreachable, adapter
+          //     malfunction, or an authoring mistake that left the suite with
+          //     no weight → manual review.
+          //
+          // The last two are why codeOutcomeFor returns null rather than a
+          // zero-multiplier outcome. Falling through to `awardFor` with a
+          // manufactured zero would mark a candidate wrong for an outage, and
+          // would do it silently: every number downstream stays well-formed.
+          //
+          // Note what is NOT written to `exposed`: no per-test detail of any
+          // kind. gradedAnswers lands on the attempt document, which a student
+          // can read directly, and a hidden test's pass/fail list is an oracle
+          // that reconstructs the suite by bisection. Staff read the full
+          // verdict from its own collection instead.
+          const verdict = codeVerdicts.get(aq.questionId);
+          const outcome = verdict ? codeOutcomeFor(verdict, ans.tests ?? []) : null;
+          if (outcome) {
+            const award = awardFor(outcome, policy, aq.marks);
+            sectionAwarded += award;
+            totalAwarded   += award;
+            exposed.marksAwarded = award;
+            exposed.isCorrect    = outcome.isCorrect;
+          } else {
+            requiresManualReview = true;
+          }
         } else {
           // text engine — needs human grading
           requiresManualReview = true;
@@ -4165,11 +4298,13 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     ));
 
     const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
+    const codeVerdicts = await loadCodeVerdicts(db, attemptId, questionMap);
 
     const { scores, gradedAnswers } = scoreAttemptAnswers({
       sections,
       questionMap,
       answerMap,
+      codeVerdicts,
       answers: attempt.answers,
       passingScore: assessment.passingScore,
       // Keys land in the student's own attempt only when STUDENTS are in
@@ -4435,10 +4570,25 @@ export const regradeAttempts = onCall<RegradeAttemptsData>(
         for (const [k, v] of extra.answerMap) answerMap.set(k, v);
       }
 
+      // Scope the verdict load to THIS attempt's paper. questionMap is shared
+      // across the whole regrade loop, so passing it whole would look up
+      // verdicts for coding questions that are on other students' papers.
+      const attemptQMap = new Map<string, QuestionDoc>();
+      for (const sec of sections) {
+        for (const sq of sec.questions) {
+          const qd = questionMap.get(sq.questionId);
+          if (qd) attemptQMap.set(sq.questionId, qd);
+        }
+      }
+
       const { scores, gradedAnswers } = scoreAttemptAnswers({
         sections,
         questionMap,
         answerMap,
+        // A regrade is how a coding mark ARRIVES: the judge is asynchronous, so
+        // the paper is finalised into manual review first and the verdict lands
+        // afterwards. Re-reading verdicts here is what turns it into a mark.
+        codeVerdicts: await loadCodeVerdicts(db, docSnap.id, attemptQMap),
         answers: att.answers,
         passingScore: assessment.passingScore,
         exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
@@ -7191,6 +7341,7 @@ export const gradeProvisional = onCall<GradeProvisionalData>(
       sections,
       questionMap,
       answerMap,
+      codeVerdicts: await loadCodeVerdicts(db, attemptId, questionMap),
       answers: attempt.answers,
       passingScore: assessment.passingScore,
       // NEVER to the student on this path, whatever the review audience says.

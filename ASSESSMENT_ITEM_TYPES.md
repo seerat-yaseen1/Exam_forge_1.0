@@ -53,12 +53,12 @@ Assessment Item
 │   ├── ◻ Logical Set
 │   └── ✅ Multi-question Passage
 │
-├── Coding                          ◻ all — Extension Phase 2
-│   ├── Coding Challenge
-│   ├── SQL Challenge
-│   ├── Debugging
-│   ├── Output Prediction
-│   └── Code Review
+├── Coding
+│   ├── ◻ Coding Challenge           ─┐
+│   ├── ◻ SQL Challenge               ├ need the sandbox — Extension Phase 2
+│   ├── ◻ Debugging                  ─┘
+│   ├── ✅ Output Prediction          ─┐ need no sandbox; shipped ahead of it
+│   └── ✅ Code Review                ─┘
 │
 ├── Cognitive Game                  ◻ all — Extension Phase 3
 │   ├── Memory              ├── Spatial Ability
@@ -88,7 +88,7 @@ Assessment Item
     └── Adaptive Item
 ```
 
-**51 types. 13 are live.** Everything else is a name with a change list
+**51 types. 15 are live.** Everything else is a name with a change list
 attached, and §5 is that change list.
 
 ---
@@ -106,8 +106,10 @@ are ordinary questions.
 | True / False | `mcq` / `truefalse` | auto |
 | Fill in the Blank | `mcq` / `fillblank` | auto |
 | Match the Following | `match` / `null` | auto, proportional |
+| Output Prediction | `mcq` / `outputpred` | auto |
 | Short Answer | `text` / `short` | manual |
 | Long Answer | `text` / `long` | manual |
+| Code Review | `text` / `codereview` | manual |
 | Reading Comprehension | group kind `rc` | auto (children) |
 | Data Interpretation | group kind `di` | auto (children) |
 | Seating Arrangement | group kind `seating` | auto (children) |
@@ -276,7 +278,7 @@ code sandbox or game canvas breaks that correspondence in both directions.
 
 | Engine | What the shell must be able to do | Item types | Live |
 |---|---|---|---|
-| `objective` | show one item, take one discrete response, score from a key | MCQ ×2, True/False, Fill in the Blank, **Match**, Sequence, **Numeric**, Hotspot, Drag & Drop, Matrix/Grid, Output Prediction, Psychometric, Adaptive — 13 | ✅ |
+| `objective` | show one item, take one discrete response, score from a key | MCQ ×2, True/False, Fill in the Blank, **Match**, **Output Prediction**, Sequence, Numeric, Hotspot, Drag & Drop, Matrix/Grid, Psychometric, Adaptive — 13 | ✅ |
 | `subjective` | hold free text for a human grader | Short Answer, Long Answer, Essay, Case Analysis, Code Review — 5 | ✅ |
 | `grouped` | hold a passage/table on screen across its questions | all 8 grouped types | ✅ |
 | `coding` | run untrusted code or a query against test cases | Coding Challenge, SQL Challenge, Debugging | ◻ |
@@ -374,6 +376,66 @@ A question that carries no `engine` — a malformed or far-future document —
 put an item on a paper the shell may not be able to render. Unlocked sections
 are unaffected.
 
+## 5b · Code in a question, without a sandbox
+
+Output Prediction and Code Review are the two coding types that need no
+execution — one is a keyed answer *about* a snippet, the other is prose about
+one. Both shipped ahead of the sandbox, and what they cost is the clearest
+demonstration of the model in §5a working.
+
+### They store no new field
+
+The snippet lives in the **stem**, as a ` ```lang ` fenced block that `RichText`
+renders as a code block. That is not a shortcut. Because there is no new field:
+
+- `sanitizeQuestionForStudent` needs no change — it already passes `stem` and
+  `variant` through, so the snippet reaches the candidate through the existing
+  whitelist rather than a new hole in it.
+- `firestore.rules` needs no change — nothing new is persisted.
+- Duplicate detection, bulk upload and export keep working. Bulk upload gained
+  two strings in a validation list and no new column.
+
+They differ from their plain siblings (`single`, `long`) only in **what they
+declare themselves to be** — which is exactly what lets a section rule, a bank
+filter or a future analytics cut target them.
+
+### RichText learned code blocks
+
+` ```lang ` fenced blocks and `` `inline` `` spans, parsed in the existing single
+pass. Two details are load-bearing:
+
+**Code is matched before math.** `$` is ordinary in shell, PHP, JS templates and
+regexes, so `echo "$USER owes $5"` would otherwise have everything between the
+dollars swallowed by the math branch and handed to KaTeX. Matching the fence
+first consumes the block before the math alternatives are considered.
+
+**`white-space: pre`, not `pre-wrap`.** Wrapping code re-flows its indentation,
+and indentation is meaning in Python and readability everywhere else — a
+candidate must never have to guess whether a line was indented or merely
+wrapped. The cost is horizontal scroll on a narrow screen, contained to the
+block rather than the page.
+
+Code is rendered as a React text child, never through
+`dangerouslySetInnerHTML` — a snippet containing markup is displayed, not
+executed. **No syntax highlighting**, deliberately: it needs either a grammar
+per language (a dependency, in a bundle already carrying KaTeX) or a hand-rolled
+tokeniser, and mis-tokenised code that *looks* authoritative is worse than plain
+code on a paper someone is being marked on.
+
+### Two silent-failure modes closed on the way
+
+Adding a variant exposed two places where a forgotten one fails without a sound.
+Both are now structural rather than a matter of remembering:
+
+| Where | Was | Now |
+|---|---|---|
+| `scoreMCQMultiplier` (server) | allow-list of `single`/`truefalse`/`fillblank`; anything else fell through to **multiplier 0** — every candidate who answered a new variant *correctly* would be silently marked zero | `multi` is the special case; every other mcq variant is scored as the single selection it is |
+| `QuestionRenderer` (client) | allow-list deciding which control to render; a new variant produced **no answer area at all** in a live exam | an exhaustive `switch` whose `never` default makes a forgotten variant a build error |
+
+The server cannot import the client's `MCQVariant` union, so a safe runtime
+default is the only lever there. The client gets compile-time exhaustiveness
+from the registry's binding tables and now from the renderer too.
+
 ## 6 · The tracks
 
 ### Objective engine track — Sequence, Numeric, Hotspot, Drag & Drop, Matrix
@@ -416,12 +478,27 @@ other grouped work rather than on its own.
 
 ### Coding — Extension Phase 2
 
-Designed in `PLATFORM_EXTENSION_PLAN.md` §4. New `code` engine, a `CodingRule`
-selection kind, and an execution sandbox — the sandbox, not the item type, is
-the real scope. Output Prediction and Code Review are the exceptions: neither
-needs execution (one is an MCQ or short answer over a snippet, the other a long
-answer over a diff), so both could ship ahead of the sandbox as variants if
-there is demand.
+**Output Prediction and Code Review have shipped** — see §5b. Neither needs
+execution, so neither waited on the sandbox.
+
+The remaining three — Coding Challenge, SQL Challenge, Debugging — are designed
+in `PLATFORM_EXTENSION_PLAN.md` §4: a new `code` storage engine, a `CodingRule`
+selection kind, and an execution sandbox. **The sandbox, not the item type, is
+the real scope.** Buy rather than build: a self-hosted isolated runner (Judge0 /
+Piston) called from a Cloud Function, never from the client — the client is the
+party being tested. The editor should be CodeMirror 6, lazy-loaded, on the same
+discipline the repo already applies to `xlsx`.
+
+The grading seam already exists and does not need inventing: a judge is
+asynchronous and untrusted, so it cannot run inside `gradeAttempt`, but
+`requiresManualReview` plus `passed: boolean | null` were built so a paper with
+unmarked essays isn't falsely reported as failed. Code questions reuse that
+state — pending at grade time, judged async, patched through `regradeAttempts`.
+
+One decision that must be made explicitly rather than inherited: **negative
+marking on code.** `resolveGradingPolicy` would otherwise apply the section's
+penalty and deduct marks for a failing test case. Either give it a `code` branch
+or refuse negative marking on coding sections at validation time.
 
 ### Cognitive Games — Extension Phase 3
 

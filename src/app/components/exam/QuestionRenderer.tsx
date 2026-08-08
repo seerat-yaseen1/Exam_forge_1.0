@@ -15,7 +15,9 @@ import { CheckSquare, Square, ChevronDown, Flag } from 'lucide-react';
 import { RichText } from '../questions/RichText';
 import { GROUP_KIND_LABEL } from '../../../lib/questionBankService';
 import { itemTypeForQuestion } from '../../../lib/itemTypes';
-import type { Question, MCQOption, MatchPair, ExamQuestionGroup } from '../../../lib/questionBankService';
+import type {
+  Question, MCQOption, MatchPair, ExamQuestionGroup, MCQVariant, TextVariant,
+} from '../../../lib/questionBankService';
 import type { AnswerValue } from '../../../lib/submissionService';
 import type { ReportReason } from '../../../lib/questionReportService';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -379,6 +381,55 @@ function MatchEngine({
       })}
     </div>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Variant → control mapping
+//
+// Both switches are EXHAUSTIVE over their variant union, enforced by the
+// `never` assignment in the default arm. That is the whole point of writing
+// them as functions rather than inline conditions: this file is where a
+// forgotten variant becomes a blank answer area in a live exam — the candidate
+// sees a question and no way to answer it — and a blank card is not something
+// any test or type-check would otherwise catch. Adding a member to MCQVariant
+// or TextVariant now fails the build here until it is given a control.
+//
+// The runtime fallbacks are the safe shapes rather than nothing, for the same
+// reason the server scores an unknown mcq variant as a single selection: a
+// slightly wrong control still lets a candidate answer.
+// ──────────────────────────────────────────────────────────────────
+
+function mcqMode(variant: MCQVariant): 'single' | 'multi' {
+  switch (variant) {
+    case 'multi':
+      return 'multi';
+    case 'single':
+    case 'truefalse':
+    case 'fillblank':
+    // Output Prediction is a keyed one-of-N over candidate outputs; the snippet
+    // it asks about is already rendered by RichText from the stem's fenced block.
+    case 'outputpred':
+      return 'single';
+    default: {
+      const _exhaustive: never = variant;
+      return 'single';
+    }
+  }
+}
+
+function textMode(variant: TextVariant): 'short' | 'long' {
+  switch (variant) {
+    case 'short':
+      return 'short';
+    case 'long':
+    // A code review is an extended written response; it needs the tall box.
+    case 'codereview':
+      return 'long';
+    default: {
+      const _exhaustive: never = variant;
+      return 'long';
+    }
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -758,29 +809,24 @@ export function QuestionRenderer({
         {/* Engine-specific answer area */}
         <div>
           {question.engine === 'mcq' && (
-            <>
-              {(question.variant === 'single' ||
-                question.variant === 'truefalse' ||
-                question.variant === 'fillblank') && (
-                <MCQSingleEngine
-                  options={question.options}
-                  selected={mcqSingleValue}
-                  onChange={onAnswer}
-                />
-              )}
-              {question.variant === 'multi' && (
-                <MCQMultiEngine
-                  options={question.options}
-                  selected={mcqMultiValue}
-                  onChange={onAnswer}
-                />
-              )}
-            </>
+            mcqMode(question.variant as MCQVariant) === 'multi' ? (
+              <MCQMultiEngine
+                options={question.options}
+                selected={mcqMultiValue}
+                onChange={onAnswer}
+              />
+            ) : (
+              <MCQSingleEngine
+                options={question.options}
+                selected={mcqSingleValue}
+                onChange={onAnswer}
+              />
+            )
           )}
 
           {question.engine === 'text' && (
             <TextEngine
-              variant={question.variant as 'short' | 'long'}
+              variant={textMode(question.variant as TextVariant)}
               value={textValue}
               onChange={onAnswer}
             />

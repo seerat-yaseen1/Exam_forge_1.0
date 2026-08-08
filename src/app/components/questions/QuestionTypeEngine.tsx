@@ -85,6 +85,8 @@ interface TypeOption {
 
 const AUTHORING_HINT: Partial<Record<ItemTypeId, string>> = {
   'fill-blank': 'Use ___ in the stem to mark the blank.',
+  'output-prediction': 'Put the code in the stem inside a ```python fence.',
+  'code-review': 'Put the code in the stem inside a ```python fence.',
 };
 
 const TYPE_OPTIONS: TypeOption[] = liveQuestionItemTypes().map(({ def, engine, variant }) => ({
@@ -498,11 +500,13 @@ function TextEngine({
         ref={textareaRef}
         value={modelAnswer}
         onChange={(e) => onChange(e.target.value)}
-        rows={variant === 'long' ? 5 : 3}
+        rows={variant === 'short' ? 3 : 5}
         placeholder={
-          variant === 'long'
-            ? 'Key points, rubric hints, or model answer for faculty reference…'
-            : 'Expected answer for faculty reference…'
+          variant === 'codereview'
+            ? 'What a strong review should catch — bugs, edge cases, style, risk…'
+            : variant === 'long'
+              ? 'Key points, rubric hints, or model answer for faculty reference…'
+              : 'Expected answer for faculty reference…'
         }
         style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }}
         onFocus={iFocus}
@@ -900,7 +904,11 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
         {/* Engine fields */}
         {engine === 'mcq' && (
           <Field
-            label={variant === 'fillblank' ? 'Answer candidates *' : 'Options *'}
+            label={
+              variant === 'fillblank'  ? 'Answer candidates *'
+              : variant === 'outputpred' ? 'Candidate outputs *'
+              : 'Options *'
+            }
             error={errors.options || errors.correct}
           >
             <MCQEngine

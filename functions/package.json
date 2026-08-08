@@ -18,12 +18,13 @@
     "test:freeze": "npm run build && node test/freeze.suite.cjs",
     "test:rules": "firebase emulators:exec --config ../firebase.json --only firestore,storage --project demo-rules-suite \"node test/rules.suite.cjs\"",
     "test:concurrency": "firebase emulators:exec --config ../firebase.json --only firestore --project demo-concurrency \"node test/concurrency.suite.cjs\"",
-    "test": "npm run test:timing && npm run test:freeze && node test/exam.e2e.cjs && node test/groups.suite.cjs && node test/audit.probe.cjs && node test/audit.round3.cjs && node test/audit.grading.cjs && npm run test:rules && npm run test:concurrency",
+    "test": "npm run test:timing && npm run test:freeze && node test/exam.e2e.cjs && node test/groups.suite.cjs && node test/audit.probe.cjs && node test/audit.round3.cjs && node test/audit.grading.cjs && node test/judge.suite.cjs && npm run test:rules && npm run test:concurrency",
     "test:e2e": "npm run build && node test/exam.e2e.cjs",
     "test:groups": "npm run build && node test/groups.suite.cjs",
     "test:probe": "npm run build && node test/audit.probe.cjs",
     "test:round3": "npm run build && node test/audit.round3.cjs",
-    "test:grading": "npm run build && node test/audit.grading.cjs"
+    "test:grading": "npm run build && node test/audit.grading.cjs",
+    "test:judge": "npm run build && node test/judge.suite.cjs"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",

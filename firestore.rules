@@ -1108,6 +1108,28 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // attemptTelemetry — the record of HOW a candidate wrote their answer.
+    //
+    // NO STUDENT READ, and for a different reason than attemptVerdicts.
+    //
+    // A verdict is withheld because it leaks the answer key. This is withheld
+    // because it is a recording of a person working — hesitation, deletion,
+    // false starts, things they chose not to submit — and handing someone back
+    // a keystroke-level transcript of themselves under exam conditions serves
+    // no purpose the platform has. Staff of the owning institute may read it,
+    // because they are the ones who would ever have cause to.
+    //
+    // Writes are server-only. Append-only chunks written by recordCodeTelemetry
+    // through the Admin SDK, which bypasses these rules — so denying every
+    // client write costs the capture path nothing and closes the path where a
+    // candidate edits their own record of what they did.
+    match /attemptTelemetry/{id} {
+      allow read: if isWebOwner()
+                     || ((role() == 'institute' || role() == 'faculty')
+                         && request.auth.token.instituteId == resource.data.instituteId);
+      allow create, update, delete: if false;
+    }
+
     // questionBanks — owned by Web Owner only (no instituteId on the doc).
     match /questionBanks/{id} {
       allow read:   if isStaff();   // L-b: students have no reason to enumerate share/grant metadata

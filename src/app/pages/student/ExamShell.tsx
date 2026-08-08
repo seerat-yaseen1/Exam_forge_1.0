@@ -32,6 +32,7 @@ import {
   pickSection,
   gradeAttempt,
   runCodeSample,
+  recordCodeTelemetry,
   logViolation,
   enforceIntegrityThreshold,
   MAX_INTEGRITY_WARNINGS,
@@ -60,6 +61,7 @@ import {
   type ReportReason,
 } from '../../../lib/questionReportService';
 import { IntegrityEngine, codeEditorPasteAllowed } from '../../components/exam/IntegrityEngine';
+import { telemetryEnabled } from '../../../lib/codeTelemetry';
 import { FaceMonitor } from '../../components/exam/FaceMonitor';
 import { ExtensionWatchdog } from '../../components/exam/ExtensionWatchdog';
 import { SectionTimer } from '../../components/exam/SectionTimer';
@@ -1303,6 +1305,26 @@ export function ExamShell() {
       return { ok: false as const, reason: 'disabled' as const, remaining: 0, retryAfterMs: 0 };
     }
     return runCodeSample({ attemptId: att.id, questionId, language, source });
+  }, []);
+
+  // ── Code telemetry ─────────────────────────────────────────────
+  //
+  // The sink is withheld entirely when the tier forbids recording, rather than
+  // supplied and then ignored. An editor with no sink never buffers, so the
+  // decision not to record a candidate is made once, here, and cannot be
+  // undone further down.
+  const telemetryOn = telemetryEnabled(assessment?.securityTier, assessment?.codeTelemetry);
+
+  const handleCodeTelemetry = useCallback((
+    questionId: string,
+    events: unknown[],
+    seq: number,
+  ) => {
+    const att = attemptRef.current;
+    if (!att) return;
+    // Not awaited. A flush must never delay a keystroke or surface an error to
+    // someone sitting an exam — the wrapper swallows failures for that reason.
+    void recordCodeTelemetry({ attemptId: att.id, questionId, seq, events });
   }, []);
 
   // ── Overlay / violation state ──────────────────────────────────
@@ -3822,6 +3844,7 @@ export function ExamShell() {
                   group={currentGroup}
                   groupPosition={currentGroupPosition}
                   onRunCode={handleRunCode}
+                  onCodeTelemetry={telemetryOn ? handleCodeTelemetry : undefined}
                 />
               </div>
 

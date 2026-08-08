@@ -985,6 +985,14 @@ export type Assessment = {
   // (see securityLockedAt). undefined tier = legacy → startExam treats it
   // exactly as today (no camera / no extension gate).
   securityTier?: 'mock' | 'normal' | 'high_stake';
+
+  // ── Code telemetry (Stage C) ──────────────────────────────────────
+  // Whether a candidate's writing session is recorded on coding questions.
+  // Undefined means the tier default: never for 'mock', on for the proctored
+  // tiers. An institution may set it false to decline collecting a recording;
+  // setting it true at 'mock' does nothing, because rehearsal is not assessed
+  // and telemetryEnabled refuses it outright.
+  codeTelemetry?: boolean;
   deliveryMode?: 'standard' | 'linear' | 'adaptive';   // undefined = 'standard'
 
   // Authority-controlled toggles. Tier-aware defaults set at create via

@@ -304,6 +304,49 @@ async function R08() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// R-09 · attemptTelemetry — a candidate cannot read their own recording
+//
+// Withheld for a different reason than a verdict. A verdict is hidden because
+// it leaks the answer key; this is hidden because it is a recording of a
+// person working — hesitation, deletion, false starts, things they chose not
+// to submit — and handing someone back a keystroke transcript of themselves
+// under exam conditions serves no purpose the platform has.
+//
+// It is also append-only by construction: written server-side through the
+// Admin SDK, with every client write denied, so a record of what someone did
+// cannot be edited afterwards by the person it describes.
+// ═══════════════════════════════════════════════════════════════════
+async function R09() {
+  await seed(async (db) => {
+    await setDoc(doc(db, 'attemptTelemetry/att_1__q_code__0000'), {
+      attemptId: 'att_1', questionId: 'q_code', instituteId: 'inst_1', seq: 0,
+      events: [{ k: 'edit', t: 0, from: 0, to: 0, text: 'HESITATION' }],
+    });
+  });
+
+  await denied('the student who was recorded cannot read it back',
+    () => getDoc(doc(asStudent('stu_1', 'inst_1'), 'attemptTelemetry/att_1__q_code__0000')));
+  await denied('nor can another student',
+    () => getDoc(doc(asStudent('stu_2', 'inst_1'), 'attemptTelemetry/att_1__q_code__0000')));
+
+  await allowed('faculty of the owning institute can review it',
+    () => getDoc(doc(asFaculty('fac_1', 'inst_1'), 'attemptTelemetry/att_1__q_code__0000')));
+  await denied('faculty elsewhere cannot — tenancy still applies',
+    () => getDoc(doc(asFaculty('fac_2', 'inst_2'), 'attemptTelemetry/att_1__q_code__0000')));
+
+  await denied('a student cannot fabricate a recording',
+    () => setDoc(doc(asStudent('stu_1', 'inst_1'), 'attemptTelemetry/att_1__q_new__0000'), {
+      instituteId: 'inst_1', events: [],
+    }));
+  await denied('nor edit one that exists — append-only means append-only',
+    () => updateDoc(doc(asStudent('stu_1', 'inst_1'), 'attemptTelemetry/att_1__q_code__0000'), {
+      events: [],
+    }));
+  await denied('not even the webOwner writes one from a client',
+    () => updateDoc(doc(asWebOwner(), 'attemptTelemetry/att_1__q_code__0000'), { events: [] }));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // R-05 · storage.rules — the question bank's second door
 //
 // N3 (audit 2026-08-06). question-images read was `request.auth != null`, so
@@ -491,6 +534,7 @@ const SCENARIOS = [
   ['R-03', 'the tenancy boundary around both collections', R03],
   ['R-04', 'attempts — answers writable, authority fields not', R04],
   ['R-08', 'attemptVerdicts — the candidate cannot read their own judging', R08],
+  ['R-09', 'attemptTelemetry — a candidate cannot read their own recording', R09],
   ['R-05', 'storage.rules — the question bank\'s second door', R05],
   ['R-06', 'questionGroups — the stimulus is bank content, not public', R06],
   ['R-07', 'webowners — self-read by uid, without leaking the directory', R07],

@@ -955,6 +955,28 @@ export async function runCodeSample(params: {
   return (await call(params)).data;
 }
 
+// ── Code telemetry ────────────────────────────────────────────────
+//
+// Fire-and-forget. A failed flush must never surface to a candidate sitting an
+// exam and must never block their typing: telemetry is a research and review
+// artefact, and losing a chunk of it is a worse outcome for us than for them.
+// The server decides whether anything is recorded at all.
+export async function recordCodeTelemetry(params: {
+  attemptId: string;
+  questionId: string;
+  seq: number;
+  events: unknown[];
+}): Promise<void> {
+  try {
+    const call = httpsCallable<typeof params, { ok: true; stored: number }>(
+      functions, 'recordCodeTelemetry',
+    );
+    await call(params);
+  } catch {
+    // Deliberately swallowed. See above.
+  }
+}
+
 // ── Server clock skew ─────────────────────────────────────────────
 // Returns (serverNow - clientNow) in ms, captured once on exam load. The
 // SectionTimer adds this offset to Date.now() so the countdown display stays

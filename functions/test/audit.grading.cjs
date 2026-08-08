@@ -787,7 +787,10 @@ async function G18() {
 // times spends judge slots during an exam to learn nothing.
 // ═══════════════════════════════════════════════════════════════════
 async function G19() {
-  const id = await sitCodingPaper({ value: { language: 'python3', source: '' } });
+  // A real program, in a language the judge does not support: the submission
+  // cannot be assembled, but there IS an attempt here, unlike an empty editor
+  // (G-23), so the paper is queued and then settled terminally.
+  const id = await sitCodingPaper({ value: { language: 'cobol', source: 'DISPLAY 1.' } });
   const judge = scriptedJudge(() => completed(10, 10));
   fns.setJudgeAdapter(judge);
   try {
@@ -950,6 +953,30 @@ async function G22() {
     'with the operator detail withheld from the browser');
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// G-23 · an emptied editor is a blank, not a question to judge
+//
+// The editor writes { language, source: '' } when the buffer is still the
+// starter or has been cleared, because the renderer's answer channel has no
+// "no answer" arm. The server must read that the same way the navigator does.
+// Without this, a candidate who deleted their code would queue a judge run
+// that cannot run, and land the paper in manual review for a question they
+// never attempted.
+// ═══════════════════════════════════════════════════════════════════
+async function G23() {
+  const id = await sitCodingPaper({ value: { language: 'python3', source: '   \n ' } });
+
+  eq(A(id).codeJudgePending, undefined, 'an emptied answer never joins the judging queue');
+  eq(A(id).scores.requiresManualReview, false,
+    'and does not put the paper in manual review for a question nobody attempted');
+  eq(A(id).scores.total, 0, 'it simply scores nothing');
+  eq(A(id).scores.passed, false, 'and the paper gets a real verdict rather than being held open');
+
+  const sec = A(id).scores.bySection[0];
+  eq(sec.answeredQuestions, 0, 'it is not counted as answered');
+  eq(sec.marksAvailable, 10, 'but its marks stay in the denominator');
+}
+
 const SCENARIOS = [
   ['G-01', 'a text answer can be marked by a human', G01],
   ['G-02', 'no FAILED verdict on a half-marked paper', G02],
@@ -973,6 +1000,7 @@ const SCENARIOS = [
   ['G-20', 'a sample run never exposes a hidden test, at either end', G20],
   ['G-21', 'who may run code, and when', G21],
   ['G-22', 'the run budget holds, and an outage does not spend it', G22],
+  ['G-23', 'an emptied editor is a blank, not a question to judge', G23],
 ];
 
 (async () => {

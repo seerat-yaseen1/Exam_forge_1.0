@@ -194,6 +194,17 @@ export function CodeAnswerEditor({
     sink(events, seqRef.current++);
   }, []);
 
+  // The opening keyframe. Without it replay has no starting document — the
+  // editor already contains starter code that no edit event ever produced, so
+  // every reconstruction would begin from the wrong text.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (!onTelemetry || seededRef.current) return;
+    seededRef.current = true;
+    record({ k: 'lang', t: now(), to: langRef.current, doc: source });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onTelemetry, record]);
+
   // Periodic flush. Thirty seconds bounds how much is lost if the tab dies,
   // without turning a writing session into a stream of requests.
   useEffect(() => {
@@ -283,7 +294,9 @@ export function CodeAnswerEditor({
     if (next === language) return;
     draftsRef.current[language] = source;
     const buffer = bufferForLanguage(next, draftsRef.current, codeSpec);
-    record({ k: 'lang', t: now(), to: next });
+    // Carries the buffer, because a switch replaces the whole document and
+    // replay has no other way to learn what it was replaced with.
+    record({ k: 'lang', t: now(), to: next, doc: buffer });
     setLanguage(next);
     setSource(buffer);
     // The stored answer follows the visible buffer immediately, so a candidate

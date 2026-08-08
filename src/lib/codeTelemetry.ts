@@ -57,10 +57,32 @@ export interface ActEvent {
   t: number;
 }
 
+/**
+ * A language selection, carrying the buffer as it stood at that moment.
+ *
+ * THE `doc` FIELD IS WHAT MAKES REPLAY POSSIBLE, and it is not optional in
+ * practice even though the type permits its absence for older records.
+ *
+ * Edit events are ranges into a document — `replace [from, to) with text` — so
+ * reconstructing anything requires knowing what the document was to begin
+ * with. Two moments make that unknowable without a snapshot:
+ *
+ *   • the session start, where the editor already contains starter code that
+ *     no edit event ever produced;
+ *   • a language switch, which replaces the whole buffer at once with that
+ *     language's draft or starter.
+ *
+ * Without a snapshot at each, replay applies subsequent edits to the wrong base
+ * and renders a document the candidate never saw — confidently, and with no
+ * sign anything is wrong. So a lang event doubles as a keyframe: one is emitted
+ * when recording begins, and one on every switch.
+ */
 export interface LanguageEvent {
   k: 'lang';
   t: number;
   to: string;
+  /** The full buffer immediately after this event. Absent only on legacy records. */
+  doc?: string;
 }
 
 export type TelemetryEvent = EditEvent | ActEvent | LanguageEvent;
@@ -148,6 +170,10 @@ export function compact(events: TelemetryEvent[]): TelemetryEvent[] {
 export function bound(events: TelemetryEvent[]): { events: TelemetryEvent[]; truncated: number } {
   let kept = events;
   let truncated = 0;
+  // Keyframes are never dropped. Losing one costs the whole replay after it,
+  // not one moment of it — every later edit would be applied to a document
+  // that never existed.
+  const keyframes = events.filter((e) => e.k === 'lang' && e.doc !== undefined);
 
   const oversize = (list: TelemetryEvent[]) =>
     list.reduce((n, e) => n + (isEdit(e) ? e.text.length : 0), 0) > MAX_TEXT_BYTES;
@@ -157,8 +183,11 @@ export function bound(events: TelemetryEvent[]): { events: TelemetryEvent[]; tru
     while ((kept.length > MAX_EVENTS || oversize(kept)) && kept.length > 2) {
       const head = kept.slice(0, half);
       const tail = kept.slice(-half);
-      truncated += kept.length - head.length - tail.length;
-      const next = [...head, ...tail];
+      const middleKeyframes = keyframes.filter(
+        (k) => !head.includes(k) && !tail.includes(k));
+      truncated += kept.length - head.length - tail.length - middleKeyframes.length;
+      const next = [...head, ...middleKeyframes, ...tail]
+        .sort((a, b) => a.t - b.t);
       if (next.length >= kept.length) break;   // cannot shrink further
       kept = next;
     }

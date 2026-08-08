@@ -37,6 +37,7 @@ import {
 } from '../../../lib/duplicateDetection';
 import { ImageUploader } from './ImageUploader';
 import { MathToolbar, InlineMathButton } from './MathToolbar';
+import { SnippetToolbar } from './SnippetToolbar';
 import { SubjectTopicSelect } from './SubjectTopicSelect';
 import { DuplicateCompareModal } from './DuplicateCompareModal';
 import type { ParsedRow } from './bulkUploadParser';
@@ -303,7 +304,12 @@ function StemField({
       {/* Label row + math toolbar */}
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>Question stem *</label>
-        <MathToolbar textareaRef={textareaRef} onChange={onStemChange} />
+        <div className="flex items-center gap-1.5">
+          {/* Code before math: on a coding paper the block IS the question,
+              and Output Prediction and Code Review both put it in the stem. */}
+          <SnippetToolbar textareaRef={textareaRef} value={stem} onChange={onStemChange} />
+          <MathToolbar textareaRef={textareaRef} onChange={onStemChange} />
+        </div>
       </div>
 
       <textarea

@@ -1086,6 +1086,28 @@ service cloud.firestore {
                                && resource.data.get('ownerType', 'webOwner') == 'webOwner';
     }
 
+    // attemptVerdicts — one judge verdict per (attempt, coding question).
+    //
+    // NO STUDENT READ, AND THAT IS THE ENTIRE POINT OF THE COLLECTION.
+    //
+    // A student may read their own attempt document, so a verdict stored there
+    // would hand them the hidden test suite: not only the captured output, but
+    // the per-test pass/fail list, which is an oracle on its own — run, see
+    // which hidden test flipped, and the suite is reconstructable by bisection
+    // without its text ever being displayed. Verdicts therefore live here, in
+    // a collection shaped like questionAnswers rather than like attempts, for
+    // exactly the reason questionAnswers is separate from questions.
+    //
+    // Writes are server-only. The Admin SDK bypasses these rules, so denying
+    // every client write costs the judge pipeline nothing and closes the path
+    // where a candidate posts their own passing verdict.
+    match /attemptVerdicts/{id} {
+      allow read: if isWebOwner()
+                     || ((role() == 'institute' || role() == 'faculty')
+                         && request.auth.token.instituteId == resource.data.instituteId);
+      allow create, update, delete: if false;
+    }
+
     // questionBanks — owned by Web Owner only (no instituteId on the doc).
     match /questionBanks/{id} {
       allow read:   if isStaff();   // L-b: students have no reason to enumerate share/grant metadata

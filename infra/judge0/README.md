@@ -115,12 +115,35 @@ sudo update-grub && sudo reboot
 enforced — which is the reason to run it before pointing an exam at the cluster
 rather than after.
 
-**Verify before sending it real work.** One command, and it is a gate rather
-than a checklist:
+**Verify before sending it real work.** It is a gate rather than a checklist.
+
+The judge host is a dedicated appliance and deliberately has no Node toolchain,
+so run the check one of two ways — neither installs anything on it.
+
+**From Cloud Shell, over an SSH tunnel** (preferred: it also proves the API is
+bound to loopback, since the tunnel is the only way in):
 
 ```bash
-JUDGE0_URL=http://127.0.0.1:2358 AUTHN_TOKEN=<token> npm run verify:judge0
+# Tab 1 — hold the tunnel open
+gcloud compute ssh judge0-host --zone=<zone> --tunnel-through-iap -- -N -L 2358:127.0.0.1:2358
+
+# Tab 2
+cd ~/Exam_forge_1.0 && npm --prefix functions install
+JUDGE0_URL=http://127.0.0.1:2358 AUTHN_TOKEN='<token>' npm run verify:judge0
 ```
+
+**Or on the host itself, in a throwaway container:**
+
+```bash
+cd ~/Exam_forge_1.0
+docker run --rm --network host -v "$PWD":/app -w /app node:22-alpine sh -c '
+  npm --prefix functions install --silent &&
+  npm --prefix functions run build &&
+  JUDGE0_URL=http://127.0.0.1:2358 AUTHN_TOKEN="'"$AUTHN_TOKEN"'" node infra/judge0/verify.mjs'
+```
+
+`--network host` is what lets the container reach the API on the host's
+loopback. Quote the token in either form: base64 contains `/` and `+`.
 
 `infra/judge0/verify.mjs` is the only thing in this project that tests the
 sandbox itself. Everything else — limits, comparison, the adapter's failure

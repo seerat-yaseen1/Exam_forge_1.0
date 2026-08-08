@@ -1,1 +1,0 @@
-import{j as r}from"./index-WHEI2RS3.js";import{R as t}from"./ReportsInboxCore-FGoctQTi.js";import"./questionReportService-BRVlgOZc.js";import"./chevron-right-BdVIl-IW.js";function i(){return r.jsx(t,{scope:{kind:"web_owner"},rosterPathFor:o=>`/dashboard/assignments/${o}/roster`})}export{i as ReportsInboxPage};

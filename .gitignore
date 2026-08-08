@@ -6,3 +6,9 @@ firebase-debug.log
 
 # Judge0 cluster secrets — never commit
 infra/judge0/.env.judge0
+
+# Build output — Vercel runs vite build itself; a committed copy is dead weight
+dist/
+
+# Downloaded by postinstall (face-api weights), not source
+public/models/

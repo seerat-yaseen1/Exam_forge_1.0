@@ -56,18 +56,20 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      # MUST carry the token. Authentication is enabled, so every endpoint
-      # answers 401 without it and `curl -f` reports that as a failure — the
-      # server sits there working perfectly and Compose calls it unhealthy,
-      # which then blocks anything depending on it.
+      # LIVENESS, NOT AUTHORIZATION. No -f and no token: this asks whether Puma
+      # is up and routing, and a 401 answers that just as well as a 200 does.
+      # curl exits 0 for any complete HTTP response, so the check fails only
+      # when nothing is listening — which is the one thing a restart fixes and
+      # therefore the only thing worth restarting on.
       #
-      # CMD-SHELL rather than CMD so $$AUTHN_TOKEN is expanded by a shell
-      # inside the container; the CMD form passes it as a literal string.
-      test:
-        [
-          "CMD-SHELL",
-          'curl -fsS -H "X-Auth-Token: $${AUTHN_TOKEN}" http://localhost:2358/system_info >/dev/null',
-        ]
+      # It carried the token briefly and that was a mistake twice over. It put
+      # a secret in a probe that runs every 30 seconds and logs its output, and
+      # it made the probe fail whenever the expansion did not reach curl —
+      # reporting a working server as broken, which is the failure it was
+      # introduced to fix. Whether authentication actually works is V-02's job
+      # in verify.mjs, where a wrong answer is a test failure rather than a
+      # container Compose keeps restarting.
+      test: ["CMD-SHELL", "curl -sS -o /dev/null http://localhost:2358/system_info"]
       interval: 30s
       timeout: 5s
       retries: 3

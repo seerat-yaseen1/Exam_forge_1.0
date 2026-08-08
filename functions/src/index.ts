@@ -3915,13 +3915,33 @@ async function loadCodeVerdicts(
   return out;
 }
 
+/**
+ * An answer the candidate emptied, or never really made.
+ *
+ * The editor writes { language, source: '' } when the buffer is still the
+ * starter or has been cleared, because the renderer's answer channel has no
+ * "no answer" arm. Both sides read that the same way, and this is the server
+ * half: an empty source is a BLANK, not a submission. Without it a candidate
+ * who deleted their code would queue a judge run that cannot run and land the
+ * paper in manual review for a question they did not attempt.
+ */
+function isEmptyCodeAnswer(q: QuestionDoc, ans: AttemptAnswerDoc): boolean {
+  if (q.engine !== 'code') return false;
+  const v = ans.value as Record<string, string> | undefined;
+  const source = v && typeof v === 'object' && !Array.isArray(v) ? v.source : undefined;
+  return typeof source !== 'string' || source.trim().length === 0;
+}
+
 /** Does this paper contain a coding answer that will need a judge? */
 function attemptHasCodingAnswer(
   answers: Record<string, AttemptAnswerDoc> | undefined,
   questionMap: Map<string, QuestionDoc>,
 ): boolean {
   if (!answers) return false;
-  return Object.keys(answers).some((qid) => questionMap.get(qid)?.engine === 'code');
+  return Object.entries(answers).some(([qid, a]) => {
+    const q = questionMap.get(qid);
+    return q?.engine === 'code' && !isEmptyCodeAnswer(q, a);
+  });
 }
 
 /**
@@ -4136,7 +4156,7 @@ function scoreAttemptAnswers(params: {
         totalAwarded   += aq.marks;
         exposed.marksAwarded = aq.marks;
         exposed.isCorrect    = null;
-      } else if (studentAnswer && q && ans) {
+      } else if (studentAnswer && q && ans && !isEmptyCodeAnswer(q, studentAnswer)) {
         answered++;
         if (q.engine === 'mcq') {
           const outcome = scoreMCQMultiplier(q, ans, studentAnswer.value);

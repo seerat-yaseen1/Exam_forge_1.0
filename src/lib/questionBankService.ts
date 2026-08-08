@@ -93,7 +93,12 @@ export type CorrectPair = {
 // declare themselves to be, which is what lets a section rule, a bank filter
 // or a future analytics cut target them.
 
-export type QuestionEngine = 'mcq' | 'text' | 'match';
+// 'code' is the storage discriminant for a sandboxed coding answer. It is NOT
+// the same thing as the 'coding' ItemCategory, which also contains Output
+// Prediction and Code Review — those are keyed and prose answers about a
+// snippet and run on the mcq and text engines respectively. Only an item that
+// actually needs the judge is stored as 'code'.
+export type QuestionEngine = 'mcq' | 'text' | 'match' | 'code';
 
 export type MCQVariant     = 'single' | 'multi' | 'truefalse' | 'fillblank' | 'outputpred';
 export type TextVariant    = 'short' | 'long' | 'codereview';

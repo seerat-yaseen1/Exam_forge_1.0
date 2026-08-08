@@ -6,10 +6,10 @@
  *   - modelAnswer
  *   - explanation
  *
- * Handles all three engines: MCQ, Text, Match.
+ * Handles every engine: MCQ, Text, Match, and Code.
  */
 
-import { useMemo, useRef, useEffect, useState } from 'react';
+import { useMemo, useRef, useEffect, useState, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckSquare, Square, ChevronDown, Flag } from 'lucide-react';
 import { RichText } from '../questions/RichText';
@@ -21,6 +21,8 @@ import type {
 import type { AnswerValue } from '../../../lib/submissionService';
 import type { ReportReason } from '../../../lib/questionReportService';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import type { CodeAnswerValue, CodeSpec } from './codeAnswer';
+import type { JudgeLanguage, SampleRunResponse } from './judgeTypes';
 
 // ── Shared styles ─────────────────────────────────────────────────
 
@@ -436,6 +438,11 @@ function textMode(variant: TextVariant): 'short' | 'long' {
 // Main export
 // ──────────────────────────────────────────────────────────────────
 
+// The editor and its grammars are lazy: a candidate sitting an MCQ paper has
+// no reason to download CodeMirror. React.lazy here, dynamic import inside.
+const CodeAnswerEditor = lazy(() =>
+  import('./CodeAnswerEditor').then((m) => ({ default: m.CodeAnswerEditor })));
+
 interface QuestionRendererProps {
   question: Question;
   marks: number;              // from the assessment's question config
@@ -443,6 +450,13 @@ interface QuestionRendererProps {
   totalQuestions: number;
   answer: AnswerValue | undefined;
   onAnswer: (value: AnswerValue) => void;
+  /**
+   * Runs a coding answer's visible tests. Supplied by ExamShell, which owns the
+   * callable. Absent means the run button is not offered — which is the correct
+   * rendering wherever there is no live exam behind the question (preview,
+   * review), rather than a button that cannot work.
+   */
+  onRunCode?: (language: JudgeLanguage, source: string) => Promise<SampleRunResponse>;
   // Optional report-this-question controls — buffered in ExamShell
   flagReason?: ReportReason | null;
   onFlagChange?: (reason: ReportReason | null) => void;
@@ -719,6 +733,7 @@ export function QuestionRenderer({
   totalQuestions,
   answer,
   onAnswer,
+  onRunCode,
   flagReason,
   onFlagChange,
   group,
@@ -838,6 +853,22 @@ export function QuestionRenderer({
               value={matchValue}
               onChange={onAnswer}
             />
+          )}
+
+          {question.engine === 'code' && (
+            <Suspense fallback={<div className="p-4 text-sm opacity-60">Loading editor…</div>}>
+              <CodeAnswerEditor
+                questionId={question.id}
+                codeSpec={(question as { codeSpec?: CodeSpec }).codeSpec}
+                value={
+                  answer && typeof answer === 'object' && !Array.isArray(answer)
+                    ? (answer as unknown as CodeAnswerValue)
+                    : null
+                }
+                onChange={(v) => onAnswer(v as unknown as AnswerValue)}
+                onRun={onRunCode}
+              />
+            </Suspense>
           )}
         </div>
 

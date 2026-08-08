@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Search, Check, BookOpen, AlignLeft, Shuffle, ChevronDown } from 'lucide-react';
+import { X, Search, Check, BookOpen, AlignLeft, Shuffle, ChevronDown, Code2 } from 'lucide-react';
 import type { Question, QuestionEngine, Difficulty } from '../../../lib/questionBankService';
 import type { AssessmentQuestion } from '../../../lib/assessmentService';
 
@@ -31,6 +31,12 @@ const ENGINE_META: Record<QuestionEngine, { label: string; color: string; bg: st
     color: '#4A1D96',
     bg: '#F5F0FF',
     icon: <Shuffle size={9} strokeWidth={2} />,
+  },
+  code: {
+    label: 'CODE',
+    color: '#0F5132',
+    bg: '#EAF6EF',
+    icon: <Code2 size={9} strokeWidth={2} />,
   },
 };
 

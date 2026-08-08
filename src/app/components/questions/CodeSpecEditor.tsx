@@ -30,6 +30,8 @@ import {
   type AuthoringLanguage,
 } from '../../../lib/codeAuthoring';
 import type { CodeSpec, CodeTest } from '../../../lib/questionBankService';
+import { starterTemplate } from '../../../lib/codeSnippets';
+import { CodeField } from './CodeField';
 
 interface CodeSpecEditorProps {
   spec: CodeSpec;
@@ -101,21 +103,42 @@ export function CodeSpecEditor({ spec, tests, onSpecChange, onTestsChange }: Cod
           <p className="text-xs opacity-60">
             Optional. A candidate who does not change it counts as not having answered.
           </p>
-          {languages.map((lang) => (
-            <div key={lang} className="space-y-1">
-              <label className="text-xs opacity-70">{LANGUAGE_LABEL[lang]}</label>
-              <textarea
-                className={FIELD}
-                style={MONO}
-                rows={4}
-                value={spec.starterCode?.[lang] ?? ''}
-                onChange={(e) =>
-                  setSpec({ starterCode: { ...(spec.starterCode ?? {}), [lang]: e.target.value } })
-                }
-                placeholder={`Starting buffer for ${LANGUAGE_LABEL[lang]}…`}
-              />
-            </div>
-          ))}
+          {languages.map((lang) => {
+            const current = spec.starterCode?.[lang] ?? '';
+            return (
+              <div key={lang} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs opacity-70">{LANGUAGE_LABEL[lang]}</label>
+                  <button
+                    type="button"
+                    className="text-xs rounded border px-2 py-0.5"
+                    onClick={() => {
+                      // Confirm ONLY when there is something to lose. An author
+                      // filling an empty field should not be asked to approve
+                      // it; one about to lose a buffer they wrote should.
+                      if (current.trim().length > 0
+                          && !window.confirm(`Replace the ${LANGUAGE_LABEL[lang]} starter code with the template?`)) {
+                        return;
+                      }
+                      setSpec({
+                        starterCode: { ...(spec.starterCode ?? {}), [lang]: starterTemplate(lang) },
+                      });
+                    }}
+                  >
+                    {current.trim().length === 0 ? 'Use template' : 'Replace with template'}
+                  </button>
+                </div>
+                <CodeField
+                  value={current}
+                  language={lang}
+                  minHeight={110}
+                  onChange={(next) =>
+                    setSpec({ starterCode: { ...(spec.starterCode ?? {}), [lang]: next } })
+                  }
+                />
+              </div>
+            );
+          })}
         </section>
       )}
 
@@ -240,21 +263,28 @@ export function CodeSpecEditor({ spec, tests, onSpecChange, onTestsChange }: Cod
                 </button>
               </div>
 
+              {/* Whitespace is shown in both. A trailing space on a line of
+                  expected output is invisible in a textarea and is exactly what
+                  fails a correct program under the `exact` comparison — an
+                  author who cannot see it cannot fix it, and the cost lands on
+                  the candidate. */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label className="text-xs opacity-70">Input (stdin)</label>
-                  <textarea
-                    className={FIELD} style={MONO} rows={3}
+                  <CodeField
                     value={t.stdin}
-                    onChange={(e) => patchTest(i, { stdin: e.target.value })}
+                    showWhitespace
+                    minHeight={90}
+                    onChange={(next) => patchTest(i, { stdin: next })}
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs opacity-70">Expected output</label>
-                  <textarea
-                    className={FIELD} style={MONO} rows={3}
+                  <CodeField
                     value={t.expected}
-                    onChange={(e) => patchTest(i, { expected: e.target.value })}
+                    showWhitespace
+                    minHeight={90}
+                    onChange={(next) => patchTest(i, { expected: next })}
                   />
                 </div>
               </div>

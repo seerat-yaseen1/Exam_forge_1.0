@@ -128,18 +128,21 @@ bound to loopback, since the tunnel is the only way in):
 gcloud compute ssh judge0-host --zone=<zone> --tunnel-through-iap -- -N -L 2358:127.0.0.1:2358
 
 # Tab 2
-cd ~/Exam_forge_1.0 && npm --prefix functions install
+cd ~/Exam_forge_1.0
 JUDGE0_URL=http://127.0.0.1:2358 AUTHN_TOKEN='<token>' npm run verify:judge0
 ```
+
+The script installs and builds `functions/` itself — it has to, because it
+imports the pinned language table from there, and a gate that only works after
+someone remembers a setup step is not a gate.
 
 **Or on the host itself, in a throwaway container:**
 
 ```bash
 cd ~/Exam_forge_1.0
-docker run --rm --network host -v "$PWD":/app -w /app node:22-alpine sh -c '
-  npm --prefix functions install --silent &&
-  npm --prefix functions run build &&
-  JUDGE0_URL=http://127.0.0.1:2358 AUTHN_TOKEN="'"$AUTHN_TOKEN"'" node infra/judge0/verify.mjs'
+docker run --rm --network host -v "$PWD":/app -w /app \
+  -e JUDGE0_URL=http://127.0.0.1:2358 -e AUTHN_TOKEN="$AUTHN_TOKEN" \
+  node:22-alpine npm run verify:judge0
 ```
 
 `--network host` is what lets the container reach the API on the host's

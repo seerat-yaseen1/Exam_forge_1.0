@@ -36,10 +36,15 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const VERSION = '0.20.3';
 const URL = `https://cdn.sheetjs.com/xlsx-${VERSION}/xlsx-${VERSION}.tgz`;
-const ROOT = path.resolve(import.meta.dirname, '..');
+// fileURLToPath rather than import.meta.dirname: the latter needs Node 20.11+,
+// and this script's whole job is to run on whatever machine happens to have
+// network access to the CDN. Failing there with a syntax-level error would be
+// a poor introduction to it.
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VENDOR_DIR = path.join(ROOT, 'vendor');
 const TARBALL = path.join(VENDOR_DIR, `xlsx-${VERSION}.tgz`);
 const SHAFILE = path.join(VENDOR_DIR, `xlsx-${VERSION}.sha256`);

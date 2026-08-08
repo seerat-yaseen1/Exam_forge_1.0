@@ -10,6 +10,12 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import {
+  emptyAnswerDefaults,
+  pickAnswerFields,
+  sanitizePublic,
+  stripAnswerFields,
+} from './questionAnswerSplit';
 import { ensureSebToken } from './assessmentService';
 import { db, functions } from './firebase';
 import {
@@ -102,7 +108,56 @@ export type QuestionEngine = 'mcq' | 'text' | 'match' | 'code';
 
 export type MCQVariant     = 'single' | 'multi' | 'truefalse' | 'fillblank' | 'outputpred';
 export type TextVariant    = 'short' | 'long' | 'codereview';
-export type QuestionVariant = MCQVariant | TextVariant | null;
+// Which kind of coding item this is. All three run on the 'code' engine and
+// differ only in what the author supplies and what the candidate is asked to
+// do — the judge does not care which it is.
+export type CodeVariant    = 'challenge' | 'sql' | 'debug';
+
+/**
+ * How a coding test case is compared. Mirrors ComparisonMode in
+ * functions/src/judgeCore.ts — keep in EXACT sync. A mode offered here and
+ * unknown there falls back to the judge's default, which silently changes what
+ * "correct" means for that question.
+ */
+export type CodeComparison = 'exact' | 'trimmed' | 'tokens' | 'numeric';
+
+/** One test case. Mirrors JudgeTest in functions/src/judgeCore.ts. */
+export type CodeTest = {
+  id: string;
+  stdin: string;
+  expected: string;
+  /**
+   * Visible to the candidate, and runnable during the exam.
+   *
+   * Visible tests default to ZERO WEIGHT, because a candidate can read the
+   * input and expected output — any marks on them are available to a program
+   * that hardcodes rather than solves.
+   */
+  visible: boolean;
+  weight?: number;
+  comparison?: CodeComparison;
+  tolerance?: number;
+  label?: string;
+};
+
+/**
+ * Delivery settings for a coding question. PUBLIC — see Question.codeSpec.
+ */
+export type CodeSpec = {
+  /** Empty or absent means every language the platform runs. */
+  languages?: string[];
+  /** Per-language starting buffer. */
+  starterCode?: Record<string, string>;
+  /** Author limits, clamped server-side to MAX_LIMITS before they reach a judge. */
+  limits?: {
+    cpuMs?: number;
+    wallMs?: number;
+    memoryKb?: number;
+    outputKb?: number;
+    processes?: number;
+  };
+};
+export type QuestionVariant = MCQVariant | TextVariant | CodeVariant | null;
 
 // ── Difficulty & shared metadata ──────────────────────────────────
 
@@ -140,6 +195,18 @@ export type Question = {
   // ── Match fields (engine === 'match') ──
   pairs: MatchPair[];         // left ↔ right definitions; [] for non-match
   correctPairs: CorrectPair[];// which left maps to which right; [] for non-match
+
+  // ── Code fields (engine === 'code') ──
+  //
+  // codeSpec is PUBLIC and belongs on the question document: the candidate is
+  // shown the languages, needs the starter buffer, and needs to know the limits
+  // their program runs under. None of it is the answer.
+  codeSpec?: CodeSpec;
+  // tests is an ANSWER FIELD and is stripped from the public document by
+  // sanitizePublic, exactly like correctIds. The hidden suite IS the answer key
+  // for a coding question; leaving it here would ship it to every browser
+  // inside the exam payload.
+  tests?: CodeTest[];
 
   // ── Metadata ──
   subject: string;            // canonical name (kept for back-compat)
@@ -416,30 +483,23 @@ export type QuestionAnswer = {
   correctIds: string[];
   correctPairs: CorrectPair[];
   modelAnswer: string;
+  /**
+   * The coding test suite, hidden cases included. See Question.tests.
+   *
+   * Optional because every answer document written before coding existed has
+   * no such field, and a required one would make those docs fail to type on
+   * read. Absent and empty mean the same thing: no suite, so nothing to judge.
+   */
+  tests?: CodeTest[];
   ownerType?: QuestionOwnerType;
   ownerId?: string;
   updatedAt: string;
 };
 
-const ANSWER_KEYS = ['correctIds', 'correctPairs', 'modelAnswer'] as const;
 
-function pickAnswerFields(q: Partial<Question>): Partial<QuestionAnswer> {
-  const out: Partial<QuestionAnswer> = {};
-  if (q.correctIds   !== undefined) out.correctIds   = q.correctIds;
-  if (q.correctPairs !== undefined) out.correctPairs = q.correctPairs;
-  if (q.modelAnswer  !== undefined) out.modelAnswer  = q.modelAnswer;
-  return out;
-}
+// The answer split lives in its own pure module so the suite can prove the
+// invariant directly. See questionAnswerSplit.ts.
 
-function stripAnswerFields<T extends Partial<Question>>(q: T): T {
-  const out: any = { ...q };
-  for (const k of ANSWER_KEYS) delete out[k];
-  return out;
-}
-
-function emptyAnswerDefaults(): Pick<Question, 'correctIds' | 'correctPairs' | 'modelAnswer'> {
-  return { correctIds: [], correctPairs: [], modelAnswer: '' };
-}
 
 /**
  * Batch-load answer docs for a set of question ids.
@@ -522,11 +582,7 @@ function applyAnswer(q: Question, ans?: QuestionAnswer | null): Question {
   };
 }
 
-function sanitizePublic(q: Question): Question {
-  // Always wipe answer fields from the public payload — defense in depth
-  // for pre-migration docs still carrying them inline.
-  return { ...q, ...emptyAnswerDefaults() };
-}
+
 
 // ══════════════════════════════════════════════════════════════════
 // QUESTION CRUD

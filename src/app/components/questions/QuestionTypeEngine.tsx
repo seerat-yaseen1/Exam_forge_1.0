@@ -16,7 +16,11 @@ import {
   buildEmptyMatch,
   getDuplicateCheckPool,
   findDuplicateCandidates,
+  type CodeSpec,
+  type CodeTest,
 } from '../../../lib/questionBankService';
+import { validateCodeQuestion } from '../../../lib/codeAuthoring';
+import { CodeSpecEditor } from './CodeSpecEditor';
 import {
   ITEM_CATEGORY_LABEL,
   isItemTypeLive,
@@ -723,6 +727,8 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
   const [modelAnswer,  setModelAnswer]  = useState(initialData?.modelAnswer ?? '');
   const [pairs,        setPairs]        = useState<MatchPair[]>(initialData?.pairs ?? []);
   const [correctPairs, setCorrectPairs] = useState<CorrectPair[]>(initialData?.correctPairs ?? []);
+  const [codeSpec,     setCodeSpec]     = useState<CodeSpec>(initialData?.codeSpec ?? {});
+  const [tests,        setTests]        = useState<CodeTest[]>(initialData?.tests ?? []);
   const [subjectId,   setSubjectId]   = useState<string | null>(initialData?.subjectId ?? null);
   const [topicId,     setTopicId]     = useState<string | null>(initialData?.topicId ?? null);
   const [subject,     setSubject]     = useState(initialData?.subject ?? '');
@@ -783,6 +789,14 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
       if (pairs.some((p) => !p.leftText.trim() || !p.rightText.trim()))
         errs.pairs = 'All pairs must have text in both columns.';
     }
+    if (engine === 'code') {
+      // Only the blocking issues stop a save. Warnings are shown inline in the
+      // editor and are the author's call — a question with no runnable samples
+      // is unusual, not wrong.
+      const blocking = validateCodeQuestion(codeSpec, tests)
+        .filter((i) => i.severity === 'error');
+      if (blocking.length > 0) errs.code = blocking[0].message;
+    }
     if (!subjectId) errs.subject = 'Subject is required.';
     if (!topicId)   errs.topic   = 'Topic is required.';
     setErrors(errs);
@@ -834,6 +848,13 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
         options, correctIds,
         modelAnswer: modelAnswer.trim(),
         pairs, correctPairs,
+        // Coding halves. questionBankService routes `tests` into the
+        // questionAnswers sibling (ANSWER_KEYS) and wipes it from the public
+        // document, so the hidden suite never ships inside an exam payload;
+        // codeSpec stays public because the candidate is shown all of it.
+        // Sent only for the code engine, so no other question type acquires
+        // an empty tests array it has no use for.
+        ...(engine === 'code' ? { codeSpec, tests } : {}),
         subject: subject.trim(), topic: topic.trim(),
         subjectId: subjectId ?? undefined,
         topicId:   topicId   ?? undefined,
@@ -923,6 +944,15 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
           <Field label="Model answer" hint="Stored as faculty reference. Students only see the stem.">
             <TextEngine modelAnswer={modelAnswer} onChange={setModelAnswer} variant={variant as TextVariant} />
           </Field>
+        )}
+
+        {engine === 'code' && (
+          <CodeSpecEditor
+            spec={codeSpec}
+            tests={tests}
+            onSpecChange={setCodeSpec}
+            onTestsChange={setTests}
+          />
         )}
 
         {engine === 'match' && (

@@ -76,7 +76,35 @@ docker compose up -d
 docker compose ps            # all healthy before proceeding
 ```
 
-**Verify the isolation before sending it real work:**
+**Verify before sending it real work.** One command, and it is a gate rather
+than a checklist:
+
+```bash
+JUDGE0_URL=http://127.0.0.1:2358 AUTHN_TOKEN=<token> npm run verify:judge0
+```
+
+`infra/judge0/verify.mjs` is the only thing in this project that tests the
+sandbox itself. Everything else — limits, comparison, the adapter's failure
+handling — is proven against fakes, which cannot tell you whether isolate
+actually kills an infinite loop or whether a candidate can open a socket.
+
+It exits non-zero on any failure, so it belongs in front of a deploy, not
+beside it. It checks:
+
+| | |
+|---|---|
+| V-01/02 | The cluster answers, and **refuses an unauthenticated request** |
+| V-03 | The pinned language ids match this instance |
+| V-04..06 | Code runs, compile errors are reported, stderr stays separate from stdout |
+| V-07..10 | CPU, wall, memory and process limits are actually enforced |
+| **V-11/12** | **A submission cannot open a socket or resolve a hostname** |
+| V-13 | The server accepts a submission at the platform ceiling |
+
+V-11 and V-12 are the ones to care about. A program that can reach the network
+can exfiltrate the paper and fetch an answer; the script tests that *property*
+rather than either mechanism that is supposed to provide it.
+
+Two checks still need shell access on the host and cannot be done over HTTP:
 
 ```bash
 # Must FAIL — a worker that can reach the internet is a broken deployment.
@@ -119,17 +147,11 @@ is pinned to the image tag in `docker-compose.yml`. An upgrade that renumbers
 them does not error — it runs Python submissions as Ruby, and every candidate
 looks like they wrote broken code.
 
-```bash
-curl -s -H "X-Auth-Token: $AUTHN_TOKEN" http://127.0.0.1:2358/languages > /tmp/langs.json
-node -e '
-  const {verifyLanguageTable} = require("./functions/lib/judge0Adapter.js");
-  const bad = verifyLanguageTable(JSON.parse(require("fs").readFileSync("/tmp/langs.json")));
-  if (bad.length) { console.error("LANGUAGE TABLE MISMATCH:", bad); process.exit(1); }
-  console.log("language table OK");
-'
-```
+`npm run verify:judge0` covers this as check V-03 — run the whole script after
+an upgrade rather than this one thing, since a Judge0 release can move more
+than the ids.
 
-Run this as a deployment gate, not by hand when someone remembers.
+Run it as a deployment gate, not by hand when someone remembers.
 
 ---
 

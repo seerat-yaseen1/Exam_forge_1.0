@@ -48,6 +48,7 @@
 // question bank rather than as an error.
 
 import type {
+  CodeVariant,
   GroupKind,
   MCQVariant,
   QuestionEngine,
@@ -798,6 +799,12 @@ export const ITEM_TYPE_FOR_TEXT_VARIANT: Record<TextVariant, ItemTypeId> = {
   codereview: 'code-review',
 };
 
+export const ITEM_TYPE_FOR_CODE_VARIANT: Record<CodeVariant, ItemTypeId> = {
+  challenge: 'coding-challenge',
+  sql:       'sql-challenge',
+  debug:     'debugging',
+};
+
 /** The match engine has no variants — one engine, one taxonomy entry. */
 export const ITEM_TYPE_FOR_MATCH: ItemTypeId = 'match-the-following';
 
@@ -833,6 +840,9 @@ const BINDING_BY_ID: Partial<Record<ItemTypeId, ItemTypeBinding>> = (() => {
   }
   for (const [variant, id] of Object.entries(ITEM_TYPE_FOR_TEXT_VARIANT)) {
     out[id] = { surface: 'question', engine: 'text', variant: variant as TextVariant };
+  }
+  for (const [variant, id] of Object.entries(ITEM_TYPE_FOR_CODE_VARIANT)) {
+    out[id] = { surface: 'question', engine: 'code', variant: variant as CodeVariant };
   }
   out[ITEM_TYPE_FOR_MATCH] = { surface: 'question', engine: 'match', variant: null };
   for (const [kind, id] of Object.entries(ITEM_TYPE_FOR_GROUP_KIND)) {
@@ -906,6 +916,11 @@ export function itemTypeIdForQuestion(
   if (engine === 'text') {
     return variant && variant in ITEM_TYPE_FOR_TEXT_VARIANT
       ? ITEM_TYPE_FOR_TEXT_VARIANT[variant as TextVariant]
+      : null;
+  }
+  if (engine === 'code') {
+    return variant && variant in ITEM_TYPE_FOR_CODE_VARIANT
+      ? ITEM_TYPE_FOR_CODE_VARIANT[variant as CodeVariant]
       : null;
   }
   if (engine === 'match') return ITEM_TYPE_FOR_MATCH;

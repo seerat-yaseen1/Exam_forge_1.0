@@ -105,7 +105,7 @@ function runLabel(run: Extract<ChipRun, { kind: 'group' }>): string {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function isAnswered(questionId: string, answers: Record<string, AttemptAnswer>): boolean {
+export function isAnswered(questionId: string, answers: Record<string, AttemptAnswer>): boolean {
   const answer = answers[questionId];
   if (!answer) return false;
 

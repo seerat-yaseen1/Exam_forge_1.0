@@ -39,6 +39,12 @@ services:
     # not. Never change to 0.0.0.0 without a firewall in front of it.
     ports:
       - "127.0.0.1:2358:2358"
+    # The server and workers need the Postgres and Redis credentials to CONNECT,
+    # not just to be started alongside them. Judge0 reads its configuration from
+    # both the mounted judge0.conf and the process environment; connection
+    # settings live in .env.judge0 beside the secrets they belong with, so they
+    # are never committed.
+    env_file: ./.env.judge0
     volumes:
       - ./judge0.conf:/judge0.conf:ro
     networks:
@@ -73,6 +79,12 @@ services:
     command: ["./scripts/workers"]
     restart: always
     privileged: true
+    # The server and workers need the Postgres and Redis credentials to CONNECT,
+    # not just to be started alongside them. Judge0 reads its configuration from
+    # both the mounted judge0.conf and the process environment; connection
+    # settings live in .env.judge0 beside the secrets they belong with, so they
+    # are never committed.
+    env_file: ./.env.judge0
     volumes:
       - ./judge0.conf:/judge0.conf:ro
     networks:

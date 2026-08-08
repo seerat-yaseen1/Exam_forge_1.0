@@ -122,9 +122,20 @@ import {
   type SubNodeType,
 } from './allocationCore';
 import {
+  JudgeAdapter,
+  JudgeAttemptState,
+  JudgeLimits,
+  JudgeSubmission,
   JudgeTest,
   JudgeVerdict,
+  MAX_JUDGE_ATTEMPTS,
+  NullJudgeAdapter,
+  advanceState as advanceJudgeState,
+  clampLimits,
+  isExhausted as judgeExhausted,
+  isJudgeLanguage,
   outcomeFor as codeOutcomeFor,
+  shouldJudgeNow,
 } from './judgeCore';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -3459,6 +3470,16 @@ interface QuestionDoc {
   variant: string | null;
   options: MCQOption[];
   difficulty?: 'easy' | 'medium' | 'hard';   // server-read; used for per-row grading policy
+  /**
+   * Coding delivery settings. Safe to keep on the question document — unlike
+   * the test suite, none of this is the answer key: the candidate is shown the
+   * languages and needs to know the limits their program runs under.
+   */
+  codeSpec?: {
+    languages?: string[];
+    limits?: Partial<JudgeLimits>;
+    starterCode?: Record<string, string>;
+  };
 }
 
 // ── Grading policy (server twin of resolveGradingPolicy in assessmentService) ──
@@ -3877,6 +3898,63 @@ async function loadCodeVerdicts(
     });
   }
   return out;
+}
+
+/** Does this paper contain a coding answer that will need a judge? */
+function attemptHasCodingAnswer(
+  answers: Record<string, AttemptAnswerDoc> | undefined,
+  questionMap: Map<string, QuestionDoc>,
+): boolean {
+  if (!answers) return false;
+  return Object.keys(answers).some((qid) => questionMap.get(qid)?.engine === 'code');
+}
+
+/**
+ * THE COMPOSITION ROOT — the one place that decides which judge runs code.
+ *
+ * Returns NullJudgeAdapter today, which is a deliberate shipping state rather
+ * than a stub: the entire pipeline runs against it, and every submission
+ * becomes a paper awaiting review instead of a zero. Selecting a real provider
+ * is a change to this function and nothing else — that is the whole point of
+ * JudgeAdapter, and the reason the provider comparison never blocked this work.
+ */
+let judgeAdapterInstance: JudgeAdapter | null = null;
+function getJudgeAdapter(): JudgeAdapter {
+  if (!judgeAdapterInstance) judgeAdapterInstance = new NullJudgeAdapter();
+  return judgeAdapterInstance;
+}
+
+/**
+ * Install the adapter. This is the seam a provider is selected through — by
+ * configuration when one exists, and by the headless suites, which need a
+ * judge whose verdicts they control in order to prove the pipeline settles a
+ * paper and rewrites its marks. Passing null restores the default.
+ */
+export function setJudgeAdapter(adapter: JudgeAdapter | null): void {
+  judgeAdapterInstance = adapter;
+}
+
+/** Assemble the submission for one coding answer, clamping the author's limits. */
+function buildCodeSubmission(
+  q: QuestionDoc,
+  ans: QuestionAnswerDoc,
+  value: AttemptAnswerDoc['value'],
+  ref: string,
+): JudgeSubmission | null {
+  const v = (value ?? {}) as Record<string, string>;
+  const language = v.language;
+  const source = v.source;
+  // A submission we cannot even form is not a judging failure — there is
+  // nothing to run. Returning null leaves it unjudged and therefore in manual
+  // review, which is where an answer nobody can execute belongs.
+  if (!isJudgeLanguage(language) || typeof source !== 'string' || source.length === 0) return null;
+  return {
+    language,
+    source,
+    tests: ans.tests ?? [],
+    limits: clampLimits(q.codeSpec?.limits),
+    ref,
+  };
 }
 
 interface GradedAnswerOut {
@@ -4328,6 +4406,22 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       scores,
       gradedAnswers,
     };
+
+    // ── Queue the paper's coding answers for judging ──────────────
+    //
+    // Judging cannot happen here. A judge is slow, remote and allowed to be
+    // down, and this callable is what a student presses "Submit" on — blocking
+    // it on a sandbox would mean a judge outage prevents finishing an exam.
+    // So finalisation records that judging is owed and returns; the sweep does
+    // the work and a regrade turns the verdicts into marks.
+    //
+    // The flag is set from the ANSWERS rather than from requiresManualReview,
+    // which is also true of a paper full of essays and would have the sweep
+    // picking up work it can never do.
+    if (attemptHasCodingAnswer(attempt.answers, questionMap)) {
+      updates.codeJudgePending = true;
+    }
+
     if (reason === 'terminated') {
       updates['integrityLog.autoTerminated'] = true;
       if (terminateReason) updates['integrityLog.terminatedReason'] = terminateReason;
@@ -11192,5 +11286,184 @@ export const revokeSessions = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     await getAuth().revokeRefreshTokens(request.auth.uid);
     return { ok: true, revokedAt: new Date().toISOString() };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
+// CODING — the judging sweep
+// ══════════════════════════════════════════════════════════════════
+//
+// Judging is asynchronous because it has to be: a judge is remote, slow, and
+// permitted to be down, and the alternative is an outage that stops students
+// finishing an exam. gradeAttempt therefore finalises a paper into manual
+// review and sets codeJudgePending; this sweep does the work afterwards and
+// rewrites the scores once every coding answer on the paper has settled.
+//
+// The re-judge path is not a separate mechanism. A submission whose verdict
+// never completed simply still has codeJudgePending set, with a backoff saying
+// when to try again — so an outage that resolves an hour later is picked up by
+// the same loop that judged everything else.
+
+/**
+ * Judge every outstanding coding answer on one attempt.
+ *
+ * Returns whether the paper is now settled — every coding answer either judged
+ * or out of retries — which is what clears the pending flag.
+ */
+async function judgeAttemptCoding(
+  db: FirebaseFirestore.Firestore,
+  adapter: JudgeAdapter,
+  attemptId: string,
+): Promise<{ judged: number; settled: boolean }> {
+  const attemptSnap = await db.collection('attempts').doc(attemptId).get();
+  if (!attemptSnap.exists) return { judged: 0, settled: true };
+  const attempt = attemptSnap.data() as {
+    assessmentId: string;
+    instituteId?: string;
+    answers?: Record<string, AttemptAnswerDoc>;
+    gradingConfig?: AssessmentGradingConfigS;
+  };
+
+  const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+  // No assessment means nothing to judge against. Settled, so the flag clears
+  // rather than the attempt being retried forever against a missing paper.
+  if (!assessmentSnap.exists) return { judged: 0, settled: true };
+
+  // A-05: judge against the paper THIS attempt sat.
+  const assessment = examContractFor(
+    attempt as unknown as Record<string, unknown>,
+    assessmentSnap.data() as Record<string, unknown>,
+  ) as GradingAssessmentDoc;
+  const sections = normalizeSections(assessment);
+  const qIds = Array.from(new Set(
+    sections.flatMap((sec) => sec.questions.map((q) => q.questionId)),
+  ));
+  const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
+
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  let judged = 0;
+  let outstanding = 0;
+
+  for (const qid of Object.keys(attempt.answers ?? {})) {
+    const q = questionMap.get(qid);
+    if (q?.engine !== 'code') continue;
+    const ans = answerMap.get(qid);
+    if (!ans) continue;
+
+    const vRef = db.collection('attemptVerdicts').doc(codeVerdictDocId(attemptId, qid));
+    const existing = (await vRef.get()).data() as { state?: JudgeAttemptState } | undefined;
+    const state = existing?.state;
+
+    if (!shouldJudgeNow(state, nowMs)) {
+      // Not eligible now. Only a submission that is still going to be tried
+      // again keeps the paper open; a settled or exhausted one does not.
+      const done = state?.lastStatus === 'completed'
+                || state?.lastStatus === 'compile_error'
+                || judgeExhausted(state);
+      if (!done) outstanding++;
+      continue;
+    }
+
+    const base = {
+      attemptId,
+      questionId: qid,
+      instituteId: attempt.instituteId ?? null,
+      updatedAt: nowIso,
+    };
+
+    const submission = buildCodeSubmission(q, ans, attempt.answers![qid].value, `${attemptId}:${qid}`);
+    if (!submission) {
+      // Nothing runnable was submitted — no language, or no source. That is not
+      // a judging failure to retry, it is an answer no judge can execute, so it
+      // is marked terminally and left in manual review.
+      await vRef.set({
+        ...base,
+        state: { attempts: MAX_JUDGE_ATTEMPTS, lastStatus: 'internal_error' as const },
+      }, { merge: true });
+      continue;
+    }
+
+    // Claim first, so an overlapping sweep skips this submission rather than
+    // spending a second judge slot on it. The claim is a lease: if this worker
+    // dies now, shouldJudgeNow releases it once the lease expires.
+    await vRef.set({ ...base, state: { ...(state ?? { attempts: 0 }), claimedAt: nowIso } }, { merge: true });
+
+    const verdict = await adapter.run(submission);
+    const nextState = advanceJudgeState(state, verdict, nowMs);
+    await vRef.set({ ...base, verdict, state: nextState }, { merge: true });
+    judged++;
+
+    if (!judgeExhausted(nextState)
+        && nextState.lastStatus !== 'completed'
+        && nextState.lastStatus !== 'compile_error') {
+      outstanding++;
+    }
+  }
+
+  const settled = outstanding === 0;
+  if (settled) {
+    // Every coding answer has an answer of some kind. Re-score with the
+    // verdicts now in place — this is the step that turns a judged submission
+    // into a mark, and it is the same scorer every other path uses.
+    const codeVerdicts = await loadCodeVerdicts(db, attemptId, questionMap);
+    const { scores, gradedAnswers } = scoreAttemptAnswers({
+      sections,
+      questionMap,
+      answerMap,
+      codeVerdicts,
+      answers: attempt.answers,
+      passingScore: assessment.passingScore,
+      exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
+      gradingConfig: attempt.gradingConfig ?? assessment.gradingConfig,
+    });
+    await attemptSnap.ref.update({
+      scores,
+      gradedAnswers,
+      codeJudgePending: FieldValue.delete(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return { judged, settled };
+}
+
+export const scheduledJudgeCoding = onSchedule(
+  {
+    schedule: 'every 5 minutes',
+    timeZone: 'Etc/UTC',
+    region: 'us-central1',
+    // Judging is network-bound against a remote sandbox, and one paper can
+    // carry several submissions each running a full test suite.
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async () => {
+    const db = getFirestore();
+    const adapter = getJudgeAdapter();
+
+    // Bounded per run. The sweep is every five minutes, so a backlog drains
+    // across runs rather than one invocation trying to outlast its timeout.
+    const pending = await db.collection('attempts')
+      .where('codeJudgePending', '==', true)
+      .limit(50)
+      .get();
+
+    let papers = 0;
+    let judged = 0;
+    let settled = 0;
+    for (const docSnap of pending.docs) {
+      try {
+        const r = await judgeAttemptCoding(db, adapter, docSnap.id);
+        papers++;
+        judged += r.judged;
+        if (r.settled) settled++;
+      } catch (e) {
+        // One bad paper must not stop the sweep — the rest of the cohort is
+        // waiting on it. The attempt keeps its pending flag and is retried.
+        console.error('[judgeCoding] attempt', docSnap.id, e);
+      }
+    }
+    console.log(`[judgeCoding] papers=${papers} judged=${judged} settled=${settled}`);
   },
 );

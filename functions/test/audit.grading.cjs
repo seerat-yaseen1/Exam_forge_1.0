@@ -665,6 +665,142 @@ async function G15() {
   eq(A(id).scores.total, 3, '7 − 4 = 3');
 }
 
+// ── Sweep helpers ─────────────────────────────────────────────────
+// A scripted judge, so the suite controls what the pipeline is handed.
+function scriptedJudge(verdictFor) {
+  return {
+    name: 'scripted',
+    calls: [],
+    async run(sub) { this.calls.push(sub); return verdictFor(sub); },
+    async health() { return true; },
+  };
+}
+const V = (id) => DB.read('attemptVerdicts', id);
+
+/** Seed a finished coding paper and return its attempt id. */
+async function sitCodingPaper(o = {}) {
+  seedQ('c1', { engine: 'code', tests: suite(10) });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  advance(min(1));
+  answer(id, 'c1', o.value ?? { language: 'python3', source: 'solve()' }, 'SA', 'code');
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+  return id;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-16 · finalisation queues judging instead of doing it
+//
+// A judge is remote, slow and allowed to be down. If submitting an exam
+// blocked on one, a judge outage would stop students finishing. So the paper
+// finalises immediately, flagged as owing marks, and the sweep does the work.
+// ═══════════════════════════════════════════════════════════════════
+async function G16() {
+  const id = await sitCodingPaper();
+  eq(A(id).codeJudgePending, true, 'the paper is queued for judging');
+  eq(A(id).status, 'submitted', 'and finalised anyway — submitting never waits on a judge');
+  eq(A(id).scores.requiresManualReview, true, 'while the marks are still owed');
+
+  // A paper with no coding answers must not join the queue.
+  DB = new FakeDb();
+  seedQ('m1');
+  seedExam([{ questionId: 'm1', marks: 10, order: 0 }]);
+  const s2 = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  answer(s2.attempt.id, 'm1', 'alpha', 'SA');
+  await call(fns.gradeAttempt, { attemptId: s2.attempt.id, reason: 'manual' }, STUDENT());
+  eq(A(s2.attempt.id).codeJudgePending, undefined,
+    'an MCQ-only paper is never queued — the flag comes from the answers, not from requiresManualReview');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-17 · the sweep judges, settles, and rewrites the marks
+//
+// The whole asynchronous path with the judge actually running: queue → judge →
+// verdict stored → paper settled → scores rewritten. 7 of 10 tests is 7 marks.
+// ═══════════════════════════════════════════════════════════════════
+async function G17() {
+  const id = await sitCodingPaper();
+  const judge = scriptedJudge(() => completed(10, 7));
+  fns.setJudgeAdapter(judge);
+  try {
+    await fns.scheduledJudgeCoding.run({});
+  } finally { fns.setJudgeAdapter(null); }
+
+  eq(judge.calls.length, 1, 'the submission reached the judge');
+  eq(judge.calls[0].language, 'python3', 'with the language the candidate chose');
+  eq(judge.calls[0].tests.length, 10, 'and the hidden suite');
+
+  const v = V(`${id}__c1`);
+  eq(v.verdict.status, 'completed', 'the verdict is stored');
+  eq(v.state.attempts, 1, 'the attempt is counted');
+  eq(A(id).codeJudgePending, undefined, 'the paper leaves the queue');
+  eq(A(id).scores.total, 7, 'and 7 of 10 tests becomes 7 of 10 marks');
+  eq(A(id).scores.requiresManualReview, false, 'with nothing left owing');
+  eq(A(id).scores.passed, true, 'so a real verdict is finally issued');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-18 · an outage retries; it does not mark anyone zero
+//
+// The default NullJudgeAdapter stands in for "no provider reachable". The
+// paper must stay queued, keep its manual-review flag, and above all not
+// acquire a zero — and the retry must be bounded so a submission that kills
+// the judge cannot be retried forever.
+// ═══════════════════════════════════════════════════════════════════
+async function G18() {
+  const id = await sitCodingPaper();
+  await fns.scheduledJudgeCoding.run({});          // NullJudgeAdapter — unavailable
+
+  const v = V(`${id}__c1`);
+  eq(v.verdict.status, 'judge_unavailable', 'the outage is recorded as an outage');
+  eq(v.state.attempts, 1, 'and counted as an attempt');
+  check(v.state.nextAttemptAt !== undefined, 'with a retry scheduled');
+  eq(A(id).codeJudgePending, true, 'the paper stays queued');
+  eq(A(id).scores.total, 0, 'no marks were awarded');
+  eq(A(id).scores.requiresManualReview, true, 'and it still reads as owing marks');
+  eq(A(id).scores.passed, null, 'never as a failure');
+
+  // Backoff holds the next sweep off.
+  await fns.scheduledJudgeCoding.run({});
+  eq(V(`${id}__c1`).state.attempts, 1, 'a sweep inside the backoff window does not re-run it');
+
+  // Exhaust the budget, then confirm it stops and the paper settles unjudged.
+  DB.seed('attemptVerdicts', `${id}__c1`, {
+    ...V(`${id}__c1`),
+    state: { attempts: 4, lastStatus: 'judge_unavailable' },
+  });
+  await fns.scheduledJudgeCoding.run({});
+  eq(V(`${id}__c1`).state.attempts, 5, 'the last retry runs');
+  await fns.scheduledJudgeCoding.run({});
+  eq(V(`${id}__c1`).state.attempts, 5, 'and then the platform stops trying');
+  eq(A(id).codeJudgePending, undefined, 'the paper leaves the queue, unjudged');
+  eq(A(id).scores.requiresManualReview, true,
+    'and is left visible to a human rather than silently scored zero');
+  eq(A(id).scores.total, 0, 'still no marks — and still not negative');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-19 · an answer no judge can execute is terminal, not retried
+//
+// An empty or language-less submission is not an outage. Retrying it five
+// times spends judge slots during an exam to learn nothing.
+// ═══════════════════════════════════════════════════════════════════
+async function G19() {
+  const id = await sitCodingPaper({ value: { language: 'python3', source: '' } });
+  const judge = scriptedJudge(() => completed(10, 10));
+  fns.setJudgeAdapter(judge);
+  try {
+    await fns.scheduledJudgeCoding.run({});
+  } finally { fns.setJudgeAdapter(null); }
+
+  eq(judge.calls.length, 0, 'nothing runnable was ever sent to the judge');
+  eq(V(`${id}__c1`).state.attempts, 5, 'it is marked terminally rather than left to retry');
+  eq(A(id).codeJudgePending, undefined, 'the paper settles');
+  eq(A(id).scores.requiresManualReview, true, 'in manual review, where an unexecutable answer belongs');
+  eq(A(id).scores.total, 0, 'with no marks awarded');
+}
+
 const SCENARIOS = [
   ['G-01', 'a text answer can be marked by a human', G01],
   ['G-02', 'no FAILED verdict on a half-marked paper', G02],
@@ -681,6 +817,10 @@ const SCENARIOS = [
   ['G-13', 'THE RULE — a judge outage is never a candidate\'s zero', G13],
   ['G-14', 'a coding section does not inherit the exam\'s negative marking', G14],
   ['G-15', 'and applies it, to a total failure only, when it opts in', G15],
+  ['G-16', 'finalisation queues judging instead of blocking on it', G16],
+  ['G-17', 'the sweep judges, settles, and rewrites the marks', G17],
+  ['G-18', 'an outage retries, bounded, and never marks anyone zero', G18],
+  ['G-19', 'an answer no judge can execute is terminal, not retried', G19],
 ];
 
 (async () => {

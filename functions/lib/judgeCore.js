@@ -42,7 +42,7 @@
  * not a flag anyone has to remember to check.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NullJudgeAdapter = exports.DEFAULT_TOLERANCE = exports.MAX_LIMITS = exports.DEFAULT_LIMITS = exports.JUDGE_LANGUAGE_LABEL = exports.JUDGE_LANGUAGES = void 0;
+exports.JUDGE_CLAIM_LEASE_MS = exports.MAX_JUDGE_ATTEMPTS = exports.NullJudgeAdapter = exports.DEFAULT_TOLERANCE = exports.MAX_LIMITS = exports.DEFAULT_LIMITS = exports.JUDGE_LANGUAGE_LABEL = exports.JUDGE_LANGUAGES = void 0;
 exports.isJudgeLanguage = isJudgeLanguage;
 exports.clampLimits = clampLimits;
 exports.weightOf = weightOf;
@@ -55,6 +55,11 @@ exports.testPasses = testPasses;
 exports.summarise = summarise;
 exports.outcomeFor = outcomeFor;
 exports.redactForCandidate = redactForCandidate;
+exports.nextBackoffMs = nextBackoffMs;
+exports.claimIsStale = claimIsStale;
+exports.shouldJudgeNow = shouldJudgeNow;
+exports.advanceState = advanceState;
+exports.isExhausted = isExhausted;
 exports.sampleRunSubmission = sampleRunSubmission;
 exports.JUDGE_LANGUAGES = [
     'python3', 'javascript', 'typescript', 'java', 'c', 'cpp',
@@ -365,6 +370,80 @@ function redactForCandidate(verdict, tests) {
         hiddenCount: tests.filter((t) => !t.visible).length,
         judgedAt: verdict.judgedAt,
     };
+}
+/**
+ * How many times a submission is judged before the platform stops trying.
+ *
+ * Not unlimited, and the reason is that "the judge is down" and "this
+ * submission kills the judge" look identical from here. A retry budget bounds
+ * the damage a single pathological program can do to a shared judge during an
+ * exam. On exhaustion the paper stays in manual review — visible, unresolved,
+ * and never a zero.
+ */
+exports.MAX_JUDGE_ATTEMPTS = 5;
+/** A claim older than this is presumed dead and may be taken over. */
+exports.JUDGE_CLAIM_LEASE_MS = 10 * 60000;
+const BACKOFF_MS = [60000, 5 * 60000, 15 * 60000, 60 * 60000];
+/**
+ * How long to wait before the next attempt.
+ *
+ * Escalating rather than fixed: the failure this retries against is usually an
+ * outage, and an outage is not resolved by asking again immediately. Hammering
+ * a judge that is already struggling is how a degraded judge becomes a dead
+ * one.
+ */
+function nextBackoffMs(attempts) {
+    if (attempts <= 0)
+        return BACKOFF_MS[0];
+    return BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)];
+}
+function claimIsStale(state, nowMs) {
+    if (!state?.claimedAt)
+        return true;
+    const t = Date.parse(state.claimedAt);
+    return !Number.isFinite(t) || nowMs - t >= exports.JUDGE_CLAIM_LEASE_MS;
+}
+/**
+ * Should this submission be judged now?
+ *
+ * Four reasons not to, and they are deliberately all one decision rather than
+ * scattered `if`s at the call site: already settled, out of retries, still
+ * backing off, or claimed by a worker that is probably still alive.
+ */
+function shouldJudgeNow(state, nowMs) {
+    const s = state ?? { attempts: 0 };
+    // A real verdict is final. Re-judging a completed submission would let a
+    // second run silently overwrite a mark a student has already been shown.
+    if (s.lastStatus === 'completed' || s.lastStatus === 'compile_error')
+        return false;
+    if (s.attempts >= exports.MAX_JUDGE_ATTEMPTS)
+        return false;
+    if (s.nextAttemptAt) {
+        const t = Date.parse(s.nextAttemptAt);
+        if (Number.isFinite(t) && nowMs < t)
+            return false;
+    }
+    return claimIsStale(s, nowMs);
+}
+/** The state to store after an attempt to judge produced `verdict`. */
+function advanceState(state, verdict, nowMs) {
+    const attempts = (state?.attempts ?? 0) + 1;
+    const next = { attempts, lastStatus: verdict.status };
+    // A real verdict needs no further attempts, so it carries no backoff and no
+    // claim — leaving either behind would make a settled submission look busy.
+    if (isRealVerdict(verdict))
+        return next;
+    if (attempts < exports.MAX_JUDGE_ATTEMPTS) {
+        next.nextAttemptAt = new Date(nowMs + nextBackoffMs(attempts)).toISOString();
+    }
+    return next;
+}
+/** True when the platform has given up and a human needs to see this. */
+function isExhausted(state) {
+    const s = state ?? { attempts: 0 };
+    if (s.lastStatus === 'completed' || s.lastStatus === 'compile_error')
+        return false;
+    return s.attempts >= exports.MAX_JUDGE_ATTEMPTS;
 }
 /**
  * The submission a candidate's in-exam "Run" produces.

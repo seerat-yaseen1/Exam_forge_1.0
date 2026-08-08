@@ -755,6 +755,133 @@ export function isExhausted(state: JudgeAttemptState | undefined): boolean {
   return s.attempts >= MAX_JUDGE_ATTEMPTS;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// §10 — IN-EXAM SAMPLE RUNS
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * How often a candidate may run their code against the visible tests.
+ *
+ * Runs exist so a candidate can check they understood the problem rather than
+ * writing blind, which is what every real coding environment offers and what
+ * makes a coding exam a test of programming instead of a test of nerve. They
+ * are also the only path in the platform where a student's action reaches the
+ * judge directly, so they are bounded on two independent axes.
+ */
+export interface SampleRunConfig {
+  /** Institutions may switch runs off entirely. */
+  enabled: boolean;
+  /**
+   * Runs per question, per attempt. Bounds total judge load: a cohort of 200
+   * with 20 runs each is a knowable ceiling rather than an open tap.
+   */
+  maxPerQuestion: number;
+  /**
+   * Minimum gap between runs. Bounds the RATE independently of the total,
+   * which is what stops one candidate saturating the queue in ten seconds
+   * while everyone else waits.
+   */
+  cooldownMs: number;
+  /** Largest source accepted, in bytes. Rejected before the judge sees it. */
+  maxSourceBytes: number;
+}
+
+export const DEFAULT_SAMPLE_RUN_CONFIG: Readonly<SampleRunConfig> = Object.freeze({
+  enabled: true,
+  maxPerQuestion: 20,
+  cooldownMs: 5_000,
+  maxSourceBytes: 256 * 1024,
+});
+
+/** Resolve an assessment's partial settings, clamped to sane bounds. */
+export function resolveSampleRunConfig(raw?: Partial<SampleRunConfig>): SampleRunConfig {
+  const d = DEFAULT_SAMPLE_RUN_CONFIG;
+  const int = (v: unknown, fallback: number, lo: number, hi: number): number => {
+    const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : fallback;
+    return Math.min(hi, Math.max(lo, n));
+  };
+  return {
+    enabled: raw?.enabled !== false,
+    maxPerQuestion: int(raw?.maxPerQuestion, d.maxPerQuestion, 0, 200),
+    cooldownMs: int(raw?.cooldownMs, d.cooldownMs, 0, 120_000),
+    maxSourceBytes: int(raw?.maxSourceBytes, d.maxSourceBytes, 1024, 1024 * 1024),
+  };
+}
+
+/** What the platform remembers about one candidate's runs on one question. */
+export interface SampleRunState {
+  /** Runs that actually reached a judge and got a verdict. */
+  count: number;
+  /** ISO time of the last run ATTEMPT, successful or not. */
+  lastRunAt?: string;
+}
+
+export type SampleRunDecision =
+  | { allowed: true; remaining: number }
+  | {
+      allowed: false;
+      reason: 'disabled' | 'quota_exhausted' | 'cooling_down';
+      remaining: number;
+      /** For 'cooling_down': how long until the next run is permitted. */
+      retryAfterMs?: number;
+    };
+
+/**
+ * May this candidate run now?
+ *
+ * `remaining` is returned on every branch, including refusals, because the
+ * candidate needs to see their budget in order to spend it sensibly — a run
+ * counter that only appears once it is exhausted is worse than none.
+ */
+export function checkSampleRun(
+  state: SampleRunState | undefined,
+  cfg: SampleRunConfig,
+  nowMs: number,
+): SampleRunDecision {
+  const count = state?.count ?? 0;
+  const remaining = Math.max(0, cfg.maxPerQuestion - count);
+
+  if (!cfg.enabled) return { allowed: false, reason: 'disabled', remaining: 0 };
+  if (remaining <= 0) return { allowed: false, reason: 'quota_exhausted', remaining: 0 };
+
+  if (cfg.cooldownMs > 0 && state?.lastRunAt) {
+    const last = Date.parse(state.lastRunAt);
+    if (Number.isFinite(last)) {
+      const elapsed = nowMs - last;
+      if (elapsed < cfg.cooldownMs) {
+        return {
+          allowed: false,
+          reason: 'cooling_down',
+          remaining,
+          retryAfterMs: cfg.cooldownMs - elapsed,
+        };
+      }
+    }
+  }
+  return { allowed: true, remaining };
+}
+
+/**
+ * The state to store after a run attempt.
+ *
+ * A RUN THAT NEVER REACHED A JUDGE DOES NOT COST THE CANDIDATE A RUN. Charging
+ * quota for an outage would let a bad ten minutes on the cluster silently
+ * consume a candidate's whole budget, and they would have no way to know why.
+ * The cooldown still advances, so an unreachable judge cannot be hammered
+ * either — the rate is bounded even when the quota is not spent.
+ */
+export function advanceRunState(
+  state: SampleRunState | undefined,
+  verdict: JudgeVerdict,
+  nowMs: number,
+): SampleRunState {
+  const charged = isRealVerdict(verdict);
+  return {
+    count: (state?.count ?? 0) + (charged ? 1 : 0),
+    lastRunAt: new Date(nowMs).toISOString(),
+  };
+}
+
 /**
  * The submission a candidate's in-exam "Run" produces.
  *

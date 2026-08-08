@@ -42,7 +42,7 @@
  * not a flag anyone has to remember to check.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.JUDGE_CLAIM_LEASE_MS = exports.MAX_JUDGE_ATTEMPTS = exports.NullJudgeAdapter = exports.DEFAULT_TOLERANCE = exports.MAX_LIMITS = exports.DEFAULT_LIMITS = exports.JUDGE_LANGUAGE_LABEL = exports.JUDGE_LANGUAGES = void 0;
+exports.DEFAULT_SAMPLE_RUN_CONFIG = exports.JUDGE_CLAIM_LEASE_MS = exports.MAX_JUDGE_ATTEMPTS = exports.NullJudgeAdapter = exports.DEFAULT_TOLERANCE = exports.MAX_LIMITS = exports.DEFAULT_LIMITS = exports.JUDGE_LANGUAGE_LABEL = exports.JUDGE_LANGUAGES = void 0;
 exports.isJudgeLanguage = isJudgeLanguage;
 exports.clampLimits = clampLimits;
 exports.weightOf = weightOf;
@@ -60,6 +60,9 @@ exports.claimIsStale = claimIsStale;
 exports.shouldJudgeNow = shouldJudgeNow;
 exports.advanceState = advanceState;
 exports.isExhausted = isExhausted;
+exports.resolveSampleRunConfig = resolveSampleRunConfig;
+exports.checkSampleRun = checkSampleRun;
+exports.advanceRunState = advanceRunState;
 exports.sampleRunSubmission = sampleRunSubmission;
 exports.JUDGE_LANGUAGES = [
     'python3', 'javascript', 'typescript', 'java', 'c', 'cpp',
@@ -444,6 +447,72 @@ function isExhausted(state) {
     if (s.lastStatus === 'completed' || s.lastStatus === 'compile_error')
         return false;
     return s.attempts >= exports.MAX_JUDGE_ATTEMPTS;
+}
+exports.DEFAULT_SAMPLE_RUN_CONFIG = Object.freeze({
+    enabled: true,
+    maxPerQuestion: 20,
+    cooldownMs: 5000,
+    maxSourceBytes: 256 * 1024,
+});
+/** Resolve an assessment's partial settings, clamped to sane bounds. */
+function resolveSampleRunConfig(raw) {
+    const d = exports.DEFAULT_SAMPLE_RUN_CONFIG;
+    const int = (v, fallback, lo, hi) => {
+        const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : fallback;
+        return Math.min(hi, Math.max(lo, n));
+    };
+    return {
+        enabled: raw?.enabled !== false,
+        maxPerQuestion: int(raw?.maxPerQuestion, d.maxPerQuestion, 0, 200),
+        cooldownMs: int(raw?.cooldownMs, d.cooldownMs, 0, 120000),
+        maxSourceBytes: int(raw?.maxSourceBytes, d.maxSourceBytes, 1024, 1024 * 1024),
+    };
+}
+/**
+ * May this candidate run now?
+ *
+ * `remaining` is returned on every branch, including refusals, because the
+ * candidate needs to see their budget in order to spend it sensibly — a run
+ * counter that only appears once it is exhausted is worse than none.
+ */
+function checkSampleRun(state, cfg, nowMs) {
+    const count = state?.count ?? 0;
+    const remaining = Math.max(0, cfg.maxPerQuestion - count);
+    if (!cfg.enabled)
+        return { allowed: false, reason: 'disabled', remaining: 0 };
+    if (remaining <= 0)
+        return { allowed: false, reason: 'quota_exhausted', remaining: 0 };
+    if (cfg.cooldownMs > 0 && state?.lastRunAt) {
+        const last = Date.parse(state.lastRunAt);
+        if (Number.isFinite(last)) {
+            const elapsed = nowMs - last;
+            if (elapsed < cfg.cooldownMs) {
+                return {
+                    allowed: false,
+                    reason: 'cooling_down',
+                    remaining,
+                    retryAfterMs: cfg.cooldownMs - elapsed,
+                };
+            }
+        }
+    }
+    return { allowed: true, remaining };
+}
+/**
+ * The state to store after a run attempt.
+ *
+ * A RUN THAT NEVER REACHED A JUDGE DOES NOT COST THE CANDIDATE A RUN. Charging
+ * quota for an outage would let a bad ten minutes on the cluster silently
+ * consume a candidate's whole budget, and they would have no way to know why.
+ * The cooldown still advances, so an unreachable judge cannot be hammered
+ * either — the rate is bounded even when the quota is not spent.
+ */
+function advanceRunState(state, verdict, nowMs) {
+    const charged = isRealVerdict(verdict);
+    return {
+        count: (state?.count ?? 0) + (charged ? 1 : 0),
+        lastRunAt: new Date(nowMs).toISOString(),
+    };
 }
 /**
  * The submission a candidate's in-exam "Run" produces.

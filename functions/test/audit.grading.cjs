@@ -801,6 +801,155 @@ async function G19() {
   eq(A(id).scores.total, 0, 'with no marks awarded');
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// G-20 · a sample run never exposes a hidden test — at either end
+//
+// The run path is the only place a student's action reaches the judge
+// directly. Two claims: the hidden suite is never SENT to the provider, and
+// nothing derived from it comes back. The first is the stronger one — it
+// protects the key from provider logs and adapter bugs, not just from the
+// response body.
+// ═══════════════════════════════════════════════════════════════════
+async function G20() {
+  seedQ('c1', {
+    engine: 'code',
+    tests: [
+      { id: 's1', stdin: '2', expected: '4', visible: true },
+      { id: 'h1', stdin: '9', expected: 'HIDDEN-A', visible: false },
+      { id: 'h2', stdin: '9', expected: 'HIDDEN-B', visible: false },
+    ],
+  });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+
+  const judge = scriptedJudge(() => ({
+    status: 'completed', adapter: 'scripted', judgedAt: at(VNOW),
+    results: [{ testId: 's1', status: 'passed', stdout: '4' }],
+  }));
+  fns.setJudgeAdapter(judge);
+  let res;
+  try {
+    res = await call(fns.runCodeSample,
+      { attemptId: id, questionId: 'c1', language: 'python3', source: 'print(4)' }, STUDENT());
+  } finally { fns.setJudgeAdapter(null); }
+
+  eq(res.ok, true, 'the run succeeded');
+  eq(judge.calls.length, 1, 'and reached the judge');
+  eq(judge.calls[0].tests.length, 1, 'with the SAMPLE test only');
+  check(!JSON.stringify(judge.calls[0]).includes('HIDDEN'),
+    'THE POINT — the hidden suite never reaches the provider at all');
+
+  const blob = JSON.stringify(res);
+  check(!blob.includes('HIDDEN'), 'and nothing hidden comes back');
+  check(!blob.includes('h1') && !blob.includes('h2'), 'not even the hidden test ids');
+  eq(res.verdict.hiddenCount, 2, 'the candidate learns only how many exist');
+  eq(res.verdict.results.length, 1, 'and sees their sample result');
+  eq(res.remaining, 19, 'with their remaining budget');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-21 · who may run, and when
+//
+// A run executes code. Every guard here is one that, if missing, lets someone
+// execute code they have no business executing — or lets a candidate keep
+// working after the exam is over.
+// ═══════════════════════════════════════════════════════════════════
+async function G21() {
+  seedQ('c1', { engine: 'code', tests: [{ id: 's1', stdin: '', expected: '1', visible: true }] });
+  seedQ('m1');
+  seedExam([
+    { questionId: 'c1', marks: 10, order: 0 },
+    { questionId: 'm1', marks: 10, order: 1 },
+  ]);
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  const args = { attemptId: id, questionId: 'c1', language: 'python3', source: 'print(1)' };
+
+  await expectThrow('another student cannot run code in my attempt',
+    () => call(fns.runCodeSample, args, STUDENT('other_uid', 'stu_2')), 'Not your attempt');
+  await expectThrow('nor can staff — a run spends the STUDENT\'s quota',
+    () => call(fns.runCodeSample, args, OWNER()), 'Not your attempt');
+  await expectThrow('a question not on my paper cannot be run',
+    () => call(fns.runCodeSample, { ...args, questionId: 'not_on_paper' }, STUDENT()),
+    'not on your paper');
+  await expectThrow('a non-coding question does not run code',
+    () => call(fns.runCodeSample, { ...args, questionId: 'm1' }, STUDENT()),
+    'does not run code');
+  await expectThrow('an unsupported language is refused',
+    () => call(fns.runCodeSample, { ...args, language: 'brainfuck' }, STUDENT()),
+    'Unsupported language');
+
+  // A paused student is paused.
+  const att = DB.read('attempts', id);
+  DB.seed('attempts', id, { ...att, freezes: [{ startedAt: at(VNOW), endedAt: null }] });
+  await expectThrow('a paused attempt cannot run code — the clock is stopped',
+    () => call(fns.runCodeSample, args, STUDENT()), 'paused');
+  DB.seed('attempts', id, att);
+
+  // And a finished one cannot either.
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+  await expectThrow('a submitted attempt cannot run code',
+    () => call(fns.runCodeSample, args, STUDENT()), 'not in progress');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-22 · the budget holds, and an outage does not spend it
+//
+// Runs are bounded so one candidate cannot saturate the judge queue while a
+// cohort waits. But a judge that is down must not quietly consume a
+// candidate's whole budget — they would have no way to know why.
+// ═══════════════════════════════════════════════════════════════════
+async function G22() {
+  seedQ('c1', { engine: 'code', tests: [{ id: 's1', stdin: '', expected: '1', visible: true }] });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }], {});
+  // Two runs, no cooldown, so the quota is what binds in this probe.
+  DB.seed('assessments', 'asmt_1', {
+    ...DB.read('assessments', 'asmt_1'),
+    codingRuns: { maxPerQuestion: 2, cooldownMs: 0 },
+  });
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  const args = { attemptId: id, questionId: 'c1', language: 'python3', source: 'print(1)' };
+
+  const judge = scriptedJudge(() => ({
+    status: 'completed', adapter: 'scripted', judgedAt: at(VNOW),
+    results: [{ testId: 's1', status: 'passed', stdout: '1' }],
+  }));
+  fns.setJudgeAdapter(judge);
+  try {
+    const r1 = await call(fns.runCodeSample, args, STUDENT());
+    eq(r1.remaining, 1, 'the first run leaves one');
+    const r2 = await call(fns.runCodeSample, args, STUDENT());
+    eq(r2.remaining, 0, 'the second exhausts the budget');
+
+    const r3 = await call(fns.runCodeSample, args, STUDENT());
+    eq(r3.ok, false, 'the third is refused');
+    eq(r3.reason, 'quota_exhausted', 'for the stated reason');
+    eq(judge.calls.length, 2, 'and never reached the judge');
+  } finally { fns.setJudgeAdapter(null); }
+
+  // A fresh attempt, with the judge down throughout.
+  DB = new FakeDb();
+  seedQ('c1', { engine: 'code', tests: [{ id: 's1', stdin: '', expected: '1', visible: true }] });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  DB.seed('assessments', 'asmt_1', {
+    ...DB.read('assessments', 'asmt_1'),
+    codingRuns: { maxPerQuestion: 2, cooldownMs: 0 },
+  });
+  const s2 = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id2 = s2.attempt.id;
+  const args2 = { ...args, attemptId: id2 };
+
+  const down = await call(fns.runCodeSample, args2, STUDENT());   // NullJudgeAdapter
+  eq(down.ok, true, 'the call still succeeds — an outage is not a client error');
+  eq(down.judgeAvailable, false, 'but reports the judge as unavailable');
+  eq(down.remaining, 2, 'THE POINT — an outage did not spend a run');
+  eq(down.verdict.status, 'judge_unavailable', 'and the state is visible to the UI');
+  check(down.verdict.failureReason === undefined,
+    'with the operator detail withheld from the browser');
+}
+
 const SCENARIOS = [
   ['G-01', 'a text answer can be marked by a human', G01],
   ['G-02', 'no FAILED verdict on a half-marked paper', G02],
@@ -821,6 +970,9 @@ const SCENARIOS = [
   ['G-17', 'the sweep judges, settles, and rewrites the marks', G17],
   ['G-18', 'an outage retries, bounded, and never marks anyone zero', G18],
   ['G-19', 'an answer no judge can execute is terminal, not retried', G19],
+  ['G-20', 'a sample run never exposes a hidden test, at either end', G20],
+  ['G-21', 'who may run code, and when', G21],
+  ['G-22', 'the run budget holds, and an outage does not spend it', G22],
 ];
 
 (async () => {

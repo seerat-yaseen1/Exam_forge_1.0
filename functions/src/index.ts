@@ -11506,6 +11506,122 @@ interface RunCodeSampleData {
   source: string;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// CODING — telemetry capture
+// ══════════════════════════════════════════════════════════════════
+//
+// Records what a candidate did while writing, so Stage C's replay and
+// similarity work has something to read. Nothing in the grading path consumes
+// any of it, and that separation is the point: the moment behaviour affects a
+// score, a candidate is being marked on how they worked rather than on what
+// they produced.
+//
+// APPEND-ONLY CHUNKS, never a growing document. Each flush writes a new doc
+// with its own sequence number, which avoids the 1 MB document ceiling, avoids
+// read-modify-write races between a flush and a submit, and means a record
+// cannot be quietly rewritten after the fact — which matters for something
+// that may end up being cited about a person.
+
+/** Per call. The client compacts first; this is the backstop against a client that does not. */
+const TELEMETRY_MAX_EVENTS_PER_CALL = 500;
+/** Per (attempt, question). At one flush every 30s this is several hours of writing. */
+const TELEMETRY_MAX_CHUNKS = 400;
+const TELEMETRY_MAX_BYTES_PER_CALL = 256 * 1024;
+
+interface RecordTelemetryData {
+  attemptId: string;
+  questionId: string;
+  seq: number;
+  events: unknown[];
+}
+
+export const recordCodeTelemetry = onCall<RecordTelemetryData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    const callerRole      = request.auth.token.role      as Role   | undefined;
+    const callerStudentId = request.auth.token.studentId as string | undefined;
+
+    const { attemptId, questionId, seq, events } = request.data || ({} as RecordTelemetryData);
+    if (!attemptId || !questionId) {
+      throw new HttpsError('invalid-argument', 'attemptId and questionId are required.');
+    }
+    if (!Array.isArray(events) || events.length === 0) {
+      // Nothing to record is not an error — a flush with an empty buffer is
+      // normal when a candidate is reading rather than typing.
+      return { ok: true as const, stored: 0 };
+    }
+
+    const db = getFirestore();
+    const attemptSnap = await db.collection('attempts').doc(attemptId).get();
+    if (!attemptSnap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const attempt = attemptSnap.data() as {
+      studentId?: string;
+      assessmentId: string;
+      instituteId?: string;
+      status?: string;
+    };
+
+    // The owning student only, and only while they are actually sitting. A
+    // finished attempt cannot acquire new telemetry — that would let a record
+    // be extended after the fact, which is exactly what an append-only log is
+    // supposed to prevent.
+    if (callerRole !== 'student' || callerStudentId !== attempt.studentId) {
+      throw new HttpsError('permission-denied', 'Not your attempt.');
+    }
+    if (attempt.status !== 'in_progress') {
+      throw new HttpsError('failed-precondition', 'This attempt is not in progress.');
+    }
+
+    const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+    const assessment = assessmentSnap.data() as {
+      securityTier?: 'mock' | 'normal' | 'high_stake';
+      codeTelemetry?: boolean;
+    };
+
+    // THE SERVER DECIDES WHETHER ANYONE IS RECORDED. The client makes the same
+    // determination to avoid sending pointless traffic, but a client that
+    // decides it may record is not a reason to store anything: practice is
+    // never recorded, an institution may decline at the proctored tiers, and an
+    // assessment that cannot state its tier does not start a recording.
+    const tier = assessment.securityTier;
+    const enabled =
+      tier === 'mock' || tier === undefined ? false : (assessment.codeTelemetry ?? true);
+    if (!enabled) {
+      return { ok: true as const, stored: 0, recording: false as const };
+    }
+
+    if (events.length > TELEMETRY_MAX_EVENTS_PER_CALL) {
+      throw new HttpsError('invalid-argument', 'Too many events in one call.');
+    }
+    const payload = JSON.stringify(events);
+    if (Buffer.byteLength(payload, 'utf8') > TELEMETRY_MAX_BYTES_PER_CALL) {
+      throw new HttpsError('invalid-argument', 'Telemetry payload too large.');
+    }
+    const chunk = Number.isInteger(seq) && seq >= 0 ? seq : 0;
+    if (chunk >= TELEMETRY_MAX_CHUNKS) {
+      // Stop accepting rather than fail the exam over it. A candidate who has
+      // written for this long is not the problem, and a rejected flush must
+      // never surface as an error in front of someone sitting a paper.
+      return { ok: true as const, stored: 0, full: true as const };
+    }
+
+    await db.collection('attemptTelemetry')
+      .doc(`${attemptId}__${questionId}__${String(chunk).padStart(4, '0')}`)
+      .set({
+        attemptId,
+        questionId,
+        instituteId: attempt.instituteId ?? null,
+        seq: chunk,
+        events,
+        createdAt: new Date().toISOString(),
+      });
+
+    return { ok: true as const, stored: events.length };
+  },
+);
+
 export const runCodeSample = onCall<RunCodeSampleData>(
   { region: 'us-central1', secrets: [JUDGE0_AUTH_TOKEN] },
   async (request) => {

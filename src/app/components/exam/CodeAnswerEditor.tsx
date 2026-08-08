@@ -42,6 +42,12 @@ import {
   type SampleRunResponse,
 } from './judgeTypes';
 import {
+  MAX_EVENTS,
+  bound,
+  compact,
+  type TelemetryEvent,
+} from '../../../lib/codeTelemetry';
+import {
   answerFrom,
   bufferForLanguage,
   initialLanguage,
@@ -99,6 +105,12 @@ interface CodeAnswerEditorProps {
   disabled?: boolean;
   /** Runs the visible tests. Wired to the runCodeSample callable by the shell. */
   onRun?: (language: JudgeLanguage, source: string) => Promise<SampleRunResponse>;
+  /**
+   * Flushes a batch of telemetry. Absent means DO NOT RECORD — the shell only
+   * supplies it when the tier permits, so an editor with no sink captures
+   * nothing rather than buffering a recording that goes nowhere.
+   */
+  onTelemetry?: (events: TelemetryEvent[], seq: number) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────
@@ -110,6 +122,7 @@ export function CodeAnswerEditor({
   onChange,
   disabled = false,
   onRun,
+  onTelemetry,
 }: CodeAnswerEditorProps) {
   const languages = useMemo(
     () => resolveLanguages(codeSpec, JUDGE_LANGUAGES), [codeSpec]);
@@ -140,6 +153,72 @@ export function CodeAnswerEditor({
   const langRef = useRef(language);
   langRef.current = language;
 
+  // ── Telemetry buffer ────────────────────────────────────────────
+  //
+  // Buffered in a ref rather than state: an edit event on every keystroke
+  // would re-render the component on every keystroke, which is a real cost in
+  // an editor and buys nothing — nothing on screen shows the buffer.
+  //
+  // The clock is relative to when this editor mounted, so the record survives
+  // a device clock that is wrong or is changed mid-exam.
+  const startedAtRef = useRef<number>(Date.now());
+  const bufferRef = useRef<TelemetryEvent[]>([]);
+  const seqRef = useRef(0);
+  const onTelemetryRef = useRef(onTelemetry);
+  onTelemetryRef.current = onTelemetry;
+
+  const now = () => Date.now() - startedAtRef.current;
+
+  const record = useCallback((e: TelemetryEvent) => {
+    // No sink means no recording. The shell withholds onTelemetry when the
+    // tier forbids it, so this is where "practice is never recorded" actually
+    // takes effect on the client.
+    if (!onTelemetryRef.current) return;
+    bufferRef.current.push(e);
+    // Hard stop rather than unbounded growth. A runaway buffer in an exam tab
+    // is a memory problem for the candidate, which is a far worse outcome than
+    // an incomplete recording.
+    if (bufferRef.current.length > MAX_EVENTS) {
+      bufferRef.current = bufferRef.current.slice(-MAX_EVENTS);
+    }
+  }, []);
+
+  const flush = useCallback(() => {
+    const sink = onTelemetryRef.current;
+    if (!sink || bufferRef.current.length === 0) return;
+    // Compact BEFORE sending: a run of typing becomes one event carrying its
+    // duration, which is both smaller and more informative than the keystrokes
+    // it replaces.
+    const { events } = bound(compact(bufferRef.current));
+    bufferRef.current = [];
+    sink(events, seqRef.current++);
+  }, []);
+
+  // Periodic flush. Thirty seconds bounds how much is lost if the tab dies,
+  // without turning a writing session into a stream of requests.
+  useEffect(() => {
+    if (!onTelemetry) return;
+    const id = setInterval(flush, 30_000);
+    return () => { clearInterval(id); flush(); };
+  }, [onTelemetry, flush]);
+
+  // Focus and blur are recorded because leaving the editor mid-question is
+  // exactly the kind of thing a reviewer looks for — and exactly the kind of
+  // thing that is innocent most of the time, which is why it is a count in a
+  // summary and never a verdict.
+  useEffect(() => {
+    if (!onTelemetry) return;
+    const onBlur = () => record({ k: 'blur', t: now() });
+    const onFocus = () => record({ k: 'focus', t: now() });
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onTelemetry, record]);
+
   // ── Build the editor ────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -154,9 +233,17 @@ export function CodeAnswerEditor({
 
       const extensions: unknown[] = [
         basicSetup,
-        EditorView.updateListener.of((update: { docChanged: boolean;
-                                                state: { doc: { toString(): string } } }) => {
+        EditorView.updateListener.of((update: {
+          docChanged: boolean;
+          state: { doc: { toString(): string } };
+          changes?: { iterChanges?: (fn: (fromA: number, toA: number, fromB: number, toB: number, inserted: { toString(): string }) => void) => void };
+        }) => {
           if (!update.docChanged) return;
+          // One event per change range, with its text. This is the unit replay
+          // needs; compaction merges the typing runs on the way out.
+          update.changes?.iterChanges?.((fromA: number, toA: number, _fB: number, _tB: number, inserted: { toString(): string }) => {
+            record({ k: 'edit', t: now(), from: fromA, to: toA, text: inserted.toString() });
+          });
           const next = update.state.doc.toString();
           draftsRef.current[langRef.current] = next;
           setSource(next);
@@ -196,6 +283,7 @@ export function CodeAnswerEditor({
     if (next === language) return;
     draftsRef.current[language] = source;
     const buffer = bufferForLanguage(next, draftsRef.current, codeSpec);
+    record({ k: 'lang', t: now(), to: next });
     setLanguage(next);
     setSource(buffer);
     // The stored answer follows the visible buffer immediately, so a candidate
@@ -210,6 +298,11 @@ export function CodeAnswerEditor({
     if (!onRun || running) return;
     setRunning(true);
     setRunNotice(null);
+    record({ k: 'run', t: now() });
+    // Flush on run: it is a natural checkpoint, and it means a session that
+    // ends in a crash still has everything up to the last thing the candidate
+    // deliberately did.
+    flush();
     try {
       const res = await onRun(language, source);
       setRemaining(res.remaining);

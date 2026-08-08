@@ -977,6 +977,86 @@ async function G23() {
   eq(sec.marksAvailable, 10, 'but its marks stay in the denominator');
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// G-24 · telemetry records the proctored tiers, and never practice
+//
+// This is a recording of a person working — hesitation, deletion, false
+// starts, things they chose not to submit. THE SERVER decides whether anyone
+// is recorded; a client that believes it may record is not a reason to store
+// anything.
+// ═══════════════════════════════════════════════════════════════════
+async function G24() {
+  const ev = [{ k: 'edit', t: 0, from: 0, to: 0, text: 'print(1)' }];
+
+  // 'mock' is the practice tier, which seedExam uses by default.
+  seedQ('c1', { engine: 'code', tests: suite(4) });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  const practice = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const r1 = await call(fns.recordCodeTelemetry,
+    { attemptId: practice.attempt.id, questionId: 'c1', seq: 0, events: ev }, STUDENT());
+  eq(r1.stored, 0, 'a practice attempt records nothing');
+  eq(r1.recording, false, 'and says so rather than pretending it stored');
+  eq(DB.read('attemptTelemetry', `${practice.attempt.id}__c1__0000`), undefined,
+    'no document is written at all');
+
+  // Same paper at a proctored tier.
+  DB = new FakeDb();
+  seedQ('c1', { engine: 'code', tests: suite(4) });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  DB.seed('assessments', 'asmt_1', { ...DB.read('assessments', 'asmt_1'), securityTier: 'normal' });
+  const proctored = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = proctored.attempt.id;
+  const r2 = await call(fns.recordCodeTelemetry,
+    { attemptId: id, questionId: 'c1', seq: 0, events: ev }, STUDENT());
+  eq(r2.stored, 1, 'a proctored attempt is recorded');
+  const doc = DB.read('attemptTelemetry', `${id}__c1__0000`);
+  check(!!doc, 'and a chunk document exists');
+  eq(doc.seq, 0, 'numbered');
+  eq(doc.instituteId, 'inst_1', 'and stamped with the institute, for the staff read rule');
+
+  // An institution may decline at a proctored tier.
+  DB.seed('assessments', 'asmt_1', {
+    ...DB.read('assessments', 'asmt_1'), codeTelemetry: false,
+  });
+  const r3 = await call(fns.recordCodeTelemetry,
+    { attemptId: id, questionId: 'c1', seq: 1, events: ev }, STUDENT());
+  eq(r3.stored, 0, 'an institution can decline to collect a recording');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// G-25 · who may write telemetry, and when
+//
+// An append-only record that a finished attempt could extend is not
+// append-only in any useful sense.
+// ═══════════════════════════════════════════════════════════════════
+async function G25() {
+  seedQ('c1', { engine: 'code', tests: suite(4) });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  DB.seed('assessments', 'asmt_1', { ...DB.read('assessments', 'asmt_1'), securityTier: 'normal' });
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+  const ev = [{ k: 'edit', t: 0, from: 0, to: 0, text: 'x' }];
+  const args = { attemptId: id, questionId: 'c1', seq: 0, events: ev };
+
+  await expectThrow('another student cannot write to my record',
+    () => call(fns.recordCodeTelemetry, args, STUDENT('other', 'stu_2')), 'Not your attempt');
+  await expectThrow('nor can staff — this records what the STUDENT did',
+    () => call(fns.recordCodeTelemetry, args, OWNER()), 'Not your attempt');
+
+  const empty = await call(fns.recordCodeTelemetry,
+    { ...args, events: [] }, STUDENT());
+  eq(empty.stored, 0, 'an empty flush is not an error — reading is not typing');
+
+  await expectThrow('an oversized batch is refused',
+    () => call(fns.recordCodeTelemetry,
+      { ...args, events: Array.from({ length: 5000 }, () => ev[0]) }, STUDENT()),
+    'Too many events');
+
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+  await expectThrow('a finished attempt cannot acquire new telemetry',
+    () => call(fns.recordCodeTelemetry, args, STUDENT()), 'not in progress');
+}
+
 const SCENARIOS = [
   ['G-01', 'a text answer can be marked by a human', G01],
   ['G-02', 'no FAILED verdict on a half-marked paper', G02],
@@ -1001,6 +1081,8 @@ const SCENARIOS = [
   ['G-21', 'who may run code, and when', G21],
   ['G-22', 'the run budget holds, and an outage does not spend it', G22],
   ['G-23', 'an emptied editor is a blank, not a question to judge', G23],
+  ['G-24', 'telemetry records the proctored tiers, and never practice', G24],
+  ['G-25', 'who may write telemetry, and when', G25],
 ];
 
 (async () => {

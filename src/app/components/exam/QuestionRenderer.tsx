@@ -461,6 +461,12 @@ interface QuestionRendererProps {
     language: JudgeLanguage,
     source: string,
   ) => Promise<SampleRunResponse>;
+  /**
+   * Telemetry sink. ABSENT MEANS DO NOT RECORD — the shell supplies it only
+   * when the security tier permits, so withholding it is how "practice is
+   * never recorded" reaches the editor.
+   */
+  onCodeTelemetry?: (questionId: string, events: unknown[], seq: number) => void;
   // Optional report-this-question controls — buffered in ExamShell
   flagReason?: ReportReason | null;
   onFlagChange?: (reason: ReportReason | null) => void;
@@ -738,6 +744,7 @@ export function QuestionRenderer({
   answer,
   onAnswer,
   onRunCode,
+  onCodeTelemetry,
   flagReason,
   onFlagChange,
   group,
@@ -871,6 +878,11 @@ export function QuestionRenderer({
                 }
                 onChange={(v) => onAnswer(v as unknown as AnswerValue)}
                 onRun={onRunCode ? (lang, src) => onRunCode(question.id, lang, src) : undefined}
+                onTelemetry={
+                  onCodeTelemetry
+                    ? (events, seq) => onCodeTelemetry(question.id, events, seq)
+                    : undefined
+                }
               />
             </Suspense>
           )}

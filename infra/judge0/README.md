@@ -59,12 +59,19 @@ failing tests they actually passed.
 git clone <this repo> && cd infra/judge0
 
 # Secrets. .env.judge0 is git-ignored — never commit it.
-cat > .env.judge0 <<'EOF'
+cat > .env.judge0 <<EOF
+# Where the server and workers connect. These are Compose service names, so
+# they resolve on the judge0-internal network and nowhere else.
+POSTGRES_HOST=db
+REDIS_HOST=redis
+
 POSTGRES_DB=judge0
 POSTGRES_USER=judge0
-POSTGRES_PASSWORD=<openssl rand -base64 32>
-REDIS_PASSWORD=<openssl rand -base64 32>
-AUTHN_TOKEN=<openssl rand -base64 48>
+POSTGRES_PASSWORD=$(openssl rand -base64 32)
+REDIS_PASSWORD=$(openssl rand -base64 32)
+
+# Every request to the API must carry this as X-Auth-Token.
+AUTHN_TOKEN=$(openssl rand -base64 48)
 EOF
 chmod 600 .env.judge0
 
@@ -74,7 +81,17 @@ echo 'kernel.perf_event_paranoid=1' | sudo tee /etc/sysctl.d/99-judge0.conf
 
 docker compose up -d
 docker compose ps            # all healthy before proceeding
+
+# The server and workers need these to CONNECT, not merely to start after
+# Postgres. If `docker compose logs server` shows connection errors, check the
+# variables actually landed:
+docker compose exec server printenv | grep -E 'POSTGRES|REDIS|AUTHN'
 ```
+
+Note the unquoted heredoc above (`<<EOF`, not `<<'EOF'`) — the `$(openssl …)`
+calls have to be evaluated by the shell. Quoting it writes the literal text
+`$(openssl rand -base64 32)` as your database password, which then fails in a
+way that looks like a Postgres problem.
 
 ### cgroup v2 — expect this to be the first thing that breaks
 

@@ -1,0 +1,145 @@
+# ═══════════════════════════════════════════════════════════════════
+# JUDGE0 — self-hosted execution cluster for Exam Forge coding items
+#
+# Read infra/judge0/README.md before changing anything here. The two
+# properties this file exists to guarantee:
+#
+#   1. CANDIDATE CODE CANNOT REACH THE NETWORK. The workers sit on an
+#      internal-only Docker network with no gateway, and every submission
+#      additionally carries enable_network:false. Belt and braces, because
+#      a program that could reach the network could exfiltrate the paper.
+#
+#   2. THE API IS NEVER PUBLIC. It binds to loopback only and is reached
+#      through the VPC connector from Cloud Functions. Judge0 runs
+#      arbitrary code by design; an instance anyone can reach is a
+#      cryptominer with extra steps, and this has happened to public
+#      Judge0 deployments repeatedly.
+#
+# Versions are PINNED. Judge0's numeric language ids change between
+# releases, and JUDGE0_LANGUAGE_IDS in functions/src/judge0Adapter.ts is
+# pinned to the tag below. Changing it without re-running the language
+# check runs submissions in the wrong language.
+# ═══════════════════════════════════════════════════════════════════
+
+x-judge0-image: &judge0-image judge0/judge0:1.13.1
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  # ── API ─────────────────────────────────────────────────────────
+  server:
+    image: *judge0-image
+    command: ["./scripts/server"]
+    restart: always
+    # LOOPBACK ONLY. The VPC connector reaches this host; the internet does
+    # not. Never change to 0.0.0.0 without a firewall in front of it.
+    ports:
+      - "127.0.0.1:2358:2358"
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    networks:
+      - judge0-internal
+      - judge0-egress
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:2358/system_info"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+    logging: *default-logging
+
+  # ── Workers — where candidate code actually runs ────────────────
+  #
+  # privileged is required: isolate needs cgroup and namespace control to
+  # enforce the CPU, memory and process limits that stop a submission
+  # taking the machine down. It is also why workers get their own host
+  # and their own network with no route out.
+  workers:
+    image: *judge0-image
+    command: ["./scripts/workers"]
+    restart: always
+    privileged: true
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    networks:
+      # NO judge0-egress. Workers talk to Postgres and Redis and nothing
+      # else — this is the isolation, not a convenience.
+      - judge0-internal
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Scale with `docker compose up -d --scale workers=N`. N is the real
+    # concurrency ceiling of the whole platform; see the sizing note in
+    # the README before raising it.
+    deploy:
+      replicas: 4
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+    logging: *default-logging
+
+  # ── Submission store ────────────────────────────────────────────
+  db:
+    image: postgres:16.4-alpine
+    restart: always
+    env_file: ./.env.judge0
+    volumes:
+      - judge0-db:/var/lib/postgresql/data
+    networks:
+      - judge0-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # ── Queue ───────────────────────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    restart: always
+    env_file: ./.env.judge0
+    command:
+      [
+        "bash", "-c",
+        'docker-entrypoint.sh --appendonly no --requirepass "$$REDIS_PASSWORD"',
+      ]
+    networks:
+      - judge0-internal
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+networks:
+  # internal: true removes the gateway entirely. A container on this
+  # network has no route off the host — not a firewall rule that can be
+  # relaxed, an absent route.
+  judge0-internal:
+    internal: true
+  # The API alone needs outbound reachability for nothing today; the
+  # network exists so that adding (say) object storage for submission
+  # archives does not tempt anyone to put the workers on it.
+  judge0-egress: {}
+
+volumes:
+  judge0-db:

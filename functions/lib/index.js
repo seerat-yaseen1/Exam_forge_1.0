@@ -38,6 +38,12 @@ const examTimingCore_1 = require("./examTimingCore");
 // Phase 3 — shared with Vercel's /api/seb-verify. Declared at module top so
 // every callable that lists it in `secrets` can reference it (const, not hoisted).
 const SEB_SIGNING_SECRET = (0, params_1.defineSecret)('SEB_SIGNING_SECRET');
+// ── Judge0 (self-hosted) ──────────────────────────────────────────
+// The cluster's private address, and the token every request carries. Both
+// empty by default, which resolves to NullJudgeAdapter — see getJudgeAdapter.
+// Deployment: infra/judge0/README.md.
+const JUDGE0_BASE_URL = (0, params_1.defineString)('JUDGE0_BASE_URL', { default: '' });
+const JUDGE0_AUTH_TOKEN = (0, params_1.defineSecret)('JUDGE0_AUTH_TOKEN');
 /**
  * Capacity settings for the SIX functions a whole cohort hits at once
  * (audit P-01 / 10k scale target).
@@ -86,6 +92,7 @@ const EXAM_HOT_PATH = {
 const app_1 = require("firebase-admin/app");
 const allocationCore_1 = require("./allocationCore");
 const judgeCore_1 = require("./judgeCore");
+const judge0Adapter_1 = require("./judge0Adapter");
 const auth_1 = require("firebase-admin/auth");
 const firestore_1 = require("firebase-admin/firestore");
 (0, app_1.initializeApp)();
@@ -2946,8 +2953,26 @@ function attemptHasCodingAnswer(answers, questionMap) {
  */
 let judgeAdapterInstance = null;
 function getJudgeAdapter() {
-    if (!judgeAdapterInstance)
+    if (judgeAdapterInstance)
+        return judgeAdapterInstance;
+    const baseUrl = JUDGE0_BASE_URL.value();
+    if (!baseUrl) {
+        // Unconfigured is a SAFE state, not a broken one: every submission becomes
+        // a paper awaiting review rather than a zero. Deploying the pipeline before
+        // the judge cluster exists is therefore fine, and so is losing the config.
         judgeAdapterInstance = new judgeCore_1.NullJudgeAdapter();
+        return judgeAdapterInstance;
+    }
+    const authToken = JUDGE0_AUTH_TOKEN.value();
+    if (!authToken) {
+        // A Judge0 with no token is a Judge0 anyone who finds it can run code on.
+        // Refusing to use it is deliberate — an unauthenticated judge is worse than
+        // no judge, and the failure is loud in logs while staying safe for students.
+        console.error('[judge] JUDGE0_BASE_URL is set but JUDGE0_AUTH_TOKEN is empty; refusing to use an unauthenticated judge.');
+        judgeAdapterInstance = new judgeCore_1.NullJudgeAdapter();
+        return judgeAdapterInstance;
+    }
+    judgeAdapterInstance = new judge0Adapter_1.Judge0Adapter({ baseUrl, authToken });
     return judgeAdapterInstance;
 }
 /**
@@ -8731,6 +8756,7 @@ exports.scheduledJudgeCoding = (0, scheduler_1.onSchedule)({
     // carry several submissions each running a full test suite.
     timeoutSeconds: 540,
     memory: '512MiB',
+    secrets: [JUDGE0_AUTH_TOKEN],
 }, async () => {
     const db = (0, firestore_1.getFirestore)();
     const adapter = getJudgeAdapter();

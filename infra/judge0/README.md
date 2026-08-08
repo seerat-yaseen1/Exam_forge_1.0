@@ -76,6 +76,28 @@ docker compose up -d
 docker compose ps            # all healthy before proceeding
 ```
 
+### cgroup v2 — expect this to be the first thing that breaks
+
+Judge0 1.13.x's `isolate` requires **cgroup v1**, and every current distro
+(Ubuntu 22.04+, Debian 12, most GCP images) boots cgroup v2 by default. The
+symptom is not a clear error: workers start, accept submissions, and every one
+comes back as an internal error or with its limits silently unenforced — which
+is the worst failure mode this cluster has, because unenforced limits look like
+a working judge until a candidate submits an infinite loop.
+
+```bash
+# Check which hierarchy the host is on
+stat -fc %T /sys/fs/cgroup    # cgroup2fs = v2, tmpfs = v1
+
+# If v2, switch the host and reboot
+sudo sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 systemd.unified_cgroup_hierarchy=0"/' /etc/default/grub
+sudo update-grub && sudo reboot
+```
+
+`verify.mjs` catches this — V-07 through V-10 fail if limits are not being
+enforced — which is the reason to run it before pointing an exam at the cluster
+rather than after.
+
 **Verify before sending it real work.** One command, and it is a gate rather
 than a checklist:
 

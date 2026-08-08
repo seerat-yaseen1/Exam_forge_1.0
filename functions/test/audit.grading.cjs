@@ -1057,6 +1057,57 @@ async function G25() {
     () => call(fns.recordCodeTelemetry, args, STUDENT()), 'not in progress');
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// G-26 · erasure reaches the records that hang off an attempt
+//
+// attemptVerdicts and attemptTelemetry are keyed by attemptId, so the
+// studentId-based purge that erases everything else never sees them. Before
+// this they survived the erasure of the person they describe — orphaned, and
+// still holding that person's program output and a keystroke record of them
+// writing it.
+//
+// The split is deliberate. An anonymised attempt is kept because the institute
+// needs the academic record and the verdict justifies the mark on it.
+// Telemetry has no such claim: it is not an academic record, and it is the
+// most identifying thing here — a score is not a fingerprint, the rhythm of
+// someone typing under pressure is closer to being one.
+// ═══════════════════════════════════════════════════════════════════
+async function G26() {
+  DB.seed('attempts', 'att_1', { id: 'att_1', studentId: 'stu_1', instituteId: 'inst_1' });
+  DB.seed('attempts', 'att_2', { id: 'att_2', studentId: 'stu_1', instituteId: 'inst_1' });
+  DB.seed('attempts', 'att_9', { id: 'att_9', studentId: 'stu_OTHER', instituteId: 'inst_1' });
+
+  const seedChild = (att, qid) => {
+    DB.seed('attemptVerdicts', `${att}__${qid}`,
+      { attemptId: att, questionId: qid, instituteId: 'inst_1', verdict: {} });
+    DB.seed('attemptTelemetry', `${att}__${qid}__0000`,
+      { attemptId: att, questionId: qid, instituteId: 'inst_1', events: [] });
+  };
+  seedChild('att_1', 'c1'); seedChild('att_2', 'c1'); seedChild('att_9', 'c1');
+
+  const ids = await fns.attemptIdsForStudent(DB, 'stu_1');
+  eq(ids.sort().join(','), 'att_1,att_2', 'the subject\'s attempts are found, and only theirs');
+
+  // ── Anonymise: telemetry goes, the verdict stays with the record ──
+  const anon = await fns.purgeAttemptChildRecords(DB, ids, { includeVerdicts: false });
+  eq(anon.telemetryDeleted, 2, 'every telemetry chunk of the subject is destroyed');
+  eq(DB.read('attemptTelemetry', 'att_1__c1__0000'), undefined, 'gone');
+  check(!!DB.read('attemptVerdicts', 'att_1__c1'),
+    'the verdict survives, because it is what justifies the retained mark');
+  check(!!DB.read('attemptTelemetry', 'att_9__c1__0000'),
+    'ANOTHER STUDENT is untouched — erasure is of a person, not of a collection');
+
+  // ── Delete: the record goes entirely, so the verdict goes with it ──
+  const del = await fns.purgeAttemptChildRecords(DB, ids, { includeVerdicts: true });
+  eq(del.verdictsDeleted, 2, 'verdicts are destroyed in delete mode');
+  eq(DB.read('attemptVerdicts', 'att_1__c1'), undefined, 'gone');
+  check(!!DB.read('attemptVerdicts', 'att_9__c1'), 'and again, only the subject\'s');
+
+  // Idempotent: an erasure re-run must not fail on records already gone.
+  const again = await fns.purgeAttemptChildRecords(DB, ids, { includeVerdicts: true });
+  eq(again.telemetryDeleted, 0, 'a second pass finds nothing and does not throw');
+}
+
 const SCENARIOS = [
   ['G-01', 'a text answer can be marked by a human', G01],
   ['G-02', 'no FAILED verdict on a half-marked paper', G02],
@@ -1083,6 +1134,7 @@ const SCENARIOS = [
   ['G-23', 'an emptied editor is a blank, not a question to judge', G23],
   ['G-24', 'telemetry records the proctored tiers, and never practice', G24],
   ['G-25', 'who may write telemetry, and when', G25],
+  ['G-26', 'erasure reaches the records that hang off an attempt', G26],
 ];
 
 (async () => {

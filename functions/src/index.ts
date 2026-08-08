@@ -677,6 +677,57 @@ async function countLiveOwnedAssessments(
 // be the worst possible failure mode here.
 
 /** Delete every doc matching one equality filter, in batches. Returns the count. */
+/**
+ * Delete the per-attempt records that hang off an attempt but are not keyed by
+ * the student.
+ *
+ * attemptVerdicts and attemptTelemetry are keyed by attemptId, so the
+ * studentId-based purge that erases everything else never sees them. Without
+ * this they survive the erasure of the person they describe — orphaned, still
+ * readable by staff, and still containing that person's program output and a
+ * keystroke-level record of them writing it.
+ *
+ * TELEMETRY GOES IN BOTH MODES, VERDICTS ONLY ON DELETE.
+ *
+ * An anonymised attempt is kept because the institute needs the academic
+ * record, and a verdict is part of that record — it is the justification for
+ * the mark on the row, and a retained mark nobody can explain is worse than no
+ * row at all. Telemetry has no such claim. It is not an academic record; it is
+ * material about how somebody worked, kept for review and research, and none
+ * of that survives a person exercising erasure. It is also the most
+ * identifying thing here: a score is not a fingerprint, and the rhythm of
+ * someone typing under pressure comes closer to being one.
+ */
+export async function purgeAttemptChildRecords(
+  db: FirebaseFirestore.Firestore,
+  attemptIds: string[],
+  opts: { includeVerdicts: boolean },
+): Promise<{ telemetryDeleted: number; verdictsDeleted: number }> {
+  let telemetryDeleted = 0;
+  let verdictsDeleted = 0;
+  for (const attemptId of attemptIds) {
+    telemetryDeleted += await purgeWhere(db, 'attemptTelemetry', 'attemptId', attemptId);
+    if (opts.includeVerdicts) {
+      verdictsDeleted += await purgeWhere(db, 'attemptVerdicts', 'attemptId', attemptId);
+    }
+  }
+  return { telemetryDeleted, verdictsDeleted };
+}
+
+/** Attempt ids belonging to one student. Read BEFORE the attempts are removed. */
+export async function attemptIdsForStudent(
+  db: FirebaseFirestore.Firestore,
+  studentId: string,
+): Promise<string[]> {
+  try {
+    const snap = await db.collection('attempts').where('studentId', '==', studentId).get();
+    return snap.docs.map((d) => d.id);
+  } catch (err) {
+    console.error('attemptIdsForStudent failed', studentId, err);
+    return [];
+  }
+}
+
 async function purgeWhere(
   db: FirebaseFirestore.Firestore,
   collection: string,
@@ -794,6 +845,15 @@ async function performInstituteCascade(
   counts.questionBanks = await purgeWhere(db, 'questionBanks', 'instituteId', instituteId);
   counts.questionShares = await purgeWhere(db, 'questionShares', 'instituteId', instituteId);
   counts.questionReports = await purgeWhere(db, 'questionReports', 'instituteId', instituteId);
+
+  // Per-attempt records that hang off attempts but are keyed by attemptId, so
+  // the studentId and assessmentId purges below never see them. Both carry
+  // instituteId precisely so they can be swept here — otherwise destroying an
+  // institute would leave behind its candidates' program output and a
+  // keystroke record of them writing it, readable by nobody and deletable by
+  // nothing, because the attempts they pointed at are gone.
+  counts.attemptVerdicts  = await purgeWhere(db, 'attemptVerdicts',  'instituteId', instituteId);
+  counts.attemptTelemetry = await purgeWhere(db, 'attemptTelemetry', 'instituteId', instituteId);
 
   // 4. Academic hierarchy + mappings.
   counts.academicMappings = await purgeWhere(db, 'academicMappings', 'instituteId', instituteId);
@@ -2838,11 +2898,25 @@ export const executeErasure = onCall<{
 
   // ── Attempts: the one thing ordinary deletion never touches ──────
   if (subjectRole === 'student') {
+    // Collected FIRST. attemptVerdicts and attemptTelemetry are keyed by
+    // attemptId, so once the attempts are gone there is nothing left to find
+    // them by and they would survive as orphans.
+    const attemptIds = await attemptIdsForStudent(db, subjectId);
+
     if (mode === 'anonymize') {
       counts.attemptsAnonymized = await anonymizeAttempts(db, subjectId);
     } else {
       counts.attemptsDeleted = await purgeWhere(db, 'attempts', 'studentId', subjectId);
     }
+
+    const child = await purgeAttemptChildRecords(db, attemptIds, {
+      // Delete mode removes the record entirely, so the verdict goes with it.
+      // Anonymise keeps the row for the institute's academic record, and the
+      // verdict is what justifies the mark on it.
+      includeVerdicts: mode !== 'anonymize',
+    });
+    counts.telemetryDeleted = child.telemetryDeleted;
+    if (child.verdictsDeleted > 0) counts.verdictsDeleted = child.verdictsDeleted;
     counts.questionReports = await purgeWhere(db, 'questionReports', 'studentId', subjectId);
     counts.assessmentMembers = await purgeWhere(db, 'assessmentMembers', 'studentId', subjectId);
   }

@@ -125,6 +125,25 @@ function isAnswered(questionId: string, answers: Record<string, AttemptAnswer>):
     return Object.keys(value as Record<string, string>).length > 0;
   }
 
+  if (type === 'code') {
+    // A CODING QUESTION IS NOT ANSWERED BECAUSE AN EDITOR HAS TEXT IN IT.
+    //
+    // Coding questions ship starter code, so the naive "value is non-empty"
+    // test every other engine uses would mark every coding question answered
+    // the moment it was rendered — the navigator would show a full grid and
+    // "all questions answered" on a paper nobody had touched.
+    //
+    // The comparison against the starter lives at the WRITE side: the editor
+    // does not save an answer until the source differs from what it was given,
+    // so an untouched question has no answer document at all and is caught by
+    // the `!answer` check above. This branch is the second half of that — a
+    // candidate who selects all and deletes has emptied their answer, and an
+    // empty editor is not an attempt.
+    if (typeof value !== 'object' || Array.isArray(value)) return false;
+    const source = (value as Record<string, string>).source;
+    return typeof source === 'string' && source.trim().length > 0;
+  }
+
   return false;
 }
 

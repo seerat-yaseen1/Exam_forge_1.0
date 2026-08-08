@@ -161,7 +161,10 @@ export type SectionTiming = {
 export type AnswerValue = string | string[] | Record<string, string>;
 
 export type AttemptAnswer = {
-  type: 'mcq' | 'text' | 'match';
+  // 'code' answers are { language, source }, which the existing
+  // Record<string, string> arm of AnswerValue already admits — the value union
+  // does not widen and the stored shape does not change.
+  type: 'mcq' | 'text' | 'match' | 'code';
   value: AnswerValue;
   answeredAt: string;  // ISO; time of last edit
   sectionId: string;

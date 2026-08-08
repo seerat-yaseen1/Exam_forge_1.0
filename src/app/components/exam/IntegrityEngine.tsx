@@ -31,6 +31,53 @@ interface IntegrityEngineProps {
   onViolation: (type: ViolationType, detail?: string) => void;
   /** Called separately when the user exits fullscreen (for UI handling). */
   onFullscreenChange: (isFullscreen: boolean) => void;
+  /**
+   * May the candidate paste INSIDE a code editor?
+   *
+   * Resolved by the caller from the security tier (see codeEditorPasteAllowed):
+   * practice yes, proctored and high-stake no. It exists as a separate prop
+   * rather than being inferred here because the exemption is narrow — it never
+   * relaxes paste anywhere else on the page, and a code editor is the only
+   * surface where cutting and moving a block is ordinary work rather than a
+   * signal.
+   *
+   * Default false: a caller that forgets this gets the strict behaviour.
+   */
+  allowCodeEditorPaste?: boolean;
+}
+
+/**
+ * Marks the element a code editor owns, so the clipboard handlers can tell
+ * "inside the answer editor" from "anywhere else in the exam".
+ *
+ * An explicit attribute rather than a CodeMirror class: the exemption is a
+ * decision this codebase makes, and hanging it on `.cm-content` would make an
+ * editor upgrade silently widen or close it.
+ */
+export const CODE_EDITOR_ATTR = 'data-exam-code-editor';
+
+function insideCodeEditor(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return !!el?.closest?.(`[${CODE_EDITOR_ATTR}]`);
+}
+
+/**
+ * The settled tier policy for pasting into a code editor.
+ *
+ * Practice allows it silently. Proctored and high-stake block it, and block it
+ * INSIDE the editor too — which is a deliberate cost: a candidate moving a
+ * function with cut-and-paste in a proctored exam will be stopped, and told
+ * why rather than left thinking the editor is broken. Overridable at 'normal',
+ * locked at 'high_stake', matching how applyTierDefaults treats every other
+ * deterrent.
+ */
+export function codeEditorPasteAllowed(
+  tier: 'mock' | 'normal' | 'high_stake' | undefined,
+  override?: boolean,
+): boolean {
+  if (tier === 'high_stake') return false;   // LOCKED
+  if (tier === 'mock') return override ?? true;
+  return override ?? false;                  // 'normal', and unknown/legacy tiers
 }
 
 // ── Component ─────────────────────────────────────────────────────
@@ -39,8 +86,11 @@ export function IntegrityEngine({
   active,
   onViolation,
   onFullscreenChange,
+  allowCodeEditorPaste = false,
 }: IntegrityEngineProps) {
   const activeRef = useRef(active);
+  const allowCodePasteRef = useRef(allowCodeEditorPaste);
+  allowCodePasteRef.current = allowCodeEditorPaste;
   const onViolationRef = useRef(onViolation);
   const onFullscreenChangeRef = useRef(onFullscreenChange);
 
@@ -104,6 +154,10 @@ export function IntegrityEngine({
 
       // Copy / Cut
       if (ctrl && (key === 'c' || key === 'x')) {
+        // Where paste is permitted, cut and copy must be too, or cut-and-move
+        // is broken in half: the candidate can lift a block and then cannot
+        // put it back. The two travel together by construction.
+        if (insideCodeEditor(e.target) && allowCodePasteRef.current) return;
         // Allow if nothing is selected in a textarea (natural use)
         const selection = window.getSelection()?.toString();
         if (selection && selection.length > 0) {
@@ -115,6 +169,7 @@ export function IntegrityEngine({
 
       // Paste
       if (ctrl && key === 'v') {
+        if (insideCodeEditor(e.target) && allowCodePasteRef.current) return;
         e.preventDefault();
         fire('paste_attempt', 'Paste attempt blocked');
         return;
@@ -124,6 +179,10 @@ export function IntegrityEngine({
       if (ctrl && key === 'a') {
         const target = e.target as HTMLElement;
         if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;
+        // Select-all in a code editor is ordinary editing and reveals nothing
+        // the candidate cannot already see. Allowed at every tier — unlike
+        // paste, it moves no data INTO the exam.
+        if (insideCodeEditor(target)) return;
         e.preventDefault();
         return;
       }
@@ -158,6 +217,7 @@ export function IntegrityEngine({
 
     const handleCut = (e: ClipboardEvent) => {
       if (!activeRef.current) return;
+      if (insideCodeEditor(e.target) && allowCodePasteRef.current) return;
       e.preventDefault();
       fire('copy_attempt', 'Cut event blocked', 1000);
     };
@@ -167,8 +227,19 @@ export function IntegrityEngine({
       // Allow paste inside textareas (needed for text answer questions)
       const target = e.target as HTMLElement;
       if (target.tagName === 'TEXTAREA') return;
+
+      // A code editor is a contenteditable div, not a TEXTAREA, so the check
+      // above never covered it — every paste inside the answer editor used to
+      // fire a violation, including a candidate moving their own code.
+      const inEditor = insideCodeEditor(target);
+      if (inEditor && allowCodePasteRef.current) return;
+
       e.preventDefault();
-      fire('paste_attempt', 'Paste event blocked', 1000);
+      fire(
+        'paste_attempt',
+        inEditor ? 'Paste is disabled in this exam' : 'Paste event blocked',
+        1000,
+      );
     };
 
     // ── 3. Right-click ──────────────────────────────────────────

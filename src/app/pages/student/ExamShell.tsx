@@ -58,7 +58,7 @@ import {
   createReportsForAttempt,
   type ReportReason,
 } from '../../../lib/questionReportService';
-import { IntegrityEngine } from '../../components/exam/IntegrityEngine';
+import { IntegrityEngine, codeEditorPasteAllowed } from '../../components/exam/IntegrityEngine';
 import { FaceMonitor } from '../../components/exam/FaceMonitor';
 import { ExtensionWatchdog } from '../../components/exam/ExtensionWatchdog';
 import { SectionTimer } from '../../components/exam/SectionTimer';
@@ -3559,6 +3559,10 @@ export function ExamShell() {
         active={isIntegrityActive}
         onViolation={handleViolation}
         onFullscreenChange={handleFullscreenChange}
+        // Narrow exemption for the code answer editor only, resolved from the
+        // security tier: practice allows it, proctored and high-stake do not.
+        // A missing tier is a legacy attempt and resolves to the strict side.
+        allowCodeEditorPaste={codeEditorPasteAllowed(assessment?.securityTier)}
       />
       <ExtensionWatchdog
         active={isIntegrityActive}

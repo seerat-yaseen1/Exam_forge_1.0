@@ -22,7 +22,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAllocationPreviewPage = exports.addManualMember = exports.resolveAllocation = exports.resolveQuestionRequest = exports.submitQuestionRequest = exports.shareQuestionsAsRole = exports.deleteQuestionGroupAsRole = exports.editQuestionGroupAsRole = exports.createQuestionGroupAsRole = exports.deleteQuestionAsRole = exports.editQuestionAsRole = exports.createQuestionsBulkAsRole = exports.createQuestionAsRole = exports.submitSection = exports.startSection = exports.startExam = exports.getExamVerdict = exports.unfreezeAttempt = exports.freezeAttempt = exports.gradeProvisional = exports.logViolation = exports.registerSession = exports.sebDiagnostics = exports.saveAnswerNoAdvance = exports.submitAnswerAndAdvance = exports.verifyAndResume = exports.reportExtensionCheck = exports.examHeartbeat = exports.getServerTime = exports.softDeleteAttempt = exports.getStudentAssessments = exports.getExamQuestions = exports.getAnswerKeysForReview = exports.regradeAttempts = exports.gradeAttempt = exports.getDeletionImpact = exports.getSubjectData = exports.decideSubjectRequest = exports.submitSubjectRequest = exports.executeErasure = exports.resolveDeletionRequest = exports.submitDeletionRequest = exports.setHierarchyNodeLifecycle = exports.deleteAuthUser = exports.scheduledPurge = exports.scheduledCloseExpiredAttempts = exports.purgeEntity = exports.restoreEntity = exports.getInstitutePurgePreview = exports.createAuthUser = void 0;
-exports.scheduledJudgeCoding = exports.revokeSessions = void 0;
+exports.scheduledJudgeCoding = exports.runCodeSample = exports.revokeSessions = void 0;
 exports.codeVerdictDocId = codeVerdictDocId;
 exports.setJudgeAdapter = setJudgeAdapter;
 const https_1 = require("firebase-functions/v2/https");
@@ -8748,6 +8748,140 @@ async function judgeAttemptCoding(db, adapter, attemptId) {
     }
     return { judged, settled };
 }
+exports.runCodeSample = (0, https_1.onCall)({ region: 'us-central1', secrets: [JUDGE0_AUTH_TOKEN] }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError('unauthenticated', 'Sign-in required.');
+    const callerRole = request.auth.token.role;
+    const callerStudentId = request.auth.token.studentId;
+    const { attemptId, questionId, language, source } = request.data || {};
+    if (!attemptId || !questionId) {
+        throw new https_1.HttpsError('invalid-argument', 'attemptId and questionId are required.');
+    }
+    if (typeof source !== 'string') {
+        throw new https_1.HttpsError('invalid-argument', 'source must be a string.');
+    }
+    const db = (0, firestore_1.getFirestore)();
+    const attemptSnap = await db.collection('attempts').doc(attemptId).get();
+    if (!attemptSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Attempt not found.');
+    const attempt = attemptSnap.data();
+    // ── Who ──────────────────────────────────────────────────────
+    // The OWNING STUDENT ONLY. Deliberately narrower than gradeAttempt, which
+    // also admits graders: a run executes code, and there is no reason for
+    // staff to execute a student's code through the student's quota.
+    if (callerRole !== 'student' || callerStudentId !== attempt.studentId) {
+        throw new https_1.HttpsError('permission-denied', 'Not your attempt.');
+    }
+    // ── When ─────────────────────────────────────────────────────
+    if (attempt.status !== 'in_progress') {
+        throw new https_1.HttpsError('failed-precondition', 'This attempt is not in progress.');
+    }
+    // A paused student is paused. Running code during a freeze would be doing
+    // the exam while the clock is stopped, which is the one thing a freeze is
+    // meant to prevent. Read the same way gradeProvisional reads it.
+    if ((attempt.freezes ?? []).some((f) => !f.endedAt)) {
+        throw new https_1.HttpsError('failed-precondition', 'This attempt is paused.');
+    }
+    // answersLockedAfter is a Firestore Timestamp on current attempts, an ISO
+    // string on legacy ones, and absent on untimed exams. It is the SECTION or
+    // OVERALL lock rather than the availability window, which would be the
+    // wrong clock to read while a freeze is open — but an open freeze was
+    // rejected immediately above, so here the two agree.
+    const lockRaw = attempt.answersLockedAfter;
+    const lockMs = lockRaw instanceof firestore_1.Timestamp ? lockRaw.toMillis()
+        : typeof lockRaw === 'string' ? Date.parse(lockRaw)
+            : null;
+    if (lockMs !== null && Number.isFinite(lockMs) && Date.now() > lockMs) {
+        throw new https_1.HttpsError('failed-precondition', 'The answer window has closed.');
+    }
+    // ── What ─────────────────────────────────────────────────────
+    // A-05: the paper THIS attempt sat, so a question added to the live
+    // assessment mid-exam is not runnable by someone who never received it.
+    const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    if (!assessmentSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Assessment not found.');
+    const assessment = examContractFor(attempt, assessmentSnap.data());
+    const onPaper = normalizeSections(assessment)
+        .some((sec) => sec.questions.some((q) => q.questionId === questionId));
+    if (!onPaper)
+        throw new https_1.HttpsError('permission-denied', 'That question is not on your paper.');
+    const [qSnap, aSnap] = await Promise.all([
+        db.collection('questions').doc(questionId).get(),
+        db.collection('questionAnswers').doc(questionId).get(),
+    ]);
+    if (!qSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Question not found.');
+    const q = qSnap.data();
+    if (q.engine !== 'code') {
+        throw new https_1.HttpsError('failed-precondition', 'That question does not run code.');
+    }
+    const qAns = aSnap.data() ?? {
+        id: questionId, correctIds: [], correctPairs: [], modelAnswer: '',
+    };
+    if (!(0, judgeCore_1.isJudgeLanguage)(language)) {
+        throw new https_1.HttpsError('invalid-argument', 'Unsupported language.');
+    }
+    // An author who restricted the languages meant it — running Python against
+    // a Java-only question is not a thing the candidate is being examined on.
+    const allowed = q.codeSpec?.languages;
+    if (Array.isArray(allowed) && allowed.length > 0 && !allowed.includes(language)) {
+        throw new https_1.HttpsError('invalid-argument', 'That language is not allowed for this question.');
+    }
+    const cfg = (0, judgeCore_1.resolveSampleRunConfig)(assessment.codingRuns);
+    if (Buffer.byteLength(source, 'utf8') > cfg.maxSourceBytes) {
+        throw new https_1.HttpsError('invalid-argument', 'Source is too large to run.');
+    }
+    // ── How often ────────────────────────────────────────────────
+    const state = attempt.codeRuns?.[questionId];
+    const nowMs = Date.now();
+    const decision = (0, judgeCore_1.checkSampleRun)(state, cfg, nowMs);
+    if (!decision.allowed) {
+        // Returned rather than thrown. A candidate who has run out of runs, or
+        // who pressed the button twice, has done nothing wrong — an error dialog
+        // mid-exam reads as "something broke" and costs them attention they do
+        // not have to spare.
+        return {
+            ok: false,
+            reason: decision.reason,
+            remaining: decision.remaining,
+            retryAfterMs: decision.retryAfterMs ?? 0,
+        };
+    }
+    // ── Run ──────────────────────────────────────────────────────
+    // sampleRunSubmission strips the hidden tests BEFORE the submission is
+    // built, so the answer key never reaches the provider at all — not merely
+    // never reaches the response.
+    const full = buildCodeSubmission(q, qAns, { language, source }, `sample:${attemptId}:${questionId}`);
+    if (!full)
+        throw new https_1.HttpsError('invalid-argument', 'Nothing to run.');
+    const submission = (0, judgeCore_1.sampleRunSubmission)(full);
+    if (submission.tests.length === 0) {
+        return { ok: false, reason: 'no_samples', remaining: decision.remaining, retryAfterMs: 0 };
+    }
+    const verdict = await getJudgeAdapter().run(submission);
+    const nextState = (0, judgeCore_1.advanceRunState)(state, verdict, nowMs);
+    await attemptSnap.ref.update({
+        [`codeRuns.${questionId}`]: nextState,
+        updatedAt: new Date(nowMs).toISOString(),
+    });
+    // redactForCandidate is the second half of the guarantee: visible tests
+    // keep their output, hidden ones are reduced to a count, and the operator
+    // detail on a failed run never leaves the server.
+    //
+    // It is given the FULL suite, not the sample-only one the judge received.
+    // Redaction filters results by visibility either way, but only the full
+    // list can tell the candidate how many hidden tests are waiting — which is
+    // the number that tells them a green sample run is not a finished answer.
+    return {
+        ok: true,
+        verdict: (0, judgeCore_1.redactForCandidate)(verdict, full.tests),
+        remaining: Math.max(0, cfg.maxPerQuestion - nextState.count),
+        // A judge that is down must not read as "your code failed". The client
+        // shows this as a service message, and the candidate's answer is graded
+        // later from the hidden suite regardless of whether they ever ran it.
+        judgeAvailable: verdict.status !== 'judge_unavailable' && verdict.status !== 'internal_error',
+    };
+});
 exports.scheduledJudgeCoding = (0, scheduler_1.onSchedule)({
     schedule: 'every 5 minutes',
     timeZone: 'Etc/UTC',

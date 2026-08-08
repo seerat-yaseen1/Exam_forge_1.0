@@ -361,6 +361,62 @@ scenario('J-27', 'advanceState records what happened and what happens next', () 
 });
 
 // ══════════════════════════════════════════════════════════════════
+// §7c — IN-EXAM SAMPLE RUNS
+// ══════════════════════════════════════════════════════════════════
+
+scenario('J-28', 'run settings resolve and clamp', () => {
+  const d = J.resolveSampleRunConfig();
+  eq(d.enabled, true, 'runs are on by default — writing code blind is a test of nerve');
+  eq(d.maxPerQuestion, J.DEFAULT_SAMPLE_RUN_CONFIG.maxPerQuestion, 'with the default quota');
+
+  eq(J.resolveSampleRunConfig({ enabled: false }).enabled, false,
+    'an institution can switch them off entirely');
+  eq(J.resolveSampleRunConfig({ maxPerQuestion: 99999 }).maxPerQuestion, 200,
+    'an absurd quota is clamped');
+  eq(J.resolveSampleRunConfig({ cooldownMs: -5 }).cooldownMs, 0, 'a negative cooldown floors at zero');
+  eq(J.resolveSampleRunConfig({ maxSourceBytes: 1 }).maxSourceBytes, 1024,
+    'and the source cap cannot be set so low that nothing runs');
+});
+
+scenario('J-29', 'a run is bounded on two independent axes', () => {
+  const cfg = J.resolveSampleRunConfig({ maxPerQuestion: 3, cooldownMs: 5000 });
+
+  const fresh = J.checkSampleRun(undefined, cfg, NOW);
+  eq(fresh.allowed, true, 'the first run is allowed');
+  eq(fresh.remaining, 3, 'and the budget is reported');
+
+  const spent = J.checkSampleRun({ count: 3 }, cfg, NOW);
+  eq(spent.allowed, false, 'the quota bounds the TOTAL');
+  eq(spent.reason, 'quota_exhausted', 'and says so');
+
+  const hot = J.checkSampleRun({ count: 1, lastRunAt: new Date(NOW - 1000).toISOString() }, cfg, NOW);
+  eq(hot.allowed, false, 'the cooldown bounds the RATE, independently of the total');
+  eq(hot.reason, 'cooling_down', 'and says so');
+  eq(hot.retryAfterMs, 4000, 'with the wait remaining');
+  eq(hot.remaining, 2, 'and the budget is reported even while refusing');
+
+  const cooled = J.checkSampleRun({ count: 1, lastRunAt: new Date(NOW - 6000).toISOString() }, cfg, NOW);
+  eq(cooled.allowed, true, 'once cooled, it runs again');
+
+  eq(J.checkSampleRun(undefined, J.resolveSampleRunConfig({ enabled: false }), NOW).reason,
+    'disabled', 'and a disabled exam refuses outright');
+});
+
+scenario('J-30', 'an outage does not cost a candidate a run', () => {
+  const before = { count: 2, lastRunAt: new Date(NOW - 60_000).toISOString() };
+
+  const down = J.advanceRunState(before, J.unavailableVerdict('judge0', 'ETIMEDOUT'), NOW);
+  eq(down.count, 2, 'THE POINT — a run that never reached a judge is not charged');
+  eq(down.lastRunAt, new Date(NOW).toISOString(),
+    'but the cooldown still advances, so an unreachable judge cannot be hammered');
+
+  const okRun = J.advanceRunState(before, verdict('completed', []), NOW);
+  eq(okRun.count, 3, 'a real verdict is charged');
+  const ce = J.advanceRunState(before, verdict('compile_error', []), NOW);
+  eq(ce.count, 3, 'and so is a compile error — the judge did its job');
+});
+
+// ══════════════════════════════════════════════════════════════════
 // §7 — THE DEFAULT ADAPTER
 // ══════════════════════════════════════════════════════════════════
 

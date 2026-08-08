@@ -56,11 +56,24 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:2358/system_info"]
+      # MUST carry the token. Authentication is enabled, so every endpoint
+      # answers 401 without it and `curl -f` reports that as a failure — the
+      # server sits there working perfectly and Compose calls it unhealthy,
+      # which then blocks anything depending on it.
+      #
+      # CMD-SHELL rather than CMD so $$AUTHN_TOKEN is expanded by a shell
+      # inside the container; the CMD form passes it as a literal string.
+      test:
+        [
+          "CMD-SHELL",
+          'curl -fsS -H "X-Auth-Token: $${AUTHN_TOKEN}" http://localhost:2358/system_info >/dev/null',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
+      # The first boot runs database migrations and inserts every language
+      # row, which takes appreciably longer than a restart.
+      start_period: 90s
     deploy:
       resources:
         limits:

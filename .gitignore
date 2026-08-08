@@ -3,3 +3,6 @@ node_modules/
 # Firestore emulator writes this wherever it is started from.
 firestore-debug.log
 firebase-debug.log
+
+# Judge0 cluster secrets — never commit
+infra/judge0/.env.judge0

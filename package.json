@@ -7,7 +7,7 @@
     "postinstall": "mkdir -p public/models && curl -fsSL https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/tiny_face_detector_model-weights_manifest.json -o public/models/tiny_face_detector_model-weights_manifest.json && curl -fsSL https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/tiny_face_detector_model-shard1 -o public/models/tiny_face_detector_model-shard1",
     "typecheck": "tsc --noEmit",
     "vendor:xlsx": "node scripts/vendor-xlsx.mjs",
-    "verify:judge0": "npm --prefix functions run build && node infra/judge0/verify.mjs",
+    "verify:judge0": "npm --prefix functions install --no-audit --no-fund --loglevel=error && npm --prefix functions run build && node infra/judge0/verify.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "vite build",

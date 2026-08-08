@@ -904,6 +904,57 @@ export async function endBreak(params: {
   return { question: data.question ?? null };
 }
 
+// ── In-exam sample run ────────────────────────────────────────────
+//
+// Runs a coding answer against the question's VISIBLE tests only. The server
+// strips the hidden suite before the submission is built, so the answer key
+// never reaches the judge on this path, and redacts what comes back.
+//
+// Deliberately NOT wrapped in withSeb, matching the server: runCodeSample does
+// not verify a SEB token today. Worth revisiting — the platform's posture is
+// that SEB binds the exam-taker — but the exposure is small, since a run
+// returns only sample results the candidate can already see inside SEB.
+//
+// This never throws for a refusal. Out of runs, cooling down, runs disabled and
+// "no samples on this question" all come back as ok:false with a reason, because
+// none of them is an error the candidate caused, and an exception mid-exam reads
+// as "something broke". Only a genuine transport failure rejects.
+export type SampleRunResult =
+  | { ok: true; verdict: CandidateVerdictDTO; remaining: number; judgeAvailable: boolean }
+  | {
+      ok: false;
+      reason: 'disabled' | 'quota_exhausted' | 'cooling_down' | 'no_samples';
+      remaining: number;
+      retryAfterMs: number;
+    };
+
+/** Mirrors CandidateVerdict in functions/src/judgeCore.ts — hidden tests already stripped. */
+export interface CandidateVerdictDTO {
+  status: 'completed' | 'compile_error' | 'judge_unavailable' | 'internal_error';
+  compileMessage?: string;
+  results: Array<{
+    testId: string;
+    status: 'passed' | 'wrong_answer' | 'timeout' | 'runtime_error'
+          | 'memory_exceeded' | 'output_exceeded' | 'skipped';
+    timeMs?: number;
+    memoryKb?: number;
+    stdout?: string;
+    stderr?: string;
+  }>;
+  hiddenCount: number;
+  judgedAt: string;
+}
+
+export async function runCodeSample(params: {
+  attemptId: string;
+  questionId: string;
+  language: string;
+  source: string;
+}): Promise<SampleRunResult> {
+  const call = httpsCallable<typeof params, SampleRunResult>(functions, 'runCodeSample');
+  return (await call(params)).data;
+}
+
 // ── Server clock skew ─────────────────────────────────────────────
 // Returns (serverNow - clientNow) in ms, captured once on exam load. The
 // SectionTimer adds this offset to Date.now() so the countdown display stays

@@ -31,6 +31,7 @@ import {
   endBreak,
   pickSection,
   gradeAttempt,
+  runCodeSample,
   logViolation,
   enforceIntegrityThreshold,
   MAX_INTEGRITY_WARNINGS,
@@ -1278,6 +1279,30 @@ export function ExamShell() {
       else next[questionId] = reason;
       return next;
     });
+  }, []);
+
+  // ── In-exam code runs ──────────────────────────────────────────
+  //
+  // The only path where a student's action reaches the judge. Everything that
+  // decides whether it may — ownership, attempt state, the answer window, the
+  // per-question quota and cooldown — is enforced server-side; this is a relay.
+  //
+  // It does not throw for a refusal. Out of runs, cooling down, or runs turned
+  // off all arrive as ok:false and are rendered as a note beside the editor,
+  // because none of them is the candidate's mistake and an error mid-exam reads
+  // as "the exam is broken". A genuine transport failure is caught here for the
+  // same reason: a judge that cannot be reached must never look like a judge
+  // that failed the code.
+  const handleRunCode = useCallback(async (
+    questionId: string,
+    language: string,
+    source: string,
+  ) => {
+    const att = attemptRef.current;
+    if (!att) {
+      return { ok: false as const, reason: 'disabled' as const, remaining: 0, retryAfterMs: 0 };
+    }
+    return runCodeSample({ attemptId: att.id, questionId, language, source });
   }, []);
 
   // ── Overlay / violation state ──────────────────────────────────
@@ -3796,6 +3821,7 @@ export function ExamShell() {
                   onFlagChange={(reason) => handleFlagChange(currentQId!, reason)}
                   group={currentGroup}
                   groupPosition={currentGroupPosition}
+                  onRunCode={handleRunCode}
                 />
               </div>
 

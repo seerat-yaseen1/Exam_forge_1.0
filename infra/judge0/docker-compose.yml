@@ -56,11 +56,24 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:2358/system_info"]
+      # MUST carry the token. Authentication is enabled, so every endpoint
+      # answers 401 without it and `curl -f` reports that as a failure — the
+      # server sits there working perfectly and Compose calls it unhealthy,
+      # which then blocks anything depending on it.
+      #
+      # CMD-SHELL rather than CMD so $$AUTHN_TOKEN is expanded by a shell
+      # inside the container; the CMD form passes it as a literal string.
+      test:
+        [
+          "CMD-SHELL",
+          'curl -fsS -H "X-Auth-Token: $${AUTHN_TOKEN}" http://localhost:2358/system_info >/dev/null',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
+      # The first boot runs database migrations and inserts every language
+      # row, which takes appreciably longer than a restart.
+      start_period: 90s
     deploy:
       resources:
         limits:
@@ -117,7 +130,7 @@ services:
     networks:
       - judge0-internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -128,15 +141,27 @@ services:
     image: redis:7.4-alpine
     restart: always
     env_file: ./.env.judge0
+    # sh, NOT bash: this is an Alpine image and bash does not exist in it, so a
+    # bash -c command line kills the container on start and every dependent
+    # service then fails on the healthcheck rather than on the real cause.
+    #
+    # A shell is needed at all because the password has to be read from the
+    # container's environment. Compose's own ${VAR} interpolation reads .env,
+    # not .env.judge0, so it would expand to an empty string here and start an
+    # UNAUTHENTICATED Redis — the escaped $$ defers expansion to the container,
+    # where env_file has actually been applied.
+    #
+    # exec so redis-server becomes PID 1 and receives stop signals directly.
     command:
       [
-        "bash", "-c",
-        'docker-entrypoint.sh --appendonly no --requirepass "$$REDIS_PASSWORD"',
+        "sh", "-c",
+        'exec redis-server --appendonly no --requirepass "$$REDIS_PASSWORD"',
       ]
     networks:
       - judge0-internal
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
+      # Quoted: a base64 password contains / and + and would otherwise split.
+      test: ["CMD-SHELL", 'redis-cli -a "$${REDIS_PASSWORD}" ping | grep -q PONG']
       interval: 10s
       timeout: 5s
       retries: 5

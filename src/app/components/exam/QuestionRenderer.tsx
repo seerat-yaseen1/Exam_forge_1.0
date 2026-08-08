@@ -456,7 +456,11 @@ interface QuestionRendererProps {
    * rendering wherever there is no live exam behind the question (preview,
    * review), rather than a button that cannot work.
    */
-  onRunCode?: (language: JudgeLanguage, source: string) => Promise<SampleRunResponse>;
+  onRunCode?: (
+    questionId: string,
+    language: JudgeLanguage,
+    source: string,
+  ) => Promise<SampleRunResponse>;
   // Optional report-this-question controls — buffered in ExamShell
   flagReason?: ReportReason | null;
   onFlagChange?: (reason: ReportReason | null) => void;
@@ -866,7 +870,7 @@ export function QuestionRenderer({
                     : null
                 }
                 onChange={(v) => onAnswer(v as unknown as AnswerValue)}
-                onRun={onRunCode}
+                onRun={onRunCode ? (lang, src) => onRunCode(question.id, lang, src) : undefined}
               />
             </Suspense>
           )}

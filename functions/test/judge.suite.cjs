@@ -298,6 +298,69 @@ scenario('J-21', 'a sample run never sends hidden tests to the judge at all', ()
 });
 
 // ══════════════════════════════════════════════════════════════════
+// §7b — DISPATCH POLICY
+// ══════════════════════════════════════════════════════════════════
+
+const NOW = Date.parse('2026-08-08T12:00:00.000Z');
+
+scenario('J-23', 'a settled submission is never judged twice', () => {
+  eq(J.shouldJudgeNow({ attempts: 1, lastStatus: 'completed' }, NOW), false,
+    'a completed verdict is final');
+  eq(J.shouldJudgeNow({ attempts: 1, lastStatus: 'compile_error' }, NOW), false,
+    'so is a compile error — re-running could overwrite a mark already shown');
+  eq(J.shouldJudgeNow(undefined, NOW), true, 'a submission never attempted is judged');
+});
+
+scenario('J-24', 'a failed submission retries, then stops', () => {
+  eq(J.shouldJudgeNow({ attempts: 1, lastStatus: 'judge_unavailable' }, NOW), true,
+    'an outage is retried once the backoff has passed');
+  eq(J.shouldJudgeNow({ attempts: J.MAX_JUDGE_ATTEMPTS, lastStatus: 'judge_unavailable' }, NOW), false,
+    'the retry budget is finite — "judge is down" and "this program kills the judge" look alike');
+  eq(J.isExhausted({ attempts: J.MAX_JUDGE_ATTEMPTS, lastStatus: 'judge_unavailable' }), true,
+    'and exhaustion is reportable, so a human sees an unresolved paper');
+  eq(J.isExhausted({ attempts: 9, lastStatus: 'completed' }), false,
+    'a settled submission is never "exhausted", whatever it cost to get there');
+});
+
+scenario('J-25', 'backoff escalates rather than hammering a struggling judge', () => {
+  const a = J.nextBackoffMs(1), b = J.nextBackoffMs(2), c = J.nextBackoffMs(3);
+  check(a < b && b < c, 'each retry waits longer than the last', `${a}, ${b}, ${c}`);
+  check(J.nextBackoffMs(99) === J.nextBackoffMs(4), 'and the wait is capped, not unbounded');
+  eq(J.shouldJudgeNow({ attempts: 1, lastStatus: 'judge_unavailable',
+    nextAttemptAt: new Date(NOW + 60_000).toISOString() }, NOW), false,
+    'a submission still inside its backoff window is skipped');
+});
+
+scenario('J-26', 'a claim is a lease, not a lock', () => {
+  const fresh = new Date(NOW - 1000).toISOString();
+  eq(J.shouldJudgeNow({ attempts: 0, claimedAt: fresh }, NOW), false,
+    'a live worker keeps its claim, so overlapping sweeps do not double-judge');
+  const dead = new Date(NOW - J.JUDGE_CLAIM_LEASE_MS - 1).toISOString();
+  eq(J.shouldJudgeNow({ attempts: 0, claimedAt: dead }, NOW), true,
+    'but a worker that died holding one cannot strand the submission forever');
+  eq(J.claimIsStale({ attempts: 0, claimedAt: 'not a date' }, NOW), true,
+    'an unparseable claim is treated as stale rather than trusted');
+});
+
+scenario('J-27', 'advanceState records what happened and what happens next', () => {
+  const done = J.advanceState({ attempts: 1 }, verdict('completed', []), NOW);
+  eq(done.attempts, 2, 'the attempt is counted');
+  eq(done.lastStatus, 'completed', 'and the outcome recorded');
+  eq(done.nextAttemptAt, undefined, 'a settled submission carries no backoff');
+  eq(done.claimedAt, undefined, 'and no claim — it must not look busy');
+
+  const failed = J.advanceState({ attempts: 0 }, J.unavailableVerdict('judge0', 'down'), NOW);
+  check(failed.nextAttemptAt !== undefined, 'a failed one schedules its retry');
+  eq(J.shouldJudgeNow(failed, NOW), false, 'and is not eligible again immediately');
+  check(J.shouldJudgeNow(failed, NOW + J.nextBackoffMs(1)), 'but is once the wait elapses');
+
+  const last = J.advanceState({ attempts: J.MAX_JUDGE_ATTEMPTS - 1 },
+    J.unavailableVerdict('judge0', 'down'), NOW);
+  eq(last.nextAttemptAt, undefined, 'the final failure schedules nothing further');
+  eq(J.isExhausted(last), true, 'and reports as exhausted');
+});
+
+// ══════════════════════════════════════════════════════════════════
 // §7 — THE DEFAULT ADAPTER
 // ══════════════════════════════════════════════════════════════════
 

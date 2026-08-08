@@ -641,6 +641,120 @@ export function redactForCandidate(verdict: JudgeVerdict, tests: JudgeTest[]): C
   };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// §9 — DISPATCH POLICY
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * What the platform remembers about judging one coding answer.
+ *
+ * Stored beside the verdict. A verdict that never completed leaves this behind
+ * as the record of how many times we have tried and when it is worth trying
+ * again — which is the whole of the re-judge path: a stalled submission is not
+ * a special case needing its own mechanism, it is simply one the sweep has not
+ * finished with.
+ */
+export interface JudgeAttemptState {
+  /** Completed attempts to judge, successful or not. */
+  attempts: number;
+  /** RunStatus of the most recent attempt, when there was one. */
+  lastStatus?: RunStatus;
+  /** ISO time before which the next attempt should not be made. */
+  nextAttemptAt?: string;
+  /**
+   * ISO time a worker claimed this submission.
+   *
+   * The sweep can overlap itself — a run that takes longer than its interval,
+   * or a manual trigger beside a scheduled one — and judging the same
+   * submission twice wastes a judge slot during the window when slots are
+   * scarcest. The claim is a lease rather than a lock precisely because a
+   * worker can die holding it; see `claimIsStale`.
+   */
+  claimedAt?: string;
+}
+
+/**
+ * How many times a submission is judged before the platform stops trying.
+ *
+ * Not unlimited, and the reason is that "the judge is down" and "this
+ * submission kills the judge" look identical from here. A retry budget bounds
+ * the damage a single pathological program can do to a shared judge during an
+ * exam. On exhaustion the paper stays in manual review — visible, unresolved,
+ * and never a zero.
+ */
+export const MAX_JUDGE_ATTEMPTS = 5;
+
+/** A claim older than this is presumed dead and may be taken over. */
+export const JUDGE_CLAIM_LEASE_MS = 10 * 60_000;
+
+const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
+
+/**
+ * How long to wait before the next attempt.
+ *
+ * Escalating rather than fixed: the failure this retries against is usually an
+ * outage, and an outage is not resolved by asking again immediately. Hammering
+ * a judge that is already struggling is how a degraded judge becomes a dead
+ * one.
+ */
+export function nextBackoffMs(attempts: number): number {
+  if (attempts <= 0) return BACKOFF_MS[0];
+  return BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)];
+}
+
+export function claimIsStale(state: JudgeAttemptState | undefined, nowMs: number): boolean {
+  if (!state?.claimedAt) return true;
+  const t = Date.parse(state.claimedAt);
+  return !Number.isFinite(t) || nowMs - t >= JUDGE_CLAIM_LEASE_MS;
+}
+
+/**
+ * Should this submission be judged now?
+ *
+ * Four reasons not to, and they are deliberately all one decision rather than
+ * scattered `if`s at the call site: already settled, out of retries, still
+ * backing off, or claimed by a worker that is probably still alive.
+ */
+export function shouldJudgeNow(
+  state: JudgeAttemptState | undefined,
+  nowMs: number,
+): boolean {
+  const s = state ?? { attempts: 0 };
+  // A real verdict is final. Re-judging a completed submission would let a
+  // second run silently overwrite a mark a student has already been shown.
+  if (s.lastStatus === 'completed' || s.lastStatus === 'compile_error') return false;
+  if (s.attempts >= MAX_JUDGE_ATTEMPTS) return false;
+  if (s.nextAttemptAt) {
+    const t = Date.parse(s.nextAttemptAt);
+    if (Number.isFinite(t) && nowMs < t) return false;
+  }
+  return claimIsStale(s, nowMs);
+}
+
+/** The state to store after an attempt to judge produced `verdict`. */
+export function advanceState(
+  state: JudgeAttemptState | undefined,
+  verdict: JudgeVerdict,
+  nowMs: number,
+): JudgeAttemptState {
+  const attempts = (state?.attempts ?? 0) + 1;
+  const next: JudgeAttemptState = { attempts, lastStatus: verdict.status };
+  // A real verdict needs no further attempts, so it carries no backoff and no
+  // claim — leaving either behind would make a settled submission look busy.
+  if (isRealVerdict(verdict)) return next;
+  if (attempts < MAX_JUDGE_ATTEMPTS) {
+    next.nextAttemptAt = new Date(nowMs + nextBackoffMs(attempts)).toISOString();
+  }
+  return next;
+}
+
+/** True when the platform has given up and a human needs to see this. */
+export function isExhausted(state: JudgeAttemptState | undefined): boolean {
+  const s = state ?? { attempts: 0 };
+  if (s.lastStatus === 'completed' || s.lastStatus === 'compile_error') return false;
+  return s.attempts >= MAX_JUDGE_ATTEMPTS;
+}
+
 /**
  * The submission a candidate's in-exam "Run" produces.
  *

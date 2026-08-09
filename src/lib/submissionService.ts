@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  documentId,
   getDoc,
   updateDoc,
   getDocs,
@@ -17,6 +18,7 @@ import { functions } from './firebase';
 // Type-only in BOTH directions — codeVerdictView imports AttemptAnswer from
 // here. Erased at compile, so there is no runtime cycle of the kind
 // itemTypes.ts warns about.
+import type { TelemetryEvent } from './codeTelemetry';
 import type { CodeVerdictDoc } from './codeVerdictView';
 import type { AnswerDiscriminant } from './itemTypes';
 import type { CorrectPair, Question } from './questionBankService';
@@ -1841,4 +1843,57 @@ export async function rejudgeAttemptCoding(
     { ok: true; rearmed: number; judged: number; settled: boolean }
   >(functions, 'rejudgeAttemptCoding');
   return (await call({ attemptId, ...(questionId ? { questionId } : {}) })).data;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CODING TELEMETRY — staff only
+// ══════════════════════════════════════════════════════════════════
+//
+// The record of HOW a candidate wrote their answer, withheld from students for
+// a different reason than verdicts are: a verdict leaks the answer key, this
+// is a keystroke-level recording of a person working under exam conditions.
+// Staff of the owning institute may read it, because they are the only ones
+// with cause to.
+//
+// Written as append-only chunks by recordCodeTelemetry — a growing document
+// would hit the 1 MB ceiling and would let a later flush silently rewrite an
+// earlier one, which matters for something that may end up being cited about
+// a person. Chunk ids are `${attemptId}__${questionId}__NNNN`, zero-padded so
+// they sort lexicographically in sequence order.
+//
+// THE QUERY SHAPE IS LOAD-BEARING. A documentId() range alone would be refused
+// for institute and faculty callers: firestore.rules scopes reads by
+// `resource.data.instituteId`, and Firestore rejects a query it cannot prove
+// satisfies that for every document, whatever the documents happen to contain.
+// Adding the instituteId equality makes it provable, and it is served by the
+// automatic single-field index — single-field indexes are (value, __name__),
+// which is exactly an equality plus a name range. No composite index, and one
+// code path for every role rather than a branch on the caller's claims.
+
+/**
+ * Every telemetry chunk recorded for one coding answer, in sequence order.
+ *
+ * An empty array means nothing was recorded — practice tiers never record,
+ * an institution may switch recording off at the proctored tiers, and a
+ * candidate who never opened the question produced no events. None of those
+ * is an error, and callers must not present them as one.
+ */
+export async function getCodeTelemetry(
+  attemptId: string,
+  questionId: string,
+  instituteId: string | null,
+): Promise<Array<{ seq: number; events: TelemetryEvent[] }>> {
+  const prefix = `${attemptId}__${questionId}__`;
+  const snap = await getDocs(query(
+    collection(db, 'attemptTelemetry'),
+    where('instituteId', '==', instituteId ?? null),
+    where(documentId(), '>=', prefix),
+    //  is the last character Firestore will sort, so this is "every id
+    // beginning with the prefix" without needing to know how many chunks exist.
+    where(documentId(), '<=', `${prefix}\uf8ff`),
+  ));
+  return snap.docs.map((d) => {
+    const data = d.data() as { seq?: number; events?: TelemetryEvent[] };
+    return { seq: typeof data.seq === 'number' ? data.seq : 0, events: data.events ?? [] };
+  });
 }

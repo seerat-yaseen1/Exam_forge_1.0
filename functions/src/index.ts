@@ -4036,6 +4036,19 @@ function getJudgeAdapter(): JudgeAdapter {
     // Unconfigured is a SAFE state, not a broken one: every submission becomes
     // a paper awaiting review rather than a zero. Deploying the pipeline before
     // the judge cluster exists is therefore fine, and so is losing the config.
+    //
+    // But safe is not the same as diagnosable. This branch used to be the only
+    // one of the three that said nothing at all, which made the most likely
+    // cause of "the code runner is temporarily unavailable" the one with no
+    // evidence anywhere — an operator reading the logs saw an empty file and
+    // concluded the judge was configured and broken rather than absent. It is
+    // logged at the same volume as the missing-token branch below, because
+    // from the outside the two failures are indistinguishable.
+    console.error(
+      '[judge] JUDGE0_BASE_URL is not set — no judge is configured, so every '
+      + 'coding submission will report the runner as unavailable and every '
+      + 'coding answer will fall to manual review. See infra/judge0/README.md §3.',
+    );
     judgeAdapterInstance = new NullJudgeAdapter();
     return judgeAdapterInstance;
   }
@@ -11922,6 +11935,18 @@ export const runCodeSample = onCall<RunCodeSampleData>(
     }
 
     const verdict = await getJudgeAdapter().run(submission);
+    // `failureReason` is the operator's half of the verdict and is stripped
+    // from the candidate response by redactForCandidate — correctly, since it
+    // names internal hosts and HTTP statuses. Stripped and never logged, it was
+    // simply lost: the candidate saw "temporarily unavailable" and the only
+    // account of WHY existed nowhere. Sample runs are not persisted the way
+    // judged submissions are, so the log is the only place it can go.
+    if (verdict.status === 'judge_unavailable' || verdict.status === 'internal_error') {
+      console.error(
+        `[judge] sample run unavailable for attempt=${attemptId} question=${questionId} `
+        + `adapter=${verdict.adapter}: ${verdict.failureReason ?? '(no reason given)'}`,
+      );
+    }
     const nextState = advanceRunState(state, verdict, nowMs);
     await attemptSnap.ref.update({
       [`codeRuns.${questionId}`]: nextState,

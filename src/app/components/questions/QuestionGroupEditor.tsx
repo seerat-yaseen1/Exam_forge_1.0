@@ -29,8 +29,13 @@ import { RichText } from './RichText';
 import {
   GROUP_KINDS, GROUP_KIND_LABEL, buildEmptyGroup,
   type Difficulty, type GroupChildDraft, type GroupKind, type GroupStimulus,
-  type QuestionGroup, type QuestionOwnerType,
+  type QuestionEngine, type QuestionGroup, type QuestionOwnerType,
 } from '../../../lib/questionBankService';
+
+/** Exhaustive over QuestionEngine — a new engine will not compile until named. */
+const ENGINE_LABEL: Record<QuestionEngine, string> = {
+  mcq: 'MCQ', text: 'Text', match: 'Match', code: 'Code',
+};
 
 // ── Shared styles, matching QuestionTypeEngine ────────────────────
 
@@ -442,7 +447,11 @@ export function QuestionGroupEditor({
                       WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}
                   />
                   <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
-                    {c.engine === 'mcq' ? 'MCQ' : c.engine === 'text' ? 'Text' : 'Match'} · {c.difficulty}
+                    {/* Was a three-arm ternary ending in 'Match', so a coding
+                        child was labelled "Match". ENGINE_LABEL is exhaustive
+                        over QuestionEngine, so a fifth engine fails the build
+                        rather than silently borrowing the last arm. */}
+                    {ENGINE_LABEL[c.engine]} · {c.difficulty}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">

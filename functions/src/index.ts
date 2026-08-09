@@ -2210,7 +2210,11 @@ type AuditActionS =
   // Phase 4.4: a provisional grade is a staff action on a live sitting, and
   // it is visible to staff before the student's exam is over. Same standard.
   | 'attemptGradedProvisional'
-  | 'attemptRewritten';
+  | 'attemptRewritten'
+  // Re-arming a coding submission the platform gave up on. An authority
+  // decision that can change a student's mark, so it leaves a record for the
+  // same reason a freeze does.
+  | 'attemptCodingRejudged';
 
 type SuccessionS = {
   fromOwnerType: 'webOwner' | 'institute' | 'faculty';
@@ -12003,6 +12007,137 @@ export const runCodeSample = onCall<RunCodeSampleData>(
       // shows this as a service message, and the candidate's answer is graded
       // later from the hidden suite regardless of whether they ever ran it.
       judgeAvailable: verdict.status !== 'judge_unavailable' && verdict.status !== 'internal_error',
+    };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
+// CODING — re-arming a submission the platform gave up on
+// ══════════════════════════════════════════════════════════════════
+//
+// MAX_JUDGE_ATTEMPTS bounds the damage one pathological submission can do to a
+// shared judge during an exam, and that bound is right. What was missing is
+// what happens AFTER it: a submission that exhausted its retries kept
+// codeJudgePending set, the sweep re-read the paper every five minutes and
+// correctly declined to act, and there was no way — no button, no callable —
+// to tell the platform to try again once the cause was fixed.
+//
+// So a judge outage that outlasted eighty minutes of backoff left a cohort's
+// coding marks unrecoverable through the product. The only remedy was editing
+// Firestore by hand, which is not a remedy anyone should need.
+//
+// WHAT THIS DELIBERATELY WILL NOT DO: re-judge a submission that already has a
+// REAL VERDICT. `completed` and `compile_error` are settled — a mark that a
+// student may already have been shown — and quietly recomputing one is a
+// different and much larger decision than recovering from an outage. Fixing a
+// wrong expected output and re-marking a cohort is a re-grade, and it should
+// look like one rather than hiding inside a retry button.
+
+interface RejudgeCodingData {
+  attemptId: string;
+  /** Narrow to one question. Omitted means every stuck coding answer on the paper. */
+  questionId?: string;
+}
+
+export const rejudgeAttemptCoding = onCall<RejudgeCodingData>(
+  {
+    region: 'us-central1',
+    // Judges inline rather than waiting for the next sweep: this is a person
+    // pressing a button and watching, and "it will fix itself within five
+    // minutes" is how someone presses it four more times.
+    timeoutSeconds: 300,
+    memory: '512MiB',
+    secrets: [JUDGE0_AUTH_TOKEN],
+    ...JUDGE_ACCESS,
+  },
+  async (request) => {
+    const { attemptId, questionId } = request.data || ({} as RejudgeCodingData);
+    if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    const db = getFirestore();
+    const attemptSnap = await db.collection('attempts').doc(attemptId).get();
+    if (!attemptSnap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const attempt = attemptSnap.data() as {
+      instituteId?: string;
+      studentId?: string;
+      assessmentId: string;
+      answers?: Record<string, AttemptAnswerDoc>;
+    };
+    // The same gate freezing and provisional grading use — staff of the owning
+    // institute, or a webOwner. A student may never re-arm their own judging.
+    const actor = assertInvigilator(request, attempt);
+
+    const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+    const assessment = examContractFor(
+      attempt as unknown as Record<string, unknown>,
+      assessmentSnap.data() as Record<string, unknown>,
+    ) as GradingAssessmentDoc;
+    const qIds = Array.from(new Set(
+      normalizeSections(assessment).flatMap((sec) => sec.questions.map((q) => q.questionId)),
+    ));
+    if (questionId && !qIds.includes(questionId)) {
+      throw new HttpsError('invalid-argument', 'That question is not on this paper.');
+    }
+    const { questionMap } = await loadQuestionAndAnswerMaps(db, qIds);
+
+    // Which submissions are actually stuck? Only ones the candidate attempted,
+    // and only ones that never produced a real verdict.
+    const targets = Object.keys(attempt.answers ?? {}).filter((qid) => {
+      if (questionId && qid !== questionId) return false;
+      const q = questionMap.get(qid);
+      if (q?.engine !== 'code') return false;
+      return !isEmptyCodeAnswer(q, attempt.answers![qid]);
+    });
+
+    let rearmed = 0;
+    for (const qid of targets) {
+      const vRef = db.collection('attemptVerdicts').doc(codeVerdictDocId(attemptId, qid));
+      const snap = await vRef.get();
+      if (!snap.exists) continue;   // never judged at all — the flag below is enough
+      const state = (snap.data() as { state?: JudgeAttemptState } | undefined)?.state;
+      if (state?.lastStatus === 'completed' || state?.lastStatus === 'compile_error') continue;
+
+      // Dot paths with delete sentinels, NOT a merged `state` object: a merge
+      // deep-merges maps, so lastStatus and nextAttemptAt would survive and
+      // shouldJudgeNow would refuse the submission again on the same grounds.
+      await vRef.update({
+        'state.attempts': 0,
+        'state.lastStatus': FieldValue.delete(),
+        'state.nextAttemptAt': FieldValue.delete(),
+        'state.claimedAt': FieldValue.delete(),
+        updatedAt: new Date().toISOString(),
+      });
+      rearmed++;
+    }
+
+    // Set even when nothing was re-armed: a paper whose sweep never ran has no
+    // verdict documents to reset, and this is what puts it back in the queue.
+    await attemptSnap.ref.update({
+      codeJudgePending: true,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const result = await judgeAttemptCoding(db, getJudgeAdapter(), attemptId);
+
+    await writeAuditRow(db, {
+      action: 'attemptCodingRejudged',
+      entityType: 'attempt',
+      entityId: attemptId,
+      entityLabel: attempt.studentId ?? null,
+      instituteId: attempt.instituteId ?? null,
+      actorUid: actor.uid,
+      actorRole: actor.role,
+      reason: questionId ? `question ${questionId}` : `${rearmed} submission(s)`,
+    });
+
+    return {
+      ok: true as const,
+      rearmed,
+      judged: result.judged,
+      // False means at least one submission still has no verdict — the judge is
+      // still unreachable. The caller shows that rather than implying success.
+      settled: result.settled,
     };
   },
 );

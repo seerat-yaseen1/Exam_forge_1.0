@@ -53,6 +53,18 @@ export const DELETION_AUDIT_COLLECTION = 'deletionAudit';
  *                                            the only action permitted
  *                                            to touch attempt data
  */
+/**
+ * Twin of AuditActionS in functions/src/index.ts — KEEP IN SYNC.
+ *
+ * It had already drifted: the server has written attemptFrozen,
+ * attemptUnfrozen, attemptGradedProvisional and attemptRewritten rows since
+ * Phase 4, and none of them was named here. Nothing failed, because
+ * `auditActionLabel` falls through to returning the raw action — so a trail
+ * of exam-authority decisions rendered as `attemptGradedProvisional` instead
+ * of a sentence, in the one view that exists to be read by a person.
+ *
+ * twinSync.test.ts now asserts the two lists match.
+ */
 export type AuditAction =
   | 'archive'
   | 'softDelete'
@@ -61,7 +73,12 @@ export type AuditAction =
   | 'requestSubmitted'
   | 'requestApproved'
   | 'requestRejected'
-  | 'erasure';
+  | 'erasure'
+  | 'attemptFrozen'
+  | 'attemptUnfrozen'
+  | 'attemptGradedProvisional'
+  | 'attemptRewritten'
+  | 'attemptCodingRejudged';
 
 /**
  * One immutable audit row.
@@ -304,6 +321,11 @@ export function auditActionLabel(action: AuditAction): string {
     case 'requestApproved':  return 'Approved';
     case 'requestRejected':  return 'Rejected';
     case 'erasure':          return 'Erased';
+    case 'attemptFrozen':            return 'Attempt paused';
+    case 'attemptUnfrozen':          return 'Attempt resumed';
+    case 'attemptGradedProvisional': return 'Graded provisionally';
+    case 'attemptRewritten':         return 'Attempt rewritten';
+    case 'attemptCodingRejudged':    return 'Coding re-judged';
     default:                 return action;
   }
 }

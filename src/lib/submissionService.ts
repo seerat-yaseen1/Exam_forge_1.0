@@ -1819,3 +1819,26 @@ export async function getCodeVerdicts(
   }));
   return out;
 }
+
+/**
+ * Ask the platform to try judging a paper's stuck coding answers again.
+ *
+ * Staff only, and only for submissions that never produced a real verdict —
+ * the server refuses to touch a `completed` or `compile_error` one, because
+ * recomputing a mark a student may already have been shown is a re-grade
+ * rather than a retry.
+ *
+ * Judges INLINE and returns the outcome, so the caller can say what happened
+ * instead of "check back in five minutes". `settled: false` means at least one
+ * submission still has no verdict — the runner is still unreachable.
+ */
+export async function rejudgeAttemptCoding(
+  attemptId: string,
+  questionId?: string,
+): Promise<{ ok: true; rearmed: number; judged: number; settled: boolean }> {
+  const call = httpsCallable<
+    { attemptId: string; questionId?: string },
+    { ok: true; rearmed: number; judged: number; settled: boolean }
+  >(functions, 'rejudgeAttemptCoding');
+  return (await call({ attemptId, ...(questionId ? { questionId } : {}) })).data;
+}

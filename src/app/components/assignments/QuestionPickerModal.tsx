@@ -386,6 +386,12 @@ export function QuestionPickerModal({
             <FilterChip label="MCQ" active={engineFilter === 'mcq'} onClick={() => setEngineFilter(engineFilter === 'mcq' ? '' : 'mcq')} />
             <FilterChip label="Text" active={engineFilter === 'text'} onClick={() => setEngineFilter(engineFilter === 'text' ? '' : 'text')} />
             <FilterChip label="Match" active={engineFilter === 'match'} onClick={() => setEngineFilter(engineFilter === 'match' ? '' : 'match')} />
+            {/* The chips are a hand-written list beside a `QuestionEngine`
+                union that has four members, so `code` was simply never added.
+                Coding questions did appear under "All" and carried a CODE
+                badge, but the one filter that would find them in a large bank
+                did not offer them. */}
+            <FilterChip label="Code" active={engineFilter === 'code'} onClick={() => setEngineFilter(engineFilter === 'code' ? '' : 'code')} />
 
             <span className="text-xs ml-2" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.05em' }}>
               DIFF:

@@ -37,6 +37,7 @@ import {
   softDeleteAttempt,
   getBreakState,
   getCodeVerdicts,
+  rejudgeAttemptCoding,
   type Attempt,
   type AttemptAnswer,
   type GradedAnswer,
@@ -987,6 +988,42 @@ function ResponseViewer({
   const [activeTab, setActiveTab] = useState<AnswerCategory | 'all'>('all');
   const [expanded, setExpanded]   = useState<string | null>(null);
   const [verdicts, setVerdicts]   = useState<Record<string, CodeVerdictDoc>>({});
+  const [rejudging, setRejudging] = useState<string | null>(null);
+  const [rejudgeNote, setRejudgeNote] = useState<Record<string, string>>({});
+
+  /**
+   * Re-arm one stuck coding submission and judge it now.
+   *
+   * Reports the OUTCOME rather than "requested". The callable judges inline,
+   * so it can distinguish "marked" from "the runner is still unreachable" —
+   * and a button that says "done" when the judge is still down is how someone
+   * presses it four more times.
+   */
+  const runRejudge = useCallback(async (qid: string) => {
+    setRejudging(qid);
+    setRejudgeNote((p) => ({ ...p, [qid]: '' }));
+    try {
+      const res = await rejudgeAttemptCoding(attempt.id, qid);
+      setRejudgeNote((p) => ({
+        ...p,
+        [qid]: res.settled
+          ? 'Marked — the score has been updated.'
+          : 'The code runner is still unavailable. Queued for the next sweep.',
+      }));
+      // Re-read so the panel shows the verdict this run produced rather than
+      // the stale one it was opened with. The attempt's own scores arrive on
+      // the roster subscription.
+      const fresh = await getCodeVerdicts(attempt.id, [qid]);
+      setVerdicts((p) => ({ ...p, ...fresh }));
+    } catch (e) {
+      setRejudgeNote((p) => ({
+        ...p,
+        [qid]: (e as Error)?.message || 'Could not reach the server.',
+      }));
+    } finally {
+      setRejudging(null);
+    }
+  }, [attempt.id]);
 
   // Build marks + section-name lookup from assessment sections
   const marksMap = useMemo<Map<string, number>>(() => {
@@ -1393,6 +1430,40 @@ function ResponseViewer({
                                 )}
                               </div>
                             ))}
+                          </div>
+                        )}
+
+                        {/* ── Try again ────────────────────────────────
+                            Offered only where it can help: a submission with
+                            no real verdict. MAX_JUDGE_ATTEMPTS is a sound
+                            bound on what one pathological program can do to a
+                            shared judge, but nothing existed for AFTER it, so
+                            an outage that outlasted the backoff left the marks
+                            unrecoverable through the product. Not offered on a
+                            judged answer — re-running a mark a student has
+                            been shown is a re-grade, not a retry. */}
+                        {codeState === 'needs_review' && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              onClick={() => void runRejudge(q.id)}
+                              disabled={rejudging === q.id}
+                              className="flex items-center gap-1.5 text-xs px-2 py-1"
+                              style={{
+                                border: '1px solid var(--ef-border)', borderRadius: 2,
+                                background: 'var(--ef-surface)', color: 'var(--ef-ink)',
+                                cursor: rejudging === q.id ? 'default' : 'pointer',
+                                opacity: rejudging === q.id ? 0.6 : 1,
+                              }}>
+                              {rejudging === q.id
+                                ? <Loader2 size={11} className="animate-spin" strokeWidth={1.5} />
+                                : <RotateCcw size={11} strokeWidth={1.5} />}
+                              {rejudging === q.id ? 'Running…' : 'Try marking again'}
+                            </button>
+                            {rejudgeNote[q.id] && (
+                              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                                {rejudgeNote[q.id]}
+                              </span>
+                            )}
                           </div>
                         )}
 

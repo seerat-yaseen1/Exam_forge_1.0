@@ -38,6 +38,7 @@ import {
   RUN_STATUS_LABEL,
   TEST_STATUS_LABEL,
 } from './codeVerdictView';
+import { auditActionLabel } from './deletionAudit';
 import { codeVerdictDocId } from './submissionService';
 import { JUDGE_LANGUAGES } from '../app/components/exam/judgeTypes';
 
@@ -166,17 +167,18 @@ describe('student question whitelist', () => {
 // map does not name renders as `undefined` in the run panel, on the screen a
 // reviewer uses to explain a mark to a candidate.
 
-/** Pull the members out of an `export type NAME = | 'a' | 'b';` declaration. */
+/** Pull the members out of a `type NAME = | 'a' | 'b';` declaration. */
 function unionMembers(source: string, name: string): string[] {
   // Line comments go first. Every member of these unions is documented inline,
   // and one of those comments contains a semicolon ("every test ran; per-test
   // statuses are authoritative") — which terminated the match after a single
   // member and made the assertion fail against a correct table.
   const code = source.replace(/\/\/[^\n]*/g, '');
-  const m = code.match(new RegExp(`export type ${name} =([^;]*);`));
+  // `export` optional: AuditActionS is module-private on the server.
+  const m = code.match(new RegExp(`(?:export )?type ${name} =([^;]*);`));
   if (!m) {
     throw new Error(
-      `Could not find the ${name} union in functions/src/judgeCore.ts. It was `
+      `Could not find the ${name} union in the functions source. It was `
       + 'renamed or reshaped — update this test deliberately rather than '
       + 'deleting the assertion, because the twin it guards is still a twin.',
     );
@@ -213,6 +215,26 @@ describe('judge verdict vocabulary — server types, client labels', () => {
     expect(server).toBeTruthy();
     expect(server![1]).toBe('${attemptId}__${questionId}');
     expect(codeVerdictDocId('att1', 'q1')).toBe('att1__q1');
+  });
+});
+
+describe('audit actions — the server writes them, the client renders them', () => {
+  // Found already drifted: the server had been writing attemptFrozen,
+  // attemptUnfrozen, attemptGradedProvisional and attemptRewritten rows since
+  // Phase 4 and the client union named none of them. Nothing failed, because
+  // auditActionLabel falls through to the raw action — so a trail of decisions
+  // about someone's exam rendered as `attemptGradedProvisional` in the one
+  // view that exists for a person to read.
+
+  it('every server action has a client label', () => {
+    const server = unionMembers(serverIndex, 'AuditActionS');
+    expect(server.length).toBeGreaterThan(0);
+    for (const action of server) {
+      // Not just "is in the union" — the label must not be the fallthrough,
+      // which is what made the drift invisible in the first place.
+      expect(auditActionLabel(action as Parameters<typeof auditActionLabel>[0]))
+        .not.toBe(action);
+    }
   });
 });
 

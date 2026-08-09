@@ -282,6 +282,72 @@ scenario('J-20', 'an adapter cannot smuggle output through an unknown test id', 
   check(!JSON.stringify(c).includes('LEAK'), 'its output does not reach the candidate');
 });
 
+scenario('J-31', 'a visible test travels WITH its own input and expected output', () => {
+  // "Visible" is defined at the top of judgeCore as a test "whose input,
+  // expected output and actual output ever reach a browser". That described an
+  // intention the redaction did not implement: a candidate saw "Sample 2 ·
+  // Wrong output" and nothing they could act on — not the input that failed,
+  // not what was expected of them, not the author's note about it.
+  const tests = [
+    { id: 's1', stdin: '5 7', expected: '12', visible: true, label: 'the worked example' },
+    hidden('h1', 'SECRET'),
+  ];
+  const c = J.redactForCandidate(
+    verdict('completed', [{ testId: 's1', status: 'wrong_answer', stdout: '-2' }, failing('h1')]),
+    tests,
+  );
+
+  eq(c.results.length, 1, 'still only the visible test');
+  eq(c.results[0].stdin, '5 7', 'the candidate can see what was fed in');
+  eq(c.results[0].expected, '12', 'and what was expected of them');
+  eq(c.results[0].label, 'the worked example', "and the author's note");
+  eq(c.results[0].stdout, '-2', 'beside what their program actually printed');
+});
+
+scenario('J-32', 'the added fields give a hidden test no route to a browser', () => {
+  // THE ASSERTION THAT MATTERS. The test text is attached from the SUITE, keyed
+  // by an id that has already passed the visibility check — never from
+  // anything the adapter returned. A hidden test has no entry in that map, so
+  // there is no path by which one acquires a stdin or an expected on the way
+  // out.
+  const tests = [
+    sample('s1', '1'),
+    { id: 'h1', stdin: 'SECRET INPUT', expected: 'SECRET EXPECTED', visible: false },
+  ];
+  const c = J.redactForCandidate(
+    verdict('completed', [passing('s1'), failing('h1')]),
+    tests,
+  );
+  const blob = JSON.stringify(c);
+  check(!blob.includes('SECRET INPUT'), 'a hidden stdin does not travel');
+  check(!blob.includes('SECRET EXPECTED'), 'nor a hidden expected output');
+  eq(c.results.length, 1, 'and the hidden result is still dropped entirely');
+});
+
+scenario('J-33', 'an adapter that claims a hidden id gains nothing by it', () => {
+  // The lookup is by id into the VISIBLE map. An adapter returning a result
+  // under a hidden test's id is dropped before any text is attached, so it
+  // cannot use the new fields to read the answer key back out.
+  const tests = [sample('s1', '1'), { id: 'h1', stdin: 'IN', expected: 'OUT', visible: false }];
+  const c = J.redactForCandidate(
+    verdict('completed', [{ testId: 'h1', status: 'passed', stdout: 'x' }]),
+    tests,
+  );
+  eq(c.results.length, 0, 'the smuggled result is dropped');
+  check(!JSON.stringify(c).includes('OUT'), 'and carries no test text with it');
+});
+
+scenario('J-34', 'sample text is clipped rather than shipped unbounded', () => {
+  const big = 'x'.repeat(J.MAX_SAMPLE_TEXT + 5000);
+  const c = J.redactForCandidate(
+    verdict('completed', [passing('s1')]),
+    [{ id: 's1', stdin: big, expected: big, visible: true }],
+  );
+  check(c.results[0].stdin.length < big.length, 'a huge input is truncated');
+  check(c.results[0].stdin.endsWith('truncated'), 'and says so rather than ending mid-value');
+  check(c.results[0].expected.length < big.length, 'likewise the expected output');
+});
+
 scenario('J-21', 'a sample run never sends hidden tests to the judge at all', () => {
   const full = {
     language: 'python3',

@@ -45,7 +45,14 @@ export const JUDGE_LANGUAGE_LABEL: Record<JudgeLanguage, string> = {
   sql:        'SQL',
 };
 
-/** One visible test result, as the server's redacted verdict reports it. */
+/**
+ * One visible test result, as the server's redacted verdict reports it.
+ *
+ * `stdin`, `expected` and `label` are the TEST ITSELF, and they arrive only
+ * for visible tests — see redactForCandidate, which attaches them from the
+ * suite rather than from anything the judge returned. Absent on a verdict
+ * produced before they were sent, which is why they are optional.
+ */
 export interface CandidateTestResult {
   testId: string;
   status: 'passed' | 'wrong_answer' | 'timeout' | 'runtime_error'
@@ -54,6 +61,9 @@ export interface CandidateTestResult {
   memoryKb?: number;
   stdout?: string;
   stderr?: string;
+  stdin?: string;
+  expected?: string;
+  label?: string;
 }
 
 /** The verdict shape runCodeSample returns — hidden tests already stripped. */

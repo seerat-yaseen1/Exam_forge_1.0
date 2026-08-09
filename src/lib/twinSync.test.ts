@@ -124,3 +124,47 @@ describe('student question whitelist', () => {
     }
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// THE ANSWER DISCRIMINANT — a twin inside the client
+// ══════════════════════════════════════════════════════════════════
+//
+// The same failure as ANSWER_KEYS, on the same day, one build over. Every
+// stored answer records which engine produced it, and ExamShell derived that
+// with its own ternary instead of from the taxonomy:
+//
+//     q.engine === 'mcq' ? 'mcq' : q.engine === 'text' ? 'text' : 'match'
+//
+// Four engines, three arms. Every CODING answer was stored as 'match'. As
+// with ANSWER_KEYS nothing failed: no type error (the ternary's union is a
+// subset of the field's), no runtime error, no wrong-looking screen. What
+// happened was that QuestionNavigator's `type === 'code'` branch — written
+// specifically so starter code does not count as an answer — was never
+// reached, so a candidate who cleared their editor was shown as having
+// answered it and the pre-submit unanswered count was wrong.
+//
+// The branch's own unit tests passed the whole time, because they built
+// `type: 'code'` by hand. Testing both ends of a wire proves nothing about
+// the wire, which is what this file is for.
+
+describe('the answer discriminant has exactly one writer', () => {
+  const examShell = read('src/app/pages/student/ExamShell.tsx');
+  const submission = read('src/lib/submissionService.ts');
+
+  it('ExamShell derives it from the taxonomy', () => {
+    expect(examShell).toMatch(/answerTypeForEngine\(/);
+  });
+
+  it('ExamShell does not hand-roll it from a ternary', () => {
+    // Anchored on the SHAPE of the defect rather than its exact text: any
+    // ternary branching on an engine literal is how the second copy comes
+    // back. If a future ternary over `.engine` is genuinely unrelated to the
+    // answer type, narrow this assertion rather than deleting it.
+    expect(examShell).not.toMatch(/\.engine === '(?:mcq|text|match|code)'\s*\?/);
+  });
+
+  it('AttemptAnswer.type is the alias, not a fourth copy of the union', () => {
+    expect(submission).toMatch(/type:\s*AnswerDiscriminant/);
+    expect(submission).not.toMatch(/type:\s*'mcq'\s*\|/);
+  });
+});

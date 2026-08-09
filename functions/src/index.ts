@@ -117,9 +117,16 @@ const EXAM_HOT_PATH = {
 /**
  * Reaching the judge.
  *
- * The Judge0 cluster has no public address by design — it binds 127.0.0.1:2358
- * on a VM with no external IP — so the only route to it is a Serverless VPC
- * connector into the project's network.
+ * The Judge0 cluster has no public address by design — it binds the host's
+ * INTERNAL address (10.128.0.2:2358) on a VM with no external IP — so the only
+ * route to it is a Serverless VPC connector into the project's network.
+ *
+ * Not loopback, and that distinction cost a debugging cycle: a connector does
+ * not arrive on 127.0.0.1. It arrives from its own range on the host's internal
+ * interface, so a loopback publish refuses the connection while the connector,
+ * the firewall, the secret and the base URL all look correct. See the comment
+ * on the `ports:` entry in infra/judge0/docker-compose.yml, which carries the
+ * curl that tells the two apart.
  *
  * Egress is PRIVATE_RANGES_ONLY deliberately. ALL_TRAFFIC would push Firestore
  * and every other Google API call through the connector as well, costing

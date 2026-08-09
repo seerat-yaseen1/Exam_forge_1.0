@@ -19,7 +19,14 @@
  * Exits non-zero if anything fails. Suitable as a deployment gate.
  */
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { JUDGE0_LANGUAGE_IDS, verifyLanguageTable } from '../../functions/lib/judge0Adapter.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO = join(HERE, '..', '..');
 
 const URL_BASE = (process.env.JUDGE0_URL ?? 'http://127.0.0.1:2358').replace(/\/$/, '');
 const TOKEN = process.env.AUTHN_TOKEN ?? '';
@@ -31,6 +38,17 @@ let current = null;
 function scenario(id, title, fn) { results.push({ id, title, fn }); }
 function check(pass, label, detail) {
   current.checks.push({ pass: !!pass, label, detail: detail === undefined ? null : String(detail) });
+}
+/**
+ * A check this machine cannot make, as distinct from one that failed.
+ *
+ * Only V-00 uses it, and only for the half of it that needs the deploy
+ * machine's git-ignored env file. Reporting "cannot check from here" as a
+ * failure on the judge host would train people to ignore a red V-00, which is
+ * the one outcome worse than not having the check.
+ */
+function skip(label, detail) {
+  current.checks.push({ skip: true, label, detail: detail === undefined ? null : String(detail) });
 }
 const eq = (a, e, label) => check(a === e, label, `expected ${JSON.stringify(e)}, got ${JSON.stringify(a)}`);
 
@@ -97,6 +115,133 @@ async function run(source, opts = {}) {
   }
   return { error: 'never became terminal within 60s' };
 }
+
+// ══════════════════════════════════════════════════════════════════
+// §0 — THE ADDRESS, IN BOTH PLACES IT IS WRITTEN
+// ══════════════════════════════════════════════════════════════════
+//
+// The only static check in this file, and the only one that can run without a
+// cluster. It exists because of a failure that cost a debugging cycle: the
+// server published 127.0.0.1:2358, a Serverless VPC connector does not arrive
+// on loopback, and every other layer — connector, firewall, secret, base URL —
+// looked correct. Cloud Functions saw judge_unavailable; curl from inside the
+// VM saw a perfectly healthy API.
+//
+// Nothing could catch that, because the address is written in two files that
+// never meet: the `ports:` entry in docker-compose.yml, which is deployed to
+// the VM, and JUDGE0_BASE_URL in functions/.env.<project>, which is read at
+// firebase deploy. Their comments each promise the other matches. This is the
+// promise being enforced.
+
+/** The host address the compose file publishes 2358 on, or a reason it cannot say. */
+function publishedAddress() {
+  let text;
+  try {
+    text = readFileSync(join(HERE, 'docker-compose.yml'), 'utf8');
+  } catch (e) {
+    return { error: `cannot read docker-compose.yml: ${e.message}` };
+  }
+
+  // Deliberately not a YAML parser: this script has no dependencies, and the
+  // shape being read is one list entry under one `ports:` key.
+  const lines = text.split('\n');
+  const specs = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() !== 'ports:') continue;
+    for (let j = i + 1; j < lines.length; j++) {
+      const m = lines[j].match(/^\s*-\s*['"]?([^'"\s#]+)['"]?\s*$/);
+      if (!m) break;              // end of the list
+      specs.push(m[1]);
+    }
+  }
+
+  const forJudge = specs.filter((s) => s.endsWith(':2358'));
+  if (forJudge.length === 0) return { error: `no published port maps to 2358 (found: ${specs.join(', ') || 'none'})` };
+  if (forJudge.length > 1) return { error: `2358 is published more than once: ${forJudge.join(', ')}` };
+
+  // "HOST:HOSTPORT:CONTAINERPORT" is the only form that binds one interface.
+  // "HOSTPORT:CONTAINERPORT" and a bare port both publish on every interface,
+  // which on a VM one --address flag away from a public IP is the whole risk.
+  const parts = forJudge[0].split(':');
+  if (parts.length !== 3) return { spec: forJudge[0], host: null, port: null };
+  return { spec: forJudge[0], host: parts[0], port: parts[1] };
+}
+
+/** JUDGE0_BASE_URL as the deploy machine's env files define it. */
+function configuredBaseUrl() {
+  let names;
+  try {
+    names = readdirSync(join(REPO, 'functions')).filter((n) => /^\.env(\..+)?$/.test(n));
+  } catch {
+    names = [];
+  }
+  if (names.length === 0) return { absent: true };
+
+  const found = [];
+  for (const name of names) {
+    const text = readFileSync(join(REPO, 'functions', name), 'utf8');
+    for (const line of text.split('\n')) {
+      const m = line.match(/^\s*(?:export\s+)?JUDGE0_BASE_URL\s*=\s*(.*)$/);
+      if (!m) continue;
+      const value = m[1].trim().replace(/^['"]|['"]$/g, '').replace(/\/$/, '');
+      found.push({ name, value });
+    }
+  }
+  if (found.length === 0) return { files: names, undeclared: true };
+  return { files: names, found };
+}
+
+scenario('V-00', 'the judge address agrees everywhere it is written', async () => {
+  const pub = publishedAddress();
+  if (pub.error) {
+    check(false, 'docker-compose.yml declares one published address for 2358', pub.error);
+    return;
+  }
+
+  // SECURITY, not tidiness. 0.0.0.0 publishes on every interface the VM has or
+  // is later given, and this one runs arbitrary untrusted code.
+  check(pub.host !== null && pub.host !== '0.0.0.0' && pub.host !== '::' && pub.host !== '*',
+    'the API is published on ONE named interface, never 0.0.0.0',
+    pub.host === null
+      ? `"${pub.spec}" has no host address, so Docker publishes on every interface`
+      : `bound to ${pub.host}`);
+  if (pub.host === null) return;
+
+  check(pub.port === '2358',
+    'it is published on 2358, the port JUDGE0_BASE_URL names',
+    `published on ${pub.port}`);
+
+  const cfg = configuredBaseUrl();
+  if (cfg.absent) {
+    skip('JUDGE0_BASE_URL matches it',
+      `no functions/.env* on this machine — expected when running from the judge host or Cloud Shell. Re-run V-00 on the machine you deploy from, where ${pub.host}:${pub.port} has to appear in JUDGE0_BASE_URL.`);
+    return;
+  }
+  if (cfg.undeclared) {
+    // Not cosmetic: getJudgeAdapter() reads an unset base URL as "no judge
+    // configured" and installs NullJudgeAdapter. Deploying from here would
+    // send every coding answer to manual review, with one warning line in the
+    // log as the only evidence.
+    check(false, 'JUDGE0_BASE_URL is declared',
+      `none of ${cfg.files.join(', ')} sets it — a deploy from this machine installs NullJudgeAdapter and every coding answer goes to manual review`);
+    return;
+  }
+
+  const expected = `${pub.host}:${pub.port}`;
+  for (const { name, value } of cfg.found) {
+    let actual;
+    try {
+      const u = new URL(value);
+      actual = u.port ? `${u.hostname}:${u.port}` : u.hostname;
+    } catch {
+      check(false, `functions/${name} sets a parseable JUDGE0_BASE_URL`, value || '(empty)');
+      continue;
+    }
+    check(actual === expected,
+      `functions/${name} points at the address the cluster publishes`,
+      `compose publishes ${expected}, JUDGE0_BASE_URL is ${actual} — Cloud Functions will report judge_unavailable against a healthy cluster`);
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════
 // §1 — REACHABILITY AND AUTH
@@ -255,16 +400,26 @@ scenario('V-13', 'the server accepts the platform ceiling', async () => {
 
 (async () => {
   console.log(`\n${C.b}JUDGE0 ACCEPTANCE${C.x}  ${C.d}${URL_BASE}${C.x}\n`);
-  let pass = 0, fail = 0;
+  let pass = 0, fail = 0, skipped = 0;
 
   for (const s of results) {
     current = { checks: [], error: null };
     try { await s.fn(); } catch (e) { current.error = e; }
 
-    const bad = current.checks.filter((c) => !c.pass);
-    const status = current.error ? `${C.r}ERROR${C.x}` : bad.length ? `${C.r}FAIL${C.x}` : `${C.g}PASS${C.x}`;
+    const bad = current.checks.filter((c) => !c.skip && !c.pass);
+    const held = current.checks.filter((c) => c.skip);
+    const status = current.error ? `${C.r}ERROR${C.x}`
+      : bad.length ? `${C.r}FAIL${C.x}`
+      : held.length ? `${C.y}PART${C.x}`
+      : `${C.g}PASS${C.x}`;
     console.log(`  ${status}  ${C.b}${s.id}${C.x}  ${s.title}`);
     for (const c of current.checks) {
+      if (c.skip) {
+        skipped++;
+        console.log(`        ${C.y}○${C.x} ${c.label} ${C.d}(not checkable here)${C.x}`);
+        if (c.detail) console.log(`          ${C.d}${c.detail}${C.x}`);
+        continue;
+      }
       if (c.pass) { pass++; continue; }
       fail++;
       console.log(`        ${C.r}✗${C.x} ${c.label}`);
@@ -279,6 +434,9 @@ scenario('V-13', 'the server accepts the platform ceiling', async () => {
   console.log(`\n${'─'.repeat(72)}`);
   if (fail === 0) {
     console.log(`${C.g}${C.b}  ALL GREEN${C.x} — ${pass} checks. This cluster is fit to mark an exam.`);
+    if (skipped > 0) {
+      console.log(`${C.y}  ${skipped} check${skipped === 1 ? '' : 's'} could not run here${C.x} — see the ○ lines above.`);
+    }
   } else {
     console.log(`${C.r}${C.b}  ${fail} FAILED${C.x} — ${pass} passed.`);
     console.log(`${C.y}  Do not point an exam at this cluster until these are green.${C.x}`);

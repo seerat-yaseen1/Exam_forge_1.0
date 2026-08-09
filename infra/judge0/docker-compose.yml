@@ -9,11 +9,13 @@
 #      additionally carries enable_network:false. Belt and braces, because
 #      a program that could reach the network could exfiltrate the paper.
 #
-#   2. THE API IS NEVER PUBLIC. It binds to loopback only and is reached
-#      through the VPC connector from Cloud Functions. Judge0 runs
-#      arbitrary code by design; an instance anyone can reach is a
-#      cryptominer with extra steps, and this has happened to public
-#      Judge0 deployments repeatedly.
+#   2. THE API IS NEVER PUBLIC. It binds ONE named internal address on a
+#      VM that has no external IP, and is reached only through the VPC
+#      connector from Cloud Functions. Judge0 runs arbitrary code by
+#      design; an instance anyone can reach is a cryptominer with extra
+#      steps, and this has happened to public Judge0 deployments
+#      repeatedly. Note that "not public" is not the same as "loopback" —
+#      see the ports: entry below for why that difference matters.
 #
 # Versions are PINNED. Judge0's numeric language ids change between
 # releases, and JUDGE0_LANGUAGE_IDS in functions/src/judge0Adapter.ts is

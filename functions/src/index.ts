@@ -4062,6 +4062,13 @@ function getJudgeAdapter(): JudgeAdapter {
     // Unconfigured is a SAFE state, not a broken one: every submission becomes
     // a paper awaiting review rather than a zero. Deploying the pipeline before
     // the judge cluster exists is therefore fine, and so is losing the config.
+    //
+    // C-10: safe is not the same as silent. This branch used to say nothing at
+    // all, so "is the judge wired?" could only be answered by reading a verdict
+    // document — and a deploy from a machine without functions/.env.<project>
+    // degrades to exactly here, with no error, because JUDGE0_BASE_URL defaults
+    // to ''. One line at selection makes that visible in the log.
+    console.warn('[judge] adapter=null reason=JUDGE0_BASE_URL is not set; submissions will go to manual review.');
     judgeAdapterInstance = new NullJudgeAdapter();
     return judgeAdapterInstance;
   }
@@ -4071,11 +4078,17 @@ function getJudgeAdapter(): JudgeAdapter {
     // A Judge0 with no token is a Judge0 anyone who finds it can run code on.
     // Refusing to use it is deliberate — an unauthenticated judge is worse than
     // no judge, and the failure is loud in logs while staying safe for students.
-    console.error('[judge] JUDGE0_BASE_URL is set but JUDGE0_AUTH_TOKEN is empty; refusing to use an unauthenticated judge.');
+    console.error('[judge] adapter=null reason=JUDGE0_BASE_URL is set but JUDGE0_AUTH_TOKEN is empty; refusing to use an unauthenticated judge.');
     judgeAdapterInstance = new NullJudgeAdapter();
     return judgeAdapterInstance;
   }
 
+  // Logged so a healthy selection is as visible as a failed one. Without this
+  // the two states are indistinguishable in the log, which is how a whole
+  // afternoon goes into checking a connector that was never the problem. The
+  // base URL is a private 10.x address, not a secret; the token is never
+  // logged.
+  console.info(`[judge] adapter=judge0 baseUrl=${baseUrl}`);
   judgeAdapterInstance = new Judge0Adapter({ baseUrl, authToken });
   return judgeAdapterInstance;
 }
@@ -11948,6 +11961,19 @@ export const runCodeSample = onCall<RunCodeSampleData>(
     }
 
     const verdict = await getJudgeAdapter().run(submission);
+
+    // C-10: the ONLY record of why a run failed. Every reason the adapter
+    // produces — connect timeout, HTTP status, open circuit breaker — is
+    // returned to the browser inside the verdict and, before this line, went
+    // nowhere else. That made a failing judge diagnosable only from DevTools,
+    // which is not available when a candidate reports it after the fact.
+    // Successes stay silent deliberately: this runs once per candidate click.
+    if (verdict.status === 'judge_unavailable' || verdict.status === 'internal_error') {
+      console.error(
+        `[judge] runCodeSample status=${verdict.status} attempt=${attemptId} question=${questionId} adapter=${verdict.adapter} reason=${verdict.failureReason ?? 'none'}`,
+      );
+    }
+
     const nextState = advanceRunState(state, verdict, nowMs);
     await attemptSnap.ref.update({
       [`codeRuns.${questionId}`]: nextState,

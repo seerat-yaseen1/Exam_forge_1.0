@@ -35,7 +35,7 @@ BASE=<last-deployed-commit-sha>
 
 ```bash
 git diff --stat $BASE..HEAD -- \
-  firestore.rules firestore.indexes.json storage.rules functions/ src/
+  firestore.rules firestore.indexes.json storage.rules functions/ src/ infra/
 ```
 
 **Step 3 — deploy exactly what that names.** Each path maps to one target:
@@ -47,6 +47,7 @@ git diff --stat $BASE..HEAD -- \
 | `storage.rules` | `firebase deploy --only storage` | |
 | `functions/` | `firebase deploy --only functions` | See §5 — deploy all functions together, never cherry-pick |
 | `src/` | separate — see §6 | Frontend rides its own pipeline |
+| `infra/judge0/` | **not a Firebase target** — see §2 | A VM you `docker compose up` on. `firebase deploy` does not touch it, and nothing in CI tells you it drifted |
 
 **Step 4 — gate on the tests first.**
 
@@ -66,6 +67,79 @@ git tag -f deployed/$(date +%Y-%m-%d) && git push -f origin deployed/$(date +%Y-
 ```
 
 That last step is what stops this section rotting again.
+
+---
+
+## 2 · The judge is a second deployment
+
+Coding items are the one feature that does not live entirely behind
+`firebase deploy`. Three things have to be true at once, none of them deployed
+by the same command, and **all three fail the same silent way** — coding answers
+queue into manual review and nothing else looks wrong.
+
+| | What it is | How it is deployed |
+|---|---|---|
+| **The cluster** | `infra/judge0/` on a dedicated VM with no external IP | `docker compose up -d` on the host. See `infra/judge0/README.md` |
+| **The route** | Serverless VPC connector `exam-forge-connector` | In code: `JUDGE_ACCESS` in `functions/src/index.ts`, carried by **both** judge functions. Ships with a functions deploy |
+| **The config** | `JUDGE0_BASE_URL` (env) + `JUDGE0_AUTH_TOKEN` (secret) | `functions/.env.<project>` and `firebase functions:secrets:set` |
+
+Missing config is a **safe** state, deliberately: `getJudgeAdapter()` installs
+`NullJudgeAdapter` and every coding answer becomes a paper awaiting review
+rather than a zero. It is not a *visible* state. One warning line in the log is
+the entire evidence:
+
+```
+[judge] adapter=null reason=JUDGE0_BASE_URL is not set; submissions will go to manual review.
+[judge] adapter=null reason=JUDGE0_BASE_URL is set but JUDGE0_AUTH_TOKEN is empty; …
+[judge] adapter=judge0 baseUrl=http://10.128.0.2:2358          ← the healthy one
+```
+
+**Deploy all functions, not just the callable.** `runCodeSample` (the in-exam
+Run button) and `scheduledJudgeCoding` (the sweep that actually marks) are
+separate deployed functions that need the same connector and the same secret.
+Deploying one and not the other gives you the worst possible signal: a student's
+sample run works, so the judge is obviously fine, while every submitted paper
+sits unmarked. `scheduledJudgeCoding` is a **scheduler** function — Cloud
+Scheduler must be enabled in the project or it never fires at all.
+
+**The loopback trap, recorded so nobody pays for it twice.** The cluster binds
+`10.128.0.2:2358`, its internal address — *not* `127.0.0.1`. A VPC connector
+does not arrive on loopback; it arrives from its own range on the host's
+internal interface. Bind loopback and Cloud Functions get `judge_unavailable`
+while `curl` from inside the VM answers perfectly, with the connector, firewall,
+token and base URL all reading as correct. That address is written in two files
+that never meet — the `ports:` entry in `docker-compose.yml` and
+`JUDGE0_BASE_URL` — and **`verify.mjs` check V-00 is what compares them.**
+
+**Gate the deploy on the cluster, the way §1 Step 4 gates it on the tests.**
+
+```bash
+JUDGE0_URL=http://10.128.0.2:2358 AUTHN_TOKEN='<token>' npm run verify:judge0
+```
+
+Non-zero exit means do not point an exam at it. Run it from the machine you
+deploy from when you can: `JUDGE0_BASE_URL` lives in a `.env.<project>` file, so
+V-00's second half can only run where that file is, and reports itself skipped
+(`○`) everywhere else.
+
+**Post-deploy, the coding path needs its own check** — §8's log greps will not
+catch any of the above. Sit one coding question, submit, then within ~5 minutes:
+
+```bash
+firebase functions:log --project YOUR_PROJECT_ID --only scheduledJudgeCoding
+#   → "[judgeCoding] papers=1 judged=1 settled=1"
+#     settled=0 with judged>0 means the judge ran and did not finish the paper;
+#     papers=0 means nothing was queued, so look at gradeAttempt instead.
+```
+
+- `attempts/{id}.codeJudgePending` — set at submit, **gone** once the sweep settles the paper.
+- `attemptVerdicts/{attemptId}__{questionId}` — exists, with `state.lastStatus: 'completed'`.
+- The mark on the question changes from 0 to the hidden suite's pass rate. Until it does, `scores.requiresManualReview` is true and that is correct, not a fault.
+
+A paper still pending after three sweeps is not waiting — check
+`state.attempts`. At 5 it is exhausted, and there is currently no in-product way
+to re-arm it; `regradeAttempts` re-reads verdicts that already exist, it does not
+re-judge.
 
 ---
 
@@ -191,6 +265,9 @@ firebase functions:log --project YOUR_PROJECT_ID | grep "INVARIANT VIOLATION"
 firebase functions:log --project YOUR_PROJECT_ID --only scheduledCloseExpiredAttempts
 #    → "left open N (student still has somewhere to go)" is HEALTHY, not a fault.
 ```
+
+If the diff touched anything coding-related, none of the three greps above says
+whether the judge is reachable — **§2 has the checks that do.**
 
 Then run one real sitting end to end on a **mock-tier** exam and check that:
 

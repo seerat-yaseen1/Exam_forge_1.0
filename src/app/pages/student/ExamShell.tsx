@@ -62,10 +62,11 @@ import {
 } from '../../../lib/questionReportService';
 import { IntegrityEngine, codeEditorPasteAllowed } from '../../components/exam/IntegrityEngine';
 import { telemetryEnabled } from '../../../lib/codeTelemetry';
+import { answerTypeForEngine } from '../../../lib/itemTypes';
 import { FaceMonitor } from '../../components/exam/FaceMonitor';
 import { ExtensionWatchdog } from '../../components/exam/ExtensionWatchdog';
 import { SectionTimer } from '../../components/exam/SectionTimer';
-import { QuestionNavigator } from '../../components/exam/QuestionNavigator';
+import { QuestionNavigator, answerHasContent } from '../../components/exam/QuestionNavigator';
 import { QuestionRenderer } from '../../components/exam/QuestionRenderer';
 import {
   WarningOverlay,
@@ -451,12 +452,21 @@ function isAnswerWindowClosed(e: unknown): boolean {
   return msg.includes('ANSWER_WINDOW_CLOSED');
 }
 
+/**
+ * The inverse of `answerHasContent`, and deliberately nothing more.
+ *
+ * This used to be its own rule, dispatching on the VALUE's shape rather than
+ * on the answer type. For mcq, text and match the two agreed; for code they
+ * could not, because a coding value is an object whose keys are present even
+ * when the editor is empty — `{ language, source: '' }` has two keys and read
+ * as content. Eight call sites depended on it, three of them counting what the
+ * student still has unanswered.
+ *
+ * One rule, one implementation. If what counts as an answer ever changes, it
+ * changes for the navigator and for durability in the same edit.
+ */
 function isAnswerEmpty(ans: AttemptAnswer | undefined): boolean {
-  if (!ans) return true;
-  if (ans.type === 'text') return !(ans.value as string).trim();
-  if (Array.isArray(ans.value)) return (ans.value as string[]).length === 0;
-  if (typeof ans.value === 'object') return Object.keys(ans.value as Record<string, string>).length === 0;
-  return !(ans.value as string);
+  return !answerHasContent(ans);
 }
 
 /**
@@ -1986,7 +1996,10 @@ export function ExamShell() {
     if (!q) return;
 
     const sectionId = currentSection?.id ?? '';
-    const type = q.engine === 'mcq' ? 'mcq' : q.engine === 'text' ? 'text' : 'match';
+    // NOT a ternary over the engines this file happens to remember. That is
+    // what this was, and the missing arm sent every coding answer to storage
+    // typed as 'match' — see answerTypeForEngine in itemTypes.ts.
+    const type = answerTypeForEngine(q.engine);
     const answer: AttemptAnswer = {
       type,
       value,

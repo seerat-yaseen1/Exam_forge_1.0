@@ -106,10 +106,51 @@ function runLabel(run: Extract<ChipRun, { kind: 'group' }>): string {
 // ── Helpers ────────────────────────────────────────────────────────
 
 export function isAnswered(questionId: string, answers: Record<string, AttemptAnswer>): boolean {
-  const answer = answers[questionId];
+  return answerHasContent(answers[questionId]);
+}
+
+/**
+ * Does this answer carry anything the student would call an answer?
+ *
+ * Split out of `isAnswered` so the one rule has one implementation. ExamShell
+ * needed the same question ("is there anything at risk here?") and had grown
+ * its own `isAnswerEmpty`, which dispatched on the VALUE's shape rather than
+ * on the type and therefore had no coding arm at all — a cleared editor read
+ * as content. Two predicates for one fact is how they drift; this is the fact.
+ */
+export function answerHasContent(answer: AttemptAnswer | undefined): boolean {
   if (!answer) return false;
 
   const { type, value } = answer;
+
+  // CODE IS DETECTED BY SHAPE, NOT ONLY BY TYPE, and that is deliberate.
+  //
+  // Until answerTypeForEngine landed, every coding answer was stored with
+  // type 'match'. Those answers exist — on finished papers, and on attempts
+  // that were in flight when the fix deployed — and reading one as a match
+  // answer counts `{ language, source: '' }` as answered on the strength of
+  // its two keys. Keying on the shape rather than the label means this reads
+  // an old answer and a new one identically, with no migration.
+  //
+  // Both keys are required. A match value is Record<leftId, rightId>, so
+  // demanding `language` AND `source` puts a false positive out of reach.
+  if (isCodeAnswerValue(type, value)) {
+    // A CODING QUESTION IS NOT ANSWERED BECAUSE AN EDITOR HAS TEXT IN IT.
+    //
+    // Coding questions ship starter code, so the naive "value is non-empty"
+    // test every other engine uses would mark every coding question answered
+    // the moment it was rendered — the navigator would show a full grid and
+    // "all questions answered" on a paper nobody had touched.
+    //
+    // The comparison against the starter lives at the WRITE side: the editor
+    // does not save an answer until the source differs from what it was given,
+    // so an untouched question has no answer document at all and is caught by
+    // the `!answer` check above. This branch is the second half of that — a
+    // candidate who selects all and deletes has emptied their answer, and an
+    // empty editor is not an attempt.
+    const source = (value as Record<string, string>).source;
+    return typeof source === 'string' && source.trim().length > 0;
+  }
 
   if (type === 'mcq') {
     if (Array.isArray(value)) return value.length > 0;
@@ -125,26 +166,24 @@ export function isAnswered(questionId: string, answers: Record<string, AttemptAn
     return Object.keys(value as Record<string, string>).length > 0;
   }
 
-  if (type === 'code') {
-    // A CODING QUESTION IS NOT ANSWERED BECAUSE AN EDITOR HAS TEXT IN IT.
-    //
-    // Coding questions ship starter code, so the naive "value is non-empty"
-    // test every other engine uses would mark every coding question answered
-    // the moment it was rendered — the navigator would show a full grid and
-    // "all questions answered" on a paper nobody had touched.
-    //
-    // The comparison against the starter lives at the WRITE side: the editor
-    // does not save an answer until the source differs from what it was given,
-    // so an untouched question has no answer document at all and is caught by
-    // the `!answer` check above. This branch is the second half of that — a
-    // candidate who selects all and deletes has emptied their answer, and an
-    // empty editor is not an attempt.
-    if (typeof value !== 'object' || Array.isArray(value)) return false;
-    const source = (value as Record<string, string>).source;
-    return typeof source === 'string' && source.trim().length > 0;
-  }
-
   return false;
+}
+
+/**
+ * Is this stored answer a coding answer?
+ *
+ * `type === 'code'` is the answer written by a current client. The shape test
+ * beside it is what reads answers written before `answerTypeForEngine`, which
+ * carry `type: 'match'` over a code value — see the note in `answerHasContent`.
+ * A code value that is not an object (a corrupt document, or a client that
+ * sent a bare string) is NOT treated as code: it falls through to the engine
+ * branches, which all refuse it, and an unreadable answer is not an answer.
+ */
+function isCodeAnswerValue(type: AttemptAnswer['type'], value: AttemptAnswer['value']): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  if (type === 'code') return true;
+  return typeof v.language === 'string' && typeof v.source === 'string';
 }
 
 // ── Component ──────────────────────────────────────────────────────

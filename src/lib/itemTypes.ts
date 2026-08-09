@@ -939,6 +939,46 @@ export function itemTypeIdForGroupKind(kind: GroupKind): ItemTypeId {
   return ITEM_TYPE_FOR_GROUP_KIND[kind];
 }
 
+// ── The answer discriminant ───────────────────────────────────────
+//
+// `AttemptAnswer.type` is the SAME four values as `QuestionEngine`, and that
+// is not a coincidence to be rediscovered — it is the contract. The stored
+// answer says which engine produced it so that every reader can dispatch on
+// the answer alone, without re-fetching the question.
+//
+// It is written here, in the registry, for the reason the registry exists.
+// The mapping used to be a hand-written ternary in ExamShell:
+//
+//     q.engine === 'mcq' ? 'mcq' : q.engine === 'text' ? 'text' : 'match'
+//
+// which silently sent every CODING answer to storage typed as 'match'. The
+// cost was not theoretical: QuestionNavigator's `type === 'code'` branch —
+// the one that stops starter code counting as an answer — became unreachable,
+// so a candidate who cleared their editor was shown as having answered, and
+// the pre-submit unanswered count was wrong for the whole paper. The branch's
+// own unit test passed throughout, because it built `type: 'code'` by hand:
+// both halves were right and the wire between them was not.
+//
+// An exhaustive switch rather than `return engine`. They are the same union
+// TODAY; the switch is what fails the BUILD rather than an exam if a fifth
+// engine is ever added and the two sets stop agreeing.
+
+/** What `AttemptAnswer.type` may be. Identical to `QuestionEngine`, by contract. */
+export type AnswerDiscriminant = QuestionEngine;
+
+export function answerTypeForEngine(engine: QuestionEngine): AnswerDiscriminant {
+  switch (engine) {
+    case 'mcq':   return 'mcq';
+    case 'text':  return 'text';
+    case 'match': return 'match';
+    case 'code':  return 'code';
+    default: {
+      const never: never = engine;
+      return never;
+    }
+  }
+}
+
 export function itemTypeForGroupKind(kind: GroupKind): ItemTypeDef {
   return ITEM_TYPE_BY_ID[ITEM_TYPE_FOR_GROUP_KIND[kind]];
 }

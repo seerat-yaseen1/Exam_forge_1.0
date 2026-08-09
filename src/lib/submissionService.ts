@@ -14,6 +14,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
 import { functions } from './firebase';
+import type { AnswerDiscriminant } from './itemTypes';
 import type { CorrectPair, Question } from './questionBankService';
 import { ensureSebToken, forceRefreshSebToken } from './assessmentService';
 
@@ -164,7 +165,12 @@ export type AttemptAnswer = {
   // 'code' answers are { language, source }, which the existing
   // Record<string, string> arm of AnswerValue already admits — the value union
   // does not widen and the stored shape does not change.
-  type: 'mcq' | 'text' | 'match' | 'code';
+  //
+  // AnswerDiscriminant, not a fourth hand-written copy of the same four
+  // strings. It is an alias of QuestionEngine, and `answerTypeForEngine` is
+  // the only sanctioned way to produce one — see the note beside it in
+  // itemTypes.ts for what the hand-written version cost.
+  type: AnswerDiscriminant;
   value: AnswerValue;
   answeredAt: string;  // ISO; time of last edit
   sectionId: string;

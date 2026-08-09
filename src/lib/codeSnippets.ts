@@ -53,8 +53,15 @@ export const STARTER_TEMPLATES: Record<AuthoringLanguage, string> = {
     'import sys\n\n\ndef solve() -> None:\n    data = sys.stdin.read().split()\n    # your code here\n\n\nsolve()\n',
   javascript:
     "const data = require('fs').readFileSync(0, 'utf8').split(/\\s+/);\n\nfunction solve() {\n  // your code here\n}\n\nsolve();\n",
+  // `declare const require` is load-bearing, not decoration. Judge0 compiles
+  // TypeScript with a bare `tsc` and no @types/node, so a plain `require(...)`
+  // is TS2580 "Cannot find name 'require'" — tsc exits non-zero and Judge0
+  // reports a COMPILATION ERROR. The candidate then sees their first run fail
+  // on scaffolding they did not write, which is exactly what these templates
+  // exist to prevent. The declaration satisfies the compiler without needing a
+  // type package the sandbox does not have.
   typescript:
-    "const data: string[] = require('fs').readFileSync(0, 'utf8').split(/\\s+/);\n\nfunction solve(): void {\n  // your code here\n}\n\nsolve();\n",
+    "declare const require: (id: string) => any;\n\nconst data: string[] = require('fs').readFileSync(0, 'utf8').split(/\\s+/);\n\nfunction solve(): void {\n  // your code here\n}\n\nsolve();\n",
   java:
     'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        // your code here\n    }\n}\n',
   c:

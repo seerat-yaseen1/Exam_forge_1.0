@@ -3777,6 +3777,55 @@ exports.getAnswerKeysForReview = (0, https_1.onCall)({ region: 'us-central1' }, 
     }
     return { ok: true, keys };
 });
+/**
+ * The PUBLIC half of a coding question, narrowed field by field.
+ *
+ * codeSpec carries what the candidate is entitled to see — which languages the
+ * question accepts, the buffer their editor opens into, and the limits their
+ * program runs under. None of it is the answer; `tests` is, and `tests` lives
+ * on the questionAnswers sibling and is never touched here.
+ *
+ * Rebuilt rather than passed through, on the same discipline as the whitelist
+ * that calls it: a field added to CodeSpec later must be named here before a
+ * candidate can see it, so the next field cannot arrive by accident.
+ *
+ * WITHOUT THIS the exam is not merely missing a nicety. resolveLanguages reads
+ * an absent spec as "every language the platform runs", so an author's
+ * restriction silently evaporates and the editor opens in whichever language
+ * sorts first — while starterFor returns '' and the candidate faces an empty
+ * buffer the question was written to pre-fill.
+ */
+function sanitizeCodeSpecForStudent(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+        return null;
+    const spec = raw;
+    const limits = (spec.limits ?? {});
+    const num = (v) => typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+    const starter = (spec.starterCode ?? {});
+    const starterCode = {};
+    for (const [lang, body] of Object.entries(starter)) {
+        if (typeof body === 'string')
+            starterCode[lang] = body;
+    }
+    return stripUndefined({
+        languages: Array.isArray(spec.languages)
+            ? spec.languages.filter((l) => typeof l === 'string')
+            : [],
+        starterCode,
+        // The author's raw numbers. The server clamps to MAX_LIMITS at submission
+        // time (buildCodeSubmission → clampLimits); showing the author's figure
+        // here would be a lie only if it exceeded the ceiling, so it is clamped
+        // for display too — the candidate is told the limit they will actually run
+        // under, not the one that was typed.
+        limits: stripUndefined({
+            cpuMs: num(limits.cpuMs),
+            wallMs: num(limits.wallMs),
+            memoryKb: num(limits.memoryKb),
+            outputKb: num(limits.outputKb),
+            processes: num(limits.processes),
+        }),
+    });
+}
 // ── Shared student-facing question sanitizer ──────────────────────
 // Single source of truth for the field whitelist. Used by getExamQuestions
 // AND submitAnswerAndAdvance (Phase 2.5) so the two can never drift and a
@@ -3802,10 +3851,19 @@ function sanitizeQuestionForStudent(q, includeExplanation) {
         // renders as a standalone one with its passage missing.
         groupId: q.groupId ?? null,
         groupOrder: typeof q.groupOrder === 'number' ? q.groupOrder : null,
+        // Coding delivery settings (engine 'code'). PUBLIC — see
+        // sanitizeCodeSpecForStudent. Null for every other engine, so nothing
+        // changes shape for the papers that carry no coding questions.
+        codeSpec: q.engine === 'code' ? sanitizeCodeSpecForStudent(q.codeSpec) : null,
         explanation: includeExplanation ? (q.explanation ?? '') : '',
         correctIds: [],
         correctPairs: [],
         modelAnswer: '',
+        // The hidden suite IS the answer key for a coding question. Emptied here
+        // for the same reason correctIds is: a pre-migration document that still
+        // carries tests inline is neutralised by the sanitiser rather than by
+        // remembering that it should not have them.
+        tests: [],
         isDeleted: false,
         createdAt: q.createdAt ?? '',
         updatedAt: q.updatedAt ?? '',
@@ -7417,8 +7475,25 @@ requireMode = 'direct') {
     }
     return { ownerType: 'faculty', ownerId: callerFacultyId, instituteId: callerInstituteId, mode: fr.mode };
 }
-// Shared answer-key extraction — mirrors src/lib/questionBankService.ts.
-const ANSWER_KEYS_S = ['correctIds', 'correctPairs', 'modelAnswer'];
+/**
+ * Shared answer-key extraction — the server twin of ANSWER_KEYS in
+ * src/lib/questionAnswerSplit.ts. KEEP IN EXACT SYNC.
+ *
+ * A key present there and missing here does not fail loudly, it fails in both
+ * directions at once: the field is written to the PUBLIC question document
+ * (where it is an answer key sitting in the collection students read from),
+ * and it is NOT written to the questionAnswers sibling (where every grading
+ * path looks for it). That is what happened to `tests` — a coding question
+ * authored by faculty or an institute shipped its expected outputs on the
+ * public doc while `buildCodeSubmission` saw an empty suite, so the candidate
+ * could not run their code ("no sample tests to run"), the judge was handed
+ * zero tests, and the answer sat in manual review forever.
+ *
+ * The direct client write path (createQuestion) never had the bug, so only
+ * faculty- and institute-authored coding questions are affected. Existing ones
+ * are repaired by functions/scripts/repair-code-answer-split.ts.
+ */
+const ANSWER_KEYS_S = ['correctIds', 'correctPairs', 'modelAnswer', 'tests'];
 function splitQuestionPayload(payload) {
     const publicPart = {};
     const answerPart = {};
@@ -7469,10 +7544,18 @@ function buildQuestionDocs(owner, src, seq) {
         updatedAt: nowIso,
     };
     const { publicPart, answerPart } = splitQuestionPayload(full);
-    const publicDoc = stripUndefined({ ...publicPart, correctIds: [], correctPairs: [], modelAnswer: '' });
+    // The answer fields are OVERWRITTEN with empties rather than merely omitted,
+    // so a payload that still carries one inline is neutralised by the same call
+    // — the point is that what lands in `questions` cannot contain an answer,
+    // whatever the caller passed in. Same construction as sanitizePublic on the
+    // client. `tests` joins the list because the hidden suite is the answer key
+    // for a coding question.
+    const publicDoc = stripUndefined({
+        ...publicPart, correctIds: [], correctPairs: [], modelAnswer: '', tests: [],
+    });
     const answerDoc = stripUndefined({
         id, ownerType: owner.ownerType, ownerId: owner.ownerId,
-        correctIds: [], correctPairs: [], modelAnswer: '', ...answerPart, updatedAt: nowIso,
+        correctIds: [], correctPairs: [], modelAnswer: '', tests: [], ...answerPart, updatedAt: nowIso,
     });
     return { id, publicDoc, answerDoc };
 }
@@ -7509,8 +7592,16 @@ async function execEditQuestion(db, owner, id, src, taxonomy) {
     delete publicPart.instituteId;
     delete publicPart.createdAt;
     const batch = db.batch();
-    if (Object.keys(publicPart).length > 0) {
-        batch.update(db.collection('questions').doc(id), stripUndefined({ ...publicPart, updatedAt: nowIso }));
+    // Self-heal on write. Questions authored while `tests` was missing from
+    // ANSWER_KEYS_S carry the hidden suite on their PUBLIC document; an edit is
+    // the one moment this path is already touching that document, so it clears
+    // the stale copy rather than leaving it for the repair script alone. Emptied
+    // rather than deleted, matching what buildQuestionDocs now writes.
+    const publicWipes = answerPart.tests !== undefined || existing.get('tests') !== undefined
+        ? { tests: [] }
+        : {};
+    if (Object.keys(publicPart).length > 0 || Object.keys(publicWipes).length > 0) {
+        batch.update(db.collection('questions').doc(id), stripUndefined({ ...publicPart, ...publicWipes, updatedAt: nowIso }));
     }
     if (Object.keys(answerPart).length > 0) {
         batch.set(db.collection('questionAnswers').doc(id), stripUndefined({ ...answerPart, ownerType: owner.ownerType, ownerId: owner.ownerId, updatedAt: nowIso }), { merge: true });

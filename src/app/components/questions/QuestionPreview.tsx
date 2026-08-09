@@ -5,10 +5,19 @@ import {
   type MCQOption,
   type MatchPair,
   type CorrectPair,
+  type CodeSpec,
+  type CodeTest,
   questionTypeLabel,
   questionTypeBadge,
   difficultyColor,
 } from '../../../lib/questionBankService';
+import {
+  COMPARISON_LABEL,
+  LANGUAGE_LABEL,
+  defaultWeight,
+  totalWeight,
+  type AuthoringLanguage,
+} from '../../../lib/codeAuthoring';
 import { RichText } from './RichText';
 
 // ── Badges ────────────────────────────────────────────────────────────────────
@@ -255,6 +264,141 @@ function MatchPreview({
   );
 }
 
+// ── Code ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A coding question, as its author needs to check it.
+ *
+ * Everything here is invisible in the exam by design — the candidate sees a
+ * language selector, a buffer and the visible tests, and never the suite that
+ * marks them. So preview is the ONLY surface where an author can confirm that
+ * the starter code they wrote is the starter code that ships, and that the
+ * hidden tests carry the weight they intended.
+ *
+ * The split follows the storage split exactly. `codeSpec` is public and always
+ * shown; `tests` is the answer key and is gated behind showAnswers with
+ * correctIds and modelAnswer, so a preview rendered for a student audience
+ * cannot leak expected outputs.
+ */
+function CodePreview({
+  codeSpec, tests, showAnswers,
+}: {
+  codeSpec?: CodeSpec;
+  tests?: CodeTest[];
+  showAnswers: boolean;
+}) {
+  const languages = codeSpec?.languages ?? [];
+  const starter   = codeSpec?.starterCode ?? {};
+  const suite     = tests ?? [];
+  const weight    = totalWeight(suite);
+  const hidden    = suite.filter((t) => !t.visible).length;
+
+  const box: React.CSSProperties = {
+    background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)',
+    borderRadius: 2, padding: '8px 10px',
+  };
+  const mono: React.CSSProperties = {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontSize: 11, whiteSpace: 'pre', overflowX: 'auto', display: 'block',
+    color: 'var(--ef-ink)', lineHeight: 1.6,
+  };
+  const heading = (t: string) => (
+    <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>{t}</p>
+  );
+
+  return (
+    <div className="mt-3 space-y-3">
+      {/* ── Languages ── */}
+      <div>
+        {heading('LANGUAGES')}
+        <p className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>
+          {languages.length === 0
+            // Not a blank — an empty restriction means "any language the
+            // platform runs", and an author who assumed the opposite has
+            // written a much easier question than they think.
+            ? 'Unrestricted — the candidate may answer in any language the platform runs.'
+            : languages.map((l) => LANGUAGE_LABEL[l as AuthoringLanguage] ?? l).join(', ')}
+        </p>
+      </div>
+
+      {/* ── Starter code ── */}
+      {languages.length > 0 && (
+        <div>
+          {heading('STARTER CODE')}
+          <div className="space-y-2">
+            {languages.map((lang) => {
+              const body = starter[lang] ?? '';
+              return (
+                <div key={lang}>
+                  <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)' }}>
+                    {LANGUAGE_LABEL[lang as AuthoringLanguage] ?? lang}
+                  </p>
+                  {body.trim().length > 0
+                    ? <div style={box}><code style={mono}>{body}</code></div>
+                    : <em className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                        Empty — the candidate opens a blank editor.
+                      </em>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Test suite ── */}
+      {showAnswers && (
+        <div>
+          {heading('TEST CASES')}
+          {suite.length === 0 ? (
+            <em className="text-xs" style={{ color: 'var(--ef-danger)' }}>
+              No test cases — this question cannot be marked.
+            </em>
+          ) : (
+            <>
+              <p className="text-xs mb-1.5" style={{ color: weight > 0 ? 'var(--ef-text-subtle)' : 'var(--ef-danger)' }}>
+                Total weight {weight} across {hidden} hidden and {suite.length - hidden} visible
+                {suite.length === 1 ? ' test' : ' tests'}
+                {/* The one number that decides whether the question marks at
+                    all. Visible tests default to zero weight, so a suite can
+                    look full and still award nothing. */}
+                {weight <= 0 && ' — no test carries weight, so this question cannot be marked.'}
+              </p>
+              <div className="space-y-1.5">
+                {suite.map((t, i) => (
+                  <div key={t.id} style={box}>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{i + 1}.</span>
+                      <span className="text-xs px-1.5 py-0.5" style={{
+                        background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)',
+                        borderRadius: 2, color: 'var(--ef-text-subtle)',
+                      }}>
+                        {t.visible ? 'Visible' : 'Hidden'}
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                        weight {defaultWeight(t)} · {COMPARISON_LABEL[t.comparison ?? 'trimmed']}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)' }}>Input</p>
+                        <code style={mono}>{t.stdin || '(empty)'}</code>
+                      </div>
+                      <div>
+                        <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)' }}>Expected</p>
+                        <code style={mono}>{t.expected || '(empty)'}</code>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export interface QuestionPreviewProps {
@@ -279,6 +423,7 @@ export function QuestionPreview({
     options, correctIds,
     modelAnswer,
     pairs, correctPairs,
+    codeSpec, tests,
     subject, topic, tags, difficulty, explanation,
   } = question;
 
@@ -315,6 +460,9 @@ export function QuestionPreview({
       )}
       {engine === 'match' && (
         <MatchPreview pairs={pairs} correctPairs={correctPairs} showAnswers={showAnswers} onImageClick={setLightboxUrl} />
+      )}
+      {engine === 'code' && (
+        <CodePreview codeSpec={codeSpec} tests={tests} showAnswers={showAnswers} />
       )}
 
       {/* ── Explanation ── */}

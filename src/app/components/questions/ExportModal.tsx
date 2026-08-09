@@ -153,9 +153,14 @@ async function questionsToXLSX(questions: Question[]): Promise<void> {
   const XLSX = await loadXlsx();
   const wb = XLSX.utils.book_new();
 
+  // One sheet per engine, and EVERY engine gets one. A question whose engine
+  // has no sheet is not exported at all — it does not appear, and nothing says
+  // it was dropped, so an author who exports their bank as a backup gets a file
+  // that is quietly short. That is how coding questions were being lost.
   const mcq   = questions.filter((q) => q.engine === 'mcq');
   const text  = questions.filter((q) => q.engine === 'text');
   const match = questions.filter((q) => q.engine === 'match');
+  const code  = questions.filter((q) => q.engine === 'code');
 
   // ── MCQ sheet ──────────────────────────────────────────────────
   if (mcq.length > 0) {
@@ -230,6 +235,42 @@ async function questionsToXLSX(questions: Question[]): Promise<void> {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Match');
   }
 
+  // ── Code sheet ─────────────────────────────────────────────────
+  //
+  // A coding question does not fit one flat row the way the others do: it
+  // carries a spec, a starter buffer per language, and a variable-length test
+  // suite whose stdin and expected output are multi-line. So the two nested
+  // parts are written as JSON in single cells rather than exploded into
+  // pair1_a / pair1_b style columns, which would need a column per test and
+  // would still mangle embedded newlines.
+  //
+  // This is a faithful BACKUP, not a re-import format — bulk upload has no
+  // code parser, and the sheet says so in its own column rather than letting
+  // someone discover it after editing a hundred rows.
+  if (code.length > 0) {
+    const rows = code.map((q) => ({
+      type: q.variant,
+      stem: q.stem,
+      languages: (q.codeSpec?.languages ?? []).join(', '),
+      starter_code_json: JSON.stringify(q.codeSpec?.starterCode ?? {}),
+      limits_json: JSON.stringify(q.codeSpec?.limits ?? {}),
+      // The suite is the answer key. It is included because this sheet exists
+      // to be a backup of the author's own bank — the same reason `correct`
+      // and `model_answer` are on the other sheets.
+      tests_json: JSON.stringify(q.tests ?? []),
+      test_count: (q.tests ?? []).length,
+      hidden_test_count: (q.tests ?? []).filter((t) => !t.visible).length,
+      subject: q.subject,
+      topic: q.topic,
+      tags: q.tags.join(', '),
+      difficulty: q.difficulty,
+      explanation: q.explanation,
+      stem_image_url: q.stemImage ?? '',
+      note: 'Backup only — coding questions cannot be re-imported via bulk upload.',
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Code');
+  }
+
   const ts = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `STRATUM_Questions_${ts}.xlsx`);
 }
@@ -265,6 +306,7 @@ const ENGINES = [
   { value: 'mcq',   label: 'MCQ'   },
   { value: 'text',  label: 'Text'  },
   { value: 'match', label: 'Match' },
+  { value: 'code',  label: 'Code'  },
 ];
 
 export function ExportModal({ questions, subjects, onClose }: ExportModalProps) {

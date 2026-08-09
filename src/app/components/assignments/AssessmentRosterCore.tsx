@@ -1317,6 +1317,35 @@ function ResponseViewer({
                           </p>
                         )}
 
+                        {/* WHY the run did not produce a verdict.
+
+                            The adapter writes a distinct reason for each way
+                            it can fail — 'Judge0 circuit breaker is open',
+                            'Judge0 create returned HTTP 403', 'Judge0 did not
+                            finish within the run deadline', 'Submission
+                            carries no tests' — and every one of them arrives
+                            here as the same `judge_unavailable` label. Without
+                            the reason, an unreachable cluster, a rate limit
+                            and a question authored with no test suite are
+                            indistinguishable on the one screen someone looks
+                            at when marks are missing.
+
+                            Operator text, deliberately: it names the adapter
+                            and the transport. It is safe HERE because this
+                            collection is staff-only, and it is stripped from
+                            the candidate's copy by redactForCandidate. */}
+                        {verdict?.failureReason && (
+                          <p className="text-xs px-2 py-1.5"
+                            style={{
+                              background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)',
+                              borderRadius: 2, color: 'var(--ef-text-muted)', lineHeight: 1.5,
+                              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                              wordBreak: 'break-word',
+                            }}>
+                            {verdict.failureReason}
+                          </p>
+                        )}
+
                         {/* Attempts, once any have been made. `5 of 5` with no
                             verdict is the exhausted case and the reason this
                             paper will not resolve on its own. */}

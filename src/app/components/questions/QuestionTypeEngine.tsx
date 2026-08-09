@@ -14,10 +14,12 @@ import {
   buildEmptyMCQ,
   buildEmptyText,
   buildEmptyMatch,
+  buildEmptyCode,
   getDuplicateCheckPool,
   findDuplicateCandidates,
   type CodeSpec,
   type CodeTest,
+  type CodeVariant,
 } from '../../../lib/questionBankService';
 import { validateCodeQuestion } from '../../../lib/codeAuthoring';
 import { CodeSpecEditor } from './CodeSpecEditor';
@@ -768,17 +770,35 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
   }, [stem, options, correctIds, subjectId, topicId]);
 
   // ── Type select ───────────────────────────────────────────────────
+  // Every engine names its own factory. The dispatch used to end in a bare
+  // `else` that meant "match", so picking a coding type built a MATCH draft:
+  // the new question opened with three blank match pairs and saved them to
+  // both documents. An exhaustive switch makes the next engine a build error
+  // here instead of silently inheriting whichever branch happens to be last.
   const selectType = (eng: QuestionEngine, vari: QuestionVariant) => {
     let empty: Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'>;
-    if (eng === 'mcq')       empty = buildEmptyMCQ(vari as MCQVariant);
-    else if (eng === 'text') empty = buildEmptyText(vari as TextVariant);
-    else                     empty = buildEmptyMatch();
+    switch (eng) {
+      case 'mcq':   empty = buildEmptyMCQ(vari as MCQVariant);   break;
+      case 'text':  empty = buildEmptyText(vari as TextVariant); break;
+      case 'match': empty = buildEmptyMatch();                   break;
+      case 'code':  empty = buildEmptyCode(vari as CodeVariant); break;
+      default: {
+        const never: never = eng;
+        throw new Error(`Unhandled question engine: ${String(never)}`);
+      }
+    }
 
     setEngine(eng); setVariant(vari);
     setStem(''); setStemImage(undefined);
     setOptions(empty.options);   setCorrectIds(empty.correctIds);
     setModelAnswer(empty.modelAnswer);
     setPairs(empty.pairs);       setCorrectPairs(empty.correctPairs);
+    // Reset the coding halves too. Without this, picking MCQ after starting a
+    // coding draft carried the old spec and suite along in state, and the
+    // engine === 'code' guard in handleSave was the only thing stopping them
+    // from being saved onto an MCQ.
+    setCodeSpec(empty.codeSpec ?? {});
+    setTests(empty.tests ?? []);
     setErrors({});
     setPhase('form');
   };

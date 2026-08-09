@@ -1746,6 +1746,36 @@ export function buildEmptyMatch(): Omit<Question, 'id' | 'isDeleted' | 'createdA
   };
 }
 
+/**
+ * A blank coding question.
+ *
+ * `codeSpec` and `tests` start EMPTY rather than pre-filled. An author picks
+ * their languages first and the starter-code fields appear for those; seeding
+ * a language would make that choice for them, and seeding a test would put a
+ * row in the suite that validateCodeQuestion then complains about.
+ *
+ * pairs / correctPairs / options are empty for the same reason they are on the
+ * text engine — this question has none. Before this factory existed the type
+ * picker fell through to buildEmptyMatch() for the code engine, so every
+ * coding question was created carrying three blank match pairs and three
+ * correctPairs, which then persisted to both documents.
+ */
+export function buildEmptyCode(variant: CodeVariant): Omit<Question, 'id' | 'isDeleted' | 'createdAt' | 'updatedAt'> {
+  return {
+    ...emptyBase,
+    engine: 'code',
+    variant,
+    stem: '',
+    options: [],
+    correctIds: [],
+    modelAnswer: '',
+    pairs: [],
+    correctPairs: [],
+    codeSpec: {},
+    tests: [],
+  };
+}
+
 // ══════════════════════════════════════════════════════════════════
 // DUPLICATE-CHECK POOL
 // ══════════════════════════════════════════════════════════════════

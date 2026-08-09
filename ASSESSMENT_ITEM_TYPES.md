@@ -54,9 +54,9 @@ Assessment Item
 │   └── ✅ Multi-question Passage
 │
 ├── Coding
-│   ├── ◻ Coding Challenge           ─┐
-│   ├── ◻ SQL Challenge               ├ need the sandbox — Extension Phase 2
-│   ├── ◻ Debugging                  ─┘
+│   ├── ✅ Coding Challenge          ─┐
+│   ├── ✅ SQL Challenge              ├ the `code` engine + Judge0 sandbox
+│   ├── ✅ Debugging                 ─┘
 │   ├── ✅ Output Prediction          ─┐ need no sandbox; shipped ahead of it
 │   └── ✅ Code Review                ─┘
 │
@@ -88,7 +88,7 @@ Assessment Item
     └── Adaptive Item
 ```
 
-**51 types. 15 are live.** Everything else is a name with a change list
+**51 types. 18 are live.** Everything else is a name with a change list
 attached, and §5 is that change list.
 
 ---
@@ -110,6 +110,9 @@ are ordinary questions.
 | Short Answer | `text` / `short` | manual |
 | Long Answer | `text` / `long` | manual |
 | Code Review | `text` / `codereview` | manual |
+| Coding Challenge | `code` / `challenge` | auto, from the judge verdict |
+| SQL Challenge | `code` / `sql` | auto, from the judge verdict |
+| Debugging | `code` / `debug` | auto, from the judge verdict |
 | Reading Comprehension | group kind `rc` | auto (children) |
 | Data Interpretation | group kind `di` | auto (children) |
 | Seating Arrangement | group kind `seating` | auto (children) |
@@ -253,7 +256,7 @@ live type has to satisfy — the list is derived from what `mcq`, `text` and
 | 12 | Server field whitelist | `sanitizeQuestionForStudent`, `functions/src/index.ts:4624` | **always — a field not on this allow-list never reaches the candidate** |
 | 13 | Grading branch | `scoreMCQMultiplier` / `scoreMatchMultiplier` + the dispatch at `functions/src/index.ts:~3910` | any auto- or hybrid-scored type |
 | 14 | Firestore rules validation | `firestore.rules` | new persisted fields |
-| 15 | Bulk upload + export | `bulkUploadParser.ts`, `ExportModal.tsx` (one sheet per engine) | new engine |
+| 15 | Bulk upload + export | `bulkUploadParser.ts`, `ExportModal.tsx` (one sheet per engine) | new engine — and export is not optional: an engine with no sheet is dropped from an export **silently**, which is how a bank backup quietly loses a whole question type. `code` has an export sheet and no upload parser, deliberately: a test suite is not a spreadsheet row, and the sheet says so in its own column. |
 | 16 | Selection rule kind | `RuleKind`, `assessmentService.ts:226` | only when selection semantics differ (as groups do) |
 
 **A new *variant* of an existing engine is cheap** — points 1, 4, 5, 6, 9, 13
@@ -281,7 +284,7 @@ code sandbox or game canvas breaks that correspondence in both directions.
 | `objective` | show one item, take one discrete response, score from a key | MCQ ×2, True/False, Fill in the Blank, **Match**, **Output Prediction**, Sequence, Numeric, Hotspot, Drag & Drop, Matrix/Grid, Psychometric, Adaptive — 13 | ✅ |
 | `subjective` | hold free text for a human grader | Short Answer, Long Answer, Essay, Case Analysis, Code Review — 5 | ✅ |
 | `grouped` | hold a passage/table on screen across its questions | all 8 grouped types | ✅ |
-| `coding` | run untrusted code or a query against test cases | Coding Challenge, SQL Challenge, Debugging | ◻ |
+| `coding` | run untrusted code or a query against test cases | Coding Challenge, SQL Challenge, Debugging | ✅ |
 | `game` | surrender the clock — the item owns its own timing | all 8 games | ◻ |
 | `media` | ask the OS for camera, mic, a drawing surface or a file | Audio, Video, Speech, Image Annotation, Whiteboard, File Upload | ◻ |
 | `practical` | embed a third-party tool or simulated system | Simulation, Virtual Lab, Spreadsheet, Design, Workflow | ◻ |
@@ -289,7 +292,7 @@ code sandbox or game canvas breaks that correspondence in both directions.
 
 An engine is live when at least one live item type sits on it — derived, like
 every other liveness statement here, so the section picker cannot offer a
-runtime that nothing can run in yet. Three are live, so a section lock is
+runtime that nothing can run in yet. Four are live, so a section lock is
 usually **one tick**.
 
 ### A renderer is not a runtime
@@ -476,29 +479,52 @@ are live. No new engine, no renderer change, no grading change — the group
 machinery from Extension Phase 1 already carries them. Worth doing next to any
 other grouped work rather than on its own.
 
-### Coding — Extension Phase 2
+### Coding — SHIPPED
 
-**Output Prediction and Code Review have shipped** — see §5b. Neither needs
-execution, so neither waited on the sandbox.
-
-The remaining three — Coding Challenge, SQL Challenge, Debugging — are designed
-in `PLATFORM_EXTENSION_PLAN.md` §4: a new `code` storage engine, a `CodingRule`
-selection kind, and an execution sandbox. **The sandbox, not the item type, is
-the real scope.** Buy rather than build: a self-hosted isolated runner (Judge0 /
-Piston) called from a Cloud Function, never from the client — the client is the
-party being tested. The editor should be CodeMirror 6, lazy-loaded, on the same
+All five coding types are live. Output Prediction and Code Review shipped first
+(§5b) because neither needs execution; Coding Challenge, SQL Challenge and
+Debugging followed on the `code` storage engine and a self-hosted Judge0,
+called from a Cloud Function and never from the client — the client is the
+party being tested. The editor is CodeMirror 6, lazy-loaded, on the same
 discipline the repo already applies to `xlsx`.
 
-The grading seam already exists and does not need inventing: a judge is
-asynchronous and untrusted, so it cannot run inside `gradeAttempt`, but
-`requiresManualReview` plus `passed: boolean | null` were built so a paper with
-unmarked essays isn't falsely reported as failed. Code questions reuse that
-state — pending at grade time, judged async, patched through `regradeAttempts`.
+The grading seam was reused rather than invented: a judge is asynchronous and
+untrusted, so it cannot run inside `gradeAttempt`. `requiresManualReview` plus
+`passed: boolean | null` already existed so a paper with unmarked essays isn't
+falsely reported as failed, and coding answers take the same state — pending at
+grade time, judged by `scheduledJudgeCoding`, re-scored when the paper settles.
 
-One decision that must be made explicitly rather than inherited: **negative
-marking on code.** `resolveGradingPolicy` would otherwise apply the section's
-penalty and deduct marks for a failing test case. Either give it a `code` branch
-or refuse negative marking on coding sections at validation time.
+**Negative marking on code opts in rather than inheriting.** Every other engine
+takes the exam-level switch as its default; coding resolves the flag from the
+section and difficulty row only, so an exam can penalise its MCQ sections by
+inheritance while its coding section does not. `resolveGradingPolicy` and its
+server twin both carry the branch.
+
+**No `CodingRule` selection kind was added, and none is needed.** A coding
+question is drawn by an ordinary topic rule like any other standalone item;
+what keeps it off a paper that cannot run it is the section engine lock (§5a),
+not a rule kind. `RuleKind` stays `topic | group`.
+
+#### What the candidate is actually asked for
+
+**Whole programs, not functions.** A submission is compiled and run as a
+complete program: it reads its input from stdin and is marked on what it prints
+to stdout, compared under the test's own comparison mode. There is no harness,
+no driver, and no function-signature contract — a candidate who writes only
+`int solve(int n) { … }` has written something that does not compile in the
+languages that need a `main`, and prints nothing in the ones that do not.
+
+This is what the starter templates in `codeSnippets.ts` exist to convey, and it
+is why every one of them is a runnable program that already reads stdin rather
+than a stub to fill in. It also means an author writing "implement the function
+`solve`" in a stem is describing a contract the platform does not enforce; the
+stem should ask for a program, and say what it reads and what it must print.
+
+A signature-based mode — author supplies a driver per language, candidate fills
+a body — is a real and separate piece of work: a driver field on `CodeSpec`, a
+per-language concatenation step in `buildCodeSubmission`, and an authoring UI
+that can verify the driver compiles against a reference solution. It is not
+built.
 
 ### Cognitive Games — Extension Phase 3
 
@@ -528,6 +554,11 @@ one-at-a-time delivery are a delivery-engine change, not an item type.
 ---
 
 ## 7 · Deliberately not done in this pass
+
+> Historical — this section records the scope of the *registry* pass, not the
+> current state. The `code` engine and its three variants landed afterwards
+> (§6, Coding). `RuleKind` and the migration position below are both still
+> accurate today.
 
 - **No new engine, variant or group kind.** Nothing about how a question is
   stored, selected, rendered or graded changed. The registry names things; it

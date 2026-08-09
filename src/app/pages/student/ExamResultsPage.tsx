@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, Shield,
   BarChart2, ArrowLeft, Award, Layers, ClipboardList, Eye,
-  ChevronDown, ChevronUp, BookOpen, AlertCircle,
+  ChevronDown, ChevronUp, BookOpen, AlertCircle, Clock,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, type Assessment } from '../../../lib/assessmentService';
@@ -26,6 +26,12 @@ import {
   type GradedAnswer,
 } from '../../../lib/submissionService';
 import { getExamQuestionsForStudent, type Question, type ExamQuestionGroup } from '../../../lib/questionBankService';
+import {
+  CODE_STATE_STUDENT_NOTE,
+  codeAnswerState,
+  codeSubmissionOf,
+} from '../../../lib/codeVerdictView';
+import { JUDGE_LANGUAGE_LABEL, type JudgeLanguage } from '../../components/exam/judgeTypes';
 import { StimulusBody, StimulusHeading } from '../../components/exam/QuestionRenderer';
 import {
   listReportsByAttempt,
@@ -102,6 +108,7 @@ function ReviewQuestion({
   marks,
   qNumber,
   group,
+  judgePending,
 }: {
   question: Question;
   answer: AttemptAnswer | undefined;
@@ -110,6 +117,8 @@ function ReviewQuestion({
   qNumber: number;
   /** Shared stimulus, when this question came from a grouped set. */
   group?: ExamQuestionGroup | null;
+  /** `attempts/{id}.codeJudgePending` — see codeVerdictView.ts. */
+  judgePending?: boolean;
 }) {
   // Correct-answer data comes from the server-populated gradedAnswers map
   // (questionAnswers itself is denied to students by Firestore rules). Falls
@@ -118,9 +127,27 @@ function ReviewQuestion({
   const correctPairs = graded?.correctPairs ?? question.correctPairs ?? [];
   const [open, setOpen] = useState(false);
 
+  // ── Coding ────────────────────────────────────────────────────
+  //
+  // Resolved before anything else on this row, because a coding answer is the
+  // one kind whose CORRECTNESS MAY NOT BE KNOWN YET. Everything below —
+  // the icon, the border colour, the answer body — has to ask this first or it
+  // reports a verdict the platform has not reached.
+  const isCode = question.engine === 'code';
+  const submission = useMemo(() => (isCode ? codeSubmissionOf(answer) : null), [isCode, answer]);
+  const codeState = useMemo(
+    () => (isCode ? codeAnswerState({ answer, graded, judgePending }) : null),
+    [isCode, answer, graded, judgePending],
+  );
+  const codePending = codeState !== null && codeState !== 'judged' && codeState !== 'invalidated';
+
   const studentAnswerText = useMemo(() => {
     if (!answer) return '(not answered)';
     const { type, value } = answer;
+    // Coding answers are rendered as a code block below, not as this line —
+    // a program is not a sentence, and folding it through `pre-wrap` destroys
+    // the indentation it is partly marked on.
+    if (isCode) return submission ? submission.source : '(not answered)';
     if (type === 'text') return (value as string) || '(not answered)';
     if (type === 'mcq') {
       const ids = Array.isArray(value) ? value : [value as string];
@@ -138,9 +165,15 @@ function ReviewQuestion({
         .join('\n');
     }
     return '(not answered)';
-  }, [answer, question]);
+  }, [answer, question, isCode, submission]);
 
   const isCorrect = useMemo(() => {
+    // UNJUDGED IS NOT WRONG. Without this the chain below runs out of engine
+    // branches and returns `false`, which put a red ✗ and a red border on a
+    // coding answer no judge had looked at — while the banner above the list
+    // said the paper was still being marked. Null renders as the neutral
+    // "pending" treatment, the same one a text answer awaiting a human gets.
+    if (codePending) return null;
     if (!answer || question.engine === 'text') return null;
     // Prefer the authoritative server result when present.
     if (graded && typeof graded.isCorrect === 'boolean') return graded.isCorrect;
@@ -155,10 +188,17 @@ function ReviewQuestion({
       return correctPairs.every((cp) => m[cp.leftId] === cp.rightId);
     }
     return false;
-  }, [answer, question, graded, correctIds, correctPairs]);
+  }, [answer, question, graded, correctIds, correctPairs, codePending]);
 
+  // KEYED ON `isCorrect === null`, NOT ON THE ENGINE.
+  //
+  // It used to read `engine === 'text' ? neutral : isCorrect ? ✓ : ✗`, which
+  // made "not a text question" mean "we know the answer". Text is not the only
+  // engine that can be unresolved — a coding answer waiting on the judge is
+  // the same situation and deserves the same neutral treatment. Text still
+  // returns null from the memo above, so nothing about it changes.
   const statusIcon =
-    question.engine === 'text'
+    isCorrect === null
       ? <Eye size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
       : isCorrect
         ? <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
@@ -170,8 +210,9 @@ function ReviewQuestion({
         border: '1px solid var(--ef-border)',
         borderRadius: 3,
         overflow: 'hidden',
+        // Same rule as statusIcon: unresolved is neutral, never red.
         borderLeft: `3px solid ${
-          question.engine === 'text' ? 'var(--ef-text-muted)'
+          isCorrect === null ? 'var(--ef-text-muted)'
           : isCorrect ? 'var(--ef-success-strong)'
           : 'var(--ef-danger)'
         }`,
@@ -249,17 +290,52 @@ function ReviewQuestion({
 
               {/* Student's answer */}
               <div>
-                <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>YOUR ANSWER</p>
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>YOUR ANSWER</p>
+                  {isCode && submission && (
+                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                      {JUDGE_LANGUAGE_LABEL[submission.language as JudgeLanguage] ?? submission.language}
+                    </span>
+                  )}
+                </div>
                 <div
                   className="px-3 py-2.5"
                   style={{
                     background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2,
-                    fontSize: 13, color: 'var(--ef-ink)', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+                    fontSize: isCode ? 12 : 13, color: 'var(--ef-ink)', lineHeight: 1.6,
+                    // `pre`, not `pre-wrap`, for code — the same decision
+                    // RichText's code blocks make. Re-flowing a program
+                    // destroys the indentation it is partly marked on, so it
+                    // scrolls sideways instead. Everything else keeps wrapping.
+                    whiteSpace: isCode && submission ? 'pre' : 'pre-wrap',
+                    ...(isCode && submission
+                      ? { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                          overflowX: 'auto' as const, maxHeight: '50vh', overflowY: 'auto' as const }
+                      : {}),
                   }}
                 >
                   {studentAnswerText}
                 </div>
               </div>
+
+              {/* Coding — where this answer is in the marking pipeline.
+                  NEVER a verdict: attemptVerdicts is denied to students, and
+                  per-test detail on hidden tests is an oracle for the suite.
+                  This says only what the platform owes them and when. */}
+              {isCode && codeState && CODE_STATE_STUDENT_NOTE[codeState] && (
+                <div className="flex items-start gap-2 px-3 py-2.5"
+                  style={{
+                    background: codePending ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)',
+                    border: '1px solid var(--ef-border)', borderRadius: 2,
+                  }}>
+                  {codeState === 'awaiting_judge'
+                    ? <Clock size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 2 }} />
+                    : <AlertCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 2 }} />}
+                  <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
+                    {CODE_STATE_STUDENT_NOTE[codeState]}
+                  </p>
+                </div>
+              )}
 
               {/* Correct answer (MCQ / Match only) */}
               {question.engine === 'mcq' && (
@@ -773,6 +849,7 @@ export function ExamResultsPage() {
                           marks={marksMap.get(qId) ?? 1}
                           qNumber={globalIdx + 1}
                           group={q.groupId ? groupMap.get(q.groupId) ?? null : null}
+                          judgePending={attempt.codeJudgePending === true}
                         />
                       );
                     })

@@ -28,10 +28,32 @@ Cloud Functions (scheduledJudgeCoding)
    └────────────────────────────────────────────┘
 ```
 
-**Nothing about this is reachable from the internet.** The API binds to
-`127.0.0.1:2358`; the VPC connector is the only route in, and it carries a
-token. Public Judge0 instances get found and mined on within hours — this is a
-well-documented outcome, not a hypothetical.
+**Nothing about this is reachable from the internet.** The API binds the host's
+internal address, `10.128.0.2:2358`, on a VM with no external IP; the VPC
+connector is the only route in, and it carries a token. Public Judge0 instances
+get found and mined on within hours — this is a well-documented outcome, not a
+hypothetical.
+
+**It is not bound to loopback, and that is not an oversight.** A Serverless VPC
+connector does not arrive on `127.0.0.1` — it arrives from its own range on the
+host's internal interface, so a loopback publish refuses every request from
+Cloud Functions while the connector, the firewall, the token and
+`JUDGE0_BASE_URL` all look correct. The symptom is `judge_unavailable` against a
+cluster that answers `curl` perfectly well from inside the box, and it is
+indistinguishable from an outage unless you know to look for it:
+
+```bash
+# From the VM. 401 means the API is up and demanding its token — that is the
+# healthy answer here.
+curl -o /dev/null -w '%{http_code}\n' http://10.128.0.2:2358/about   # -> 401
+curl -o /dev/null -w '%{http_code}\n' http://127.0.0.1:2358/about    # -> 000
+```
+
+The address is written in exactly two places — the `ports:` entry in
+`docker-compose.yml` and `JUDGE0_BASE_URL` in `functions/.env.<project>` — and
+they must agree. `verify.mjs` check **V-00** compares them, because a silent
+disagreement between those two files is precisely what the failure above looks
+like.
 
 **Workers have no network at all.** They sit on a Docker network declared
 `internal: true`, which removes the gateway rather than filtering it, and every
@@ -120,14 +142,16 @@ rather than after.
 The judge host is a dedicated appliance and deliberately has no Node toolchain,
 so run the check one of two ways — neither installs anything on it.
 
-**From Cloud Shell, over an SSH tunnel** (preferred: it also proves the API is
-bound to loopback, since the tunnel is the only way in):
+**From Cloud Shell, over an SSH tunnel** (preferred: it needs no public route to
+the cluster, and IAP proves there is not one):
 
 ```bash
-# Tab 1 — hold the tunnel open
-gcloud compute ssh judge0-host --zone=<zone> --tunnel-through-iap -- -N -L 2358:127.0.0.1:2358
+# Tab 1 — hold the tunnel open. The REMOTE end is the internal address the
+# server actually publishes; 127.0.0.1 there forwards to a port nothing is
+# listening on and every check below fails as "connection refused".
+gcloud compute ssh judge0-host --zone=<zone> --tunnel-through-iap -- -N -L 2358:10.128.0.2:2358
 
-# Tab 2
+# Tab 2 — 127.0.0.1 here is the LOCAL end of the tunnel, which is correct.
 cd ~/Exam_forge_1.0
 JUDGE0_URL=http://127.0.0.1:2358 AUTHN_TOKEN='<token>' npm run verify:judge0
 ```
@@ -141,12 +165,12 @@ someone remembers a setup step is not a gate.
 ```bash
 cd ~/Exam_forge_1.0
 docker run --rm --network host -v "$PWD":/app -w /app \
-  -e JUDGE0_URL=http://127.0.0.1:2358 -e AUTHN_TOKEN="$AUTHN_TOKEN" \
+  -e JUDGE0_URL=http://10.128.0.2:2358 -e AUTHN_TOKEN="$AUTHN_TOKEN" \
   node:22-alpine npm run verify:judge0
 ```
 
-`--network host` is what lets the container reach the API on the host's
-loopback. Quote the token in either form: base64 contains `/` and `+`.
+`--network host` is what lets the container reach the API on the host's internal
+interface. Quote the token in either form: base64 contains `/` and `+`.
 
 `infra/judge0/verify.mjs` is the only thing in this project that tests the
 sandbox itself. Everything else — limits, comparison, the adapter's failure
@@ -158,6 +182,7 @@ beside it. It checks:
 
 | | |
 |---|---|
+| V-00 | The published address agrees with `JUDGE0_BASE_URL`, and is not `0.0.0.0` |
 | V-01/02 | The cluster answers, and **refuses an unauthenticated request** |
 | V-03 | The pinned language ids match this instance |
 | V-04..06 | Code runs, compile errors are reported, stderr stays separate from stdout |
@@ -169,14 +194,23 @@ V-11 and V-12 are the ones to care about. A program that can reach the network
 can exfiltrate the paper and fetch an answer; the script tests that *property*
 rather than either mechanism that is supposed to provide it.
 
-Two checks still need shell access on the host and cannot be done over HTTP:
+Three checks still need shell access and cannot be made through the API:
 
 ```bash
-# Must FAIL — a worker that can reach the internet is a broken deployment.
+# 1. On the host. Must FAIL — a worker that can reach the internet is a
+#    broken deployment.
 docker compose exec workers curl -m 5 https://example.com ; echo "exit=$?"
 
-# Must fail from anywhere that is not the host.
-curl -m 5 http://<host-ip>:2358/system_info
+# 2. From any OTHER machine in the VPC — another VM, or Cloud Shell over IAP.
+#    Must answer 401. This is the route the connector takes, so it is the one
+#    that actually has to work, and it is the check the loopback bug failed.
+curl -m 5 -o /dev/null -w '%{http_code}\n' http://10.128.0.2:2358/about
+
+# 3. The VM must have no public address at all. Expect EMPTY output — an
+#    external IP here means 2358 is one firewall rule away from being a
+#    public code-execution service, whatever the bind address says.
+gcloud compute instances describe judge0-host --zone=<zone> \
+  --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
 ```
 
 ---

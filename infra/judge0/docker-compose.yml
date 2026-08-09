@@ -35,10 +35,30 @@ services:
     image: *judge0-image
     command: ["./scripts/server"]
     restart: always
-    # LOOPBACK ONLY. The VPC connector reaches this host; the internet does
-    # not. Never change to 0.0.0.0 without a firewall in front of it.
+    # INTERNAL INTERFACE ONLY, never 0.0.0.0.
+    #
+    # This was 127.0.0.1 and that was wrong: a Serverless VPC connector does
+    # NOT arrive on loopback. It arrives from the connector's own range on the
+    # host's internal address, so a loopback publish refuses the connection
+    # while every other layer — firewall, connector, secret, base URL — looks
+    # correct. The symptom is judge_unavailable against a cluster that answers
+    # curl perfectly well from inside the box.
+    #
+    # Diagnostic, from the VM:
+    #   curl -o /dev/null -w '%{http_code}' http://10.128.0.2:2358/about  -> 401
+    #   curl -o /dev/null -w '%{http_code}' http://127.0.0.1:2358/about   -> 000
+    # 401 is the correct answer here; it means the API is up and demanding its
+    # token.
+    #
+    # The address is hardcoded rather than 0.0.0.0 on purpose. 0.0.0.0 would
+    # publish on every interface, and this VM is one --address flag away from
+    # having a public one. Hardcoding fails CLOSED: if the VM is ever recreated
+    # with a different internal IP, nothing listens and the judge degrades to
+    # manual review, rather than the port quietly opening to the world.
+    # JUDGE0_BASE_URL in functions/.env.<project> carries the same address, so
+    # the two break together and are fixed together.
     ports:
-      - "127.0.0.1:2358:2358"
+      - "10.128.0.2:2358:2358"
     # The server and workers need the Postgres and Redis credentials to CONNECT,
     # not just to be started alongside them. Judge0 reads its configuration from
     # both the mounted judge0.conf and the process environment; connection

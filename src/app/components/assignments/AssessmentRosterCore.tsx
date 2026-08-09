@@ -16,7 +16,7 @@ import {
   CheckCircle2, Clock, PauseCircle, PlayCircle, MonitorSmartphone,
   ChevronRight, X, BookOpen, Search, Activity, WifiOff,
   Ban, CircleSlash, Hash, RotateCcw, XCircle, Minus,
-  FileText, Eye, Trash2, AlertCircle, Flag, Download,
+  FileText, Eye, Trash2, AlertCircle, Flag, Download, Code2,
 } from 'lucide-react';
 import { getAssessment, blockStudent, unblockStudent, setAttemptOverride, statusColor, resolveAllocatedStudents, isRuleAllocated, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
 import { reviewAudienceAllows, resultsAudienceAllows, type VisibilityAudience } from '../../../lib/visibility';
@@ -36,10 +36,23 @@ import {
   type ProvisionalGrade,
   softDeleteAttempt,
   getBreakState,
+  getCodeVerdicts,
   type Attempt,
   type AttemptAnswer,
   type GradedAnswer,
 } from '../../../lib/submissionService';
+import {
+  CODE_STATE_STAFF_NOTE,
+  MAX_JUDGE_ATTEMPTS,
+  RUN_STATUS_LABEL,
+  TEST_STATUS_LABEL,
+  codeAnswerState,
+  codeSubmissionOf,
+  judgeExhausted,
+  summariseVerdict,
+  type CodeVerdictDoc,
+} from '../../../lib/codeVerdictView';
+import { JUDGE_LANGUAGE_LABEL, type JudgeLanguage } from '../exam/judgeTypes';
 import { getQuestionsByIdsForReview, type Question } from '../../../lib/questionBankService';
 import { ResultsExportModal } from './ResultsExportModal';
 
@@ -833,10 +846,10 @@ function UnblockConfirmModal({
 }
 
 // ══════════════════════════════════════════════════════════════════
-// RESPONSE VIEWER — Correct / Wrong / Partial / Unattempted / Text
+// RESPONSE VIEWER — Correct / Wrong / Partial / Unattempted / Text / Code
 // ══════════════════════════════════════════════════════════════════
 
-type AnswerCategory = 'correct' | 'wrong' | 'penalized' | 'partial' | 'unattempted' | 'text';
+type AnswerCategory = 'correct' | 'wrong' | 'penalized' | 'partial' | 'unattempted' | 'text' | 'code';
 
 type ClassifiedItem = {
   question: Question;
@@ -847,13 +860,43 @@ type ClassifiedItem = {
   studentAnswer?: AttemptAnswer;
 };
 
+/**
+ * Which bucket does this answer belong in?
+ *
+ * ── THE CODING CASE, AND WHY IT NEEDED ITS OWN CATEGORY ───────────
+ *
+ * A coding answer waiting on the judge has `isCorrect: null` and zero marks,
+ * which is the same shape an unattempted question has. There was no `code`
+ * branch, so it fell to the bottom of the graded block and was classified
+ * UNATTEMPTED — a reviewer looking at a candidate who wrote forty minutes of
+ * code was told they had submitted nothing at all.
+ *
+ * 'code' is a PENDING bucket, exactly parallel to 'text'. Both mean "no mark
+ * yet, and that is not the candidate's doing": text is waiting for a human,
+ * code is waiting for the runner (or, having exhausted it, also for a human).
+ * A coding answer that HAS been judged is not in this bucket — it takes the
+ * ordinary correct/partial/wrong path, because by then it has a real mark.
+ */
 function classifyAnswer(
   q: Question,
   answer: AttemptAnswer | undefined,
   marks: number,
-  graded?: GradedAnswer
+  graded?: GradedAnswer,
+  judgePending?: boolean,
 ): { category: AnswerCategory; awarded: number } {
   if (!answer) return { category: 'unattempted', awarded: 0 };
+
+  // Ahead of the graded block: an unresolved coding answer must not reach the
+  // `isCorrect === null` fallback there, which reads it as unattempted.
+  if (q.engine === 'code') {
+    const state = codeAnswerState({ answer, graded, judgePending });
+    if (state === 'not_attempted') return { category: 'unattempted', awarded: 0 };
+    if (state === 'awaiting_judge' || state === 'needs_review') {
+      return { category: 'code', awarded: graded?.marksAwarded ?? 0 };
+    }
+    // 'judged' and 'invalidated' carry a real mark — fall through and be
+    // bucketed on it like every other engine.
+  }
 
   // Prefer the server-written verdict (gradedAnswers, populated by the
   // gradeAttempt / regradeAttempts Cloud Functions). It is the source of
@@ -926,6 +969,10 @@ const CATEGORY_CONFIG: Record<AnswerCategory, {
   partial:     { label: 'Partial',     bg: '#FFFBF0', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: '#D4A017',  icon: <AlertCircle size={11} strokeWidth={1.5} /> },
   unattempted: { label: 'Unattempted', bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border)', dot: 'var(--ef-text-muted)',  icon: <Minus size={11} strokeWidth={1.5} /> },
   text:        { label: 'Text',        bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8',  icon: <FileText size={11} strokeWidth={1.5} /> },
+  // Deliberately the same blue family as Text: both are "no mark yet, awaiting
+  // something", and a reviewer triaging a cohort should read them as one kind
+  // of outstanding work rather than as a fault.
+  code:        { label: 'Code',        bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8',  icon: <Code2 size={11} strokeWidth={1.5} /> },
 };
 
 function ResponseViewer({
@@ -939,6 +986,7 @@ function ResponseViewer({
   const [loading, setLoading]     = useState(true);
   const [activeTab, setActiveTab] = useState<AnswerCategory | 'all'>('all');
   const [expanded, setExpanded]   = useState<string | null>(null);
+  const [verdicts, setVerdicts]   = useState<Record<string, CodeVerdictDoc>>({});
 
   // Build marks + section-name lookup from assessment sections
   const marksMap = useMemo<Map<string, number>>(() => {
@@ -975,18 +1023,43 @@ function ResponseViewer({
       .finally(() => setLoading(false));
   }, [allIds.join(',')]); // eslint-disable-line
 
+  // ── The run detail, for coding questions only ─────────────────
+  //
+  // Verdicts live in attemptVerdicts because a student may read their own
+  // attempt and a verdict carries hidden-test output. Staff may read them, and
+  // until now no client code ever did — every compile message and every failed
+  // hidden test the judge reported was stored and shown to nobody.
+  //
+  // Fetched AFTER the questions, because only the questions say which ids are
+  // coding ones; a paper with none costs no reads at all.
+  const codeIds = useMemo(
+    () => questions.filter((q) => q.engine === 'code').map((q) => q.id),
+    [questions],
+  );
+
+  useEffect(() => {
+    if (codeIds.length === 0) { setVerdicts({}); return; }
+    let live = true;
+    getCodeVerdicts(attempt.id, codeIds)
+      .then((v) => { if (live) setVerdicts(v); })
+      .catch(() => { /* the answer still renders, without the run detail */ });
+    return () => { live = false; };
+  }, [attempt.id, codeIds.join(',')]); // eslint-disable-line
+
   // Classify every question
   const classified = useMemo<ClassifiedItem[]>(() => {
     return questions.map((q) => {
       const marks  = marksMap.get(q.id) ?? 0;
       const ans    = attempt.answers[q.id];
-      const { category, awarded } = classifyAnswer(q, ans, marks, attempt.gradedAnswers?.[q.id]);
+      const { category, awarded } = classifyAnswer(
+        q, ans, marks, attempt.gradedAnswers?.[q.id], attempt.codeJudgePending === true,
+      );
       return { question: q, sectionName: sectionNameMap.get(q.id) ?? '—', marks, awarded, category, studentAnswer: ans };
     });
-  }, [questions, attempt.answers, marksMap, sectionNameMap]);
+  }, [questions, attempt.answers, attempt.gradedAnswers, attempt.codeJudgePending, marksMap, sectionNameMap]);
 
   const counts = useMemo(() => {
-    const c = { correct: 0, wrong: 0, penalized: 0, partial: 0, unattempted: 0, text: 0 };
+    const c = { correct: 0, wrong: 0, penalized: 0, partial: 0, unattempted: 0, text: 0, code: 0 };
     classified.forEach((item) => { c[item.category]++; });
     return c;
   }, [classified]);
@@ -1005,6 +1078,7 @@ function ResponseViewer({
     { key: 'partial',     label: 'Partial',    count: counts.partial },
     { key: 'unattempted', label: 'Unattempted',count: counts.unattempted },
     { key: 'text',        label: 'Text',       count: counts.text },
+    { key: 'code',        label: 'Code',       count: counts.code },
   ] as RosterTab[]).filter((t) => t.key === 'all' || t.count > 0);
 
   if (loading) {
@@ -1060,6 +1134,22 @@ function ResponseViewer({
           const cfg = CATEGORY_CONFIG[item.category];
           const isOpen = expanded === item.question.id;
           const q = item.question;
+
+          // Coding: the program, its state, and the run — resolved up front so
+          // the answer body below can branch once. `submission` is null for a
+          // question the candidate never wrote in, which is what keeps an
+          // empty editor from rendering as an attempt.
+          const isCode     = q.engine === 'code';
+          const submission = isCode ? codeSubmissionOf(item.studentAnswer) : null;
+          const codeState  = isCode
+            ? codeAnswerState({
+                answer: item.studentAnswer,
+                graded: attempt.gradedAnswers?.[q.id],
+                judgePending: attempt.codeJudgePending === true,
+              })
+            : null;
+          const vdoc    = isCode ? verdicts[q.id] : undefined;
+          const verdict = vdoc?.verdict;
 
           // Resolve student's readable answer
           let studentAnswerText = '—';
@@ -1134,6 +1224,10 @@ function ResponseViewer({
                     ? `+${item.awarded}`
                     : item.category === 'text'
                     ? 'Manual'
+                    : item.category === 'code'
+                    // Distinguished at a glance in a cohort list: one of these
+                    // resolves itself, the other is work a person now owes.
+                    ? (codeState === 'awaiting_judge' ? 'Marking' : 'Review')
                     : '—'}
                 </span>
                 <Eye
@@ -1155,18 +1249,135 @@ function ResponseViewer({
 
                   {/* Student answer */}
                   <div>
-                    <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>Student's answer</p>
-                    <p className="text-xs px-2.5 py-2"
-                      style={{
-                        background: item.category === 'unattempted' ? 'var(--ef-canvas)' : cfg.bg,
-                        border: `1px solid ${item.category === 'unattempted' ? 'var(--ef-border)' : cfg.border}`,
-                        borderRadius: 2, color: 'var(--ef-ink)', lineHeight: 1.6,
-                      }}>
-                      {item.category === 'unattempted'
-                        ? <span style={{ color: 'var(--ef-text-muted)' }}>Not answered</span>
-                        : studentAnswerText}
-                    </p>
+                    <div className="flex items-baseline justify-between mb-1">
+                      <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Student's answer</p>
+                      {submission && (
+                        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                          {JUDGE_LANGUAGE_LABEL[submission.language as JudgeLanguage] ?? submission.language}
+                        </span>
+                      )}
+                    </div>
+                    {submission ? (
+                      // The program itself. `pre` and monospace, scrolling
+                      // sideways rather than wrapping: indentation is part of
+                      // what a reviewer is reading, and in some languages part
+                      // of what makes it run at all.
+                      <pre className="text-xs px-2.5 py-2"
+                        style={{
+                          background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)',
+                          borderRadius: 2, color: 'var(--ef-ink)', lineHeight: 1.55,
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                          margin: 0, overflowX: 'auto', maxHeight: '40vh', overflowY: 'auto',
+                        }}>
+                        {submission.source}
+                      </pre>
+                    ) : (
+                      <p className="text-xs px-2.5 py-2"
+                        style={{
+                          background: item.category === 'unattempted' ? 'var(--ef-canvas)' : cfg.bg,
+                          border: `1px solid ${item.category === 'unattempted' ? 'var(--ef-border)' : cfg.border}`,
+                          borderRadius: 2, color: 'var(--ef-ink)', lineHeight: 1.6,
+                        }}>
+                        {item.category === 'unattempted'
+                          ? <span style={{ color: 'var(--ef-text-muted)' }}>Not answered</span>
+                          : studentAnswerText}
+                      </p>
+                    )}
                   </div>
+
+                  {/* ── The run ──────────────────────────────────────
+                      Staff-only, and the first thing in this codebase to
+                      render attemptVerdicts at all. Hidden tests included:
+                      this panel is behind the same rules that keep the
+                      collection away from students, and a reviewer who cannot
+                      see WHY a hidden test failed cannot answer the question
+                      a candidate will ask them. */}
+                  {isCode && codeState && codeState !== 'not_attempted' && (
+                    <div>
+                      <div className="flex items-baseline justify-between mb-1">
+                        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Code runner</p>
+                        {verdict && (
+                          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                            {RUN_STATUS_LABEL[verdict.status]}
+                            {verdict.status === 'completed' && (() => {
+                              const s = summariseVerdict(verdict);
+                              return ` · ${s.passed}/${s.total} tests passed`;
+                            })()}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="px-2.5 py-2 flex flex-col gap-2"
+                        style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+
+                        {/* State first — it is the answer to "why is there no mark". */}
+                        {CODE_STATE_STAFF_NOTE[codeState] && (
+                          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
+                            {CODE_STATE_STAFF_NOTE[codeState]}
+                          </p>
+                        )}
+
+                        {/* Attempts, once any have been made. `5 of 5` with no
+                            verdict is the exhausted case and the reason this
+                            paper will not resolve on its own. */}
+                        {vdoc?.state && (
+                          <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                            Judging attempts: {vdoc.state.attempts} of {MAX_JUDGE_ATTEMPTS}
+                            {judgeExhausted(vdoc.state) && ' · gave up'}
+                            {vdoc.state.nextAttemptAt && !judgeExhausted(vdoc.state)
+                              && ` · next ${new Date(vdoc.state.nextAttemptAt).toLocaleTimeString()}`}
+                          </p>
+                        )}
+
+                        {/* Compile diagnostics — the single most useful thing
+                            here, and previously stored and shown to nobody. */}
+                        {verdict?.compileMessage && (
+                          <pre className="text-xs px-2 py-1.5"
+                            style={{
+                              background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)',
+                              borderRadius: 2, color: 'var(--ef-danger)', lineHeight: 1.5, margin: 0,
+                              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                              overflowX: 'auto', maxHeight: '20vh', overflowY: 'auto',
+                            }}>
+                            {verdict.compileMessage}
+                          </pre>
+                        )}
+
+                        {/* Per-test results, hidden tests included. */}
+                        {verdict && verdict.results.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            {verdict.results.map((r, i) => (
+                              <div key={r.testId} className="flex items-baseline gap-2 text-xs">
+                                <span style={{ color: 'var(--ef-text-muted)', minWidth: 46 }}>Test {i + 1}</span>
+                                <span style={{
+                                  color: r.status === 'passed' ? 'var(--ef-success-strong)' : 'var(--ef-danger)',
+                                }}>
+                                  {TEST_STATUS_LABEL[r.status]}
+                                </span>
+                                {typeof r.timeMs === 'number' && (
+                                  <span style={{ color: 'var(--ef-text-muted)' }}>{r.timeMs} ms</span>
+                                )}
+                                {r.stderr && (
+                                  <span className="truncate" style={{ color: 'var(--ef-text-muted)' }} title={r.stderr}>
+                                    {r.stderr.split('\n')[0]}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* No verdict document at all. Distinct from a verdict
+                            that says the run failed — nothing has been tried
+                            yet, or the sweep has not reached this paper. */}
+                        {!verdict && (
+                          <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                            No run recorded yet.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Correct answer (MCQ / match / text model) */}
                   {correctAnswerText && item.category !== 'correct' && (

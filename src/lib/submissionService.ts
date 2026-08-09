@@ -14,6 +14,10 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
 import { functions } from './firebase';
+// Type-only in BOTH directions — codeVerdictView imports AttemptAnswer from
+// here. Erased at compile, so there is no runtime cycle of the kind
+// itemTypes.ts warns about.
+import type { CodeVerdictDoc } from './codeVerdictView';
 import type { AnswerDiscriminant } from './itemTypes';
 import type { CorrectPair, Question } from './questionBankService';
 import { ensureSebToken, forceRefreshSebToken } from './assessmentService';
@@ -439,6 +443,19 @@ export type Attempt = {
   // the correct-answer payload (which students can never read from
   // questionAnswers directly). Empty on legacy / pre-migration attempts.
   gradedAnswers?: Record<string, GradedAnswer>;
+
+  /**
+   * This paper owes at least one coding answer to the judge.
+   *
+   * Set by `gradeAttempt` at submission and DELETED by `scheduledJudgeCoding`
+   * once every coding answer has settled — so its absence means judging is
+   * finished, not that it never started.
+   *
+   * Read by the review surfaces to tell "still being marked" from "could not
+   * be marked", which are identical in `gradedAnswers` (isCorrect null, zero
+   * awarded) and must not read the same to a student. See codeVerdictView.ts.
+   */
+  codeJudgePending?: boolean;
 
   // Anti-cheat
   integrityLog: IntegrityLog;
@@ -1750,4 +1767,55 @@ export function subscribeToAttemptsByAssessment(
   return onSnapshot(q, (snap) => {
     cb(snap.docs.map((d) => d.data() as Attempt));
   });
+}
+// ══════════════════════════════════════════════════════════════════
+// CODING VERDICTS — staff only
+// ══════════════════════════════════════════════════════════════════
+//
+// `attemptVerdicts` is the one collection a reviewer needs and a candidate may
+// never see. firestore.rules allows webOwner, and institute/faculty scoped to
+// their own institute; students are denied outright, because a verdict carries
+// hidden-test output and even the bare pass/fail list reconstructs the suite
+// by bisection.
+//
+// Until now NOTHING in the client read it. Every verdict the judge produced —
+// compile diagnostics, which hidden test failed, why a run never completed —
+// was written, stored, retained and shown to nobody. This is the reader.
+//
+// Doc ids are deterministic (`${attemptId}__${questionId}`, mirroring
+// codeVerdictDocId in functions/src/index.ts), so this is a direct get per
+// coding question rather than a query — no index, and no read cost on papers
+// that have no coding questions at all.
+
+/** Mirrors `codeVerdictDocId` in functions/src/index.ts — keep in EXACT sync. */
+export function codeVerdictDocId(attemptId: string, questionId: string): string {
+  return `${attemptId}__${questionId}`;
+}
+
+/**
+ * Load the judge verdicts for one attempt's coding questions.
+ *
+ * A missing document is NOT an error and NOT a zero — it means the sweep has
+ * not reached this submission yet. Callers get an absent map entry and are
+ * expected to render the pending state rather than an empty verdict.
+ *
+ * Permission failures are swallowed per-document on purpose: a reviewer whose
+ * scope does not cover this attempt should see the answer without the run
+ * detail, not an error page where the answer used to be.
+ */
+export async function getCodeVerdicts(
+  attemptId: string,
+  questionIds: string[],
+): Promise<Record<string, CodeVerdictDoc>> {
+  if (questionIds.length === 0) return {};
+  const out: Record<string, CodeVerdictDoc> = {};
+  await Promise.all(questionIds.map(async (qid) => {
+    try {
+      const snap = await getDoc(doc(db, 'attemptVerdicts', codeVerdictDocId(attemptId, qid)));
+      if (snap.exists()) out[qid] = snap.data() as CodeVerdictDoc;
+    } catch {
+      // Denied or offline — the answer still renders, without the run detail.
+    }
+  }));
+  return out;
 }

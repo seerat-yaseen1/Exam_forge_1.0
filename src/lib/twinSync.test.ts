@@ -33,6 +33,12 @@ import path from 'path';
 
 import { ANSWER_KEYS } from './questionAnswerSplit';
 import { AUTHORING_LANGUAGES } from './codeAuthoring';
+import {
+  MAX_JUDGE_ATTEMPTS,
+  RUN_STATUS_LABEL,
+  TEST_STATUS_LABEL,
+} from './codeVerdictView';
+import { codeVerdictDocId } from './submissionService';
 import { JUDGE_LANGUAGES } from '../app/components/exam/judgeTypes';
 
 const root = path.resolve(__dirname, '../..');
@@ -146,6 +152,69 @@ describe('student question whitelist', () => {
 // The branch's own unit tests passed the whole time, because they built
 // `type: 'code'` by hand. Testing both ends of a wire proves nothing about
 // the wire, which is what this file is for.
+
+// ══════════════════════════════════════════════════════════════════
+// THE VERDICT VOCABULARY — a fourth copy, and the newest
+// ══════════════════════════════════════════════════════════════════
+//
+// The review surfaces render attemptVerdicts, which are written by the
+// functions build from types in judgeCore.ts. The client cannot import them,
+// so codeVerdictView.ts restates the two status unions and the retry budget —
+// a twin, created knowingly, and therefore guarded here at the same time.
+//
+// What drift would cost: a status the server can emit and the client's label
+// map does not name renders as `undefined` in the run panel, on the screen a
+// reviewer uses to explain a mark to a candidate.
+
+/** Pull the members out of an `export type NAME = | 'a' | 'b';` declaration. */
+function unionMembers(source: string, name: string): string[] {
+  // Line comments go first. Every member of these unions is documented inline,
+  // and one of those comments contains a semicolon ("every test ran; per-test
+  // statuses are authoritative") — which terminated the match after a single
+  // member and made the assertion fail against a correct table.
+  const code = source.replace(/\/\/[^\n]*/g, '');
+  const m = code.match(new RegExp(`export type ${name} =([^;]*);`));
+  if (!m) {
+    throw new Error(
+      `Could not find the ${name} union in functions/src/judgeCore.ts. It was `
+      + 'renamed or reshaped — update this test deliberately rather than '
+      + 'deleting the assertion, because the twin it guards is still a twin.',
+    );
+  }
+  return Array.from(m[1].matchAll(/'([^']+)'/g)).map((x) => x[1]);
+}
+
+describe('judge verdict vocabulary — server types, client labels', () => {
+  it('RUN_STATUS_LABEL names every RunStatus the server can emit', () => {
+    expect(Object.keys(RUN_STATUS_LABEL).sort())
+      .toEqual(unionMembers(serverJudge, 'RunStatus').sort());
+  });
+
+  it('TEST_STATUS_LABEL names every TestStatus the server can emit', () => {
+    expect(Object.keys(TEST_STATUS_LABEL).sort())
+      .toEqual(unionMembers(serverJudge, 'TestStatus').sort());
+  });
+
+  it('MAX_JUDGE_ATTEMPTS matches the retry budget the sweep enforces', () => {
+    // The client shows "attempts N of MAX" and decides whether to say the
+    // runner gave up. A stale copy tells a reviewer a paper is still coming
+    // when the sweep stopped trying, or the reverse.
+    const m = serverJudge.match(/export const MAX_JUDGE_ATTEMPTS = (\d+)/);
+    expect(m).toBeTruthy();
+    expect(Number(m![1])).toBe(MAX_JUDGE_ATTEMPTS);
+  });
+
+  it('the verdict document id is built the same way on both sides', () => {
+    // A mismatch here does not error — it silently reads a document that does
+    // not exist, and every coding answer renders as "no run recorded yet".
+    const server = serverIndex.match(
+      /export function codeVerdictDocId\([^)]*\): string \{\s*return `([^`]+)`;/,
+    );
+    expect(server).toBeTruthy();
+    expect(server![1]).toBe('${attemptId}__${questionId}');
+    expect(codeVerdictDocId('att1', 'q1')).toBe('att1__q1');
+  });
+});
 
 describe('the answer discriminant has exactly one writer', () => {
   const examShell = read('src/app/pages/student/ExamShell.tsx');

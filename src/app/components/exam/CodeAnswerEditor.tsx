@@ -114,6 +114,36 @@ interface CodeAnswerEditorProps {
   onTelemetry?: (events: TelemetryEvent[], seq: number) => void;
 }
 
+/**
+ * One labelled block of sample text.
+ *
+ * `pre` with `whitespace-pre`, not `pre-wrap`: for a sample, the whitespace IS
+ * the data. "5 7" and "5\n7" are different inputs and a candidate debugging a
+ * parse needs to see which one they were given, so the block scrolls sideways
+ * rather than re-flowing. An empty string is rendered as a marker rather than
+ * as nothing, because "expected: nothing" and "expected: I forgot to fill this
+ * in" look identical when both render as blank.
+ */
+function SampleField({
+  label, value, tone,
+}: { label: string; value?: string; tone?: 'bad' }) {
+  if (value === undefined) return null;
+  return (
+    <div className="min-w-0">
+      <p className="text-xs opacity-50 mb-0.5">{label}</p>
+      <pre
+        className="text-xs rounded border px-2 py-1 overflow-x-auto"
+        style={{
+          whiteSpace: 'pre', margin: 0, maxHeight: 140, overflowY: 'auto',
+          opacity: tone === 'bad' ? 0.9 : 0.75,
+        }}
+      >
+        {value === '' ? '(empty)' : value}
+      </pre>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────
 
 export function CodeAnswerEditor({
@@ -531,10 +561,31 @@ export function CodeAnswerEditor({
                     <span className="text-xs opacity-50">{r.timeMs} ms</span>
                   )}
                 </div>
+                {/* The author's note for this sample, when they wrote one. */}
+                {r.label && (
+                  <p className="mt-1 text-xs opacity-70">{r.label}</p>
+                )}
+
+                {/* THE TEST ITSELF.
+                    A sample the candidate cannot read only tells them they are
+                    wrong, which is the one thing they already knew. Input and
+                    expected output are public for a visible test by
+                    definition — that is what "visible" means — and shown on a
+                    pass too, because a candidate checking their understanding
+                    of the input format needs them exactly as much when the
+                    test passes. */}
+                {(r.stdin !== undefined || r.expected !== undefined) && (
+                  <div className="mt-1.5 grid gap-1.5" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                    <SampleField label="Input" value={r.stdin} />
+                    <SampleField label="Expected output" value={r.expected} />
+                  </div>
+                )}
+
+                {/* Actual output, beside the expected it failed to match. */}
                 {r.status !== 'passed' && r.stdout !== undefined && (
-                  <pre className="mt-1 text-xs whitespace-pre-wrap opacity-80">
-                    Your output: {r.stdout || '(nothing)'}
-                  </pre>
+                  <div className="mt-1.5">
+                    <SampleField label="Your output" value={r.stdout} tone="bad" />
+                  </div>
                 )}
                 {r.stderr && (
                   <pre className="mt-1 text-xs whitespace-pre-wrap opacity-60">{r.stderr}</pre>

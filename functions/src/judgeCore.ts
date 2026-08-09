@@ -615,18 +615,55 @@ export function outcomeFor(verdict: JudgeVerdict, tests: JudgeTest[]): CodeOutco
  * `failureReason` is dropped too — it carries adapter and infrastructure
  * detail written for operators, not candidates.
  */
+/**
+ * One visible test as the candidate sees it: the result, plus THE TEST ITSELF.
+ *
+ * The three added fields are not a relaxation of the redaction. A visible test
+ * is defined at the top of this file as one "whose input, expected output and
+ * actual output ever reach a browser" — that sentence described an intention
+ * this function did not implement, so a candidate was shown "Sample 2 · Wrong
+ * output" and nothing they could act on: not the input that failed, not what
+ * was expected of them, not the author's note about it.
+ *
+ * A sample the candidate cannot read is a sample that only tells them they are
+ * wrong, which is the one thing they already knew.
+ */
+export interface CandidateTestView extends JudgeTestResult {
+  /** What this test fed the program. Visible tests only. */
+  stdin?: string;
+  /** What a correct program prints for it. Visible tests only. */
+  expected?: string;
+  /** The author's note for this sample, when they wrote one. */
+  label?: string;
+}
+
 export interface CandidateVerdict {
   status: RunStatus;
   compileMessage?: string;
-  /** Visible tests only, with their output intact. */
-  results: JudgeTestResult[];
+  /** Visible tests only, with their output AND their own text. */
+  results: CandidateTestView[];
   /** Aggregate over hidden tests, with no per-test detail. */
   hiddenCount: number;
   judgedAt: string;
 }
 
+/**
+ * Longest test text sent to a browser, per field.
+ *
+ * A sample is meant to be read by a person, so a large one is already a
+ * question that will not teach anybody anything. This is not a secrecy bound —
+ * the whole field is public by definition — it is the same reasoning as
+ * outputKb: a response whose size is set by author input needs a ceiling
+ * somewhere, and silently truncating a 2 MB sample beats sending it.
+ */
+export const MAX_SAMPLE_TEXT = 4 * 1024;
+
+function clip(s: string): string {
+  return s.length <= MAX_SAMPLE_TEXT ? s : `${s.slice(0, MAX_SAMPLE_TEXT)}\n… truncated`;
+}
+
 export function redactForCandidate(verdict: JudgeVerdict, tests: JudgeTest[]): CandidateVerdict {
-  const visibleIds = new Set(tests.filter((t) => t.visible).map((t) => t.id));
+  const visible = new Map(tests.filter((t) => t.visible).map((t) => [t.id, t]));
   const known = new Set(tests.map((t) => t.id));
 
   return {
@@ -635,7 +672,22 @@ export function redactForCandidate(verdict: JudgeVerdict, tests: JudgeTest[]): C
     // A result for a test id the suite does not contain is dropped rather than
     // passed through: an adapter that invents ids must not be able to smuggle
     // output past the visibility check.
-    results: verdict.results.filter((r) => visibleIds.has(r.testId) && known.has(r.testId)),
+    //
+    // The test text is attached from the SUITE, keyed by the same id that
+    // passed that check — never from anything the adapter returned. A hidden
+    // test has no entry in `visible`, so there is no path by which one could
+    // acquire a stdin or an expected on the way to a browser.
+    results: verdict.results.flatMap((r) => {
+      if (!known.has(r.testId)) return [];
+      const t = visible.get(r.testId);
+      if (!t) return [];
+      return [{
+        ...r,
+        stdin: clip(t.stdin),
+        expected: clip(t.expected),
+        ...(t.label ? { label: t.label } : {}),
+      }];
+    }),
     hiddenCount: tests.filter((t) => !t.visible).length,
     judgedAt: verdict.judgedAt,
   };

@@ -12,3 +12,9 @@ dist/
 
 # Downloaded by postinstall (face-api weights), not source
 public/models/
+
+# The ROOT project uses pnpm (pnpm-lock.yaml / pnpm-workspace.yaml). An npm
+# install here writes a second, conflicting lockfile — anchored to the root so
+# functions/package-lock.json, which is genuine (functions installs with npm),
+# is unaffected.
+/package-lock.json

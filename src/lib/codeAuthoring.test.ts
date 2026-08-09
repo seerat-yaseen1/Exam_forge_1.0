@@ -147,12 +147,27 @@ describe('validateCodeQuestion', () => {
       expect(warnings(issues).some((i) => i.message.includes('never be shown'))).toBe(true);
     });
 
-    it('warns when some offered languages have no starter and others do', () => {
+    it('says nothing when a language has no starter — it gets the platform template', () => {
+      // This used to warn "candidates get an empty editor for those", which is
+      // no longer true: starterFor falls back to the template library. Warning
+      // about it would send an author off to write boilerplate the platform
+      // already ships.
       const issues = validateCodeQuestion(
         { languages: ['python3', 'java'], starterCode: { python3: 'pass' } },
         [test()],
       );
-      expect(warnings(issues).some((i) => i.message.includes('empty editor'))).toBe(true);
+      expect(warnings(issues).some((i) => i.field === 'starterCode')).toBe(false);
+    });
+
+    it('warns about a starter the author deliberately blanked', () => {
+      // Absent and empty are different. An author who cleared the field gets a
+      // blank editor and should know that is what they asked for, because it
+      // is one keystroke away from the case above.
+      const issues = validateCodeQuestion(
+        { languages: ['python3'], starterCode: { python3: '   ' } },
+        [test()],
+      );
+      expect(warnings(issues).some((i) => i.message.includes('blank'))).toBe(true);
     });
 
     it('says nothing when no language has starter code — that is a valid choice', () => {

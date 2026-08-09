@@ -18,6 +18,9 @@ import {
   totalWeight,
   type AuthoringLanguage,
 } from '../../../lib/codeAuthoring';
+// The exam's own resolver, imported rather than reimplemented. A second copy
+// of "what does the editor open into" is how the preview starts lying.
+import { starterFor } from '../exam/codeAnswer';
 import { RichText } from './RichText';
 
 // ── Badges ────────────────────────────────────────────────────────────────────
@@ -327,11 +330,21 @@ function CodePreview({
           {heading('STARTER CODE')}
           <div className="space-y-2">
             {languages.map((lang) => {
-              const body = starter[lang] ?? '';
+              // Through the SAME resolver the exam uses, not the raw field.
+              // The preview exists so an author sees what is delivered; reading
+              // starterCode directly would show "blank" for every language they
+              // had not filled in, while the candidate opens the platform
+              // template — which is the preview being wrong about the one thing
+              // it is for.
+              const body = starterFor(codeSpec, lang);
+              const authored = typeof starter[lang] === 'string';
               return (
                 <div key={lang}>
                   <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)' }}>
                     {LANGUAGE_LABEL[lang as AuthoringLanguage] ?? lang}
+                    {!authored && body.trim().length > 0 && (
+                      <span style={{ marginLeft: 6, opacity: 0.7 }}>· platform template</span>
+                    )}
                   </p>
                   {body.trim().length > 0
                     ? <div style={box}><code style={mono}>{body}</code></div>

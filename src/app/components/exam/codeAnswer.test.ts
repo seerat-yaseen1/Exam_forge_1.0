@@ -17,6 +17,7 @@ import {
   starterFor,
 } from './codeAnswer';
 import { JUDGE_LANGUAGES } from './judgeTypes';
+import { STARTER_TEMPLATES } from '../../../lib/codeSnippets';
 
 const spec = {
   languages: ['python3', 'java'],
@@ -119,15 +120,47 @@ describe('bufferForLanguage', () => {
     expect(bufferForLanguage('java', {}, spec)).toBe(spec.starterCode.java);
   });
 
-  it('is empty when there is neither a draft nor a starter', () => {
-    expect(bufferForLanguage('rust', {}, spec)).toBe('');
+  it('opens an untouched language on the platform template', () => {
+    // `spec` names no Rust starter, so this used to be a blank editor. A
+    // candidate switching to Rust mid-question now gets the same runnable stub
+    // they would have got had they started there.
+    expect(bufferForLanguage('rust', {}, spec)).toBe(STARTER_TEMPLATES.rust);
   });
 });
 
 describe('starterFor', () => {
-  it('is empty when the question ships none', () => {
-    expect(starterFor(undefined, 'python3')).toBe('');
-    expect(starterFor({ starterCode: {} }, 'python3')).toBe('');
+  it('uses what the author wrote, when they wrote one', () => {
+    expect(starterFor(spec, 'python3')).toBe(spec.starterCode.python3);
+  });
+
+  it('falls back to the platform template when the author wrote none', () => {
+    // The template library existed and nothing delivered it: this returned ''
+    // for any language the author had not clicked "insert template" on, while
+    // resolveLanguages reads an unrestricted question as offering all thirteen.
+    // A question authored the default way opened blank in every one of them.
+    expect(starterFor(undefined, 'python3')).toBe(STARTER_TEMPLATES.python3);
+    expect(starterFor({ starterCode: {} }, 'java')).toBe(STARTER_TEMPLATES.java);
+  });
+
+  it('honours a deliberately blank starter', () => {
+    // Absent and empty are different answers to different questions. Never
+    // said → the template. Opened the field and cleared it → a blank page,
+    // which some questions genuinely want.
+    expect(starterFor({ starterCode: { python3: '' } }, 'python3')).toBe('');
+  });
+
+  it('is empty for a language the platform has no template for', () => {
+    expect(starterFor(undefined, 'cobol')).toBe('');
+  });
+
+  it('keeps the answered/unanswered contract intact', () => {
+    // The whole point of the fallback being HERE: answerFrom compares against
+    // this same resolver, so a candidate who opens a question and touches
+    // nothing still has no answer — now with a template on screen instead of
+    // an empty box.
+    expect(answerFrom('python3', STARTER_TEMPLATES.python3, undefined)).toBeNull();
+    expect(answerFrom('python3', `${STARTER_TEMPLATES.python3}\nprint(1)\n`, undefined))
+      .not.toBeNull();
   });
 });
 

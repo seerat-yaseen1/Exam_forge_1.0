@@ -8,12 +8,19 @@
  * so those are here, as pure functions, where the suite can reach them.
  */
 
+import { STARTER_TEMPLATES } from '../../../lib/codeSnippets';
 import type { JudgeLanguage } from './judgeTypes';
 
 /** Author-supplied delivery settings for a coding question. */
 export interface CodeSpec {
   languages?: string[];
-  /** Per-language starting buffer. Absent means an empty editor. */
+  /**
+   * Per-language starting buffer.
+   *
+   * ABSENT means the platform's own template for that language — see
+   * `starterFor`. An explicit empty string means the author wants a blank
+   * editor and is honoured; the two are deliberately different.
+   */
   starterCode?: Record<string, string>;
 }
 
@@ -27,8 +34,44 @@ function normalise(s: string): string {
   return s.replace(/\r\n?/g, '\n').trim();
 }
 
+/**
+ * What the editor opens into.
+ *
+ * ── WHY THERE IS A FALLBACK ───────────────────────────────────────
+ *
+ * codeSnippets.ts carries a runnable stub for every language the platform
+ * runs, and its own docstring calls them "the boilerplate an author should not
+ * be retyping", on the grounds that "an empty editor is a worse question than
+ * a stub: it makes every candidate spend their first minutes on the same
+ * ceremony — imports, a main, reading stdin — none of which is what the
+ * question is testing".
+ *
+ * Nothing delivered them. They were reachable only through an "insert
+ * template" button in the authoring drawer, per language, one click each — and
+ * this function returned '' for anything the author had not clicked. Meanwhile
+ * `resolveLanguages` reads an unrestricted question as offering ALL of them.
+ * So the default authoring path — do not restrict languages, do not write
+ * starter code — shipped a question that offers thirteen languages and opens
+ * BLANK in every one, which is precisely the state the template library exists
+ * to prevent.
+ *
+ * ── ABSENT AND EMPTY ARE DIFFERENT ────────────────────────────────
+ *
+ * `undefined` means the author never said, and gets the platform template.
+ * An explicit '' means they opened the field and cleared it, which is a
+ * decision and is honoured — some questions genuinely want a blank page, and
+ * an author who wants one must be able to ask for it.
+ *
+ * The whole answered/unanswered contract rides on this function: `answerFrom`
+ * compares the buffer against whatever this returns, so a candidate who never
+ * touches the template still has NO answer. Changing what a question opens
+ * into changes nothing about that, because both sides ask the same question
+ * here.
+ */
 export function starterFor(spec: CodeSpec | undefined, language: string): string {
-  return spec?.starterCode?.[language] ?? '';
+  const authored = spec?.starterCode?.[language];
+  if (typeof authored === 'string') return authored;
+  return STARTER_TEMPLATES[language as keyof typeof STARTER_TEMPLATES] ?? '';
 }
 
 /**

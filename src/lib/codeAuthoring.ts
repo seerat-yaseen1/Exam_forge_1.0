@@ -113,9 +113,22 @@ export function validateCodeQuestion(
     if (orphaned.length > 0) {
       warn('starterCode', `Starter code for ${orphaned.join(', ')} will never be shown — that language is not offered.`);
     }
-    const missing = languages.filter((l) => !starterKeys.includes(l) && unknown.indexOf(l) === -1);
-    if (starterKeys.length > 0 && missing.length > 0) {
-      warn('starterCode', `No starter code for ${missing.join(', ')} — candidates get an empty editor for those.`);
+    // NOT "no starter code for X". A language the author never filled in gets
+    // the platform's own template (starterFor), so silence there is correct
+    // and the old warning said the opposite — it promised an empty editor that
+    // no longer happens, and only said so if the author had filled in at least
+    // one other language, which made it arbitrary as well as wrong.
+    //
+    // What IS worth saying is the deliberate blank: an author who opened the
+    // field and cleared it gets exactly that, and should know the difference
+    // between clearing it and leaving it alone.
+    const blanked = languages.filter(
+      (l) => starterKeys.includes(l) && (spec?.starterCode?.[l] ?? '').trim().length === 0,
+    );
+    if (blanked.length > 0) {
+      warn('starterCode',
+        `Starter code for ${blanked.join(', ')} is blank, so candidates open an empty editor. `
+        + 'Leave it unset instead to use the platform template.');
     }
   }
 

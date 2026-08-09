@@ -21,6 +21,7 @@ import {
 import { getAssessment, blockStudent, unblockStudent, setAttemptOverride, statusColor, resolveAllocatedStudents, isRuleAllocated, type Assessment, type AssessmentSection } from '../../../lib/assessmentService';
 import { reviewAudienceAllows, resultsAudienceAllows, type VisibilityAudience } from '../../../lib/visibility';
 import { AssessmentReportsPanel } from './AssessmentReportsPanel';
+import { CodeReplayPanel } from './CodeReplayPanel';
 import {
   getStudentsByInstitute,
   getAllStudents,
@@ -1475,6 +1476,25 @@ function ResponseViewer({
                             No run recorded yet.
                           </p>
                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── How it was written ───────────────────────────
+                      Only where there is a program to have written. Loads on
+                      demand — a recording is hundreds of documents and a
+                      reviewer opens one for a small fraction of the answers
+                      they read. */}
+                  {isCode && submission && (
+                    <div>
+                      <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>Session replay</p>
+                      <div className="px-2.5 py-2"
+                        style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                        <CodeReplayPanel
+                          attemptId={attempt.id}
+                          questionId={q.id}
+                          instituteId={attempt.instituteId ?? null}
+                        />
                       </div>
                     </div>
                   )}

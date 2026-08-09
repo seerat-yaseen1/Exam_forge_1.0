@@ -34,7 +34,7 @@ const {
   assertFails,
   assertSucceeds,
 } = require('@firebase/rules-unit-testing');
-const { doc, getDoc, setDoc, updateDoc } = require('firebase/firestore');
+const { collection, doc, documentId, getDoc, getDocs, query, setDoc, updateDoc, where } = require('firebase/firestore');
 const { ref: storageRef, getBytes, listAll, uploadBytes } = require('firebase/storage');
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
@@ -344,6 +344,45 @@ async function R09() {
     }));
   await denied('not even the webOwner writes one from a client',
     () => updateDoc(doc(asWebOwner(), 'attemptTelemetry/att_1__q_code__0000'), { events: [] }));
+
+  // ── The QUERY the replay panel actually runs ──────────────────
+  //
+  // A get and a query are judged differently. For a get the rule sees the
+  // document; for a query Firestore must be able to PROVE from the query
+  // itself that every possible result passes, and this rule tests
+  // resource.data.instituteId. A chunk range on its own is therefore refused
+  // for faculty however innocent the documents are — the reader adds the
+  // instituteId equality to make it provable, and that constraint is load
+  // bearing rather than cosmetic. Asserted here because it is invisible in
+  // the reader and a "tidy-up" would delete it.
+  const chunkRange = (as) => getDocs(query(
+    collection(as, 'attemptTelemetry'),
+    where('instituteId', '==', 'inst_1'),
+    where(documentId(), '>=', 'att_1__q_code__'),
+    where(documentId(), '<=', 'att_1__q_code__'),
+  ));
+
+  await allowed('faculty may query the chunk range for their own institute',
+    () => chunkRange(asFaculty('fac_1', 'inst_1')));
+  await allowed('so may the webOwner',
+    () => chunkRange(asWebOwner()));
+  await denied('a student may not, even for their own recording',
+    () => chunkRange(asStudent('stu_1', 'inst_1')));
+
+  await denied('an unconstrained chunk range is refused — this is why the reader names the institute',
+    () => getDocs(query(
+      collection(asFaculty('fac_1', 'inst_1'), 'attemptTelemetry'),
+      where(documentId(), '>=', 'att_1__q_code__'),
+      where(documentId(), '<=', 'att_1__q_code__'),
+    )));
+
+  await denied('nor may faculty elsewhere name someone else\'s institute',
+    () => getDocs(query(
+      collection(asFaculty('fac_2', 'inst_2'), 'attemptTelemetry'),
+      where('instituteId', '==', 'inst_1'),
+      where(documentId(), '>=', 'att_1__q_code__'),
+      where(documentId(), '<=', 'att_1__q_code__'),
+    )));
 }
 
 // ═══════════════════════════════════════════════════════════════════

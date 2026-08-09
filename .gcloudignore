@@ -1,0 +1,5 @@
+node_modules/
+.git/
+sa-key.json
+.env*
+*.tgz

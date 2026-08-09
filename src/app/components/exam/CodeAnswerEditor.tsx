@@ -51,6 +51,7 @@ import {
   answerFrom,
   bufferForLanguage,
   initialLanguage,
+  isUnmodifiedStarter,
   resolveLanguages,
   runSummary,
   starterFor,
@@ -142,7 +143,8 @@ export function CodeAnswerEditor({
   const [remaining, setRemaining] = useState<number | null>(null);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const viewRef = useRef<{ destroy: () => void; state: { doc: { toString(): string } };
+  const viewRef = useRef<{ destroy: () => void;
+                           state: { doc: { toString(): string; length: number } };
                            dispatch: (t: unknown) => void } | null>(null);
 
   // Latest onChange without re-creating the editor on every parent render.
@@ -322,6 +324,67 @@ export function CodeAnswerEditor({
     setRunNotice(null);
   }, [language, source, codeSpec, onChange]);
 
+  // ── Reset to the starter ────────────────────────────────────────
+  //
+  // TWO CLICKS, DELIBERATELY. This destroys work, it sits inches from the Run
+  // button a candidate presses repeatedly, and there is no undo they will
+  // think of under time pressure. A native confirm() is not the answer either:
+  // it blocks, a kiosk browser may suppress it, and a modal over an exam reads
+  // as something having gone wrong.
+  //
+  // The armed state disarms itself after a few seconds, so a stray click
+  // cannot leave a live confirmation for a second stray click to complete
+  // minutes later.
+  const [armed, setArmed] = useState(false);
+  const disarmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (disarmRef.current) clearTimeout(disarmRef.current); }, []);
+
+  const disarm = useCallback(() => {
+    if (disarmRef.current) clearTimeout(disarmRef.current);
+    disarmRef.current = null;
+    setArmed(false);
+  }, []);
+
+  const resetToStarter = useCallback(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const starter = starterFor(specRef.current, langRef.current);
+
+    // BEFORE the change, so the replacement that follows can be recognised as
+    // a reset rather than reported as a paste-shaped insertion.
+    record({ k: 'reset', t: now() });
+
+    // Dispatched into CodeMirror rather than set through React state: the view
+    // is only rebuilt when the LANGUAGE changes, so a state update alone would
+    // leave the editor showing the old buffer while everything else believed
+    // it had been reset.
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: starter },
+    });
+
+    // The per-language draft has to go too, or switching away and back would
+    // restore the work the candidate just discarded.
+    draftsRef.current[langRef.current] = starter;
+    setVerdict(null);
+    setRunNotice(null);
+    disarm();
+    // The editor's own change listener does the rest — it records the edit,
+    // updates `source`, and calls onChange, which resolves to "unanswered"
+    // because the buffer now matches the starter again.
+  }, [record, disarm]);
+
+  const onResetClick = useCallback(() => {
+    if (armed) { resetToStarter(); return; }
+    setArmed(true);
+    if (disarmRef.current) clearTimeout(disarmRef.current);
+    disarmRef.current = setTimeout(() => setArmed(false), 4000);
+  }, [armed, resetToStarter]);
+
+  // Nothing to put back. Also the state a candidate is in before they have
+  // typed anything, where the button would only invite a misclick.
+  const atStarter = isUnmodifiedStarter(source, starterFor(codeSpec, language));
+
   // ── Run ─────────────────────────────────────────────────────────
   const run = useCallback(async () => {
     if (!onRun || running) return;
@@ -397,7 +460,33 @@ export function CodeAnswerEditor({
             )}
           </>
         )}
+
+        {/* Pushed to the far end, away from Run. The two buttons do opposite
+            things and one of them cannot be undone. */}
+        <button
+          type="button"
+          className="text-sm rounded px-3 py-1 border disabled:opacity-40 ml-auto"
+          onClick={onResetClick}
+          onBlur={disarm}
+          disabled={locked || !ready || atStarter}
+          title={atStarter
+            ? 'The editor already holds the starter code'
+            : 'Replace your code with the starter code for this language'}
+          style={armed
+            ? { borderColor: 'var(--ef-danger)', color: 'var(--ef-danger)' }
+            : undefined}
+        >
+          {armed ? 'Discard my code?' : 'Reset'}
+        </button>
       </div>
+
+      {armed && (
+        <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>
+          This replaces everything you have written for{' '}
+          {JUDGE_LANGUAGE_LABEL[language]} with the starter code. Click again to
+          confirm, or click away to cancel.
+        </p>
+      )}
 
       {/* ── Editor ──
           data-exam-code-editor is what IntegrityEngine keys its clipboard

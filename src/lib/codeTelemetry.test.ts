@@ -148,6 +148,34 @@ describe('summarise', () => {
     expect(s.largestInsert).toBe(600);
   });
 
+  describe('reset', () => {
+    it('counts a reset, and attributes its text to nobody', () => {
+      // The starter code a candidate asked to have back is not something they
+      // typed and not something they pasted. Counting it either way reports
+      // the platform's own boilerplate as the candidate's work — in
+      // typedChars, or in the paste count a reviewer reads as a signal.
+      const s = summarise([
+        { k: 'reset', t: 100 },
+        ins(101, 0, 'x'.repeat(600)),
+        ins(2000, 600, 'hello', 400),
+      ]);
+      expect(s.resets).toBe(1);
+      expect(s.pasteShaped).toBe(0);
+      expect(s.typedChars).toBe(5);
+      expect(s.largestInsert).toBe(5);
+    });
+
+    it('still counts a real paste that comes after one', () => {
+      const s = summarise([
+        { k: 'reset', t: 100 },
+        ins(101, 0, 'x'.repeat(600)),        // the reset's replacement
+        ins(5000, 600, 'y'.repeat(600)),     // a separate block, later
+      ]);
+      expect(s.resets).toBe(1);
+      expect(s.pasteShaped).toBe(1);
+    });
+  });
+
   it('returns zeroes for an empty stream rather than throwing', () => {
     // A candidate who opened a question and wrote nothing is a real case, and
     // the analytics view must render it.

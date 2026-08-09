@@ -126,7 +126,7 @@ export function duration(frames: ReplayFrame[]): number {
 // MARKS — what a reviewer scrubs to
 // ══════════════════════════════════════════════════════════════════
 
-export type MarkKind = 'paste' | 'run' | 'blur' | 'lang' | 'idle';
+export type MarkKind = 'paste' | 'run' | 'blur' | 'lang' | 'idle' | 'reset';
 
 export interface ReplayMark {
   t: number;
@@ -152,6 +152,12 @@ export function buildMarks(
 ): ReplayMark[] {
   const marks: ReplayMark[] = [];
   let prevEnd: number | null = null;
+  // A Reset click replaces the whole buffer, which has the exact shape of a
+  // paste: hundreds of characters in one event at a rate nobody types at.
+  // Attributing the platform's own starter code to the candidate, in the mark
+  // colour reserved for things worth a second look, would be a false signal on
+  // a screen used to form judgements about a person.
+  let prevWasReset = false;
 
   events.forEach((e, index) => {
     if (prevEnd !== null && e.t - prevEnd >= opts.idleGapMs) {
@@ -161,7 +167,7 @@ export function buildMarks(
     prevEnd = e.t + (isEdit(e) ? (e.dur ?? 0) : 0);
 
     if (isEdit(e)) {
-      if (e.text.length >= opts.pasteMinChars) {
+      if (!prevWasReset && e.text.length >= opts.pasteMinChars) {
         const seconds = (e.dur ?? 0) / 1000;
         const rate = seconds > 0 ? e.text.length / seconds : Infinity;
         if (rate > opts.pasteMaxCharsPerSec) {
@@ -173,11 +179,15 @@ export function buildMarks(
           });
         }
       }
+      prevWasReset = false;
       return;
     }
-    if (e.k === 'run')  marks.push({ t: e.t, kind: 'run',  label: 'Ran sample tests', index });
-    if (e.k === 'blur') marks.push({ t: e.t, kind: 'blur', label: 'Left the editor', index });
-    if (e.k === 'lang') marks.push({ t: e.t, kind: 'lang', label: `Switched to ${e.to}`, index });
+    if (e.k === 'run')   marks.push({ t: e.t, kind: 'run',   label: 'Ran sample tests', index });
+    if (e.k === 'blur')  marks.push({ t: e.t, kind: 'blur',  label: 'Left the editor', index });
+    if (e.k === 'lang')  marks.push({ t: e.t, kind: 'lang',  label: `Switched to ${e.to}`, index });
+    if (e.k === 'reset') marks.push({ t: e.t, kind: 'reset', label: 'Reset to the starter code', index });
+
+    prevWasReset = e.k === 'reset';
   });
 
   return marks;

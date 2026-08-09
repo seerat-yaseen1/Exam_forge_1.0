@@ -266,6 +266,22 @@ export function CodeAnswerEditor({
           );
         }),
         EditorView.editable.of(!disabled),
+        // FILL THE HOST, and scroll inside itself.
+        //
+        // CodeMirror sizes to its content by default, which is right in a
+        // stacked column and wrong in a split pane: without this the editor
+        // grows past the bottom of the viewport as the candidate types, the
+        // whole page scrolls instead of the code, and the toolbar with the Run
+        // button leaves the screen. `height: 100%` on the editor plus overflow
+        // on the scroller is the CM6 recipe for "fill what you are given".
+        //
+        // Harmless where there is nothing to fill: the host keeps minHeight
+        // 240 and no definite height, so 100% resolves to the content height
+        // and the stacked layout behaves as it always did.
+        EditorView.theme({
+          '&': { height: '100%' },
+          '.cm-scroller': { overflow: 'auto' },
+        }),
       ];
       if (grammar) extensions.push(grammar);
 
@@ -345,7 +361,12 @@ export function CodeAnswerEditor({
   const locked = disabled || running;
 
   return (
-    <div className="flex flex-col gap-3">
+    // `h-full min-h-0` so the editor can FILL a split-pane column instead of
+    // sitting at its minimum with the rest of the column empty. In the stacked
+    // layout (phones, and inside the authoring preview) there is no height to
+    // fill and the flex column collapses to its content exactly as before, so
+    // one tree serves both.
+    <div className="flex flex-col gap-3 h-full" style={{ minHeight: 0 }}>
       {/* ── Toolbar ── */}
       <div className="flex items-center gap-3 flex-wrap">
         <label className="text-sm opacity-70" htmlFor={`lang-${questionId}`}>Language</label>
@@ -384,7 +405,7 @@ export function CodeAnswerEditor({
       <div
         {...{ [CODE_EDITOR_ATTR]: 'true' }}
         ref={hostRef}
-        className="rounded border overflow-hidden text-sm"
+        className="rounded border overflow-hidden text-sm flex-1"
         style={{ minHeight: 240 }}
       >
         {!ready && (

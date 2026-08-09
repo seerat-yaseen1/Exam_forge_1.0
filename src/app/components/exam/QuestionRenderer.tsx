@@ -21,6 +21,7 @@ import type {
 import type { AnswerValue } from '../../../lib/submissionService';
 import type { ReportReason } from '../../../lib/questionReportService';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { SplitPane } from './SplitPane';
 import type { CodeAnswerValue, CodeSpec } from './codeAnswer';
 import type { JudgeLanguage, SampleRunResponse } from './judgeTypes';
 
@@ -776,9 +777,15 @@ export function QuestionRenderer({
   // Everything below the stimulus: header, stem, answer area. Extracted so
   // the two layouts (side-by-side on desktop, stacked on phones) can share it
   // verbatim rather than duplicating the answer engines.
-  const questionColumn = (
-    <div className="px-8 py-6 flex-1">
-
+  // ── The two halves of a question ──────────────────────────────
+  //
+  // Split apart so a CODING question can put the prompt in one pane and the
+  // editor in the other. Every other engine renders them one after another in
+  // a single column exactly as before — `questionColumn` below reassembles
+  // them, so there is one definition of each half rather than two arrangements
+  // that can drift.
+  const promptBlock = (
+    <>
         {/* Phone: the stimulus sits above the question and collapses. */}
         {group && isMobile && (
           <CollapsibleStimulus group={group} groupPosition={groupPosition} />
@@ -831,8 +838,10 @@ export function QuestionRenderer({
             }}
           />
         </div>
+    </>
+  );
 
-        {/* Engine-specific answer area */}
+  const answerBlock = (
         <div>
           {question.engine === 'mcq' && (
             mcqMode(question.variant as MCQVariant) === 'multi' ? (
@@ -887,13 +896,67 @@ export function QuestionRenderer({
             </Suspense>
           )}
         </div>
+  );
 
+  /** Both halves, stacked — every engine but coding, and coding on a phone. */
+  const questionColumn = (
+    <div className="px-8 py-6 flex-1">
+      {promptBlock}
+      {answerBlock}
     </div>
   );
 
-  // ── Standalone question, or a phone ───────────────────────────
+  // ── Narrow screen ─────────────────────────────────────────────
+  // One scrolling column for everything. A split pane needs width that is not
+  // there, and a 40%-wide code editor is worse than a stacked one.
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-full overflow-y-auto">
+        {questionColumn}
+      </div>
+    );
+  }
+
+  // ── Coding on a wide screen: prompt left, editor right ────────
+  //
+  // The convention every candidate arrives with, and for the reason the
+  // grouped split already gives: the spec — input format, output format, the
+  // worked example — is re-read continuously WHILE the program is written, and
+  // a stacked layout makes that a scroll each time.
+  //
+  // It also stops the editor being a letterbox. Stacked, it sat at its minimum
+  // height with the right half of a widescreen empty; here it takes a whole
+  // column.
+  //
+  // A grouped coding question puts the stimulus above the prompt in the SAME
+  // pane rather than adding a third: the candidate needs the editor at full
+  // height more than they need the stimulus and the stem apart, and three
+  // panes on one screen is not a layout anyone can work in.
+  if (question.engine === 'code') {
+    return (
+      <SplitPane
+        storageKey="ef.split.code"
+        leftLabel="Question"
+        rightLabel="Code editor"
+        left={
+          <>
+            {group && (
+              <div className="mb-5">
+                <StimulusHeading group={group} groupPosition={groupPosition} />
+                <div className="mt-2"><StimulusBody group={group} /></div>
+              </div>
+            )}
+            {promptBlock}
+          </>
+        }
+        right={<div className="px-6 py-6 h-full">{answerBlock}</div>}
+      />
+    );
+  }
+
+  // ── Standalone, non-coding ────────────────────────────────────
   // One scrolling column, exactly as before Phase 1.
-  if (!group || isMobile) {
+  if (!group) {
     return (
       <div className="flex flex-col h-full overflow-y-auto">
         {questionColumn}
@@ -909,25 +972,27 @@ export function QuestionRenderer({
   // in the options each time they do. Side-by-side keeps the stimulus fixed
   // while the questions change under it — which is how the paper reads on
   // paper, and what the format assumes.
+  //
+  // Now the SAME pane the coding layout uses, and therefore draggable. It was
+  // a fixed 44%, which is a reasonable guess and wrong for a wide table or a
+  // long passage; more to the point, one exam with two side-by-side layouts
+  // that behave differently is a difference a candidate has to discover
+  // mid-paper. Its own storage key, because how much room a chart wants and
+  // how much room an editor wants are not the same preference.
   return (
-    <div className="flex h-full" style={{ minHeight: 0 }}>
-      <div
-        className="overflow-y-auto px-8 py-6"
-        style={{
-          flex: '0 0 44%',
-          minWidth: 0,
-          borderRight: '1px solid var(--ef-border)',
-          background: 'var(--ef-canvas-raised)',
-        }}
-      >
-        <div className="mb-4">
-          <StimulusHeading group={group} groupPosition={groupPosition} />
-        </div>
-        <StimulusBody group={group} />
-      </div>
-      <div className="flex-1 overflow-y-auto" style={{ minWidth: 0 }}>
-        {questionColumn}
-      </div>
-    </div>
+    <SplitPane
+      storageKey="ef.split.stimulus"
+      leftLabel="Stimulus"
+      rightLabel="Question"
+      left={
+        <>
+          <div className="mb-4">
+            <StimulusHeading group={group} groupPosition={groupPosition} />
+          </div>
+          <StimulusBody group={group} />
+        </>
+      }
+      right={questionColumn}
+    />
   );
 }

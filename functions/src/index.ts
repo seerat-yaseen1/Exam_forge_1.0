@@ -113,6 +113,32 @@ const EXAM_HOT_PATH = {
   maxInstances: 200,
   concurrency: 80,
 };
+
+/**
+ * Reaching the judge.
+ *
+ * The Judge0 cluster has no public address by design — it binds 127.0.0.1:2358
+ * on a VM with no external IP — so the only route to it is a Serverless VPC
+ * connector into the project's network.
+ *
+ * Egress is PRIVATE_RANGES_ONLY deliberately. ALL_TRAFFIC would push Firestore
+ * and every other Google API call through the connector as well, costing
+ * latency and throughput for no benefit: only the 10.x address of the judge
+ * needs it.
+ *
+ * The connector is shared rather than judge-specific, which is why it is named
+ * exam-forge-connector. Connectors bill continuously per instance, so one is
+ * reused instead of one created per consumer.
+ *
+ * Named here rather than written inline so the connector appears exactly once.
+ * BOTH judge functions must carry it. Either one missing it fails as
+ * judge_unavailable against a perfectly healthy cluster, which reads like an
+ * outage rather than the config gap it is.
+ */
+const JUDGE_ACCESS = {
+  vpcConnector: 'exam-forge-connector',
+  vpcConnectorEgressSettings: 'PRIVATE_RANGES_ONLY' as const,
+};
 import { initializeApp } from 'firebase-admin/app';
 import {
   ANCESTOR_FIELD,
@@ -11793,7 +11819,7 @@ export const recordCodeTelemetry = onCall<RecordTelemetryData>(
 );
 
 export const runCodeSample = onCall<RunCodeSampleData>(
-  { region: 'us-central1', secrets: [JUDGE0_AUTH_TOKEN] },
+  { region: 'us-central1', secrets: [JUDGE0_AUTH_TOKEN], ...JUDGE_ACCESS },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerRole      = request.auth.token.role      as Role   | undefined;
@@ -11958,6 +11984,7 @@ export const scheduledJudgeCoding = onSchedule(
     timeoutSeconds: 540,
     memory: '512MiB',
     secrets: [JUDGE0_AUTH_TOKEN],
+    ...JUDGE_ACCESS,
   },
   async () => {
     const db = getFirestore();

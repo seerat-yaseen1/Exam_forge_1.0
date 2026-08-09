@@ -62,6 +62,10 @@ const MARK_COLOR: Record<MarkKind, string> = {
   blur:  'var(--ef-text-muted)',
   lang:  '#4A1D96',
   idle:  'var(--ef-border)',
+  // Muted, NOT the warning colour. A reset is the candidate using a control
+  // the product offers them. It is worth being able to jump to — the document
+  // changes completely there — and it is not worth a second look.
+  reset: 'var(--ef-text-muted)',
 };
 
 function clock(ms: number): string {
@@ -183,6 +187,7 @@ export function CodeReplayPanel({
         <span>{summary.runs} run{summary.runs === 1 ? '' : 's'}</span>
         {summary.blurs > 0 && <span>{summary.blurs} × left the editor</span>}
         {summary.languageSwitches > 0 && <span>{summary.languageSwitches} × changed language</span>}
+        {summary.resets > 0 && <span>{summary.resets} × reset to the starter</span>}
         {summary.pasteShaped > 0 && (
           // Worded as an observation, and coloured as one. The largest insert
           // is included because "3 large insertions" means something different

@@ -52,8 +52,24 @@ export interface EditEvent {
   text: string;
 }
 
+/**
+ * Something the candidate did that is not an edit.
+ *
+ * `reset` is here rather than being left to speak for itself, and the reason
+ * is the replay panel. Pressing Reset replaces the whole buffer at once, which
+ * is indistinguishable from a paste by shape — a few hundred characters
+ * appearing in one event at a rate nobody types at. Without a marker for it,
+ * a candidate who clicked a button the product offers them would be reported
+ * to a reviewer as "312 characters appeared at once", in the orange reserved
+ * for things worth a second look.
+ *
+ * The event is emitted immediately BEFORE the replacement, so the edit that
+ * follows it can be recognised. Compaction cannot separate them: a reset is a
+ * replacement rather than a pure insertion, so it never merges into a typing
+ * run.
+ */
 export interface ActEvent {
-  k: 'run' | 'blur' | 'focus';
+  k: 'run' | 'blur' | 'focus' | 'reset';
   t: number;
 }
 
@@ -236,6 +252,8 @@ export interface TelemetrySummary {
   /** Times the editor lost focus. High counts are worth a look, not an accusation. */
   blurs: number;
   languageSwitches: number;
+  /** Times the candidate asked for the starter code back. */
+  resets: number;
   pasteShaped: number;
   largestInsert: number;
   /** Characters typed, excluding paste-shaped insertions. */
@@ -255,7 +273,7 @@ export const IDLE_GAP_MS = 30_000;
 export function summarise(events: TelemetryEvent[]): TelemetrySummary {
   const s: TelemetrySummary = {
     spanMs: 0, activeMs: 0, idleCount: 0, idleMs: 0,
-    edits: 0, runs: 0, blurs: 0, languageSwitches: 0,
+    edits: 0, runs: 0, blurs: 0, languageSwitches: 0, resets: 0,
     pasteShaped: 0, largestInsert: 0, typedChars: 0,
   };
   if (events.length === 0) return s;
@@ -264,6 +282,11 @@ export function summarise(events: TelemetryEvent[]): TelemetrySummary {
   s.spanMs = end(events[events.length - 1]) - events[0].t;
 
   let prevEnd: number | null = null;
+  // The replacement produced by a Reset click is the platform's text, not the
+  // candidate's. Counting it as either typing or a paste-shaped insertion
+  // would attribute the starter code to the person who asked for it back.
+  let prevWasReset = false;
+
   for (const e of events) {
     if (prevEnd !== null) {
       const gap = e.t - prevEnd;
@@ -275,13 +298,17 @@ export function summarise(events: TelemetryEvent[]): TelemetrySummary {
     if (e.k === 'run') s.runs++;
     if (e.k === 'blur') s.blurs++;
     if (e.k === 'lang') s.languageSwitches++;
+    if (e.k === 'reset') s.resets++;
     if (isEdit(e)) {
       s.edits++;
       s.activeMs += e.dur ?? 0;
-      if (e.text.length > s.largestInsert) s.largestInsert = e.text.length;
-      if (isPasteShaped(e)) s.pasteShaped++;
-      else s.typedChars += e.text.length;
+      if (!prevWasReset) {
+        if (e.text.length > s.largestInsert) s.largestInsert = e.text.length;
+        if (isPasteShaped(e)) s.pasteShaped++;
+        else s.typedChars += e.text.length;
+      }
     }
+    prevWasReset = e.k === 'reset';
   }
 
   return s;

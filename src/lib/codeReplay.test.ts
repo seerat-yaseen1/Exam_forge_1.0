@@ -147,6 +147,39 @@ describe('buildMarks', () => {
     expect(marks.some((m) => m.kind === 'paste')).toBe(false);
   });
 
+  describe('reset', () => {
+    const reset = (t: number): TelemetryEvent => ({ k: 'reset', t });
+    // A reset replaces the whole buffer, so by shape it IS a paste: hundreds
+    // of characters in one event at a rate nobody types at. Reporting the
+    // platform's own starter code back to a reviewer in the colour reserved
+    // for things worth a second look would be a false signal about a person.
+
+    it('marks the reset itself, so a reviewer can jump to it', () => {
+      const marks = buildMarks(
+        [seed(0, ''), reset(100), ins(101, 0, 'x'.repeat(400))], MARK_OPTS);
+      expect(marks.filter((m) => m.kind === 'reset')).toHaveLength(1);
+    });
+
+    it('does NOT also report the replacement as a paste', () => {
+      const marks = buildMarks(
+        [seed(0, ''), reset(100), ins(101, 0, 'x'.repeat(400))], MARK_OPTS);
+      expect(marks.some((m) => m.kind === 'paste')).toBe(false);
+    });
+
+    it('still catches a genuine paste that follows a reset', () => {
+      // The suppression covers the ONE replacement a reset produces, not
+      // everything after it. A candidate who resets and then pastes has
+      // pasted.
+      const marks = buildMarks([
+        seed(0, ''),
+        reset(100),
+        ins(101, 0, 'x'.repeat(400)),      // the reset's own replacement
+        ins(5000, 400, 'y'.repeat(400)),   // a separate block, later
+      ], MARK_OPTS);
+      expect(marks.filter((m) => m.kind === 'paste')).toHaveLength(1);
+    });
+  });
+
   it('describes rather than concludes', () => {
     // A reviewer reading a label quickly must not be handed a verdict.
     const marks = buildMarks([seed(0, ''), ins(100, 0, 'x'.repeat(400))], MARK_OPTS);

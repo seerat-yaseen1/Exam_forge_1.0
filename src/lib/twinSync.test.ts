@@ -216,6 +216,35 @@ describe('judge verdict vocabulary — server types, client labels', () => {
   });
 });
 
+describe('operator detail stays on the staff side', () => {
+  // The roster's run panel now renders verdict.failureReason, because it is
+  // the only field that distinguishes an unreachable cluster from a rate limit
+  // from a question authored with no tests — all three arrive as the same
+  // `judge_unavailable` label.
+  //
+  // That is safe only for as long as the field cannot reach a candidate. It
+  // names the adapter and the transport, and on this deployment it carries the
+  // judge's private address. Two independent things keep it staff-side and
+  // both are asserted here.
+
+  it('redactForCandidate drops failureReason', () => {
+    const fn = serverJudge
+      .replace(/\/\/[^\n]*/g, '')
+      .match(/export function redactForCandidate[\s\S]*?\n\}/)?.[0];
+    expect(fn).toBeTruthy();
+    expect(fn).not.toMatch(/failureReason/);
+  });
+
+  it('the student results page never mentions it', () => {
+    // The other half: even with a correct redaction, a surface that fetched a
+    // raw verdict could render it. The student page must not reference the
+    // field at all — nor the collection it lives in, other than to say so.
+    const studentPage = read('src/app/pages/student/ExamResultsPage.tsx');
+    expect(studentPage).not.toMatch(/failureReason/);
+    expect(studentPage).not.toMatch(/getCodeVerdicts/);
+  });
+});
+
 describe('the answer discriminant has exactly one writer', () => {
   const examShell = read('src/app/pages/student/ExamShell.tsx');
   const submission = read('src/lib/submissionService.ts');

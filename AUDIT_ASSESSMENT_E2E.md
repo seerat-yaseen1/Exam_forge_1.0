@@ -6,12 +6,17 @@ opens the drawer to the moment a mark is final — authoring, the answer split,
 the rights-gated write path, blueprint resolution, publication, allocation,
 admission, delivery, the clocks, answer capture, integrity, coding, section
 close, finalisation, grading, and results.
-**Method:** code-derived, then executed. Six findings are reproduced against
-the **real compiled callables** (`functions/lib/index.js`) via
-`functions/test/audit.pipeline.cjs`; the rest are traced to `file:line`.
+**Method:** code-derived, then executed. Six findings were reproduced against
+the **real compiled callables** (`functions/lib/index.js`); the rest are traced
+to `file:line`. Open findings live in `functions/test/audit.pipeline.cjs`; a
+fixed one is inverted into an assertion and moved to the suite it belongs
+with.
 **Baseline:** every existing suite is green before and after this pass —
-13,446 timing states / 84,062 assertions, 85 e2e, 145 group, 93 probe, 109
-round-3, 63 grading, 146 judge. Nothing in this audit changes behaviour.
+13,446 timing states / 84,062 assertions, 64 freeze, 85 e2e, 109 group, 93
+probe, 63 round-3, 145 grading, 146 judge, 78 judge0.
+
+**Status:** F-01 and F-02 are **fixed** in this branch (see the closing note on
+each). Everything else is reported, not changed.
 
 ---
 
@@ -19,8 +24,8 @@ round-3, 63 grading, 146 judge. Nothing in this audit changes behaviour.
 
 | | Finding | Where it bites |
 |:--:|---|---|
-| 🔴 **F-01** | `startSection` accepts a section id that is not on the attempt — and the phantom section **removes the answer-write deadline** | timing |
-| 🔴 **F-02** | The same phantom section **walks past a mandatory break** | timing |
+| ✅ ~~**F-01**~~ | `startSection` accepts a section id that is not on the attempt — and the phantom section **removes the answer-write deadline** | **fixed** |
+| ✅ ~~**F-02**~~ | The same phantom section **walks past a mandatory break** | **fixed** |
 | 🔴 **F-03** | Answers to an **already-submitted section stay writable and stay marked** — per-section limits bind the UI, not the data | timing / marks |
 | 🔴 **F-04** | An MCQ or Match question with an **empty answer key marks everyone wrong and applies negative marking**, with no manual-review flag | marks |
 | 🟡 **F-05** | `scores` and per-question `isCorrect` are written to the **student-readable attempt document** regardless of `showResults` / `allowReview` | disclosure |
@@ -31,14 +36,15 @@ round-3, 63 grading, 146 judge. Nothing in this audit changes behaviour.
 | 🟢 **F-10** | The hourly sweep's range query **matches null-lock attempts**, which sort ahead of genuinely expired ones inside its 500-doc limit | liveness |
 | 🟢 **F-11** | The server question-write callables perform **no payload validation at all** | robustness |
 
-**The shape of it.** Three of the four red findings are the same defect wearing
+**The shape of it.** Three of the four red findings were the same defect wearing
 different clothes: *a section boundary is enforced in one place and trusted in
 another.* `submitSection` learned to validate its advance target (audit A-02);
-`startSection`, which performs the same transition, never did. The answer-write
-lock is one materialised instant, so "which section are you in" is a question
-the rules cannot ask — and grading never asks it either. The platform's timing
-model is genuinely excellent inside a section and genuinely soft at the seams
-between them.
+`startSection`, which performs the same transition, never did — that is F-01
+and F-02, now closed. The third, F-03, is the same shape one layer down and is
+still open: the answer-write lock is a single materialised instant, so "which
+section are you in" is a question the rules cannot ask, and grading never asks
+it either. The platform's timing model is genuinely excellent inside a section
+and was genuinely soft at the seams between them.
 
 F-04 is different in kind and, in an exam that uses negative marking, worse. It
 is the codebase's own stated failure mode — `scoreMCQMultiplier` carries a long
@@ -77,7 +83,7 @@ several of them and could not.
 | 9 | Student discovery (`getStudentAssessments`) | ✅ server-filtered, other students' ids stripped |
 | 10 | Admission (`startExam`) | ✅ structure server-derived, transactional, gates before create |
 | 11 | Paper delivery (`getExamQuestions`) | ✅ live-attempt required, whitelisted, contract-scoped |
-| 12 | Section entry (`startSection`) | ⚠ **F-01, F-02** |
+| 12 | Section entry (`startSection`) | ✅ F-01 / F-02 fixed — membership now checked on every section id |
 | 13 | Answer capture — standard | ⚠ **F-03**, F-09 |
 | 14 | Answer capture — linear/adaptive | ✅ callable-only, window gate, question clock credited |
 | 15 | Integrity + sessions | ⚠ F-07; `logViolation` itself is append-only and server-incremented |
@@ -92,11 +98,13 @@ several of them and could not.
 
 ---
 
-## 🔴 F-01 · `startSection` admits a section that is not on the attempt
+## ✅ F-01 · `startSection` admitted a section that is not on the attempt — *fixed*
 
-**Where:** `functions/src/index.ts:9386` (`const idx = sectionIds.indexOf(sectionId)`),
-lock recompute at `:9459`.
-**Reproduced:** `audit.pipeline.cjs` F-01a / F-01b.
+**Where:** `functions/src/index.ts` — was the unguarded
+`sectionIds.indexOf(sectionId)` in `startSection`, feeding the lock recompute
+below it. Guard now at `:9359`.
+**Reproduced:** was `audit.pipeline.cjs` F-01a / F-01b — now asserted as
+`audit.probe.cjs` **P-03**.
 
 `submitSection` validates its advance target against the attempt's own played
 set and refuses anything outside it:
@@ -104,7 +112,7 @@ set and refuses anything outside it:
 ```ts
 advanceIdx = playedIds.indexOf(requestedNext);
 if (advanceIdx < 0) throw new HttpsError('invalid-argument',
-  'SECTION_ADVANCE_INVALID: that section is not part of this attempt.');   // :9668
+  'SECTION_ADVANCE_INVALID: that section is not part of this attempt.');
 ```
 
 `startSection` performs the same transition and has no such check. It takes
@@ -116,7 +124,7 @@ The consequence is not the stray row. It is the line immediately after:
 ```ts
 const locks = computeAttemptLocks(
   attempt.startedAt, nowIso,
-  lockA.sections?.find((s) => s.id === sectionId)?.timeLimit,   // :9459 → undefined
+  lockA.sections?.find((s) => s.id === sectionId)?.timeLimit,   // → undefined
   lockA, toCoreAttempt(attempt));
 ```
 
@@ -126,7 +134,7 @@ bound vanishes from `answersLockedAfter` — the one field `firestore.rules`
 actually enforces. What remains is `min(overall, availability window)`.
 
 **Preconditions:** an ordinary student, mid-sitting, with no section currently
-open. The INV-1 guard at `:9346` only refuses a *second* open section, so
+open. The INV-1 guard only refuses a *second* open section, so
 closing the current one first is enough — which is what a student does anyway
 at every section boundary.
 
@@ -147,28 +155,43 @@ resolver, and the resolver reads the same absent section bound, so it correctly
 answers "not ended". The staleness fallback only fires after
 `STALE_ATTEMPT_HOURS` with no writes — and this student is writing.
 
-**Fix.** Give `startSection` the guard `submitSection` already has, in the same
-words. Everything else follows.
+### Fixed
+
+`startSection` now refuses a section id outside the attempt's played set,
+before it reasons about any state — so the error names the bad argument rather
+than reporting `SECTION_STILL_OPEN` for the wrong reason:
 
 ```ts
-const idx = sectionIds.indexOf(sectionId);
-if (idx < 0) {
+const playedSectionIds = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
+if (!playedSectionIds.includes(sectionId)) {
   throw new HttpsError('invalid-argument',
     'SECTION_START_INVALID: that section is not part of this attempt.');
 }
 ```
 
-Worth adding a belt-and-braces second: `computeAttemptLocks` returning a `null`
-section bound for a section the caller *named* is different from an exam that
-genuinely has no per-section limit. The callable can tell those apart; the
-arithmetic cannot.
+Strict rather than lenient on a missing `sectionIds`, and that is a deliberate
+asymmetry with the sibling guard added to `submitSection` for F-02.
+`startSection` already could not run without the field — it calls
+`sectionIds.indexOf` directly and threw a `TypeError` if it was absent, so such
+an attempt 500'd here before. Refusing it by name turns a stack trace into an
+answer.
+
+Asserted in `audit.probe.cjs` **P-03**, which was widened from "submitSection
+validates nextSectionId" to cover all three ids: the advance target, the
+section being entered, and the section being closed. P-03 now also pins the
+consequence rather than only the guard — that the refused start leaves no
+timing row, that `answersLockedAfter` is exactly where it was, and that
+`currentSectionIdx` never becomes `-1` from an `indexOf` miss.
 
 ---
 
-## 🔴 F-02 · The phantom section skips a mandatory break
+## ✅ F-02 · The phantom section skipped a mandatory break — *fixed*
 
-**Where:** `functions/src/index.ts:9625`.
-**Reproduced:** `audit.pipeline.cjs` F-02a (control) / F-02b.
+**Where:** `functions/src/index.ts` — the positional break resolution in
+`submitSection`. Symmetric guard now at `:9658`; the advance-target guard it
+mirrors is at `:9738`.
+**Reproduced:** was `audit.pipeline.cjs` F-02a / F-02b — now asserted as
+`audit.probe.cjs` **P-14**.
 
 Breaks are resolved positionally, from the submitted section's index in the
 attempt's play order:
@@ -195,10 +218,44 @@ F-02b  OPEN     startSection('PHANTOM')
                                         → SB.startedAt set, break elapsed 0m of 15m
 ```
 
-Fixing F-01 closes this. It is listed separately because the *reason* it is
-serious is different — F-01 buys time, F-02 defeats an invigilation control —
-and because the positional break resolution deserves its own regression test
-either way.
+### Fixed
+
+F-01's guard closes the route at its source: no phantom section can be created,
+so none can be submitted. `submitSection` gained the symmetric check anyway, on
+the section it is *closing* — A-02 validated `nextSectionId` and left
+`sectionId` resting on "it has a timing row":
+
+```ts
+const playedIds = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
+if (playedIds.length > 0 && !playedIds.includes(sectionId)) {
+  throw new HttpsError('invalid-argument',
+    'SECTION_SUBMIT_INVALID: that section is not part of this attempt.');
+}
+```
+
+Unreachable today, and stated anyway, because of what makes this gate
+different: a `-1` index does not mean "invalid", it means **no break is due** —
+the most permissive answer the schedule can give, returned on the worst input.
+A rule whose failure mode is silent permission should not depend on another
+function's guard holding.
+
+Deliberately **lenient** where F-01's is strict: `submitSection` works today
+without `sectionIds` (the timing row is enough), so requiring it would strand
+any hand-repaired or pre-`sectionIds` attempt with no way to close a section it
+had genuinely started. Every attempt `startExam` has ever written carries the
+field, so the fallback covers nothing the guard needs to reach — and the
+failure direction stays where doctrine puts it: unknown input never costs a
+student their submit.
+
+The two `Array.isArray(attempt.sectionIds) ? … : []` expressions this would
+have created in one function were collapsed into one hoisted `playedIds`, which
+the advance check below now shares. Two copies of one list is how the two ends
+of a rule start disagreeing.
+
+Asserted in `audit.probe.cjs` **P-14**, whose title has claimed "by any route"
+through two previous fixes. Both halves of the route are pinned separately, so
+if a later change ever lets the start through, the suite says which half
+broke.
 
 ---
 
@@ -553,8 +610,9 @@ request-approval paths at once.
 ```bash
 cd functions
 npm install && npm run build
-node test/audit.pipeline.cjs      # F-01 … F-05, against the compiled callables
-npm test                          # the existing gate — green, unchanged
+node test/audit.pipeline.cjs      # F-03 … F-05 — the findings still open
+node test/audit.probe.cjs         # P-03 / P-14 — F-01 and F-02, now assertions
+npm test                          # the full gate — green
 ```
 
 `audit.pipeline.cjs` is deliberately **not** wired into `npm test`. It passes by
@@ -567,8 +625,7 @@ the file is empty, delete the file.
 
 ## Suggested order
 
-1. **F-01** — one guard, closes F-02 with it, and it is the largest single
-   integrity hole in the pipeline.
+1. ~~**F-01**~~ — **done.** One guard, closed F-02 with it.
 2. **F-04** — smallest diff of the four reds, and the only one that silently
    changes marks on papers already sat. Worth a one-off scan of
    `questionAnswers` for empty keys on questions that appear in any

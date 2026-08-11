@@ -9323,6 +9323,43 @@ export const startSection = onCall<StartSectionData>(
       throw new HttpsError('failed-precondition', 'Section already started.');
     }
 
+    // ── F-01: the section must BE one of this attempt's (audit 2026-08-09) ──
+    //
+    // submitSection has validated its advance target against the played set
+    // since A-02 (:9738). This callable performs the SAME transition and never
+    // acquired the check: it took `sectionIds.indexOf(sectionId)` below and
+    // tolerated -1, so any string at all got a sectionTimings row.
+    //
+    // The stray row was never the damage. The lock recompute further down
+    // resolves the section's time limit by id against the frozen contract —
+    // and a section the contract has never heard of has no limit, so
+    // sectionDeadlineMs returns null, the section bound drops out of
+    // answersLockedAfter, and what firestore.rules enforces collapses to
+    // min(overall, availability window). Measured on a perfectly ordinary
+    // paper — 30-minute sections, no overall cap, a week-long window — the
+    // answer-write deadline moved from +30:30 to +7 DAYS on one call.
+    //
+    // It was also the third route past a mandatory break, after the two D-22
+    // closed. submitSection resolves breaks positionally from
+    // sectionIds.indexOf (:9693), which is -1 for a section nobody authored,
+    // so breakDue came back null and the advance ran with the break unserved.
+    // Both fall to this one guard, which is why it is here and not in the
+    // break gate: the gate was never wrong, it was asked about a section that
+    // should not have existed.
+    //
+    // STRICT, deliberately, unlike its sibling in submitSection. This function
+    // already cannot run without a played set — `sectionIds.indexOf` below is
+    // called on `attempt.sectionIds` directly and throws a TypeError if it is
+    // absent, so an attempt with no sectionIds 500'd here already. Refusing it
+    // by name turns a stack trace into an answer.
+    const playedSectionIds = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
+    if (!playedSectionIds.includes(sectionId)) {
+      throw new HttpsError(
+        'invalid-argument',
+        'SECTION_START_INVALID: that section is not part of this attempt.',
+      );
+    }
+
     // ── INV-1: exactly one section open at a time (D-22, Phase 2) ──
     //
     // This callable only ever checked whether the TARGET section had been
@@ -9591,6 +9628,38 @@ export const submitSection = onCall<SubmitSectionData>(
     }
     assertSEB(request.data?.sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
 
+    // ── F-02: the section being CLOSED is checked too (audit 2026-08-09) ──
+    //
+    // A-02 validated `nextSectionId` and left `sectionId` resting on "it has a
+    // timing row". With startSection fixed above, a row for a section outside
+    // the attempt can no longer be created, so this is unreachable today —
+    // which is exactly the point at which to state it. The break schedule
+    // below is resolved from `sectionIds.indexOf(sectionId)`, and a -1 there
+    // silently means "no break is due"; a defect that makes the answer to
+    // "which break applies?" be *nothing* should not depend on another
+    // function's guard holding. Two callables, two ids, one rule.
+    //
+    // LENIENT when the attempt carries no played set, unlike startSection.
+    // This function works today without `sectionIds` — the timing row is
+    // enough — so a hard requirement would strand any hand-repaired or
+    // pre-`sectionIds` attempt with no way to close a section it had genuinely
+    // started. Every attempt startExam has ever written carries the field, so
+    // the fallback covers nothing the guard needs to reach, and the failure
+    // direction stays where doctrine puts it: unknown input never costs a
+    // student their submit.
+    //
+    // `playedIds` is hoisted here rather than declared beside the advance check
+    // below, which used to own it: both guards ask the same question of the
+    // same list, and two copies of `Array.isArray(attempt.sectionIds) ? … : []`
+    // in one function is how the two ends of a rule start disagreeing.
+    const playedIds = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
+    if (playedIds.length > 0 && !playedIds.includes(sectionId)) {
+      throw new HttpsError(
+        'invalid-argument',
+        'SECTION_SUBMIT_INVALID: that section is not part of this attempt.',
+      );
+    }
+
     const timing = attempt.sectionTimings[sectionId];
     if (!timing?.startedAt) {
       throw new HttpsError('failed-precondition', 'Section was never started.');
@@ -9656,7 +9725,6 @@ export const submitSection = onCall<SubmitSectionData>(
     // would strand a student for a network blip.
     const requestedNext = typeof nextSectionId === 'string' && nextSectionId
       ? nextSectionId : null;
-    const playedIds = Array.isArray(attempt.sectionIds) ? attempt.sectionIds : [];
     let advanceTo: string | null = null;
     let advanceIdx = -1;
     let advanceAlreadyStarted = false;

@@ -17,9 +17,15 @@
 // correct — which is how a bug becomes a spec.
 //
 // WHEN A FINDING IS FIXED: invert that probe into an assertion (the fixed
-// behaviour is written next to each one), move it into audit.round3.cjs or
+// behaviour is written next to each one), move it into audit.probe.cjs or
 // exam.e2e.cjs beside the regression it belongs with, and delete it here.
 // When the file is empty, delete the file. It is a punch list, not a suite.
+//
+// RETIRED SO FAR:
+//   F-01, F-02  (2026-08-09) — startSection accepted a section id that was not
+//   on the attempt, which dropped the section bound out of answersLockedAfter
+//   and, via the -1 index, skipped a mandatory break. Both guards now live in
+//   index.ts; both routes are asserted in audit.probe.cjs P-03 and P-14.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const { FakeDb } = require('./fakeFirestore.cjs');
@@ -71,7 +77,7 @@ function seed(opts = {}) {
     assignedTo: { type: 'all' },
     gradingConfig: opts.gradingConfig,
     sections: [
-      { id: 'SA', name: 'A', timeLimit: 30, breakAfter: opts.breakAfter,
+      { id: 'SA', name: 'A', timeLimit: 30,
         questions: [{ questionId: 'q1', marks: 10, order: 0 }] },
       { id: 'SB', name: 'B', timeLimit: 20,
         questions: [{ questionId: 'q2', marks: 10, order: 0 }] },
@@ -85,7 +91,7 @@ function seed(opts = {}) {
     DB.seed('questionAnswers', q, {
       id: q,
       // opts.emptyKey models a question whose answer key never landed —
-      // see F-03 for the supported paths that produce exactly this document.
+      // see F-04 for the supported paths that produce exactly this document.
       correctIds: opts.emptyKey ? [] : ['alpha'],
       correctPairs: [], modelAnswer: '',
     });
@@ -109,85 +115,10 @@ function probe(open, id, label, detail) {
   else      { stale++;      console.log(`  ${G}${B}FIXED?${X}    ${B}${id}${X}  ${label}`); }
   if (detail) console.log(`  ${D}          ${detail}${X}`);
 }
-// A control is not a finding: it establishes that the guard being bypassed
-// elsewhere really does work on the honest route, so the bypass is a bypass
-// and not simply an unimplemented feature. It never counts either way.
-function control(holds, id, label, detail) {
-  console.log(`  ${holds ? G : R}${B}CONTROL${X}   ${B}${id}${X}  ${label}`);
-  if (detail) console.log(`  ${D}          ${detail}${X}`);
-  if (!holds) reproduced++;   // a broken control invalidates the probe beside it
-}
 function reset() { DB = new FakeDb(); VNOW = Date.parse('2026-08-01T09:00:00.000Z'); }
 
 (async () => {
   console.log(`\n${B}ASSESSMENT PIPELINE AUDIT — OPEN FINDINGS${X}  ${D}real callables, virtual clock${X}\n`);
-
-  // ══════════════════════════════════════════════════════════════════════
-  // F-01 · startSection admits a section id that is not on the attempt
-  //
-  // submitSection validates its advance target against attempt.sectionIds
-  // (index.ts:9668, audit A-02). startSection never acquired the same check:
-  // index.ts:9386 takes indexOf() and tolerates -1. A section id nobody
-  // authored therefore gets a timing row, and because the assessment has no
-  // section by that name the lock recompute at index.ts:9459 finds no
-  // timeLimit — so sectionDeadlineMs returns null and the section bound
-  // disappears from answersLockedAfter.
-  //
-  // FIXED LOOKS LIKE: startSection throws invalid-argument, exactly as
-  // submitSection does for an unknown nextSectionId.
-  // ══════════════════════════════════════════════════════════════════════
-  reset();
-  seed({ overallTimeLimit: undefined, endDate: at(VNOW + min(10080)) }); // week-long window
-  {
-    const st = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
-    const id = st.attempt.id;
-    const before = lockMs(A(id).answersLockedAfter);
-    await call(fns.submitSection, { attemptId: id, sectionId: 'SA', nextSectionId: null }, STUDENT());
-    const r = await call(fns.startSection, { attemptId: id, sectionId: 'PHANTOM' }, STUDENT());
-    const after = A(id);
-    probe(r.ok === true && !!after.sectionTimings.PHANTOM,
-      'F-01a', 'startSection accepts a sectionId absent from attempt.sectionIds',
-      `currentSectionIdx=${after.currentSectionIdx} (derived from indexOf → -1), `
-      + `sectionIds=${JSON.stringify(after.sectionIds)}`);
-    probe(lockMs(after.answersLockedAfter) > before,
-      'F-01b', 'the answer-write lock jumps out to the availability window',
-      `answersLockedAfter ${at(before)} → ${at(lockMs(after.answersLockedAfter))} `
-      + `(+${Math.round((lockMs(after.answersLockedAfter) - before) / 60000)} min of writable time)`);
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  // F-02 · the same phantom section walks past a MANDATORY break
-  //
-  // submitSection resolves the break positionally from
-  // sectionIds.indexOf(sectionId) (index.ts:9625). For a section that is not
-  // in the list that is -1, so breakDue is null and mandatoryBreakDue is
-  // false — the advance proceeds with the break unserved.
-  //
-  // FIXED LOOKS LIKE: F-01's guard makes this unreachable.
-  // ══════════════════════════════════════════════════════════════════════
-  reset();
-  seed({ overallTimeLimit: 120, breakAfter: { durationMinutes: 15, mandatory: true } });
-  {
-    const st = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
-    const id = st.attempt.id;
-    advance(min(1));
-    await call(fns.submitSection, { attemptId: id, sectionId: 'SA', nextSectionId: 'SB' }, STUDENT());
-
-    let refused = false;
-    try { await call(fns.startSection, { attemptId: id, sectionId: 'SB' }, STUDENT()); }
-    catch (e) { refused = /break/i.test(e.message); }
-    control(refused, 'F-02a', 'the honest route into SB is refused while the break runs',
-      refused ? 'startSection threw on the mandatory-break gate, as designed'
-              : 'the break gate did not fire — F-02b below proves nothing');
-
-    await call(fns.startSection, { attemptId: id, sectionId: 'PHANTOM' }, STUDENT());
-    const sub = await call(fns.submitSection,
-      { attemptId: id, sectionId: 'PHANTOM', nextSectionId: 'SB' }, STUDENT());
-    probe(sub.ok === true && !!A(id).sectionTimings.SB.startedAt,
-      'F-02b', 'inserting a phantom section skips the mandatory break entirely',
-      `server reported breakDue=${JSON.stringify(sub.breakDue)}; `
-      + `SB.startedAt=${A(id).sectionTimings.SB.startedAt} (break was 15m, elapsed 0m)`);
-  }
 
   // ══════════════════════════════════════════════════════════════════════
   // F-03 · answers to a CLOSED section stay writable, and stay marked

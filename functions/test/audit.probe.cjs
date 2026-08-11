@@ -235,10 +235,23 @@ async function P02() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// P-03 · submitSection validates `nextSectionId` against the played set
+// P-03 · every section id is validated against the attempt's played set
 //
 // Nothing checks membership, so a caller may name a section that does not
 // exist, or jump past one, or re-open one already submitted.
+//
+// WIDENED (F-01, audit 2026-08-09). A-02 gave submitSection this check for
+// `nextSectionId` only. startSection performs the SAME transition and never
+// acquired it, and the damage was not the stray timing row: the lock
+// recompute resolves a section's time limit BY ID against the frozen
+// contract, so a section the contract has never heard of has no limit,
+// sectionDeadlineMs returns null, and the section bound drops out of
+// answersLockedAfter entirely. Measured before the fix, on a paper with
+// 30-minute sections, no overall cap and a week-long window: the
+// answer-write deadline moved from +30:30 to +7 days on one call.
+//
+// Three ids, one rule — the target of an advance, the section being entered,
+// and the section being closed.
 // ═══════════════════════════════════════════════════════════════════
 async function P03() {
   seedWorld();
@@ -258,6 +271,29 @@ async function P03() {
   check(after.currentSectionIdx !== 9,
     'currentSectionIdx is not set from the caller-supplied index',
     `currentSectionIdx=${after.currentSectionIdx}`);
+
+  // ── F-01 · the section being ENTERED ──────────────────────────────
+  await expectThrow('submitSection rejects a `sectionId` outside the attempt',
+    () => call(fns.submitSection, { attemptId: id, sectionId: 'GHOST' }, STUDENT()),
+    'SECTION_SUBMIT_INVALID');
+
+  // Close SA honestly so no section is open — the state F-01 needed.
+  await call(fns.submitSection, { attemptId: id, sectionId: 'SA' }, STUDENT());
+  const lockAfterClose = lockMs(A(id).answersLockedAfter);
+
+  await expectThrow('startSection rejects a `sectionId` outside the attempt',
+    () => call(fns.startSection, { attemptId: id, sectionId: 'PHANTOM' }, STUDENT()),
+    'SECTION_START_INVALID');
+
+  const post = A(id);
+  check(!post.sectionTimings.PHANTOM,
+    'the refused start leaves no timing row behind',
+    JSON.stringify(post.sectionTimings.PHANTOM ?? null));
+  eq(lockMs(post.answersLockedAfter), lockAfterClose,
+    'and the answer-write lock is exactly where it was — no unbounded window');
+  check(post.currentSectionIdx >= 0,
+    'currentSectionIdx never becomes -1 from an indexOf miss',
+    `currentSectionIdx=${post.currentSectionIdx}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -643,6 +679,19 @@ async function P13() {
 
 // ═══════════════════════════════════════════════════════════════════
 // P-14 · mandatory break cannot be skipped, by any route
+//
+// "By any route" has been wrong twice. D-22 closed two (starting a section
+// while another was open; reordering an unplayed section to index 0). F-02
+// (audit 2026-08-09) was the third and needed neither: breaks are resolved
+// POSITIONALLY, from sectionIds.indexOf(sectionId), and a section that is not
+// in the attempt indexes to -1 — which reads as "no break is due" rather than
+// as "that section does not exist". Inserting a phantom section between SA and
+// SB therefore walked straight through the gate.
+//
+// It is fixed at the source (P-03: no phantom section can be created), and
+// asserted here as well, because the thing that made it dangerous is local to
+// this gate: a -1 index means NOTHING IS DUE, which is the most permissive
+// answer the break schedule can give and the one it gives on bad input.
 // ═══════════════════════════════════════════════════════════════════
 async function P14() {
   seedWorld({ breakAfter: { durationMinutes: 10, mandatory: true } });
@@ -659,6 +708,19 @@ async function P14() {
   await expectThrow('entering the next section during a mandatory break is refused',
     () => call(fns.startSection, { attemptId: id, sectionId: 'SB' }, STUDENT()),
     'Mandatory break');
+
+  // ── F-02 · the phantom-section route ──────────────────────────────
+  // Step one is refused, so step two is unreachable. Both are asserted: if a
+  // later change ever lets the start through, this says which half broke.
+  await expectThrow('a phantom section cannot be opened to sidestep the break',
+    () => call(fns.startSection, { attemptId: id, sectionId: 'PHANTOM' }, STUDENT()),
+    'SECTION_START_INVALID');
+  await expectThrow('nor submitted as a way of advancing past it',
+    () => call(fns.submitSection,
+      { attemptId: id, sectionId: 'PHANTOM', nextSectionId: 'SB' }, STUDENT()),
+    'SECTION_SUBMIT_INVALID');
+  eq(A(id).sectionTimings.SB.startedAt || '', '',
+    'SB is still unstarted — the break was not skipped');
 
   advance(min(10) + sec(5));
   const st = await call(fns.startSection, { attemptId: id, sectionId: 'SB' }, STUDENT());
@@ -905,7 +967,7 @@ async function P22() {
 const SCENARIOS = [
   ['P-01', 'a recorded penalty survives the next section advance', P01],
   ['P-02', 'submitSection cannot re-arm the answer-write lock', P02],
-  ['P-03', 'submitSection validates nextSectionId', P03],
+  ['P-03', 'every section id is validated against the played set', P03],
   ['P-04', 'sequential delivery enforces section/overall clocks', P04],
   ['P-05', 'the availability window bounds answer writes', P05],
   ['P-06', 'negative marking spares a partially-correct answer', P06],

@@ -386,6 +386,92 @@ async function R09() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// R-09b · attemptManualMarks — the grading record stays with the graders
+//
+// A third staff-only collection hanging off an attempt, and its reason is
+// narrower than the other two. The MARK itself is meant to reach the student,
+// and does: setManualMark re-scores the attempt, so the award arrives through
+// gradedAnswers and the totals on the document they already read. What must
+// not follow it is the record ABOUT the marking — which member of staff
+// awarded it, under which role, and how many times they have revised it.
+//
+// So the claim under test is not that marks are secret. It is that a student
+// cannot enumerate who marked them and how the mark moved, and — the part that
+// would actually cost something — cannot write their own.
+// ═══════════════════════════════════════════════════════════════════
+async function R09b() {
+  await seed(async (db) => {
+    await setDoc(doc(db, 'attemptManualMarks/att_1__q_text'), {
+      attemptId: 'att_1', questionId: 'q_text', assessmentId: 'asmt_1',
+      instituteId: 'inst_1', studentId: 'stu_1',
+      marksAwarded: 30, feedback: 'Reasonable, but thin on evidence.',
+      gradedBy: 'fac_1', gradedByRole: 'faculty',
+      gradedAt: '2026-08-01T09:00:00.000Z',
+      firstGradedAt: '2026-08-01T09:00:00.000Z',
+      revision: 1,
+    });
+  });
+
+  await denied('THE POINT — the student who was marked cannot read the grading record',
+    () => getDoc(doc(asStudent('stu_1', 'inst_1'), 'attemptManualMarks/att_1__q_text')));
+  await denied('nor can any other student',
+    () => getDoc(doc(asStudent('stu_2', 'inst_1'), 'attemptManualMarks/att_1__q_text')));
+
+  await allowed('faculty of the owning institute CAN read it',
+    () => getDoc(doc(asFaculty('fac_1', 'inst_1'), 'attemptManualMarks/att_1__q_text')));
+  await allowed('so can the webOwner',
+    () => getDoc(doc(asWebOwner(), 'attemptManualMarks/att_1__q_text')));
+  await denied('faculty of another institute cannot — tenancy still applies',
+    () => getDoc(doc(asFaculty('fac_2', 'inst_2'), 'attemptManualMarks/att_1__q_text')));
+
+  // Writes are server-only, and this is the arm that matters most: the whole
+  // value of setManualMark is that it bounds the award to the marks the
+  // question carried ON THE PAPER THE STUDENT SAT, refuses to overwrite a
+  // judge's verdict, and re-scores the attempt. A client write would be a mark
+  // with none of that attached to it.
+  await denied('a student cannot award themselves marks',
+    () => setDoc(doc(asStudent('stu_1', 'inst_1'), 'attemptManualMarks/att_1__q_text'), {
+      attemptId: 'att_1', questionId: 'q_text', instituteId: 'inst_1',
+      marksAwarded: 100, gradedBy: 'stu_1', gradedByRole: 'student', revision: 1,
+    }));
+  await denied('nor raise a mark a grader already gave',
+    () => updateDoc(doc(asStudent('stu_1', 'inst_1'), 'attemptManualMarks/att_1__q_text'),
+      { marksAwarded: 50 }));
+  await denied('nor delete one they dislike',
+    () => require('firebase/firestore').deleteDoc(
+      doc(asStudent('stu_1', 'inst_1'), 'attemptManualMarks/att_1__q_text')));
+  await denied('faculty do not write them from a client either — the callable does',
+    () => updateDoc(doc(asFaculty('fac_1', 'inst_1'), 'attemptManualMarks/att_1__q_text'),
+      { marksAwarded: 50 }));
+  await denied('not even the webOwner',
+    () => updateDoc(doc(asWebOwner(), 'attemptManualMarks/att_1__q_text'),
+      { marksAwarded: 50 }));
+
+  // The QUERY the marking panel runs — same shape and same reasoning as the
+  // replay panel's above: the instituteId equality is what makes the id range
+  // provable against a rule that tests resource.data.instituteId.
+  const markRange = (as) => getDocs(query(
+    collection(as, 'attemptManualMarks'),
+    where('instituteId', '==', 'inst_1'),
+    where(documentId(), '>=', 'att_1__'),
+    where(documentId(), '<=', 'att_1__'),
+  ));
+
+  await allowed('faculty may query the marks for one attempt in their institute',
+    () => markRange(asFaculty('fac_1', 'inst_1')));
+  await allowed('so may the webOwner',
+    () => markRange(asWebOwner()));
+  await denied('a student may not, even for their own paper',
+    () => markRange(asStudent('stu_1', 'inst_1')));
+  await denied('an unconstrained range is refused — this is why the reader names the institute',
+    () => getDocs(query(
+      collection(asFaculty('fac_1', 'inst_1'), 'attemptManualMarks'),
+      where(documentId(), '>=', 'att_1__'),
+      where(documentId(), '<=', 'att_1__'),
+    )));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // R-05 · storage.rules — the question bank's second door
 //
 // N3 (audit 2026-08-06). question-images read was `request.auth != null`, so
@@ -574,6 +660,7 @@ const SCENARIOS = [
   ['R-04', 'attempts — answers writable, authority fields not', R04],
   ['R-08', 'attemptVerdicts — the candidate cannot read their own judging', R08],
   ['R-09', 'attemptTelemetry — a candidate cannot read their own recording', R09],
+  ['R-09b', 'attemptManualMarks — the grading record stays with the graders', R09b],
   ['R-05', 'storage.rules — the question bank\'s second door', R05],
   ['R-06', 'questionGroups — the stimulus is bank content, not public', R06],
   ['R-07', 'webowners — self-read by uid, without leaking the directory', R07],

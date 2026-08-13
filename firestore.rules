@@ -1108,6 +1108,33 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // attemptManualMarks — one human award per (attempt, question).
+    //
+    // NO STUDENT READ, and the mark itself is not the reason — the student is
+    // meant to see the mark, and does: setManualMark re-scores the attempt, so
+    // the award reaches them through gradedAnswers and their totals, on the
+    // same document they already read. What lives here and must not follow it
+    // is the grading record ABOUT the mark: which member of staff awarded it,
+    // under which role, when, and how many times it has been revised. That is
+    // an internal record of a colleague's work, and the argument for keeping
+    // it out of a student-readable document is the one attemptVerdicts and
+    // provisionalGrades already make.
+    //
+    // Feedback written for the student is the deliberate exception, and it
+    // crosses by being COPIED into gradedAnswers under the review-audience
+    // gate — never by opening this collection up.
+    //
+    // Writes are server-only. setManualMark is the sole author: it is the
+    // thing that validates the award against the question's marks ceiling,
+    // refuses to overwrite a judge's verdict, and re-scores the paper. A
+    // client write would be a mark with none of that attached to it.
+    match /attemptManualMarks/{id} {
+      allow read: if isWebOwner()
+                     || ((role() == 'institute' || role() == 'faculty')
+                         && request.auth.token.instituteId == resource.data.instituteId);
+      allow create, update, delete: if false;
+    }
+
     // attemptTelemetry — the record of HOW a candidate wrote their answer.
     //
     // NO STUDENT READ, and for a different reason than attemptVerdicts.

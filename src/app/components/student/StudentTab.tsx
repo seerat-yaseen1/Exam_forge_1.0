@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   GraduationCap, Plus, Upload, Loader2, PauseCircle, PlayCircle,
-  Trash2, AlertTriangle, X, Mail, MailX, Check,
+  Trash2, AlertTriangle, X, Mail, MailX, Check, Search,
 } from 'lucide-react';
+import { BulkDeleteBar } from '../BulkDeleteBar';
 import { AddStudentDrawer, type Student } from './AddStudentDrawer';
 import { BulkStudentModal } from './BulkStudentModal';
 import {
@@ -54,6 +55,9 @@ function MetaPills({ values }: { values?: string[] }) {
 function SkeletonRow() {
   return (
     <tr style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
+      {/* Placeholder for the selection column, so the skeleton lines up with
+          the header while loading. */}
+      <td className="px-5 py-4" style={{ width: 36 }} />
       {[32, 14, 16, 24, 0].map((w, i) => (
         <td key={i} className="px-5 py-4">
           {w > 0 && <div className="h-3 rounded mb-1" style={{ width: `${w * 4}px`, background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />}
@@ -85,6 +89,12 @@ export function StudentTab({ instituteId, instituteName }: Props) {
   const [resendingId, setResendingId]       = useState<string | null>(null);
 
   const [emailNotice, setEmailNotice] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // ── Selection (bulk delete) ──────────────────────────────────────
+  // Ids only. Holding the records themselves would mean the selection and the
+  // table could disagree after the 5s poll refreshes one and not the other.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch]     = useState('');
 
   // ── Fetch ────────────────────────────────────────────────────────
 
@@ -235,6 +245,50 @@ export function StudentTab({ instituteId, instituteName }: Props) {
   const disabled = students.filter((s) => s.status === 'disabled').length;
   const existingEmails = new Set(students.map((s) => s.email));
 
+  // ── Filter + selection derivations ───────────────────────────────
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q),
+    );
+  }, [students, search]);
+
+  /**
+   * Select-all acts on what is ON SCREEN, never on the whole institute.
+   * A checkbox that silently includes rows the filter is hiding is how someone
+   * deletes three hundred people they cannot see.
+   */
+  const visibleIds     = useMemo(() => visible.map((s) => s.id), [visible]);
+  const selectedVisible = visibleIds.filter((id) => selected.has(id));
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+
+  const toggleOne = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const toggleAllVisible = () => setSelected((prev) => {
+    const next = new Set(prev);
+    if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id));
+    else visibleIds.forEach((id) => next.add(id));
+    return next;
+  });
+
+  /**
+   * Targets for the bar, resolved from ids to {id, label} against the CURRENT
+   * list. Ids that no longer exist are dropped — a row removed by the poll
+   * between selection and confirmation is not a record to act on.
+   */
+  const selectedTargets = useMemo(
+    () => students
+      .filter((s) => selected.has(s.id))
+      .map((s) => ({ id: s.id, label: s.name || s.email })),
+    [students, selected],
+  );
+
   // ── Render ───────────────────────────────────────────────────────
 
   return (
@@ -270,6 +324,25 @@ export function StudentTab({ instituteId, instituteName }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Narrowing the list is what makes select-all safe to offer. */}
+          {(total > 0 || search) && (
+            <div className="flex items-center gap-1.5 px-2.5 py-2"
+              style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
+              <Search size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name or email…"
+                className="text-xs"
+                style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--ef-ink)', width: 160 }}
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ color: 'var(--ef-text-muted)' }}>
+                  <X size={10} strokeWidth={1.5} />
+                </button>
+              )}
+            </div>
+          )}
           <button onClick={() => setBulkOpen(true)}
             className="flex items-center gap-1.5 text-xs px-3 py-2 transition-colors"
             style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
@@ -311,6 +384,18 @@ export function StudentTab({ instituteId, instituteName }: Props) {
         )}
       </AnimatePresence>
 
+      {/* Bulk selection → the existing deletion flow, once per record */}
+      <BulkDeleteBar
+        role="student"
+        targets={selectedTargets}
+        onClear={() => setSelected(new Set())}
+        onDeleted={(ids) => {
+          const gone = new Set(ids);
+          setStudents((prev) => prev.filter((s) => !gone.has(s.id)));
+        }}
+        onFinished={() => void fetch_(true)}
+      />
+
       {/* Fetch error */}
       {fetchError && (
         <div className="flex items-center gap-2 px-4 py-3 mb-4"
@@ -327,11 +412,26 @@ export function StudentTab({ instituteId, instituteName }: Props) {
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border)' }}>
+              <th className="px-5 py-3" style={{ width: 36 }}>
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  // Some-but-not-all reads as a dash rather than as a tick, so
+                  // the header never claims a selection wider than it is.
+                  ref={(el) => {
+                    if (el) el.indeterminate = selectedVisible.length > 0 && !allVisibleSelected;
+                  }}
+                  onChange={toggleAllVisible}
+                  disabled={visibleIds.length === 0}
+                  aria-label={allVisibleSelected ? 'Clear selection' : 'Select all shown'}
+                  style={{ cursor: visibleIds.length === 0 ? 'default' : 'pointer' }}
+                />
+              </th>
               {['STUDENT', 'ROLE', 'STATUS', 'PROGRAM / GROUP', 'ENROLLED', ''].map((col, i) => (
                 <th key={i} className="text-left px-5 py-3 text-xs"
                   style={{
                     color: 'var(--ef-text-muted)', letterSpacing: '0.08em', fontWeight: 400,
-                    width: i === 0 ? '28%' : i === 1 ? '10%' : i === 2 ? '12%' : i === 3 ? '22%' : i === 4 ? '14%' : '14%',
+                    width: i === 0 ? '26%' : i === 1 ? '10%' : i === 2 ? '12%' : i === 3 ? '20%' : i === 4 ? '14%' : '14%',
                   }}>
                   {col}
                 </th>
@@ -342,9 +442,28 @@ export function StudentTab({ instituteId, instituteName }: Props) {
             {/* Keyed skeleton rows to avoid React key warnings */}
             {loading && [0, 1, 2].map((i) => <SkeletonRow key={i} />)}
 
+            {/* A search that matches nothing is not an empty institute, and
+                must not offer "add your first student" as the way out. */}
+            {!loading && students.length > 0 && visible.length === 0 && (
+              <tr>
+                <td colSpan={7}>
+                  <div className="flex flex-col items-center py-16">
+                    <Search size={24} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
+                    <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>
+                      No students match “{search}”
+                    </p>
+                    <button onClick={() => setSearch('')} className="text-xs mt-3"
+                      style={{ color: 'var(--ef-text-subtle)', textDecoration: 'underline' }}>
+                      Clear search
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+
             {!loading && students.length === 0 && !fetchError && (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <div className="flex flex-col items-center py-16">
                     <GraduationCap size={28} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
                     <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
@@ -374,16 +493,30 @@ export function StudentTab({ instituteId, instituteName }: Props) {
               </tr>
             )}
 
-            {!loading && students.map((student) => {
+            {!loading && visible.map((student) => {
               const isConfirmDelete   = deletingId === student.id;
               const isTogglingStatus  = statusLoadingId === student.id;
+              const isSelected        = selected.has(student.id);
               return (
                 <motion.tr key={student.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   style={{
                     borderBottom: '1px solid var(--ef-border-subtle)',
-                    background: isConfirmDelete ? 'var(--ef-danger-bg)' : 'transparent',
+                    background: isConfirmDelete ? 'var(--ef-danger-bg)'
+                      : isSelected ? 'var(--ef-canvas-raised)'
+                      : 'transparent',
                     transition: 'background 0.15s',
                   }}>
+
+                  {/* Selection */}
+                  <td className="px-5 py-3.5">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleOne(student.id)}
+                      aria-label={`Select ${student.name || student.email}`}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </td>
 
                   {/* Name + email */}
                   <td className="px-5 py-3.5">

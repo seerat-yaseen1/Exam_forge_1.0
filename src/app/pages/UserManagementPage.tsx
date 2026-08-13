@@ -23,6 +23,7 @@ import { auth, functions } from '../../lib/firebase';
 import { DeletionImpactPanel } from '../components/DeletionImpactPanel';
 import { DeletionApprovalsInbox } from '../components/DeletionApprovalsInbox';
 import { TrashPanel } from '../components/TrashPanel';
+import { daysUntilExpiry, NO_EXPIRY_LABEL } from '../../lib/instituteValidity';
 import { SubjectRequestsInbox } from '../components/SubjectRequestsInbox';
 import { ErasurePolicyPanel } from '../components/ErasurePolicyPanel';
 
@@ -42,9 +43,10 @@ function formatSyncAge(date: Date): string {
 }
 
 function validityLabel(v: Institute): string {
-  const d = new Date(v.activeUntil);
-  const now = new Date();
-  const days = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const days = daysUntilExpiry(v.activeUntil);
+  // Checked FIRST. Without it, an institute with no expiry produced NaN,
+  // fell past every branch below, and rendered "Invalid Date".
+  if (days === null) return NO_EXPIRY_LABEL;
   if (days < 0) return 'Expired';
   if (days === 0) return 'Expires today';
   if (days === 1) return 'Expires tomorrow';
@@ -53,8 +55,11 @@ function validityLabel(v: Institute): string {
 }
 
 function validityColor(v: Institute): string {
-  const d = new Date(v.activeUntil);
-  const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const days = daysUntilExpiry(v.activeUntil);
+  // No expiry is not an alarm state — it reads as ordinary, like a far-off
+  // date. It happened to land here already, since every NaN comparison is
+  // false; now it does so on purpose.
+  if (days === null) return 'var(--ef-text-muted)';
   if (days < 0) return 'var(--ef-danger)';
   if (days <= 7) return 'var(--ef-warning-strong)';
   return 'var(--ef-text-muted)';
@@ -821,11 +826,31 @@ export function UserManagementPage() {
           </div>
         )}
 
-        {/* Feature #15 Phase 6a — deleted records are recoverable now, so the
-            trash needs a home. Web Owner sees every tenant and is the only
-            role that can permanently delete. */}
-        <div className="mb-5">
-          <TrashPanel canPurge />
+        {/* ── Deleted institutes ────────────────────────────────────
+            This panel used to list EVERY deleted record on the platform —
+            institutes, faculty and students from every tenant together, in an
+            unlabelled list sitting above the institutes table. Deleted people
+            now live inside the institute they belonged to (User Management →
+            institute → Users → Trash), which is where someone asking "who did
+            we remove from this institute" actually looks.
+
+            WHAT IS LEFT HERE, AND WHY IT IS NOT ALSO MOVED: a deleted
+            INSTITUTE has no institute to sit inside. This is the only surface
+            that can restore one or purge one — including choosing which
+            webOwner-assessment attempts go with it (InstitutePurgePanel).
+            Removing it outright would have quietly deleted the ability to
+            restore a tenant, which is a policy change wearing a navigation
+            change's clothes. Same component, same callables, narrower scope. */}
+        <div className="mb-5 px-3 py-3"
+          style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
+          <p className="text-xs mb-1" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>
+            DELETED INSTITUTES
+          </p>
+          <p className="text-xs mb-2.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+            Deleted faculty and students are managed inside their own institute,
+            under Users → Trash.
+          </p>
+          <TrashPanel canPurge roles={['institute']} />
         </div>
 
         {/* ── Table ── */}

@@ -20,13 +20,18 @@ import { QuestionRightsCeilingEditor } from '../components/questions/QuestionRig
 import { DeletionRightsCeilingEditor } from '../components/questions/DeletionRightsCeilingEditor';
 import { StudentTab } from '../components/student/StudentTab';
 import { SchoolsTab } from '../components/schools/SchoolsTab';
+import { TrashPanel } from '../components/TrashPanel';
+import { daysUntilExpiry, NO_EXPIRY_LABEL } from '../../lib/instituteValidity';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function validityInfo(activeUntil: string) {
-  const days = Math.ceil((new Date(activeUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const days = daysUntilExpiry(activeUntil);
+  // Checked FIRST — this header used to read "Until Invalid Date" for any
+  // institute that simply has no expiry.
+  if (days === null) return { label: NO_EXPIRY_LABEL, color: 'var(--ef-text-muted)' };
   if (days < 0) return { label: 'Expired', color: 'var(--ef-danger)' };
   if (days === 0) return { label: 'Expires today', color: 'var(--ef-warning-strong)' };
   if (days <= 7) return { label: `${days}d remaining`, color: 'var(--ef-warning-strong)' };
@@ -34,7 +39,7 @@ function validityInfo(activeUntil: string) {
 }
 
 type PrimaryTab = 'users' | 'schools' | 'permissions';
-type UsersSubTab = 'faculty' | 'students';
+type UsersSubTab = 'faculty' | 'students' | 'trash';
 
 // ── Permission toggle ─────────────────────────────────────────────
 
@@ -350,6 +355,12 @@ export function InstituteDetailPage() {
               {([
                 { key: 'faculty' as UsersSubTab, label: 'Faculty' },
                 { key: 'students' as UsersSubTab, label: 'Students' },
+                // Deleted faculty and students belong WITH the institute they
+                // came from. They used to be listed on the platform-level
+                // User Management page, mixed across every tenant, which made
+                // "who did we remove from this institute" a question the UI
+                // could not answer.
+                { key: 'trash' as UsersSubTab, label: 'Trash' },
               ]).map((sub) => {
                 const isActive = usersSubTab === sub.key;
                 return (
@@ -397,6 +408,23 @@ export function InstituteDetailPage() {
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   transition={{ duration: 0.18 }}>
                   <StudentTab instituteId={institute.id} instituteName={institute.name} />
+                </motion.div>
+              )}
+              {usersSubTab === 'trash' && (
+                <motion.div key="trash-tab"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}>
+                  <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                    Faculty and students deleted from {institute.name}. Restoring
+                    returns the account and its access; after the retention window
+                    the scheduled purge removes it for good.
+                  </p>
+                  {/* The SAME panel the Institute Admin uses, scoped the same
+                      way — instituteId narrows the query to this tenant, so a
+                      record from another institute cannot appear here.
+                      canPurge because the Web Owner is the only role that may
+                      permanently delete, exactly as before this moved. */}
+                  <TrashPanel instituteId={institute.id} canPurge />
                 </motion.div>
               )}
             </AnimatePresence>

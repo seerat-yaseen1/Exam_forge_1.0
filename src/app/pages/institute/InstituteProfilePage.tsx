@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { motion } from 'motion/react';
 import { Building2, Mail, Hash, CalendarDays, Upload, Loader2 } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
+import { daysUntilExpiry, NO_EXPIRY_LABEL } from '../../../lib/instituteValidity';
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
@@ -29,7 +30,8 @@ function formatDate(iso: string) {
 }
 
 function validityStatus(activeUntil: string) {
-  const days = Math.ceil((new Date(activeUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const days = daysUntilExpiry(activeUntil);
+  if (days === null) return '';
   if (days < 0) return ` · Expired`;
   if (days === 0) return ` · Expires today`;
   if (days <= 7) return ` · ${days}d remaining`;
@@ -50,8 +52,12 @@ export function InstituteProfilePage() {
     await uploadLogo(file);
   };
 
-  const validUntilStr =
-    formatDate(session.activeUntil) + validityStatus(session.activeUntil);
+  // The date is only worth formatting when there IS one. Concatenating
+  // unconditionally is what put "Invalid Date" on an institute's own profile
+  // whenever its access had no end date.
+  const validUntilStr = daysUntilExpiry(session.activeUntil) === null
+    ? NO_EXPIRY_LABEL
+    : formatDate(session.activeUntil) + validityStatus(session.activeUntil);
 
   return (
     <motion.div

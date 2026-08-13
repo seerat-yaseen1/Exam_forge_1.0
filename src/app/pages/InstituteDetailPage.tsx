@@ -21,13 +21,17 @@ import { DeletionRightsCeilingEditor } from '../components/questions/DeletionRig
 import { StudentTab } from '../components/student/StudentTab';
 import { SchoolsTab } from '../components/schools/SchoolsTab';
 import { TrashPanel } from '../components/TrashPanel';
+import { daysUntilExpiry, NO_EXPIRY_LABEL } from '../../lib/instituteValidity';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function validityInfo(activeUntil: string) {
-  const days = Math.ceil((new Date(activeUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const days = daysUntilExpiry(activeUntil);
+  // Checked FIRST — this header used to read "Until Invalid Date" for any
+  // institute that simply has no expiry.
+  if (days === null) return { label: NO_EXPIRY_LABEL, color: 'var(--ef-text-muted)' };
   if (days < 0) return { label: 'Expired', color: 'var(--ef-danger)' };
   if (days === 0) return { label: 'Expires today', color: 'var(--ef-warning-strong)' };
   if (days <= 7) return { label: `${days}d remaining`, color: 'var(--ef-warning-strong)' };

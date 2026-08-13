@@ -714,37 +714,84 @@ async function countLiveOwnedAssessments(
  * Delete the per-attempt records that hang off an attempt but are not keyed by
  * the student.
  *
- * attemptVerdicts and attemptTelemetry are keyed by attemptId, so the
- * studentId-based purge that erases everything else never sees them. Without
- * this they survive the erasure of the person they describe — orphaned, still
- * readable by staff, and still containing that person's program output and a
- * keystroke-level record of them writing it.
+ * attemptVerdicts, attemptTelemetry and attemptManualMarks are keyed by
+ * attemptId, so the studentId-based purge that erases everything else never
+ * sees them. Without this they survive the erasure of the person they describe
+ * — orphaned, still readable by staff, and still containing that person's
+ * program output, a keystroke-level record of them writing it, and an
+ * examiner's written remarks about their work.
  *
- * TELEMETRY GOES IN BOTH MODES, VERDICTS ONLY ON DELETE.
+ * TELEMETRY GOES IN BOTH MODES, VERDICTS AND MANUAL MARKS ONLY ON DELETE.
  *
  * An anonymised attempt is kept because the institute needs the academic
  * record, and a verdict is part of that record — it is the justification for
  * the mark on the row, and a retained mark nobody can explain is worse than no
- * row at all. Telemetry has no such claim. It is not an academic record; it is
- * material about how somebody worked, kept for review and research, and none
- * of that survives a person exercising erasure. It is also the most
- * identifying thing here: a score is not a fingerprint, and the rhythm of
- * someone typing under pressure comes closer to being one.
+ * row at all. A manual mark is the same argument with a person at the end of
+ * it instead of a judge: it is the reason there is a number on an essay, and
+ * it is also a scoring INPUT, so deleting it while keeping the row would make
+ * the next regrade quietly drop marks off an anonymised transcript.
+ *
+ * Telemetry has no such claim. It is not an academic record; it is material
+ * about how somebody worked, kept for review and research, and none of that
+ * survives a person exercising erasure. It is also the most identifying thing
+ * here: a score is not a fingerprint, and the rhythm of someone typing under
+ * pressure comes closer to being one.
+ *
+ * WHAT ANONYMISE DOES TO A RETAINED MARK: severs its studentId, exactly as
+ * anonymizeAttempts severs the attempt's. The record is kept for the same
+ * reason the attempt row is kept, and the link to the person is cut for the
+ * same reason too — leaving the original studentId on a child record would
+ * make the parent's anonymisation cosmetic, since the two are joinable.
  */
 export async function purgeAttemptChildRecords(
   db: FirebaseFirestore.Firestore,
   attemptIds: string[],
   opts: { includeVerdicts: boolean },
-): Promise<{ telemetryDeleted: number; verdictsDeleted: number }> {
+): Promise<{ telemetryDeleted: number; verdictsDeleted: number; marksTouched: number }> {
   let telemetryDeleted = 0;
   let verdictsDeleted = 0;
+  let marksTouched = 0;
   for (const attemptId of attemptIds) {
     telemetryDeleted += await purgeWhere(db, 'attemptTelemetry', 'attemptId', attemptId);
     if (opts.includeVerdicts) {
       verdictsDeleted += await purgeWhere(db, 'attemptVerdicts', 'attemptId', attemptId);
+      marksTouched    += await purgeWhere(db, 'attemptManualMarks', 'attemptId', attemptId);
+    } else {
+      marksTouched += await severStudentOnManualMarks(db, attemptId);
     }
   }
-  return { telemetryDeleted, verdictsDeleted };
+  return { telemetryDeleted, verdictsDeleted, marksTouched };
+}
+
+/**
+ * Cut the link from a retained grading record back to the erased person.
+ *
+ * The mirror of anonymizeAttempts, and it has to exist for the same reason:
+ * `erased:<attemptId>` is not a remapping anyone can reverse, which is what
+ * separates erasure from pseudonymisation. The award survives — it is the
+ * scoring input behind a number on a transcript the institute keeps — and
+ * nothing that points at a person does.
+ */
+async function severStudentOnManualMarks(
+  db: FirebaseFirestore.Firestore,
+  attemptId: string,
+): Promise<number> {
+  let touched = 0;
+  try {
+    const snap = await db.collection('attemptManualMarks')
+      .where('attemptId', '==', attemptId).get();
+    let batch = db.batch();
+    let n = 0;
+    for (const d of snap.docs) {
+      batch.update(d.ref, { studentId: `erased:${attemptId}` });
+      touched++;
+      if (++n >= 400) { await batch.commit(); batch = db.batch(); n = 0; }
+    }
+    if (n > 0) await batch.commit();
+  } catch (err) {
+    console.error('severStudentOnManualMarks failed', attemptId, err);
+  }
+  return touched;
 }
 
 /** Attempt ids belonging to one student. Read BEFORE the attempts are removed. */
@@ -880,13 +927,15 @@ async function performInstituteCascade(
   counts.questionReports = await purgeWhere(db, 'questionReports', 'instituteId', instituteId);
 
   // Per-attempt records that hang off attempts but are keyed by attemptId, so
-  // the studentId and assessmentId purges below never see them. Both carry
-  // instituteId precisely so they can be swept here — otherwise destroying an
-  // institute would leave behind its candidates' program output and a
-  // keystroke record of them writing it, readable by nobody and deletable by
-  // nothing, because the attempts they pointed at are gone.
-  counts.attemptVerdicts  = await purgeWhere(db, 'attemptVerdicts',  'instituteId', instituteId);
-  counts.attemptTelemetry = await purgeWhere(db, 'attemptTelemetry', 'instituteId', instituteId);
+  // the studentId and assessmentId purges below never see them. All three
+  // carry instituteId precisely so they can be swept here — otherwise
+  // destroying an institute would leave behind its candidates' program output,
+  // a keystroke record of them writing it, and an examiner's written remarks
+  // about their work, readable by nobody and deletable by nothing, because the
+  // attempts they pointed at are gone.
+  counts.attemptVerdicts    = await purgeWhere(db, 'attemptVerdicts',    'instituteId', instituteId);
+  counts.attemptTelemetry   = await purgeWhere(db, 'attemptTelemetry',   'instituteId', instituteId);
+  counts.attemptManualMarks = await purgeWhere(db, 'attemptManualMarks', 'instituteId', instituteId);
 
   // 4. Academic hierarchy + mappings.
   counts.academicMappings = await purgeWhere(db, 'academicMappings', 'instituteId', instituteId);
@@ -1774,6 +1823,10 @@ export const scheduledCloseExpiredAttempts = onSchedule(
             questionMap: paper.questionMap,
             answerMap: paper.answerMap,
             codeVerdicts: await loadCodeVerdicts(db, item.doc.id, paper.questionMap),
+            // A sweep-closed attempt has normally never been marked by hand,
+            // but "normally" is not a guarantee: an attempt can be reopened,
+            // and the sweep must never be the path that quietly drops a mark.
+            manualMarks: await loadManualMarks(db, item.doc.id, paper.questionMap),
             answers: att.answers,
             passingScore: paper.assessment.passingScore,
             exposeKeysToStudent: paper.exposeKeysToStudent,
@@ -2935,9 +2988,9 @@ export const executeErasure = onCall<{
 
   // ── Attempts: the one thing ordinary deletion never touches ──────
   if (subjectRole === 'student') {
-    // Collected FIRST. attemptVerdicts and attemptTelemetry are keyed by
-    // attemptId, so once the attempts are gone there is nothing left to find
-    // them by and they would survive as orphans.
+    // Collected FIRST. attemptVerdicts, attemptTelemetry and
+    // attemptManualMarks are keyed by attemptId, so once the attempts are gone
+    // there is nothing left to find them by and they would survive as orphans.
     const attemptIds = await attemptIdsForStudent(db, subjectId);
 
     if (mode === 'anonymize') {
@@ -2954,6 +3007,12 @@ export const executeErasure = onCall<{
     });
     counts.telemetryDeleted = child.telemetryDeleted;
     if (child.verdictsDeleted > 0) counts.verdictsDeleted = child.verdictsDeleted;
+    // Named for what actually happened to them, which differs by mode: deleted
+    // outright alongside the row, or kept with their link to the person cut.
+    if (child.marksTouched > 0) {
+      counts[mode === 'anonymize' ? 'manualMarksAnonymized' : 'manualMarksDeleted'] =
+        child.marksTouched;
+    }
     counts.questionReports = await purgeWhere(db, 'questionReports', 'studentId', subjectId);
     counts.assessmentMembers = await purgeWhere(db, 'assessmentMembers', 'studentId', subjectId);
   }
@@ -4026,6 +4085,117 @@ async function loadCodeVerdicts(
   return out;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// MANUAL MARKING — the human half of the scorer
+// ══════════════════════════════════════════════════════════════════
+//
+// A machine cannot mark an essay, so scoreAttemptAnswers sets
+// requiresManualReview and awards nothing for the text engine. That was the
+// whole story until now: the flag was written, surfaced in four places, and
+// never cleared by anything, so a paper carrying one essay question could be
+// sat and scored but never finished (audit G-01, recorded as a known gap).
+//
+// This is the missing half. A grader awards marks per (attempt, question); the
+// award is stored here and read back by the SAME scorer every other path uses,
+// which is the property that matters: a regrade, a late judge verdict, or the
+// expiry sweep re-runs scoring and the human's mark survives, because it is an
+// input to scoring rather than a patch applied after it.
+//
+// WHY ITS OWN COLLECTION, NOT THE ATTEMPT DOCUMENT: a student may read their
+// own attempt. The mark itself must reach them — that is the point — and it
+// does, through gradedAnswers and the totals. What must not is the grader's
+// identity and the internal note trail, for the same reason attemptVerdicts
+// and provisionalGrades are separate collections. Feedback written FOR the
+// student is copied into gradedAnswers under the review-audience gate; every
+// other field stays here, staff-only.
+
+interface ManualMarkDoc {
+  attemptId: string;
+  questionId: string;
+  assessmentId: string;
+  instituteId: string | null;
+  studentId: string | null;
+  /** Marks awarded by the human. Clamped to [0, question marks] on write. */
+  marksAwarded: number;
+  /** Grader's note. Reaches the student only when review is allowed. */
+  feedback?: string;
+  gradedBy: string;          // auth uid
+  gradedByRole: string;      // role claim at time of marking
+  gradedAt: string;          // ISO — last award
+  firstGradedAt: string;     // ISO — first award, kept across re-marks
+  /** How many times this answer has been re-marked. Audit signal, not a lock. */
+  revision: number;
+}
+
+/** Composite id, same shape and same reasoning as codeVerdictDocId. */
+export function manualMarkDocId(attemptId: string, questionId: string): string {
+  return `${attemptId}__${questionId}`;
+}
+
+/** Longest grader note we will store. Generous for prose, bounded for a doc. */
+const MAX_FEEDBACK_CHARS = 4000;
+
+/**
+ * A human's award, made safe for arithmetic.
+ *
+ * Bounded to [0, the question's marks]. The floor is zero even where the
+ * grading policy allows negative marking: a penalty is a rule the machine
+ * applies to a wrong answer it recognised, and extending it to "a person
+ * thought this essay was bad" is a different thing that nobody asked for. A
+ * grader who wants to award nothing awards nothing.
+ *
+ * Rounded to two decimals because the result is compared against a passing
+ * score, and 7.333333333 in a total is a float artefact reaching a transcript.
+ */
+function clampManualAward(raw: number, maxMarks: number): number {
+  if (!Number.isFinite(raw)) return 0;
+  const rounded = Math.round(raw * 100) / 100;
+  return Math.min(Math.max(rounded, 0), Math.max(0, maxMarks));
+}
+
+/**
+ * Which engines a human is allowed to mark by hand.
+ *
+ * Text always: nothing else can mark it. Code ONLY as a fallback, and the
+ * caller decides — see setManualMark, which permits it only once the judge has
+ * given up. A hand mark that could silently outrank a live judge verdict would
+ * make two sources of truth for the same number.
+ */
+function isManuallyMarkable(engine: string | undefined): boolean {
+  return engine === 'text' || engine === 'code';
+}
+
+/**
+ * Load the human marks for one attempt.
+ *
+ * Absence means "not marked yet" — never zero — exactly as with verdicts. A
+ * paper with nothing manually markable costs no reads at all.
+ */
+async function loadManualMarks(
+  db: FirebaseFirestore.Firestore,
+  attemptId: string,
+  questionMap: Map<string, QuestionDoc>,
+): Promise<Map<string, ManualMarkDoc>> {
+  const out = new Map<string, ManualMarkDoc>();
+  const qIds: string[] = [];
+  questionMap.forEach((q, id) => { if (isManuallyMarkable(q.engine)) qIds.push(id); });
+  if (qIds.length === 0) return out;
+
+  const byDocId = new Map(qIds.map((qid) => [manualMarkDocId(attemptId, qid), qid]));
+  const ids = Array.from(byDocId.keys());
+  for (let i = 0; i < ids.length; i += 300) {
+    const refs = ids.slice(i, i + 300).map((id) => db.collection('attemptManualMarks').doc(id));
+    const snaps = await db.getAll(...refs);
+    snaps.forEach((snap) => {
+      if (!snap.exists) return;
+      const qid = byDocId.get(snap.id);
+      const data = snap.data() as ManualMarkDoc | undefined;
+      if (qid && data && typeof data.marksAwarded === 'number') out.set(qid, data);
+    });
+  }
+  return out;
+}
+
 /**
  * An answer the candidate emptied, or never really made.
  *
@@ -4145,6 +4315,17 @@ interface GradedAnswerOut {
   correctIds?: string[];
   correctPairs?: CorrectPair[];
   modelAnswer?: string;
+  /**
+   * The grader's note on a hand-marked answer.
+   *
+   * Written under the same review gate as modelAnswer, and for the same
+   * reason: gradedAnswers lands on the attempt document, which the student
+   * reads directly. An exam whose review audience excludes students shows
+   * them the mark (through marksAwarded and the totals) but not the prose.
+   */
+  feedback?: string;
+  /** True when this mark came from a human rather than the scorer. */
+  manuallyMarked?: boolean;
 }
 
 interface ScoresOut {
@@ -4207,9 +4388,20 @@ function scoreAttemptAnswers(params: {
    * wrong, which is the same safe direction the judge outage takes.
    */
   codeVerdicts?: Map<string, JudgeVerdict>;
+  /**
+   * Human marks for this attempt, keyed by question id.
+   *
+   * OPTIONAL, AND ABSENT MEANS "NOT MARKED YET" — the same contract as
+   * codeVerdicts, for the same reason. Every finalising path must pass these:
+   * a scorer that cannot see the human's mark would re-derive the paper
+   * without it and silently erase work a person did, which is the one failure
+   * mode this whole mechanism exists to make impossible.
+   */
+  manualMarks?: Map<string, ManualMarkDoc>;
 }): { scores: ScoresOut; gradedAnswers: Record<string, GradedAnswerOut> } {
   const { sections, questionMap, answerMap, answers, passingScore, exposeKeysToStudent } = params;
   const codeVerdicts = params.codeVerdicts ?? new Map<string, JudgeVerdict>();
+  const manualMarks = params.manualMarks ?? new Map<string, ManualMarkDoc>();
   const invalidated = params.invalidatedQuestionIds ?? new Set<string>();
   const gradingConfig = params.gradingConfig;
 
@@ -4272,6 +4464,30 @@ function scoreAttemptAnswers(params: {
         if (q.engine === 'text')  exposed.modelAnswer  = ans.modelAnswer  ?? '';
       }
 
+      /**
+       * Apply a human's mark to this question, if one has been given.
+       *
+       * Returns whether it did, so each caller can fall through to manual
+       * review when it did not. `isCorrect` is set to a BOOLEAN rather than
+       * left null on purpose: null is what the readers use to mean "nobody has
+       * marked this", and every existing reader already buckets a boolean plus
+       * marksAwarded into correct / partial / wrong. A hand-marked essay
+       * therefore renders as an ordinary marked question everywhere, with no
+       * reader needing to learn about manual marking at all.
+       */
+      const applyManualMark = (): boolean => {
+        const mark = manualMarks.get(aq.questionId);
+        if (!mark) return false;
+        const award = clampManualAward(mark.marksAwarded, aq.marks);
+        sectionAwarded += award;
+        totalAwarded   += award;
+        exposed.marksAwarded   = award;
+        exposed.isCorrect      = award >= aq.marks;
+        exposed.manuallyMarked = true;
+        if (exposeKeys && mark.feedback) exposed.feedback = mark.feedback;
+        return true;
+      };
+
       if (invalidated.has(aq.questionId)) {
         // Invalidated question — full marks for everyone, regardless of
         // whether it was answered (matches the old flat-bonus semantics).
@@ -4327,11 +4543,14 @@ function scoreAttemptAnswers(params: {
             totalAwarded   += award;
             exposed.marksAwarded = award;
             exposed.isCorrect    = outcome.isCorrect;
-          } else {
+          } else if (!applyManualMark()) {
+            // No verdict and no human mark. Still the judge's to answer, or —
+            // once it has exhausted its retries — a grader's, through the same
+            // hand-marking path an essay uses.
             requiresManualReview = true;
           }
-        } else {
-          // text engine — needs human grading
+        } else if (!applyManualMark()) {
+          // text engine — no machine can mark this, and no human has yet
           requiresManualReview = true;
         }
       } else {
@@ -4563,6 +4782,11 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       questionMap,
       answerMap,
       codeVerdicts,
+      // Normally empty on a first finalisation — an answer cannot have been
+      // marked before it was submitted. Loaded anyway because gradeAttempt is
+      // also the re-finalise path, and a scorer that forgets the human's mark
+      // is how one gets erased.
+      manualMarks: await loadManualMarks(db, attemptId, questionMap),
       answers: attempt.answers,
       passingScore: assessment.passingScore,
       // Keys land in the student's own attempt only when STUDENTS are in
@@ -4863,6 +5087,12 @@ export const regradeAttempts = onCall<RegradeAttemptsData>(
         // the paper is finalised into manual review first and the verdict lands
         // afterwards. Re-reading verdicts here is what turns it into a mark.
         codeVerdicts: await loadCodeVerdicts(db, docSnap.id, attemptQMap),
+        // THE REASON THIS PARAMETER IS NOT OPTIONAL IN PRACTICE. A regrade
+        // re-derives every finished attempt from scratch; without the human's
+        // marks it would re-run the scorer as though nobody had ever marked
+        // anything, silently deleting a cohort's worth of hand marking and
+        // pushing every essay paper back into review.
+        manualMarks: await loadManualMarks(db, docSnap.id, attemptQMap),
         answers: att.answers,
         passingScore: assessment.passingScore,
         exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
@@ -4883,6 +5113,207 @@ export const regradeAttempts = onCall<RegradeAttemptsData>(
     if (batchSize > 0) await batch.commit();
 
     return { ok: true, updated };
+  }
+);
+
+// ══════════════════════════════════════════════════════════════════
+// setManualMark — a human awards marks on one answer
+//
+// The other half of audit G-01. The scorer flags what it cannot mark; this is
+// the only path that marks it, and the only path that can clear the flag.
+//
+// Four properties this is built to hold:
+//
+//   1. THE MARK IS AN INPUT, NOT A PATCH. It is stored, then the whole attempt
+//      is re-scored through scoreAttemptAnswers — the same function gradeAttempt
+//      and regradeAttempts use. Nothing here computes a total by hand, so a
+//      hand-marked paper cannot drift from a machine-marked one, and a later
+//      regrade re-reads the mark instead of erasing it.
+//
+//   2. THE PAPER IS THE ATTEMPT'S OWN. examContractFor, exactly as B-02
+//      established for the regrade path: a grader marking against a paper the
+//      student never sat is the same defect wearing a different hat.
+//
+//   3. A JUDGED CODING ANSWER IS NOT HAND-MARKABLE. Text has no other marker,
+//      so it is always open. Code is open only while no usable verdict exists —
+//      the judge is down, or has given up. Once a verdict lands, the judge owns
+//      that number; two authorities over one mark is how they silently diverge.
+//
+//   4. FINISHED ATTEMPTS ONLY. Marking a live sitting would race the student's
+//      own writes and produce a mark on a paper still being written.
+// ══════════════════════════════════════════════════════════════════
+
+interface SetManualMarkData {
+  attemptId: string;
+  questionId: string;
+  /** Marks to award, or null to withdraw the mark and requeue the answer. */
+  marks: number | null;
+  feedback?: string;
+}
+
+export const setManualMark = onCall<SetManualMarkData>(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+    const callerRole        = request.auth.token.role        as Role   | undefined;
+    const callerInstituteId = request.auth.token.instituteId as string | undefined;
+
+    const { attemptId, questionId, marks, feedback } =
+      request.data || ({} as SetManualMarkData);
+
+    if (!attemptId || typeof attemptId !== 'string') {
+      throw new HttpsError('invalid-argument', 'attemptId is required.');
+    }
+    if (!questionId || typeof questionId !== 'string') {
+      throw new HttpsError('invalid-argument', 'questionId is required.');
+    }
+    if (marks !== null && (typeof marks !== 'number' || !Number.isFinite(marks))) {
+      throw new HttpsError('invalid-argument', 'marks must be a number, or null to clear.');
+    }
+    if (feedback !== undefined && typeof feedback !== 'string') {
+      throw new HttpsError('invalid-argument', 'feedback must be a string.');
+    }
+    if (typeof feedback === 'string' && feedback.length > MAX_FEEDBACK_CHARS) {
+      throw new HttpsError('invalid-argument',
+        `feedback is limited to ${MAX_FEEDBACK_CHARS} characters.`);
+    }
+
+    const db = getFirestore();
+
+    const attemptRef  = db.collection('attempts').doc(attemptId);
+    const attemptSnap = await attemptRef.get();
+    if (!attemptSnap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+    const attempt = attemptSnap.data() as {
+      assessmentId: string;
+      studentId?: string;
+      instituteId?: string;
+      status?: string;
+      isDeleted?: boolean;
+      answers?: Record<string, AttemptAnswerDoc>;
+      gradingConfig?: AssessmentGradingConfigS;
+      examSnapshot?: { sections?: unknown };
+    };
+
+    // AuthZ — graders only. Students never mark, not even their own paper.
+    // Mirrors the isGrader arm of gradeAttempt rather than inventing a second
+    // spelling of the same rule.
+    const isGrader =
+      callerRole === 'webOwner'
+      || ((callerRole === 'institute' || callerRole === 'faculty')
+          && !!callerInstituteId && callerInstituteId === attempt.instituteId);
+    if (!isGrader) {
+      throw new HttpsError('permission-denied', 'Only graders may mark an answer.');
+    }
+
+    const FINISHED = new Set(['submitted', 'auto_submitted', 'terminated']);
+    if (!attempt.status || !FINISHED.has(attempt.status)) {
+      throw new HttpsError('failed-precondition',
+        'NOT_FINISHED: an answer can only be marked once the sitting is over.');
+    }
+    if (attempt.isDeleted) {
+      throw new HttpsError('failed-precondition',
+        'DELETED_ATTEMPT: this attempt has been withdrawn and cannot be marked.');
+    }
+
+    const aSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
+    if (!aSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
+
+    // B-02: mark against the paper THIS attempt sat.
+    const assessment = examContractFor(
+      attempt as unknown as Record<string, unknown>,
+      aSnap.data() as Record<string, unknown>,
+    ) as GradingAssessmentDoc;
+    const sections = normalizeSections(assessment);
+
+    // The question must be ON this paper, and we need its marks ceiling.
+    let maxMarks: number | null = null;
+    for (const sec of sections) {
+      for (const sq of sec.questions) {
+        if (sq.questionId === questionId) { maxMarks = sq.marks; break; }
+      }
+      if (maxMarks !== null) break;
+    }
+    if (maxMarks === null) {
+      throw new HttpsError('failed-precondition',
+        'NOT_ON_PAPER: that question is not part of the paper this student sat.');
+    }
+
+    const qIds = Array.from(new Set(
+      sections.flatMap((sec) => sec.questions.map((q) => q.questionId)),
+    ));
+    const { questionMap, answerMap } = await loadQuestionAndAnswerMaps(db, qIds);
+
+    const question = questionMap.get(questionId);
+    if (!question) {
+      throw new HttpsError('failed-precondition',
+        'QUESTION_UNAVAILABLE: the question document no longer exists.');
+    }
+    if (!isManuallyMarkable(question.engine)) {
+      throw new HttpsError('failed-precondition',
+        'NOT_MANUAL: this question is machine-marked. Use a regrade to change its mark.');
+    }
+
+    const codeVerdicts = await loadCodeVerdicts(db, attemptId, questionMap);
+
+    // Property 3: a coding answer the judge has actually marked is the judge's.
+    if (question.engine === 'code') {
+      const verdict = codeVerdicts.get(questionId);
+      const ansDoc  = answerMap.get(questionId);
+      const outcome = verdict ? codeOutcomeFor(verdict, ansDoc?.tests ?? []) : null;
+      if (outcome) {
+        throw new HttpsError('failed-precondition',
+          'ALREADY_JUDGED: the code runner has marked this answer. Re-run the judge '
+          + 'to change it rather than marking over the top of a verdict.');
+      }
+    }
+
+    const markRef = db.collection('attemptManualMarks').doc(manualMarkDocId(attemptId, questionId));
+    const nowIso  = new Date().toISOString();
+
+    if (marks === null) {
+      // Withdraw. The answer returns to the queue on the re-score below, which
+      // is why this is a delete rather than a zero — zero is a mark someone
+      // chose to give, and the two must not look alike to the next grader.
+      await markRef.delete();
+    } else {
+      const existing = (await markRef.get()).data() as ManualMarkDoc | undefined;
+      const doc: ManualMarkDoc = {
+        attemptId,
+        questionId,
+        assessmentId: attempt.assessmentId,
+        instituteId: attempt.instituteId ?? null,
+        studentId: attempt.studentId ?? null,
+        marksAwarded: clampManualAward(marks, maxMarks),
+        gradedBy: request.auth.uid,
+        gradedByRole: String(callerRole ?? 'unknown'),
+        gradedAt: nowIso,
+        firstGradedAt: existing?.firstGradedAt ?? nowIso,
+        revision: (existing?.revision ?? 0) + 1,
+      };
+      const trimmed = (feedback ?? '').trim();
+      if (trimmed) doc.feedback = trimmed;
+      await markRef.set(doc);
+    }
+
+    // Re-score the whole paper through the shared scorer. This is what clears
+    // requiresManualReview and restores a real pass/fail verdict once the last
+    // outstanding answer has been marked.
+    const { scores, gradedAnswers } = scoreAttemptAnswers({
+      sections,
+      questionMap,
+      answerMap,
+      codeVerdicts,
+      manualMarks: await loadManualMarks(db, attemptId, questionMap),
+      answers: attempt.answers,
+      passingScore: assessment.passingScore,
+      exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),
+      gradingConfig: attempt.gradingConfig ?? assessment.gradingConfig,
+    });
+
+    await attemptRef.update({ scores, gradedAnswers, updatedAt: nowIso });
+
+    return { ok: true, scores };
   }
 );
 
@@ -7676,6 +8107,9 @@ export const gradeProvisional = onCall<GradeProvisionalData>(
       questionMap,
       answerMap,
       codeVerdicts: await loadCodeVerdicts(db, attemptId, questionMap),
+      // A provisional grade previews the real one, so it must be computed the
+      // same way — including any marking already done on an earlier sitting.
+      manualMarks: await loadManualMarks(db, attemptId, questionMap),
       answers: attempt.answers,
       passingScore: assessment.passingScore,
       // NEVER to the student on this path, whatever the review audience says.
@@ -11756,6 +12190,9 @@ async function judgeAttemptCoding(
       questionMap,
       answerMap,
       codeVerdicts,
+      // A paper can carry both a coding answer and an essay. The judge landing
+      // must not undo the essay's mark on its way past.
+      manualMarks: await loadManualMarks(db, attemptId, questionMap),
       answers: attempt.answers,
       passingScore: assessment.passingScore,
       exposeKeysToStudent: reviewAudienceAllows(assessment, 'students'),

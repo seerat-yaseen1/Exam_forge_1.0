@@ -174,9 +174,19 @@ function ReviewQuestion({
     // said the paper was still being marked. Null renders as the neutral
     // "pending" treatment, the same one a text answer awaiting a human gets.
     if (codePending) return null;
-    if (!answer || question.engine === 'text') return null;
+    if (!answer) return null;
     // Prefer the authoritative server result when present.
+    //
+    // THIS NOW SITS ABOVE THE TEXT CHECK, and the order is the point. It used
+    // to read `if (!answer || engine === 'text') return null` first, which was
+    // right while an essay could never carry a verdict — nothing could mark
+    // one. Now that a human can, a marked essay arrives with a real boolean,
+    // and short-circuiting on the engine would have gone on rendering it as
+    // "still being marked" forever: the mark would be in their total and the
+    // question next to it would say nobody had looked at it.
     if (graded && typeof graded.isCorrect === 'boolean') return graded.isCorrect;
+    // An essay nobody has marked yet. Neutral, never wrong.
+    if (question.engine === 'text') return null;
     if (question.engine === 'mcq') {
       const ids = Array.isArray(answer.value) ? answer.value : [answer.value as string];
       const sortedCorrect = [...correctIds].sort();
@@ -376,12 +386,36 @@ function ReviewQuestion({
                 </div>
               )}
 
-              {question.engine === 'text' && (
+              {/* A written answer, before a human has marked it.
+                  Keyed on the ABSENCE of a mark rather than on the engine: the
+                  notice used to show on every text question forever, including
+                  ones that had since been marked, because until manual marking
+                  existed there was no second state for it to have. */}
+              {question.engine === 'text' && graded?.isCorrect === null && (
                 <div className="flex items-center gap-2 px-3 py-2.5"
                   style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                   <Eye size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
                   <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                     This question requires manual grading by your examiner.
+                  </p>
+                </div>
+              )}
+
+              {/* The examiner's note. Present only when they wrote one AND the
+                  exam's review settings include students — the server decides
+                  that and simply omits the field otherwise, so there is no
+                  visibility rule to re-implement here. */}
+              {graded?.feedback && (
+                <div>
+                  <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
+                    EXAMINER'S FEEDBACK
+                  </p>
+                  <p className="text-xs px-3 py-2.5"
+                    style={{
+                      background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)',
+                      borderRadius: 2, color: 'var(--ef-ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap',
+                    }}>
+                    {graded.feedback}
                   </p>
                 </div>
               )}

@@ -26,6 +26,7 @@ Owner today can:
 | Grant extra attempts to one student | `setAttemptOverride`, `assessmentService.ts:1815` |
 | Soft-delete an attempt (web-owner only) | `AssessmentRosterCore.tsx:1550`, audit S-03 |
 | Re-judge coding / regrade a whole assessment | `rejudgeAttemptCoding`, `regradeAssessmentAttempts` |
+| **Hand-mark a subjective answer, with feedback** | `setManualMark`, `MarkingPanel` — see §1 |
 | Triage student-flagged questions | `ReportsInboxCore.tsx`, `questionReportService.ts` |
 | Export results | `ResultsExportModal.tsx`, `resultsExport.ts` |
 | Run GDPR erasure / deletion approvals / purge | `ErasurePolicyPanel`, `DeletionApprovalsInbox`, `InstitutePurgePanel` |
@@ -36,9 +37,15 @@ is reachable only through an assessment.
 
 ---
 
-## 1 · 🔴 There is no way to grade a subjective answer
+## 1 · ✅ There was no way to grade a subjective answer — *fixed*
 
-The single largest hole. It is not a missing screen — it is a missing half of
+> **Closed.** `setManualMark` is the path, the roster carries the marking
+> control and a per-exam queue, and the student sees the mark and the
+> examiner's note. Covered by `functions/test/manual.grading.cjs` (14 probes),
+> rules probe R-09b, and `src/lib/manualGrading.test.ts`. The original finding
+> is kept below, followed by what was built.
+
+The single largest hole. It was not a missing screen — it was a missing half of
 the grading pipeline.
 
 - `functions/src/index.ts:4333-4335` — every text-engine answer sets
@@ -68,10 +75,50 @@ to staff and student alike. The `attemptOverrides` control is an *attempt-count*
 override (`assessmentService.ts:967`), not a score override — there is no score
 override anywhere.
 
-**What's missing:** a grading queue (all attempts with the flag, across
-assessments), a per-answer award-marks UI with the model answer / rubric
-alongside, a callable that writes the award with grader identity and timestamp,
-recomputation of section + total + pass/fail, and clearing of the flag.
+**What was missing:** a grading queue, a per-answer award-marks UI with the
+model answer alongside, a callable that writes the award with grader identity
+and timestamp, recomputation of section + total + pass/fail, and clearing of
+the flag.
+
+### What was built
+
+**`setManualMark`** (`functions/src/index.ts`) — graders only (webOwner, or
+institute/faculty of the attempt's institute); finished, non-withdrawn attempts
+only. It bounds the award to `[0, the marks the question carried on the paper
+that student sat]`, writes the grading record, then **re-scores the whole
+attempt through `scoreAttemptAnswers`** — the same function every other grading
+path uses. Nothing computes a total by hand, so a hand-marked paper cannot
+drift from a machine-marked one.
+
+**The mark is an input to scoring, not a patch applied after it.** This is the
+property everything rests on. Marks live in `attemptManualMarks` and are loaded
+by all five `scoreAttemptAnswers` call sites — `gradeAttempt`,
+`regradeAttempts`, `gradeProvisional`, the expiry sweep, and the judging sweep.
+A call site that forgot the parameter would silently erase a cohort's marking
+on the next regrade; probes M-09 and M-10 exist for exactly those two paths and
+were verified to fail when the parameter is removed.
+
+**Coding answers are covered too, with a boundary.** Text is always
+hand-markable — nothing else can mark it. Code is hand-markable only while no
+usable verdict exists (judge down, or out of retries); once a verdict lands the
+judge owns that number and `setManualMark` refuses with `ALREADY_JUDGED`. This
+closes the second path into permanent limbo: a judge outage that outlasted its
+backoff previously left the marks unreachable.
+
+**What the student sees:** the award and the recomputed total, and the
+examiner's feedback when the exam's review audience includes students. What
+they never see is the grading record — who marked, under which role, how many
+revisions — which is why it lives in its own staff-only collection rather than
+on the student-readable attempt document (rules probe R-09b).
+
+**Where the work appears:** a *Needs marking* filter on the roster, counting
+papers waiting on a **person** — `requiresManualReview` minus those still
+waiting on the judge, which resolve themselves. The marking control sits in the
+answer drawer where the answer and model answer already are.
+
+**Still open:** the queue is per-assessment. A cross-assessment "everything
+waiting on me" view depends on the student-level/cross-assessment reads
+described in §2, and is deliberately not built here.
 
 ---
 
@@ -237,8 +284,7 @@ This is structural, not just a missing button — the exam shell lives at
 
 Judged by *harm if left undone*, not by build cost:
 
-1. **Manual grading** (§1) — without it, an entire advertised question category
-   produces results that can never be finalised.
+1. ~~**Manual grading** (§1)~~ — **done.** See §1.
 2. **Student profile view** (§2) — unlocks integrity-pattern detection and
    makes every support interaction possible.
 3. **Directory + search, with pagination** (§3) — also fixes the 5-second

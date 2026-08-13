@@ -136,8 +136,11 @@ function seedExam(questions, o = {}) {
 // surfaced in three UIs (roster, student list, results page) and exported to
 // CSV, so the product promises a marking workflow.
 //
-// This probe asks whether that workflow EXISTS: can any actor put a mark on a
-// text answer, through any path?
+// This probe asked whether that workflow EXISTED: could any actor put a mark
+// on a text answer, through any path? For a long time the answer was no, and
+// the probe recorded it as a known gap rather than a failure. It now holds the
+// workflow that closed it — see the note partway down. The marking machinery
+// has its own suite in manual.grading.cjs; this keeps the end-to-end claim.
 // ═══════════════════════════════════════════════════════════════════
 async function G01() {
   seedQ('t1', { engine: 'text', modelAnswer: 'a model answer' });
@@ -164,31 +167,33 @@ async function G01() {
   await call(fns.regradeAttempts, { assessmentId: 'asmt_1' }, OWNER());
   eq(A(id).scores.total, before, 'a regrade cannot mark it either (same scorer)');
 
-  // ── KNOWN GAP, recorded rather than asserted ────────────────────
+  // Until the mark is given, the system must stay honest about it: the paper
+  // is flagged, and NO pass/fail verdict is issued (G-02, G-04).
+  check(true, 'the unmarkable half is reported honestly rather than scored as wrong');
+  eq(A(id).scores.passed, null, 'and no pass/fail verdict is issued yet (G-02)');
+
+  // ── THE GAP THIS PROBE WAS WRITTEN TO RECORD, NOW CLOSED ────────
   //
-  // There is NO manual-marking path anywhere: no callable awards marks for a
-  // text answer, and firestore.rules restrict staff attempt writes to
-  // ['updatedAt'], so no client route exists either. A paper containing an
-  // essay question can therefore never be finished.
-  //
-  // This probe does NOT fail on that. Building the workflow is a product
-  // decision — who may mark, whether marking needs a second approver, what the
-  // audit trail records — and inventing answers to those inside an audit would
-  // be worse than naming the gap. What the probe DOES hold is that the system
-  // behaves honestly in the meantime, which is what G-02 and G-04 fixed: the
-  // paper is flagged, and no pass/fail verdict is issued on it.
+  // This block used to push a KNOWN_GAP saying no manual-marking path existed
+  // anywhere, and that building one was a product decision an audit should not
+  // make for itself. That decision has since been taken: setManualMark is the
+  // path, and the probe's job flips from naming the absence to holding the
+  // behaviour. The candidate-name list is kept as the assertion so the suite
+  // fails loudly if the callable is ever renamed out from under it.
   const hasManualMarking = ['setManualMark', 'markAnswer', 'gradeAnswerManually',
     'setAnswerMark', 'manualGrade'].some((n) => typeof fns[n] === 'function');
-  if (!hasManualMarking) {
-    KNOWN_GAPS.push(
-      'No manual-marking path exists for text/essay answers. Papers containing '
-      + 'them can be sat and scored but never completed. Consequences are '
-      + 'contained (G-02: no pass/fail verdict is issued; the paper is flagged), '
-      + 'but the marks are unreachable. Building the workflow is a product '
-      + 'decision and is deliberately NOT done here.');
-  }
-  check(true, 'the unmarkable half is reported honestly rather than scored as wrong');
-  eq(A(id).scores.passed, null, 'and no pass/fail verdict is issued (G-02)');
+  check(hasManualMarking, 'a manual-marking callable exists');
+
+  await call(fns.setManualMark,
+    { attemptId: id, questionId: 't1', marks: 40, feedback: 'Good, missed one point.' },
+    OWNER());
+
+  const after = A(id).scores;
+  eq(after.total, 90, 'the human mark is added to the machine-marked half');
+  eq(after.requiresManualReview, false, 'and the paper is no longer flagged');
+  eq(after.passed, true, 'so a real pass/fail verdict is finally issued');
+  eq(A(id).gradedAnswers.t1.marksAwarded, 40, 'the per-answer record carries the award');
+  eq(A(id).gradedAnswers.t1.manuallyMarked, true, 'and records that a human gave it');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1077,13 +1082,20 @@ async function G26() {
   DB.seed('attempts', 'att_2', { id: 'att_2', studentId: 'stu_1', instituteId: 'inst_1' });
   DB.seed('attempts', 'att_9', { id: 'att_9', studentId: 'stu_OTHER', instituteId: 'inst_1' });
 
-  const seedChild = (att, qid) => {
+  const seedChild = (att, qid, studentId) => {
     DB.seed('attemptVerdicts', `${att}__${qid}`,
       { attemptId: att, questionId: qid, instituteId: 'inst_1', verdict: {} });
     DB.seed('attemptTelemetry', `${att}__${qid}__0000`,
       { attemptId: att, questionId: qid, instituteId: 'inst_1', events: [] });
+    DB.seed('attemptManualMarks', `${att}__${qid}`, {
+      attemptId: att, questionId: qid, instituteId: 'inst_1', studentId,
+      marksAwarded: 30, feedback: 'Thin on evidence.',
+      gradedBy: 'fac_1', gradedByRole: 'faculty', revision: 1,
+    });
   };
-  seedChild('att_1', 'c1'); seedChild('att_2', 'c1'); seedChild('att_9', 'c1');
+  seedChild('att_1', 'c1', 'stu_1');
+  seedChild('att_2', 'c1', 'stu_1');
+  seedChild('att_9', 'c1', 'stu_OTHER');
 
   const ids = await fns.attemptIdsForStudent(DB, 'stu_1');
   eq(ids.sort().join(','), 'att_1,att_2', 'the subject\'s attempts are found, and only theirs');
@@ -1097,11 +1109,26 @@ async function G26() {
   check(!!DB.read('attemptTelemetry', 'att_9__c1__0000'),
     'ANOTHER STUDENT is untouched — erasure is of a person, not of a collection');
 
+  // The manual mark is retained for the same reason the verdict is — it is the
+  // scoring input behind a number on a transcript the institute keeps, and
+  // dropping it would make the next regrade quietly remove marks from an
+  // anonymised row. What must NOT survive is the link back to the person.
+  const anonMark = DB.read('attemptManualMarks', 'att_1__c1');
+  check(!!anonMark, 'the manual mark survives anonymisation, as the verdict does');
+  eq(anonMark.marksAwarded, 30, 'with its award intact, so a regrade reproduces it');
+  eq(anonMark.studentId, 'erased:att_1',
+    'THE POINT — but its link to the person is severed, not remapped');
+  eq(DB.read('attemptManualMarks', 'att_9__c1').studentId, 'stu_OTHER',
+    'and another student\'s marking is untouched');
+
   // ── Delete: the record goes entirely, so the verdict goes with it ──
   const del = await fns.purgeAttemptChildRecords(DB, ids, { includeVerdicts: true });
   eq(del.verdictsDeleted, 2, 'verdicts are destroyed in delete mode');
   eq(DB.read('attemptVerdicts', 'att_1__c1'), undefined, 'gone');
   check(!!DB.read('attemptVerdicts', 'att_9__c1'), 'and again, only the subject\'s');
+  eq(DB.read('attemptManualMarks', 'att_1__c1'), undefined,
+    'the grading record goes with the row it justified');
+  check(!!DB.read('attemptManualMarks', 'att_9__c1'), 'and again, only the subject\'s');
 
   // Idempotent: an erasure re-run must not fail on records already gone.
   const again = await fns.purgeAttemptChildRecords(DB, ids, { includeVerdicts: true });

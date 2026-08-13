@@ -64,11 +64,19 @@ export function currentSessionId(): string | null {
 // (only after submission).
 
 export type GradedAnswer = {
-  isCorrect: boolean | null;   // null for ungraded (text) questions
+  // null means NOBODY HAS MARKED THIS YET — not "we don't know". A hand-marked
+  // text answer carries a boolean like any other, which is what lets every
+  // reader bucket it as correct / partial / wrong with no special case for
+  // manual marking (see setManualMark, functions/src/index.ts).
+  isCorrect: boolean | null;
   marksAwarded: number;
   correctIds?: string[];       // mcq
   correctPairs?: CorrectPair[]; // match
   modelAnswer?: string;        // text
+  /** Grader's note. Present only when the review audience includes the reader. */
+  feedback?: string;
+  /** True when a human awarded this mark rather than the scorer. */
+  manuallyMarked?: boolean;
 };
 
 // ══════════════════════════════════════════════════════════════════

@@ -54,6 +54,14 @@ import {
   summariseVerdict,
   type CodeVerdictDoc,
 } from '../../../lib/codeVerdictView';
+import {
+  awaitsManualMark,
+  clampAward,
+  getManualMarks,
+  setManualMark,
+  MAX_FEEDBACK_CHARS,
+  type ManualMark,
+} from '../../../lib/manualGradingService';
 import { JUDGE_LANGUAGE_LABEL, type JudgeLanguage } from '../exam/judgeTypes';
 import { getQuestionsByIdsForReview, type Question } from '../../../lib/questionBankService';
 import { ResultsExportModal } from './ResultsExportModal';
@@ -145,6 +153,31 @@ function attemptStartedMs(a: Attempt): number {
  */
 function isReviewable(a: Attempt | null | undefined): boolean {
   return !!a && (a.status === 'submitted' || a.status === 'auto_submitted' || a.status === 'terminated');
+}
+
+/**
+ * Does this row have a paper waiting on a PERSON?
+ *
+ * `requiresManualReview` alone is not the answer, and the difference is the
+ * whole point of this helper. The scorer raises that flag for two situations
+ * that feel alike and are not: an answer no machine can mark, and a coding
+ * answer the judge has not got to yet. The second resolves itself. Putting it
+ * in a grader's queue would have them marking answers the runner is about to
+ * mark for them — and worse, a queue that empties on its own is a queue people
+ * stop trusting.
+ *
+ * `codeJudgePending` is the discriminator: while it is set the machine still
+ * owns the paper. Once it clears — judged, or out of retries — whatever is
+ * still flagged is a person's to answer. Same rule as awaitsManualMark, which
+ * decides the per-answer control, so the count and the controls cannot
+ * disagree about what is outstanding.
+ */
+function rowNeedsMarking(row: RosterRow): boolean {
+  const a = row.attempt;
+  if (!a || !isReviewable(a)) return false;
+  if (a.isDeleted) return false;
+  if (a.codeJudgePending === true) return false;
+  return a.scores?.requiresManualReview === true;
 }
 
 function deriveRosterStatus(attempt: Attempt | null): RosterStatus {
@@ -977,12 +1010,205 @@ const CATEGORY_CONFIG: Record<AnswerCategory, {
   code:        { label: 'Code',        bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8',  icon: <Code2 size={11} strokeWidth={1.5} /> },
 };
 
+// ══════════════════════════════════════════════════════════════════
+// MARKING PANEL — where a human awards the marks a machine cannot
+// ══════════════════════════════════════════════════════════════════
+//
+// The client half of audit G-01. Everything that decides anything happens in
+// the setManualMark callable — the ceiling, the refusals, the re-score. This
+// is a box, a note and two buttons, and it is deliberately thin: a second copy
+// of the rules here would be a second place for them to drift.
+//
+// The awarded total is NOT tracked in local state. setManualMark re-scores the
+// attempt server-side, and the roster is subscribed to the attempt document,
+// so the new mark arrives the same way every other change to a sitting does.
+// Holding an optimistic copy would create a second answer to "what was this
+// awarded", and the two would disagree the first time a write failed.
+
+function MarkingPanel({
+  attemptId,
+  questionId,
+  maxMarks,
+  graded,
+  mark,
+  onMarked,
+}: {
+  attemptId: string;
+  questionId: string;
+  maxMarks: number;
+  graded: GradedAnswer | undefined;
+  mark: ManualMark | undefined;
+  onMarked: () => void;
+}) {
+  const [marksInput, setMarksInput] = useState('');
+  const [feedback, setFeedback]     = useState('');
+  const [busy, setBusy]             = useState<'save' | 'clear' | null>(null);
+  const [error, setError]           = useState('');
+  const [saved, setSaved]           = useState(false);
+
+  // Seed from the stored mark, and re-seed if it changes underneath us (a
+  // colleague marking the same paper). Keyed on the record's revision so a
+  // grader's in-progress typing is not wiped by an unrelated re-render.
+  useEffect(() => {
+    setMarksInput(mark ? String(mark.marksAwarded) : '');
+    setFeedback(mark?.feedback ?? '');
+    setError('');
+    setSaved(false);
+  }, [mark?.revision, mark?.marksAwarded, mark?.feedback, questionId]);
+
+  const parsed = clampAward(marksInput, maxMarks);
+  const dirty  = marksInput.trim() !== '' && (
+    !mark || parsed !== mark.marksAwarded || (feedback.trim() || undefined) !== mark.feedback
+  );
+
+  const submit = useCallback(async (marks: number | null) => {
+    setBusy(marks === null ? 'clear' : 'save');
+    setError('');
+    setSaved(false);
+    try {
+      await setManualMark({
+        attemptId,
+        questionId,
+        marks,
+        feedback: marks === null ? undefined : feedback.trim(),
+      });
+      setSaved(true);
+      onMarked();
+    } catch (e) {
+      // The server's refusals are specific and worth reading — a sitting still
+      // running, a verdict that already owns this mark, a withdrawn attempt.
+      // Swallowing them would leave a grader pressing a button that does
+      // nothing, which is how one ends up pressing it four more times.
+      const raw = e instanceof Error ? e.message : String(e);
+      setError(
+        raw.includes('NOT_FINISHED') ? 'This sitting is still in progress — it can be marked once the student submits.'
+        : raw.includes('ALREADY_JUDGED') ? 'The code runner has marked this answer. Re-run the judge to change it.'
+        : raw.includes('DELETED_ATTEMPT') ? 'This attempt has been withdrawn and can no longer be marked.'
+        : raw.includes('NOT_ON_PAPER') ? 'This question is not part of the paper this student sat.'
+        : raw.includes('NOT_MANUAL') ? 'This question is machine-marked.'
+        : raw.replace(/^.*?:\s*/, '') || 'Could not save the mark. Please try again.',
+      );
+    } finally {
+      setBusy(null);
+    }
+  }, [attemptId, questionId, feedback, onMarked]);
+
+  const over = marksInput.trim() !== '' && parsed === null;
+
+  return (
+    <div className="flex flex-col gap-2.5 px-3 py-3"
+      style={{ background: '#F7FAFF', border: '1px solid #BFDBFE', borderRadius: 2 }}>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs" style={{ color: '#1D4ED8', letterSpacing: '0.08em' }}>MARKING</p>
+        {mark && (
+          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+            {mark.gradedByRole === 'webOwner' ? 'Web Owner' : mark.gradedByRole} · {formatRelative(mark.gradedAt)}
+            {mark.revision > 1 && ` · revision ${mark.revision}`}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <input
+          type="number" min={0} max={maxMarks} step="0.5"
+          value={marksInput}
+          onChange={(e) => { setMarksInput(e.target.value); setSaved(false); }}
+          placeholder="—"
+          className="text-xs px-2 py-1"
+          style={{
+            width: 72, background: 'var(--ef-surface)', borderRadius: 2,
+            border: `1px solid ${over ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
+            color: 'var(--ef-ink)', outline: 'none',
+          }}
+        />
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+          of {maxMarks} mark{maxMarks !== 1 ? 's' : ''}
+        </span>
+        {parsed !== null && marksInput.trim() !== '' && String(parsed) !== marksInput.trim() && (
+          <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>
+            will be saved as {parsed}
+          </span>
+        )}
+      </div>
+
+      <textarea
+        value={feedback}
+        onChange={(e) => { setFeedback(e.target.value.slice(0, MAX_FEEDBACK_CHARS)); setSaved(false); }}
+        placeholder="Feedback for the student (optional) — shown only if review is open to them"
+        rows={2}
+        className="text-xs px-2 py-1.5"
+        style={{
+          background: 'var(--ef-surface)', border: '1px solid var(--ef-border)',
+          borderRadius: 2, color: 'var(--ef-ink)', outline: 'none', resize: 'vertical',
+          lineHeight: 1.6,
+        }}
+      />
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => void submit(parsed)}
+          disabled={busy !== null || parsed === null || !dirty}
+          className="flex items-center gap-1.5 text-xs px-2.5 py-1"
+          style={{
+            border: '1px solid #1D4ED8', borderRadius: 2,
+            background: parsed === null || !dirty ? 'var(--ef-surface)' : '#1D4ED8',
+            color: parsed === null || !dirty ? 'var(--ef-text-muted)' : '#FFFFFF',
+            cursor: busy !== null || parsed === null || !dirty ? 'default' : 'pointer',
+            opacity: busy !== null ? 0.6 : 1,
+          }}>
+          {busy === 'save'
+            ? <Loader2 size={11} className="animate-spin" strokeWidth={1.5} />
+            : <CheckCircle2 size={11} strokeWidth={1.5} />}
+          {mark ? 'Update mark' : 'Award marks'}
+        </button>
+
+        {mark && (
+          <button
+            onClick={() => void submit(null)}
+            disabled={busy !== null}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1"
+            style={{
+              border: '1px solid var(--ef-border)', borderRadius: 2,
+              background: 'var(--ef-surface)', color: 'var(--ef-text-subtle)',
+              cursor: busy !== null ? 'default' : 'pointer', opacity: busy !== null ? 0.6 : 1,
+            }}>
+            {busy === 'clear'
+              ? <Loader2 size={11} className="animate-spin" strokeWidth={1.5} />
+              : <RotateCcw size={11} strokeWidth={1.5} />}
+            Withdraw
+          </button>
+        )}
+
+        {saved && !error && (
+          <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>
+            Saved — the paper has been re-scored.
+          </span>
+        )}
+        {error && (
+          <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</span>
+        )}
+      </div>
+
+      {/* The withdrawal distinction, stated where it is acted on: a zero is a
+          decision, an empty box is not. */}
+      {!mark && graded?.isCorrect === null && (
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
+          Awaiting a mark. Award 0 to record a deliberate zero — that finishes the answer.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ResponseViewer({
   attempt,
   assessment,
+  canGrade,
 }: {
   attempt: Attempt;
   assessment: Assessment;
+  /** Owner-scoped, same gate as the other write controls in this drawer. */
+  canGrade: boolean;
 }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -991,6 +1217,28 @@ function ResponseViewer({
   const [verdicts, setVerdicts]   = useState<Record<string, CodeVerdictDoc>>({});
   const [rejudging, setRejudging] = useState<string | null>(null);
   const [rejudgeNote, setRejudgeNote] = useState<Record<string, string>>({});
+  const [manualMarks, setManualMarks] = useState<Record<string, ManualMark>>({});
+
+  /**
+   * The grading records — who marked what, and when.
+   *
+   * Only staff may read these, and only staff who can mark need them, so the
+   * fetch is gated on canGrade rather than run for every reviewer. The AWARDS
+   * themselves are not fetched here: they live on the attempt document, which
+   * the roster already subscribes to, and reading them from two places is how
+   * a screen ends up showing two different marks for one answer.
+   */
+  const loadManualMarks = useCallback(() => {
+    if (!canGrade) { setManualMarks({}); return; }
+    // The attempt's OWN institute, not the viewer's. They are the same for an
+    // institute or faculty reviewer, but the Web Owner has no institute claim
+    // at all — and it is the document's field the read rule compares against.
+    getManualMarks(attempt.id, attempt.instituteId ?? null)
+      .then(setManualMarks)
+      .catch(() => { /* the answers still render, without the marking history */ });
+  }, [attempt.id, attempt.instituteId, canGrade]);
+
+  useEffect(() => { loadManualMarks(); }, [loadManualMarks]);
 
   /**
    * Re-arm one stuck coding submission and judge it now.
@@ -1188,6 +1436,16 @@ function ResponseViewer({
             : null;
           const vdoc    = isCode ? verdicts[q.id] : undefined;
           const verdict = vdoc?.verdict;
+
+          // Can a human put a mark on THIS answer?
+          //
+          // Text always — nothing else can mark it. Code only while no verdict
+          // owns the number: once the judge has marked it, the judge is the
+          // author, and the server refuses a hand mark over the top of it.
+          // Mirrors setManualMark's own gate rather than guessing at it.
+          const canMarkThis = canGrade && (
+            q.engine === 'text' || (isCode && codeState === 'needs_review')
+          );
 
           // Resolve student's readable answer
           let studentAnswerText = '—';
@@ -1523,13 +1781,39 @@ function ResponseViewer({
                     </div>
                   )}
 
-                  {/* Text note */}
-                  {item.category === 'text' && (
+                  {/* ── Marking ──────────────────────────────────────
+                      The answer to audit G-01. This block used to be a notice
+                      reading "Text answers require manual review and grading",
+                      which was true and was the whole of it: there was nowhere
+                      in the platform that grading could then happen, so the
+                      sentence described a workflow that did not exist.
+
+                      Offered on what a human can actually mark: any text
+                      answer, and a coding answer only while no verdict owns
+                      its mark. Gated on canGrade so a reviewer without write
+                      access sees the state rather than a control that would
+                      be refused. Gated on a finished sitting because marking a
+                      paper still being written is a mark on a moving target —
+                      the server refuses it too, and this keeps the UI from
+                      offering what the server will reject. */}
+                  {canMarkThis && isReviewable(attempt) && (
+                    <MarkingPanel
+                      attemptId={attempt.id}
+                      questionId={q.id}
+                      maxMarks={item.marks}
+                      graded={attempt.gradedAnswers?.[q.id]}
+                      mark={manualMarks[q.id]}
+                      onMarked={loadManualMarks}
+                    />
+                  )}
+
+                  {/* Awaiting a human, and this viewer is not one. */}
+                  {item.category === 'text' && !canMarkThis && (
                     <div className="flex items-start gap-2 px-2.5 py-2"
                       style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 2 }}>
                       <FileText size={11} strokeWidth={1.5} style={{ color: '#1D4ED8', flexShrink: 0, marginTop: 1 }} />
                       <p className="text-xs" style={{ color: '#1D4ED8', lineHeight: 1.5 }}>
-                        Text answers require manual review and grading.
+                        This answer is waiting to be marked by an examiner.
                       </p>
                     </div>
                   )}
@@ -2345,7 +2629,15 @@ function AttemptDrawer({
                   </p>
                 )}
 
-                <ResponseViewer attempt={shownAttempt!} assessment={assessment} />
+                <ResponseViewer
+                  attempt={shownAttempt!}
+                  assessment={assessment}
+                  // Same gate as the other write controls on this drawer: the
+                  // exam's owner (or the Web Owner anywhere). A reviewer who
+                  // can read the paper but not act on it sees the marking
+                  // state without a control the rules would refuse.
+                  canGrade={canManageAttempts}
+                />
               </div>
             )}
             {!canReview && isReviewable(shownAttempt) && (
@@ -2762,7 +3054,7 @@ export function AssessmentRosterCore({
   const [liveConnected, setLiveConnected] = useState(false);
 
   const [search, setSearch]             = useState('');
-  const [filterStatus, setFilterStatus] = useState<RosterStatus | 'all' | 'blocked'>('all');
+  const [filterStatus, setFilterStatus] = useState<RosterStatus | 'all' | 'blocked' | 'needs_marking'>('all');
   const [selectedRow, setSelectedRow]   = useState<RosterRow | null>(null);
   const [freezeLoadingId, setFreezeLoadingId] = useState<string | null>(null);
   /** Why the last freeze/unfreeze was refused (§3). Cleared on the next try. */
@@ -2915,8 +3207,9 @@ export function AssessmentRosterCore({
       row.student.name.toLowerCase().includes(search.toLowerCase()) ||
       row.student.email.toLowerCase().includes(search.toLowerCase());
     const matchStatus =
-      filterStatus === 'all'     ? true :
-      filterStatus === 'blocked' ? row.isBlocked :
+      filterStatus === 'all'           ? true :
+      filterStatus === 'blocked'       ? row.isBlocked :
+      filterStatus === 'needs_marking' ? rowNeedsMarking(row) :
       row.rosterStatus === filterStatus;
     return matchSearch && matchStatus;
   }), [rows, search, filterStatus]);
@@ -2931,6 +3224,7 @@ export function AssessmentRosterCore({
     terminated: rows.filter((r) => r.rosterStatus === 'terminated').length,
     conflicts:  rows.filter((r) => !!r.attempt?.sessionConflictAt).length,
     blocked:    rows.filter((r) => r.isBlocked).length,
+    needsMarking: rows.filter(rowNeedsMarking).length,
   }), [rows]);
 
   // ── Keep drawer in sync with live data ────────────────────────
@@ -3073,10 +3367,13 @@ export function AssessmentRosterCore({
   // The annotation has to sit on the ARRAY LITERAL, not on the result of
   // .filter() — a trailing .filter() breaks the contextual typing, so each
   // `value` inferred as plain `string` and no longer matched the union.
-  const allFilterTabs: Array<{ value: RosterStatus | 'all' | 'blocked'; label: string; count: number }> = [
+  const allFilterTabs: Array<{ value: RosterStatus | 'all' | 'blocked' | 'needs_marking'; label: string; count: number }> = [
     { value: 'all',          label: 'All',         count: stats.total },
     { value: 'in_progress',  label: 'Live',        count: stats.live },
     { value: 'frozen',       label: 'Flagged',     count: stats.frozen },
+    // The marking queue for this exam. Sits with the other filters rather than
+    // in its own screen: the work is per-paper and the papers are already here.
+    { value: 'needs_marking', label: 'Needs marking', count: stats.needsMarking },
     { value: 'blocked',      label: 'Blocked',     count: stats.blocked },
     { value: 'not_started',  label: 'Not started', count: stats.notStarted },
     { value: 'submitted',    label: 'Submitted',   count: stats.submitted },

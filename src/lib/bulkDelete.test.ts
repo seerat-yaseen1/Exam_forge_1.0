@@ -51,6 +51,35 @@ describe('classifyDeleteError', () => {
     expect(c).toEqual({ kind: 'other', message: 'Insufficient permissions.' });
   });
 
+  /**
+   * VERBATIM FROM THE SERVER.
+   *
+   * These three strings were captured from functions/test/bulkdelete.emulator.cjs
+   * running the real deleteAuthUser against the Firestore emulator — that suite
+   * prints them on every run for exactly this purpose. Asserting on the real
+   * wording rather than on plausible-looking wording is what keeps this file
+   * honest: a unit test written against an imagined message passes forever
+   * while the feature mis-sorts every record.
+   */
+  describe('against messages the real server actually produced', () => {
+    it('sorts the live-exam checkpoint', () => {
+      expect(classifyDeleteError(err('FACULTY_OWNS_LIVE_ASSESSMENTS:1')))
+        .toEqual({ kind: 'live_ownership', count: 1 });
+    });
+
+    it('sorts request mode', () => {
+      expect(classifyDeleteError(err('DELETION_REQUIRES_APPROVAL')))
+        .toEqual({ kind: 'requires_approval' });
+    });
+
+    it('keeps a cross-tenant refusal readable', () => {
+      // No "code: " prefix on this one, so the prefix-strip must leave it
+      // alone rather than eating the first clause.
+      expect(classifyDeleteError(err('instituteId must match caller.')))
+        .toEqual({ kind: 'other', message: 'instituteId must match caller.' });
+    });
+  });
+
   it('never produces an empty reason', () => {
     expect(classifyDeleteError(err(''))).toEqual({ kind: 'other', message: 'Deletion failed.' });
     expect(classifyDeleteError(undefined)).toEqual({ kind: 'other', message: 'Deletion failed.' });

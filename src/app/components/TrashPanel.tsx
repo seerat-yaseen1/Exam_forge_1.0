@@ -17,16 +17,28 @@ import {
   roleLabel,
   retentionLabel,
   type TrashedRecord,
+  type LifecycleRole,
 } from '../../lib/lifecycleService';
 
 type Props = {
-  /** Omit for the Web Owner (sees everything); pass to scope to one tenant. */
+  /** Omit for a platform-level view; pass to scope to one tenant. */
   instituteId?: string;
   /** Only the Web Owner may permanently delete. */
   canPurge?: boolean;
+  /**
+   * Narrow which kinds of record are listed. Omit for the default
+   * (institute-scoped → faculty + students; unscoped → all three).
+   *
+   * Used by the Web Owner's platform view to list deleted INSTITUTES only,
+   * now that deleted faculty and students are managed inside the institute
+   * they belong to. Deliberately a filter on one component rather than a
+   * second trash implementation: restore, purge, the retention labels and the
+   * institute-purge flow are the existing behaviour and must stay singular.
+   */
+  roles?: LifecycleRole[];
 };
 
-export function TrashPanel({ instituteId, canPurge = false }: Props) {
+export function TrashPanel({ instituteId, canPurge = false, roles }: Props) {
   const [records, setRecords] = useState<TrashedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -42,14 +54,18 @@ export function TrashPanel({ instituteId, canPurge = false }: Props) {
     setLoading(true);
     setError('');
     try {
-      setRecords(await getAllTrashed(instituteId));
+      setRecords(await getAllTrashed(instituteId, roles));
     } catch (err) {
       console.error('[trash] load failed', err);
       setError('Could not load deleted records.');
     } finally {
       setLoading(false);
     }
-  }, [instituteId]);
+    // roles is an array literal at the call sites, so it is keyed on its
+    // contents rather than its identity — otherwise every parent render would
+    // refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instituteId, roles?.join(',')]);
 
   useEffect(() => { void load(); }, [load]);
 

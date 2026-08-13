@@ -108,12 +108,26 @@ export async function getTrashedByRole(
 }
 
 /** Everything currently in the trash, across all three types. */
-export async function getAllTrashed(instituteId?: string): Promise<TrashedRecord[]> {
-  const roles: LifecycleRole[] = instituteId
+export async function getAllTrashed(
+  instituteId?: string,
+  /**
+   * Narrow which kinds of record come back. OPTIONAL, and omitting it keeps
+   * the original behaviour exactly — every existing caller is unaffected.
+   *
+   * It exists because the Web Owner now has TWO trash views rather than one
+   * undifferentiated list: deleted faculty and students live inside their own
+   * institute (User Management → institute → Users → Trash), and the
+   * platform-level view is left showing deleted INSTITUTES only. Both are the
+   * same component reading the same collections through the same callables —
+   * the scoping is the only difference, which is the point.
+   */
+  roles?: LifecycleRole[],
+): Promise<TrashedRecord[]> {
+  const resolved: LifecycleRole[] = roles ?? (instituteId
     ? ['faculty', 'student']          // an institute never sees institutes
-    : ['institute', 'faculty', 'student'];
+    : ['institute', 'faculty', 'student']);
   const lists = await Promise.all(
-    roles.map((r) => getTrashedByRole(r, instituteId).catch(() => [])),
+    resolved.map((r) => getTrashedByRole(r, instituteId).catch(() => [])),
   );
   return lists.flat().sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
 }

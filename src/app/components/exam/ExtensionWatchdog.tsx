@@ -28,6 +28,11 @@
 import { useEffect, useRef } from 'react';
 import type { ViolationType } from '../../../lib/submissionService';
 import { EXTENSION_FINGERPRINTS, scanForForeignDom } from './extensionScan';
+import {
+  shadowedDocumentMembers,
+  describeTampering,
+  VISIBILITY_TAMPER_LABEL,
+} from './apiIntegrity';
 
 // Fingerprint list now lives in ./extensionScan so the pre-entry gate on the
 // briefing page and this continuous monitor share one source of truth.
@@ -99,6 +104,35 @@ export function ExtensionWatchdog({
           }
         } catch {
           // Bad selector — ignore
+        }
+      }
+
+      // ── Replaced visibility/focus APIs — freeze-eligible ───────
+      //
+      // Checked on every scan rather than once at mount, and that is the whole
+      // reason it is here as well as on the briefing page: "Always Active
+      // Window" and its clones are armed PER SITE by clicking the toolbar
+      // icon. A student can pass the entry gate honestly and switch it on a
+      // minute later, which is precisely when it is worth anything to them.
+      //
+      // Reported through `extension_detected`, so it reaches
+      // reportExtensionCheck and can freeze the attempt on tiers that require
+      // the extension check. That is the strongest response this codebase has,
+      // and it is the right one here: unlike an unrecognised element, a
+      // document that owns its own `hidden` property has no innocent
+      // explanation, and what was disabled is the tab-switch and focus
+      // detection the rest of the sitting is judged by.
+      //
+      // Deduped on a fixed key, so a spoof that stays in place for an hour is
+      // one finding rather than one every four seconds.
+      if (!seenRef.current.has('api-tamper')) {
+        const members = shadowedDocumentMembers();
+        if (members.length > 0) {
+          seenRef.current.add('api-tamper');
+          onViolationRef.current(
+            'extension_detected',
+            `${VISIBILITY_TAMPER_LABEL} (${describeTampering(members)})`,
+          );
         }
       }
 

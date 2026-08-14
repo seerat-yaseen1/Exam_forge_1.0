@@ -964,6 +964,97 @@ async function P22() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// P-23 · the integrity threshold is enforced where it is DECIDED
+//
+// Termination was a client decision. The shell counted warnings in React
+// state and called gradeAttempt with reason:'terminated' on the third; this
+// function believed that, and believed reason:'manual' exactly as readily.
+//
+// So the whole deterrent rested on the browser choosing to report itself. The
+// true count was in integrityLog the entire time — written by logViolation
+// under the Admin SDK, unreachable from any client — and nothing read it at
+// the one moment it decided whether the sitting was clean.
+//
+// Three properties, and the third is the one that keeps this honest: the
+// student's WORK must survive. A gate that refuses the submission would throw
+// away a real paper to punish a signal.
+async function P23() {
+  seedWorld({ maxAttempts: 5 });
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+
+  // Three warning-type violations, logged the only way they can be: through
+  // the real callable, which owns the counters.
+  for (const type of ['tab_switch', 'focus_loss', 'fullscreen_exit']) {
+    await call(fns.logViolation, { attemptId: id, type }, STUDENT());
+  }
+  const log = A(id).integrityLog;
+  eq((log.tabSwitches ?? 0) + (log.focusLosses ?? 0) + (log.fullscreenExits ?? 0), 3,
+    'the server holds three warning-type violations');
+
+  // Answer something, so the probe can prove the paper is still marked.
+  const att = A(id);
+  att.answers.q1 = { type: 'mcq', value: ['alpha', 'beta'], sectionId: 'SA', answeredAt: at(VNOW) };
+  DB.seed('attempts', id, att);
+
+  advance(min(1));
+
+  // The patched client: it never sends 'terminated'. It submits normally, as
+  // though nothing had happened.
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+
+  const done = A(id);
+  eq(done.status, 'terminated',
+    'a clean submit from a client over the threshold is finalised as terminated');
+  eq(done.integrityLog.autoTerminated, true,
+    'and carries the same terminal bookkeeping as a shell-driven termination');
+  eq(done.integrityLog.thresholdEnforcedServerSide, true,
+    'flagged as enforced here, so a reviewer can tell the client never asked');
+  check(typeof done.integrityLog.terminatedReason === 'string'
+        && done.integrityLog.terminatedReason.length > 0,
+    'a stated reason is recorded even though the caller supplied none',
+    `terminatedReason=${JSON.stringify(done.integrityLog.terminatedReason)}`);
+
+  // THE PROPERTY THAT MATTERS MOST. Refusing the call would have been the
+  // easy implementation and would have destroyed a real paper.
+  check(done.scores && typeof done.scores.total === 'number',
+    'the paper is still scored — enforcement changes the verdict, not the marks',
+    `scores=${JSON.stringify(done.scores)}`);
+  check(done.gradedAnswers && done.gradedAnswers.q1,
+    'and the answer written before the threshold was reached is marked');
+
+  // ── The control: a student UNDER the threshold submits cleanly ──
+  seedWorld({ maxAttempts: 5 });
+  const clean = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const cid = clean.attempt.id;
+  for (const type of ['tab_switch', 'focus_loss']) {
+    await call(fns.logViolation, { attemptId: cid, type }, STUDENT());
+  }
+  advance(min(1));
+  await call(fns.gradeAttempt, { attemptId: cid, reason: 'manual' }, STUDENT());
+  eq(A(cid).status, 'submitted',
+    'two violations is under the limit and still submits normally');
+  check(A(cid).integrityLog.thresholdEnforcedServerSide === undefined,
+    'and is not flagged');
+
+  // ── The other control: a GRADER is not overridden ──────────────
+  //
+  // A human finalising an attempt can see the integrity log and is deciding in
+  // spite of it. Overriding them would flip a deliberately-accepted paper back
+  // to terminated on every regrade.
+  seedWorld({ maxAttempts: 5 });
+  const staffCase = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const sid = staffCase.attempt.id;
+  for (const type of ['tab_switch', 'focus_loss', 'fullscreen_exit']) {
+    await call(fns.logViolation, { attemptId: sid, type }, STUDENT());
+  }
+  advance(min(1));
+  await call(fns.gradeAttempt, { attemptId: sid, reason: 'manual' }, STAFF());
+  eq(A(sid).status, 'submitted',
+    'a grader finalising over the threshold keeps their own verdict');
+}
+
+// ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['P-01', 'a recorded penalty survives the next section advance', P01],
   ['P-02', 'submitSection cannot re-arm the answer-write lock', P02],
@@ -987,6 +1078,7 @@ const SCENARIOS = [
   ['P-20', 'blocked mid-sitting stops every transition', P20],
   ['P-21', 'the paper sat is the paper marked', P21],
   ['P-22', 'live timing edits do not reach a sitting student', P22],
+  ['P-23', 'the integrity threshold is enforced server-side', P23],
 ];
 
 (async () => {

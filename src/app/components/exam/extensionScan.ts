@@ -11,6 +11,9 @@
  * Exam Browser (high-stake tier, Phase 3).
  */
 
+import { probeExtensionIds } from './extensionIdProbe';
+import { detectApiTampering } from './apiIntegrity';
+
 export type Fingerprint = { key: string; selector: string; label: string };
 
 // Conservative — only extensions that insert visible UI elements.
@@ -39,6 +42,52 @@ export const EXTENSION_FINGERPRINTS: Fingerprint[] = [
   // Password / autofill (visible UI variants)
   { key: 'lastpass',       selector: 'div[data-lastpass-icon-root], #__lpform_root', label: 'LastPass' },
   { key: 'dashlane',       selector: 'div[data-dashlane-rid], div[data-dashlane-classification]', label: 'Dashlane' },
+
+  // ── Question AI ───────────────────────────────────────────────
+  //
+  // `qai` is Question AI, observed on a live briefing page mounting four
+  // shadow hosts: qaiSidebarShadowHostEl, qaiWebPageCopilotShadowHostEl,
+  // qaiUnderlineWordShadowHostEl, qaiChromeosQuestionnaireShadowHostEl.
+  //
+  // It is worth saying plainly that this is the highest-signal entry in the
+  // whole list. Most of the names above are writing aids that happen to be
+  // unwelcome in an exam; this one exists to answer questions on the page it
+  // is looking at, which is the entire threat model in one extension. The
+  // "Questionnaire" and "WebPageCopilot" hosts are that capability naming
+  // itself.
+  //
+  // The label is the product, not the framework, because this string reaches
+  // an examiner deciding about a person. An earlier revision of this line
+  // guessed "QuillBot" from the `qai` prefix — wrong, and wrong in the one
+  // direction that matters, since the record would have accused a student of
+  // running a paraphraser rather than an answer engine. The plasmo entry below
+  // still catches it if these ids ever change; what it cannot do is name it.
+  //
+  // The `[id$="ShadowHostEl"]` half of the selector is not decoration:
+  // `[id^="qai"]` alone is three characters and could plausibly collide with
+  // an id this app or a future dependency invents. Anchoring both ends matches
+  // every host observed and nothing that merely starts with the same letters.
+  { key: 'question-ai', selector: '[id^="qai"][id$="ShadowHostEl"], [class*="question-ai-"], #question-ai-root', label: 'Question AI' },
+
+  // Wordtune — mounts several custom elements, all four observed live:
+  // wordtune-app-toolbar, wordtune-spices-nudge, wordtune-read-toolbar,
+  // wordtune-cards.
+  { key: 'wordtune',   selector: 'wordtune-app-toolbar, wordtune-cards, wordtune-read-toolbar, wordtune-spices-nudge, [class*="wordtune-"]', label: 'Wordtune' },
+
+  // ── Extension FRAMEWORK markers ───────────────────────────────
+  //
+  // `plasmo-csui` is the custom element Plasmo mounts a content-script UI
+  // into. It is worth naming for the same reason the framework is worth
+  // knowing about: nothing but a browser extension ever emits that tag, so
+  // matching it is as certain as matching a vendor's own id, and it covers
+  // every extension built on Plasmo including ones written after this line.
+  //
+  // This is what closes the case that prompted it. A Plasmo-based AI sidebar
+  // injects into the PAGE rather than opening browser chrome, so it changes
+  // neither innerWidth nor outerWidth, never drops fullscreen, and produces no
+  // blur — the entire geometry-and-focus battery is blind to it by
+  // construction. The only surface it cannot avoid presenting is its own DOM.
+  { key: 'plasmo',     selector: 'plasmo-csui, [id^="plasmo-"], [class^="plasmo-"]', label: 'Plasmo-based extension (AI sidebar)' },
 
   // Generic markers — extensions often append <div id="*-extension-root"> or use shadow DOM
   { key: 'extension-root', selector: '[id$="-extension-root"], [id^="chrome-extension-"]', label: 'Generic extension root' },
@@ -99,6 +148,48 @@ export function scanForExtensions(): string[] {
 const APP_ROOT_ID = 'root';
 const BENIGN_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'TEMPLATE', 'NOSCRIPT']);
 
+/**
+ * OUR OWN top-level nodes.
+ *
+ * The claim above — "this app renders entirely into #root, there is not one
+ * createPortal in the codebase" — is true of the React tree and false of the
+ * page. Firebase App Check initialises reCAPTCHA v3 (`firebase.ts`), and
+ * reCAPTCHA appends its own container and badge at body level. Every sitting,
+ * on every machine, with no extension installed at all.
+ *
+ * So the generic detector reported the app's own infrastructure to the
+ * reviewer as an unrecognised element, in the same list as a genuine AI
+ * sidebar — on the briefing page it read `<div#fire_app_check_[DEFAULT]>`
+ * right next to the real findings. Noise in a detector is not a cosmetic
+ * problem: this list is the evidence a human weighs, and a signal that fires
+ * for everyone teaches its reader to ignore it. It also blocks enforcement
+ * outright, since anything acting on this list would act on every student.
+ *
+ * Matched by PREFIX because the App Check container is named for the Firebase
+ * app instance (`fire_app_check_[DEFAULT]`), and the bracketed suffix is not
+ * ours to promise. Kept deliberately short: every entry here is a hole in the
+ * detector, so it earns its place by being something this codebase itself
+ * causes to exist.
+ */
+const APP_OWNED_ID_PREFIXES = [
+  'fire_app_check_',   // Firebase App Check container
+  'recaptcha-',        // reCAPTCHA v3 challenge/badge containers
+];
+
+/** reCAPTCHA's badge and challenge iframes carry these class markers. */
+const APP_OWNED_CLASS_MARKERS = ['grecaptcha-badge', 'grecaptcha-logo'];
+
+function isAppOwned(el: Element): boolean {
+  if (el.id && APP_OWNED_ID_PREFIXES.some((p) => el.id.startsWith(p))) return true;
+  const cls = typeof el.className === 'string' ? el.className : '';
+  if (APP_OWNED_CLASS_MARKERS.some((m) => cls.includes(m))) return true;
+  // reCAPTCHA's badge is a bare <div> wrapping an iframe pointed at Google's
+  // recaptcha endpoint. Identified by what it CONTAINS rather than by a class,
+  // because the wrapper itself carries no stable marker.
+  const frame = el.querySelector?.('iframe[src*="recaptcha"]');
+  return !!frame;
+}
+
 /** Extension-owned URL schemes, across the browsers that expose one. */
 const EXTENSION_SCHEMES = ['chrome-extension://', 'moz-extension://', 'safari-web-extension://', 'ms-browser-extension://'];
 
@@ -129,6 +220,7 @@ export function scanForForeignDom(): string[] {
   const inspect = (el: Element) => {
     if (BENIGN_TAGS.has(el.tagName)) return;
     if (el.id === APP_ROOT_ID) return;
+    if (isAppOwned(el)) return;
     found.push(describeNode(el));
   };
 
@@ -159,11 +251,47 @@ export function scanForForeignDom(): string[] {
 
 /** What a settled scan found, split by how much the finding can be trusted. */
 export type ExtensionScanResult = {
-  /** Matched a known fingerprint. Freeze-eligible; blocks entry. */
+  /** Matched a known fingerprint, or was proven present by ID. Blocks entry. */
   named: string[];
   /** Unrecognised top-level DOM. Recorded only — never blocks, never freezes. */
   foreign: string[];
+  /**
+   * The ID probe was refused by this page's own CSP.
+   *
+   * Carried so a caller can tell "probed and found nothing" from "never got to
+   * probe". Nothing gates on it today; it exists so that promoting the
+   * Report-Only policy in vercel.json to enforcing surfaces as a visible
+   * degradation rather than as a detector that quietly always passes.
+   */
+  idProbeBlocked?: boolean;
 };
+
+/**
+ * The entry gate's extension condition: ANY finding blocks.
+ *
+ * Both halves of the scan are treated alike here, which is the opposite of how
+ * they are treated inside the exam. The asymmetry is the point, and it follows
+ * from what being wrong costs on each surface:
+ *
+ *   entry    — nothing has started. A false positive costs the student the
+ *              time it takes to disable an extension and press Re-check. The
+ *              remedy is theirs and it is seconds long.
+ *   mid-exam — a freeze has no automatic exit (D-30). A false positive strands
+ *              a student mid-paper until a human intervenes.
+ *
+ * So the generic detector, whose false positives are unknowable by
+ * construction, is allowed to block the recoverable one and never the
+ * unrecoverable one.
+ *
+ * Extracted as a function rather than left inline because it is now the rule
+ * standing between a student and their exam, and both call sites — the mount
+ * scan and the click-time re-scan — have to apply it identically. Two copies
+ * of this condition drifting apart is how the click-time check ends up
+ * admitting exactly the student the mount scan would have refused.
+ */
+export function extensionGateBlocks(result: ExtensionScanResult): boolean {
+  return result.named.length > 0 || result.foreign.length > 0;
+}
 
 /**
  * Scan twice with a settle delay in between, because some extensions inject
@@ -179,9 +307,31 @@ export type ExtensionScanResult = {
 export async function scanForExtensionsWithSettle(settleMs = 1500): Promise<ExtensionScanResult> {
   const firstNamed = scanForExtensions();
   const firstForeign = scanForForeignDom();
-  await new Promise((r) => setTimeout(r, settleMs));
+
+  // The ID probe runs CONCURRENTLY with the settle delay rather than after it.
+  // Both are waits — one for slow-injecting DOM, one for the browser to answer
+  // a handful of local requests — and running them in sequence would add the
+  // probe's budget to the time a student stares at "Checking for browser
+  // extensions…" before they can start.
+  const [, probe] = await Promise.all([
+    new Promise((r) => setTimeout(r, settleMs)),
+    probeExtensionIds().catch(() => ({ found: [], blockedByCsp: false })),
+  ]);
+
   return {
-    named: Array.from(new Set([...firstNamed, ...scanForExtensions()])),
+    // Probe hits join `named` because that is exactly what they are: a
+    // conclusively identified extension. A hit is stronger evidence than any
+    // selector match — a store ID cannot be renamed by a release the way an
+    // element can — so it belongs on the side that acts, not the advisory one.
+    // API tampering joins `named` because it is the least ambiguous finding the
+    // scanner can make. A selector match says an extension is present; a
+    // document that owns its own `hidden` property says something has
+    // deliberately disabled the detectors this exam runs on. It belongs on the
+    // side that blocks, not the advisory one.
+    named: Array.from(new Set([
+      ...firstNamed, ...scanForExtensions(), ...probe.found, ...detectApiTampering(),
+    ])),
     foreign: Array.from(new Set([...firstForeign, ...scanForForeignDom()])),
+    ...(probe.blockedByCsp ? { idProbeBlocked: true } : {}),
   };
 }

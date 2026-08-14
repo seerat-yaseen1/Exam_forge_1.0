@@ -210,6 +210,28 @@ function formatDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
+// ── Pause reasons ─────────────────────────────────────────────────
+// The ledger's `reason` decides who may release a pause (assertCanUnfreeze),
+// so a reviewer reading the record needs to see which kind it was: a system
+// pause has no human owner, an invigilator pause does.
+const FREEZE_REASON_LABEL: Record<string, string> = {
+  invigilator:     'Paused by an invigilator',
+  extension_check: 'Paused automatically — extension check',
+  system:          'Paused by the system',
+};
+
+// ── Violation position ────────────────────────────────────────────
+// "Q4 · Section 2" from whatever the event carries. Events logged before the
+// context existed carry neither and render as nothing at all, which is
+// correct: an old event genuinely does not know where the student was, and
+// inventing a position for it would be worse than leaving the line short.
+function formatViolationWhere(v: { questionNumber?: number; sectionNumber?: number }): string {
+  const parts: string[] = [];
+  if (v.questionNumber) parts.push(`Q${v.questionNumber}`);
+  if (v.sectionNumber) parts.push(`Section ${v.sectionNumber}`);
+  return parts.join(' · ');
+}
+
 // ── Risk factors ──────────────────────────────────────────────────
 // Server-side codes (gradeAttempt) → the words a reviewer reads. An unknown
 // code falls back to the code itself, so a factor added server-side shows up
@@ -2810,14 +2832,107 @@ function AttemptDrawer({
                     .map((v, i) => (
                       <div key={i} className="flex items-start justify-between gap-2 py-1.5"
                         style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-                        <span className="text-xs" style={{ color: 'var(--ef-text-subtle)', textTransform: 'capitalize' }}>
-                          {v.type.replace(/_/g, ' ')}{v.warningNumber ? ` (warning ${v.warningNumber})` : ''}
-                        </span>
+                        <div className="min-w-0">
+                          <span className="text-xs" style={{ color: 'var(--ef-text-subtle)', textTransform: 'capitalize' }}>
+                            {v.type.replace(/_/g, ' ')}{v.warningNumber ? ` (warning ${v.warningNumber})` : ''}
+                          </span>
+                          {/* The detail has been written to every one of these
+                              events since the log existed, and this list threw
+                              it away — a reviewer saw "devtools open" where the
+                              record said which heuristic fired and by how much.
+                              Position is the other half: "tab switch at 10:32"
+                              cannot be acted on, the same event against
+                              question 4 of section B can be checked against the
+                              answer, the timing and the mark. */}
+                          {(v.detail || v.questionNumber) && (
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
+                              {formatViolationWhere(v)}
+                              {formatViolationWhere(v) && v.detail ? ' · ' : ''}
+                              {v.detail}
+                            </p>
+                          )}
+                        </div>
                         <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
                           {formatRelative(v.timestamp)}
                         </span>
                       </div>
                     ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── PAUSES ──────────────────────────────────────────
+                The freeze ledger records who paused a sitting and why, how
+                long it ran, how much of it a named human decided to give
+                back, any deduction taken at the same moment, and the note
+                they left. All of it was written, stored and retained — and
+                once the freeze ended, shown to nobody. "Paused 4m ago"
+                appeared while a pause was OPEN and then vanished with it.
+
+                A pause takes time away from a student and someone decides how
+                much to return. That decision is the thing an appeal is about,
+                so it is the thing a reviewer has to be able to see. */}
+            {(attempt.freezes ?? []).length > 0 && (
+              <div>
+                <p className="text-xs mb-2.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>PAUSES</p>
+                <div className="flex flex-col gap-1.5">
+                  {[...(attempt.freezes ?? [])]
+                    .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+                    .map((f) => {
+                      const elapsed = Math.round((f.elapsedMs ?? 0) / 1000);
+                      const granted = Math.round((f.grantedMs ?? 0) / 1000);
+                      // A pause still running has no decision yet. Saying
+                      // "0 credited" there would report a decision nobody has
+                      // made — the invigilator has not reached the modal.
+                      const open = !f.endedAt;
+                      const taken = (attempt.penalties ?? []).filter((p) => p.freezeId === f.id);
+                      return (
+                        <div key={f.id} className="px-3 py-2"
+                          style={{
+                            background: open ? '#FEF9EC' : 'var(--ef-canvas-raised)',
+                            border: `1px solid ${open ? 'var(--ef-warning-border)' : 'var(--ef-border)'}`,
+                            borderRadius: 2,
+                          }}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs" style={{ color: open ? 'var(--ef-warning)' : 'var(--ef-text-subtle)' }}>
+                              {FREEZE_REASON_LABEL[f.reason] ?? f.reason}
+                              {open ? ' · still paused' : ''}
+                            </span>
+                            <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
+                              {formatRelative(f.startedAt)}
+                            </span>
+                          </div>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                            {open
+                              ? 'Running — no credit decision has been made yet.'
+                              : `Lasted ${formatDuration(elapsed)} · ${formatDuration(granted)} credited back`}
+                            {!open && granted < elapsed && (
+                              <span style={{ color: 'var(--ef-warning)' }}>
+                                {' '}({formatDuration(elapsed - granted)} not returned)
+                              </span>
+                            )}
+                          </p>
+                          {taken.length > 0 && (
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
+                              Deducted: {taken.map((p) => `${formatDuration(Math.round(p.amountMs / 1000))} off the ${p.clock} clock`).join(', ')}
+                            </p>
+                          )}
+                          {(f.frozenBy || f.decidedBy) && (
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-subtle)' }}>
+                              {f.frozenBy ? `Paused by ${f.frozenByRole ?? 'staff'} ${f.frozenBy}` : ''}
+                              {f.frozenBy && f.decidedBy ? ' · ' : ''}
+                              {f.decidedBy ? `released by ${f.decidedBy}` : ''}
+                            </p>
+                          )}
+                          {f.note && (
+                            <p className="text-xs mt-1 px-2 py-1"
+                              style={{ color: 'var(--ef-text-muted)', background: 'var(--ef-canvas)', borderRadius: 2, lineHeight: 1.5 }}>
+                              “{f.note}”
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}

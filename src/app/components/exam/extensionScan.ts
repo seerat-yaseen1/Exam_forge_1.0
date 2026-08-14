@@ -40,6 +40,29 @@ export const EXTENSION_FINGERPRINTS: Fingerprint[] = [
   { key: 'lastpass',       selector: 'div[data-lastpass-icon-root], #__lpform_root', label: 'LastPass' },
   { key: 'dashlane',       selector: 'div[data-dashlane-rid], div[data-dashlane-classification]', label: 'Dashlane' },
 
+  // The `[id$="ShadowHostEl"]` half is not decoration: `[id^="qai"]` alone is
+  // three characters and could plausibly collide with an id this app or a
+  // future dependency invents. Anchoring both ends matches every host QuillBot
+  // actually mounts (sidebar, copilot, underline, questionnaire) and nothing
+  // that merely starts with the same letters.
+  { key: 'quillbot',   selector: '[id^="qai"][id$="ShadowHostEl"], [class*="quillbot-"], #quillbot-extension-root', label: 'QuillBot AI' },
+  { key: 'wordtune',   selector: 'wordtune-app-toolbar, wordtune-cards, wordtune-read-toolbar, wordtune-spices-nudge, [class*="wordtune-"]', label: 'Wordtune' },
+
+  // ── Extension FRAMEWORK markers ───────────────────────────────
+  //
+  // `plasmo-csui` is the custom element Plasmo mounts a content-script UI
+  // into. It is worth naming for the same reason the framework is worth
+  // knowing about: nothing but a browser extension ever emits that tag, so
+  // matching it is as certain as matching a vendor's own id, and it covers
+  // every extension built on Plasmo including ones written after this line.
+  //
+  // This is what closes the case that prompted it. A Plasmo-based AI sidebar
+  // injects into the PAGE rather than opening browser chrome, so it changes
+  // neither innerWidth nor outerWidth, never drops fullscreen, and produces no
+  // blur — the entire geometry-and-focus battery is blind to it by
+  // construction. The only surface it cannot avoid presenting is its own DOM.
+  { key: 'plasmo',     selector: 'plasmo-csui, [id^="plasmo-"], [class^="plasmo-"]', label: 'Plasmo-based extension (AI sidebar)' },
+
   // Generic markers — extensions often append <div id="*-extension-root"> or use shadow DOM
   { key: 'extension-root', selector: '[id$="-extension-root"], [id^="chrome-extension-"]', label: 'Generic extension root' },
 ];
@@ -99,6 +122,48 @@ export function scanForExtensions(): string[] {
 const APP_ROOT_ID = 'root';
 const BENIGN_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'TEMPLATE', 'NOSCRIPT']);
 
+/**
+ * OUR OWN top-level nodes.
+ *
+ * The claim above — "this app renders entirely into #root, there is not one
+ * createPortal in the codebase" — is true of the React tree and false of the
+ * page. Firebase App Check initialises reCAPTCHA v3 (`firebase.ts`), and
+ * reCAPTCHA appends its own container and badge at body level. Every sitting,
+ * on every machine, with no extension installed at all.
+ *
+ * So the generic detector reported the app's own infrastructure to the
+ * reviewer as an unrecognised element, in the same list as a genuine AI
+ * sidebar — on the briefing page it read `<div#fire_app_check_[DEFAULT]>`
+ * right next to the real findings. Noise in a detector is not a cosmetic
+ * problem: this list is the evidence a human weighs, and a signal that fires
+ * for everyone teaches its reader to ignore it. It also blocks enforcement
+ * outright, since anything acting on this list would act on every student.
+ *
+ * Matched by PREFIX because the App Check container is named for the Firebase
+ * app instance (`fire_app_check_[DEFAULT]`), and the bracketed suffix is not
+ * ours to promise. Kept deliberately short: every entry here is a hole in the
+ * detector, so it earns its place by being something this codebase itself
+ * causes to exist.
+ */
+const APP_OWNED_ID_PREFIXES = [
+  'fire_app_check_',   // Firebase App Check container
+  'recaptcha-',        // reCAPTCHA v3 challenge/badge containers
+];
+
+/** reCAPTCHA's badge and challenge iframes carry these class markers. */
+const APP_OWNED_CLASS_MARKERS = ['grecaptcha-badge', 'grecaptcha-logo'];
+
+function isAppOwned(el: Element): boolean {
+  if (el.id && APP_OWNED_ID_PREFIXES.some((p) => el.id.startsWith(p))) return true;
+  const cls = typeof el.className === 'string' ? el.className : '';
+  if (APP_OWNED_CLASS_MARKERS.some((m) => cls.includes(m))) return true;
+  // reCAPTCHA's badge is a bare <div> wrapping an iframe pointed at Google's
+  // recaptcha endpoint. Identified by what it CONTAINS rather than by a class,
+  // because the wrapper itself carries no stable marker.
+  const frame = el.querySelector?.('iframe[src*="recaptcha"]');
+  return !!frame;
+}
+
 /** Extension-owned URL schemes, across the browsers that expose one. */
 const EXTENSION_SCHEMES = ['chrome-extension://', 'moz-extension://', 'safari-web-extension://', 'ms-browser-extension://'];
 
@@ -129,6 +194,7 @@ export function scanForForeignDom(): string[] {
   const inspect = (el: Element) => {
     if (BENIGN_TAGS.has(el.tagName)) return;
     if (el.id === APP_ROOT_ID) return;
+    if (isAppOwned(el)) return;
     found.push(describeNode(el));
   };
 

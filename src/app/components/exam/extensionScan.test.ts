@@ -209,3 +209,124 @@ describe('the generic detector stays out of the freeze pipeline', () => {
     expect(watchdog).toContain("'foreign_dom'");
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// THE APP'S OWN DOM IS NOT A FINDING
+// ══════════════════════════════════════════════════════════════════
+//
+// Observed on a real briefing page: the "also on this page" list led with
+// `<div#fire_app_check_[DEFAULT]>`. That is Firebase App Check's reCAPTCHA v3
+// container, which this codebase creates in firebase.ts on every load, on
+// every machine, with no extension installed.
+//
+// A detector that fires for every student is worse than one that fires for
+// none — it is the noise a reviewer learns to scroll past, sitting in the same
+// list as a genuine AI sidebar. It also blocks enforcement outright: anything
+// acting on this list would act on everybody.
+
+describe('scanForForeignDom — the app\'s own top-level nodes', () => {
+  beforeEach(resetDom);
+
+  it('ignores the Firebase App Check container', () => {
+    const el = document.createElement('div');
+    el.id = 'fire_app_check_[DEFAULT]';
+    document.body.appendChild(el);
+    expect(scanForForeignDom()).toEqual([]);
+  });
+
+  it('ignores App Check containers for a non-default Firebase app', () => {
+    // The id is named for the app instance, so the bracketed suffix is not
+    // ours to promise. Prefix-matched for exactly that reason.
+    const el = document.createElement('div');
+    el.id = 'fire_app_check_[SECONDARY]';
+    document.body.appendChild(el);
+    expect(scanForForeignDom()).toEqual([]);
+  });
+
+  it('ignores the reCAPTCHA badge, which carries no id', () => {
+    const badge = document.createElement('div');
+    badge.className = 'grecaptcha-badge';
+    document.body.appendChild(badge);
+
+    // …and the bare wrapper, identified only by the iframe inside it.
+    const wrapper = document.createElement('div');
+    const frame = document.createElement('iframe');
+    frame.setAttribute('src', 'https://www.google.com/recaptcha/api2/anchor');
+    wrapper.appendChild(frame);
+    document.body.appendChild(wrapper);
+
+    expect(scanForForeignDom()).toEqual([]);
+  });
+
+  it('still catches a real extension sitting beside the app\'s own nodes', () => {
+    // The allowlist must narrow the report, not disable it. This is the exact
+    // shape of the observed page: App Check plus a genuine injected sidebar.
+    const appCheck = document.createElement('div');
+    appCheck.id = 'fire_app_check_[DEFAULT]';
+    document.body.appendChild(appCheck);
+
+    const sidebar = document.createElement('plasmo-csui');
+    sidebar.id = 'qaiSidebarShadowHostEl';
+    document.body.appendChild(sidebar);
+
+    const found = scanForForeignDom();
+    expect(found).toEqual(['<plasmo-csui#qaiSidebarShadowHostEl>']);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// THE IN-PAGE SIDEBAR, WHICH NOTHING ELSE CAN SEE
+// ══════════════════════════════════════════════════════════════════
+//
+// A Chrome side panel steals width from the viewport and is caught by the
+// geometry poll in IntegrityEngine. A content-script sidebar does not: it
+// mounts INSIDE the exam document, so innerWidth and outerWidth are both
+// unchanged, fullscreen is not dropped, focus never leaves and no blur fires.
+// Every geometry and focus detector is blind to it by construction.
+//
+// Its DOM is the one thing it cannot hide, which is why these belong in the
+// NAMED list — the named path is the one that blocks entry and is
+// freeze-eligible. As `foreign` they were reported and nothing acted.
+
+describe('in-page AI sidebars are named, not merely foreign', () => {
+  beforeEach(resetDom);
+
+  it('names a Plasmo-mounted content-script UI', () => {
+    document.body.appendChild(document.createElement('plasmo-csui'));
+    expect(scanForExtensions()).toContain('Plasmo-based extension (AI sidebar)');
+  });
+
+  it('names QuillBot by its shadow host', () => {
+    const el = document.createElement('plasmo-csui');
+    el.id = 'qaiWebPageCopilotShadowHostEl';
+    document.body.appendChild(el);
+    expect(scanForExtensions()).toContain('QuillBot AI');
+  });
+
+  it('names Wordtune by its custom elements', () => {
+    document.body.appendChild(document.createElement('wordtune-app-toolbar'));
+    expect(scanForExtensions()).toContain('Wordtune');
+  });
+
+  it('finds them wherever they mount, not only at the top level', () => {
+    // scanForExtensions is a document-wide querySelector, so an extension that
+    // injects into a container inside the app is still named — unlike the
+    // foreign check, which deliberately only reads top-level children.
+    const root = document.getElementById('root')!;
+    root.innerHTML = '<div class="exam-shell"><plasmo-csui></plasmo-csui></div>';
+    expect(scanForExtensions()).toContain('Plasmo-based extension (AI sidebar)');
+  });
+
+  it('does not name an id that merely starts with the same three letters', () => {
+    // `[id^="qai"]` alone would be a three-character prefix. Both ends are
+    // anchored so an unrelated id cannot lock a student out of an exam.
+    const el = document.createElement('div');
+    el.id = 'qaidTotals';
+    document.getElementById('root')!.appendChild(el);
+    expect(scanForExtensions()).not.toContain('QuillBot AI');
+  });
+
+  it('leaves a clean page clean', () => {
+    expect(scanForExtensions()).toEqual([]);
+  });
+});

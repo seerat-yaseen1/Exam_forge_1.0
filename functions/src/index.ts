@@ -4642,7 +4642,15 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       lastHeartbeatAt?: string | null;
       heartbeatGaps?: { count?: number; maxSeconds?: number } | null;
       fingerprintDrift?: { count?: number; changes?: string[] } | null;
-      integrityLog?: { violations?: Array<{ timestamp?: string }> } | null;
+      // Counters read for the integrity-threshold gate below, alongside the
+      // event array the heartbeat analysis already used.
+      integrityLog?: {
+        violations?: Array<{ timestamp?: string }>;
+        tabSwitches?: number;
+        focusLosses?: number;
+        fullscreenExits?: number;
+        autoTerminated?: boolean;
+      } | null;
       createdAt?: string;
       freezeState?: { frozen?: boolean } | null;
       freezes?: FreezeLedgerEntry[];
@@ -4801,9 +4809,52 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     });
 
     const nowIso = new Date().toISOString();
+
+    // ══════════════════════════════════════════════════════════════
+    // INTEGRITY THRESHOLD — the server decides what "clean" means
+    // ══════════════════════════════════════════════════════════════
+    //
+    // Termination used to be decided entirely in the browser: the shell
+    // counted warnings in React state and called this function with
+    // reason:'terminated' when it reached three. This function believed it,
+    // and — the actual hole — believed reason:'manual' just as readily.
+    //
+    // So a client that never sent the terminate call got a clean submission.
+    // Not only by tampering: `warningCount` is component state, so a reload
+    // reset the tally, and until the fix in this same change a fullscreen exit
+    // could not trigger termination at all. In every one of those cases the
+    // TRUE count was sitting in integrityLog — written by logViolation under
+    // the Admin SDK, unreachable from any client — and nothing read it at the
+    // one moment it decided the outcome.
+    //
+    // ── WHY IT RE-LABELS RATHER THAN REFUSES ──────────────────────
+    //
+    // The obvious move is to throw. That would be wrong: this is the call the
+    // student pressed Submit on, and refusing it leaves a real paper unsaved
+    // and ungraded in a browser that has nowhere else to put it. The answers
+    // are already scored above; what the threshold changes is the VERDICT, not
+    // whether the work is kept. So the attempt closes, the marks stand, and it
+    // closes as `terminated` with the reason recorded.
+    //
+    // ── WHY ONLY THE STUDENT'S OWN CALL ───────────────────────────
+    //
+    // A grader finalising or re-grading an attempt is a human who can see the
+    // integrity log and is deciding in spite of it. Overriding them would make
+    // a reviewed, deliberately-accepted paper flip back to terminated on every
+    // regrade, and would take a judgement call away from the only party
+    // qualified to make it.
+    const integrityWarnings = countIntegrityWarnings(attempt.integrityLog);
+    const overIntegrityThreshold =
+      isStudentOwner
+      && !isGrader
+      && reason !== 'terminated'
+      && integrityWarnings >= MAX_INTEGRITY_WARNINGS_S;
+
+    const effectiveReason: GradeReason = overIntegrityThreshold ? 'terminated' : reason;
+
     const status =
-      reason === 'manual'     ? 'submitted'
-      : reason === 'terminated' ? 'terminated'
+      effectiveReason === 'manual'     ? 'submitted'
+      : effectiveReason === 'terminated' ? 'terminated'
       : 'auto_submitted';
 
     const updates: Record<string, unknown> = {
@@ -4813,6 +4864,19 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       scores,
       gradedAnswers,
     };
+
+    if (overIntegrityThreshold) {
+      // Distinguishable in the record from a shell-driven termination: this one
+      // says the client never asked. A reviewer seeing it knows the count was
+      // reached without the browser acting on it, which is itself worth
+      // knowing — it is the signature of a patched client, a reload-reset
+      // tally, or a detector the shell failed to act on.
+      updates['integrityLog.thresholdEnforcedServerSide'] = true;
+      console.warn(
+        '[gradeAttempt] integrity threshold enforced server-side',
+        attemptId, `requested=${reason}`, `warnings=${integrityWarnings}`,
+      );
+    }
 
     // ── Queue the paper's coding answers for judging ──────────────
     //
@@ -4829,9 +4893,18 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       updates.codeJudgePending = true;
     }
 
-    if (reason === 'terminated') {
+    // effectiveReason, not reason: an attempt re-labelled by the threshold gate
+    // above must carry the same terminal bookkeeping as one the shell asked to
+    // terminate, or it would land in `terminated` status with no autoTerminated
+    // flag and no stated reason — the exact half-written record that makes an
+    // examiner distrust the whole log.
+    if (effectiveReason === 'terminated') {
       updates['integrityLog.autoTerminated'] = true;
-      if (terminateReason) updates['integrityLog.terminatedReason'] = terminateReason;
+      const statedReason = terminateReason
+        ?? (overIntegrityThreshold
+          ? `Exam terminated: ${integrityWarnings} integrity violations recorded (limit ${MAX_INTEGRITY_WARNINGS_S}).`
+          : undefined);
+      if (statedReason) updates['integrityLog.terminatedReason'] = statedReason;
     }
     // ── Closing timings for the section the student was in (A-09) ──
     //
@@ -7575,6 +7648,24 @@ const VIOLATION_COUNTER_S: Record<string, string> = {
  *  Mirrors WARNING_VIOLATION_TYPES in ExamShell. */
 const WARNING_VIOLATION_TYPES_S = new Set(['tab_switch', 'focus_loss', 'fullscreen_exit']);
 const MAX_INTEGRITY_WARNINGS_S = 3;
+
+/**
+ * The warning tally, from the counters only this file can write.
+ *
+ * A `function` declaration rather than a const arrow because gradeAttempt sits
+ * ~3000 lines ABOVE this point and calls it. Declarations hoist, so there is no
+ * temporal-dead-zone question for a future reader to have to reason about.
+ *
+ * Counting is deliberately duplicated nowhere else: logViolation's reply, the
+ * client's resume guard and gradeAttempt's finalisation gate all come through
+ * here, so the three cannot drift into disagreeing about what a warning is.
+ */
+export function countIntegrityWarnings(
+  log: { tabSwitches?: number; focusLosses?: number; fullscreenExits?: number } | null | undefined,
+): number {
+  if (!log) return 0;
+  return (log.tabSwitches ?? 0) + (log.focusLosses ?? 0) + (log.fullscreenExits ?? 0);
+}
 
 /**
  * Ceiling on STORED violation events per attempt (N5, audit 2026-08-06).

@@ -133,13 +133,54 @@ echo "── verifying ───────────────────
 # The backstop. A batch that failed silently, or a function that never got
 # deployed because it was missing from the derived list, shows up here as a
 # count that does not match the source.
-LIVE=$("$FIREBASE" functions:list --project "$PROJECT" 2>/dev/null | grep -cP '^\W*\w+\W+v\d' || true)
-echo "source: $MATCHED functions"
-echo "live:   $LIVE functions"
-if [[ "$LIVE" -lt "$MATCHED" ]]; then
+#
+# This is the LAST WORD on a deploy that has already taken twenty minutes and
+# cold-started every function in the project, so it has to get two things
+# right that the first version got wrong.
+#
+# ── 1. Strip ANSI before counting ──
+# `functions:list` renders a cli-table3 table, and cli-table3 colours the
+# border on EVERY row whether or not stdout is a TTY. So each line really
+# begins:
+#
+#     \e[90m│\e[39m createAuthUser \e[90m│\e[39m v2 …
+#
+# against which `^\W*\w+\W+v\d` cannot match: \W* eats the ESC and the two
+# brackets, then \w+ swallows `90m`, and the match is already past the point
+# where `v2` could satisfy `v\d`. It counted 0 on a table full of functions —
+# so this check reported `live: 0` against `source: 56` on a deploy where all
+# 56 had in fact updated successfully.
+#
+# ── 2. A verification that could not RUN is not a deploy that failed ──
+# The old line sent stderr to /dev/null and let `|| true` turn every possible
+# failure — no credentials, a revoked token, a missing run.services.list
+# permission, a network blip — into the number 0, which then read as "fewer
+# functions are live than exist in source" and told the operator to redeploy
+# production. That is the most expensive wrong answer this script can give,
+# and it gave it silently. The two cases are now separated, and the error
+# that caused a failed check is printed instead of discarded.
+ERRFILE="$(mktemp)"
+trap 'rm -f "$ERRFILE"' EXIT
+
+if LIST=$("$FIREBASE" functions:list --project "$PROJECT" 2>"$ERRFILE"); then
+  LIVE=$(printf '%s\n' "$LIST" | sed -r 's/\x1b\[[0-9;]*m//g' | grep -cP '^\W*\w+\W+v\d' || true)
+  echo "source: $MATCHED functions"
+  echo "live:   $LIVE functions"
+  if [[ "$LIVE" -lt "$MATCHED" ]]; then
+    echo
+    echo "MISMATCH — fewer functions are live than exist in source." >&2
+    echo "Some batch did not land. Re-run this script; it is idempotent." >&2
+    exit 1
+  fi
+else
   echo
-  echo "MISMATCH — fewer functions are live than exist in source." >&2
-  echo "Some batch did not land. Re-run this script; it is idempotent." >&2
+  echo "COULD NOT VERIFY — 'firebase functions:list' failed:" >&2
+  sed 's/^/  /' "$ERRFILE" >&2
+  echo >&2
+  echo "This says NOTHING about the deploy itself, which reported success" >&2
+  echo "above. Do NOT redeploy on the strength of this message. Confirm in" >&2
+  echo "the console instead:" >&2
+  echo "  https://console.firebase.google.com/project/$PROJECT/functions" >&2
   exit 1
 fi
 

@@ -17,7 +17,11 @@ import {
   readViewportGeometry,
   DEVTOOLS_MIN_DELTA,
   VIEWPORT_MIN_DELTA,
+  isFocusStateMismatch,
+  nextThrottleStreak,
+  RENDER_MIN_FPS,
   type ViewportSample,
+  type FocusWitness,
 } from './IntegrityEngine';
 
 describe('codeEditorPasteAllowed', () => {
@@ -212,5 +216,143 @@ describe('readViewportGeometry', () => {
       .toMatchObject({ narrowed: false });
     expect(readViewportGeometry({ ...NORMAL, h: NORMAL.h + DEVTOOLS_MIN_DELTA }, base))
       .toMatchObject({ devtoolsOpen: false });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// FOCUS-STATE MISMATCH
+// ══════════════════════════════════════════════════════════════════
+//
+// The danger here is not missing a signal, it is producing one. focus_loss is
+// a warning type and three warnings end an exam, so the reason this reports a
+// DISAGREEMENT rather than the focus loss itself is that polling the loss
+// would terminate a student who alt-tabbed once and took a few seconds to come
+// back. Every case below is a state that must stay quiet.
+
+const witnessed = (over: Partial<FocusWitness> = {}): FocusWitness =>
+  ({ everFocused: true, blurAcknowledged: false, ...over });
+
+describe('isFocusStateMismatch', () => {
+  it('is quiet while the page holds focus', () => {
+    expect(isFocusStateMismatch(witnessed(), { hasFocus: true, hidden: false })).toBe(false);
+  });
+
+  it('is quiet for an ordinary focus loss the blur event announced', () => {
+    expect(isFocusStateMismatch(
+      witnessed({ blurAcknowledged: true }), { hasFocus: false, hidden: false },
+    )).toBe(false);
+  });
+
+  it('stays quiet however long that ordinary loss lasts', () => {
+    // The acknowledgement is a fact about the current loss, not a recent
+    // event, so it does not decay. A student away for ten minutes is reported
+    // once by the blur handler and never by this one.
+    const w = witnessed({ blurAcknowledged: true });
+    for (let poll = 0; poll < 300; poll++) {
+      expect(isFocusStateMismatch(w, { hasFocus: false, hidden: false })).toBe(false);
+    }
+  });
+
+  it('is quiet for a tab switch, which visibilitychange owns', () => {
+    expect(isFocusStateMismatch(witnessed(), { hasFocus: false, hidden: true })).toBe(false);
+  });
+
+  it('is quiet on a page that has never held focus', () => {
+    // Opened in a background tab: there is no loss to have been suppressed,
+    // only focus never gained.
+    expect(isFocusStateMismatch(
+      witnessed({ everFocused: false }), { hasFocus: false, hidden: false },
+    )).toBe(false);
+  });
+
+  it('reports focus gone with no blur behind it', () => {
+    // The one state the browser does not produce on its own: something
+    // intercepted the event. hasFocus() cannot be made to lie the same way.
+    expect(isFocusStateMismatch(witnessed(), { hasFocus: false, hidden: false })).toBe(true);
+  });
+
+  it('goes quiet again once focus returns and comes back on the next suppression', () => {
+    const w = witnessed();
+    expect(isFocusStateMismatch(w, { hasFocus: false, hidden: false })).toBe(true);
+    // handleFocus resets the acknowledgement for the next loss.
+    w.blurAcknowledged = false;
+    expect(isFocusStateMismatch(w, { hasFocus: true, hidden: false })).toBe(false);
+    expect(isFocusStateMismatch(w, { hasFocus: false, hidden: false })).toBe(true);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER THROTTLE
+// ══════════════════════════════════════════════════════════════════
+//
+// A page claiming to be visible and focused while its frames have stopped is
+// describing a state the browser does not put pages in. The risk is jank: this
+// tab runs a code editor and, on the proctored tiers, face detection, so the
+// thresholds have to sit far below anything a merely busy machine produces.
+
+const FULL_WINDOW = 5000;
+
+describe('nextThrottleStreak', () => {
+  it('is quiet at an ordinary frame rate', () => {
+    expect(nextThrottleStreak(0, 300, FULL_WINDOW, true))
+      .toMatchObject({ streak: 0, fire: false });
+  });
+
+  it('is quiet on a janky but living machine', () => {
+    // 10fps is a bad time; it is not a stopped tab.
+    expect(nextThrottleStreak(0, 50, FULL_WINDOW, true))
+      .toMatchObject({ streak: 0, fire: false });
+  });
+
+  it('needs two consecutive stalled windows, not one', () => {
+    // A single long pause — garbage collection, a heavy paint, a model
+    // loading — must not be enough on its own.
+    const first = nextThrottleStreak(0, 2, FULL_WINDOW, true);
+    expect(first).toMatchObject({ streak: 1, fire: false });
+    expect(nextThrottleStreak(first.streak, 2, FULL_WINDOW, true))
+      .toMatchObject({ streak: 2, fire: true });
+  });
+
+  it('resets the streak when frames recover', () => {
+    const stalled = nextThrottleStreak(0, 1, FULL_WINDOW, true);
+    expect(stalled.streak).toBe(1);
+    expect(nextThrottleStreak(stalled.streak, 300, FULL_WINDOW, true))
+      .toMatchObject({ streak: 0, fire: false });
+  });
+
+  it('reports a sustained stall once, not once per window', () => {
+    let streak = 0;
+    const fires: number[] = [];
+    for (let w = 0; w < 20; w++) {
+      const v = nextThrottleStreak(streak, 0, FULL_WINDOW, true);
+      streak = v.streak;
+      if (v.fire) fires.push(w);
+    }
+    expect(fires).toEqual([1]);   // the window that reached the threshold
+  });
+
+  it('is quiet when the page admits to being hidden or unfocused', () => {
+    // The browser throttles background tabs by design. This branch is what
+    // keeps an honest tab switch from also being reported as a render stall.
+    expect(nextThrottleStreak(0, 0, FULL_WINDOW, false))
+      .toMatchObject({ streak: 0, fire: false });
+    // …and it clears any streak built up before the tab went away.
+    expect(nextThrottleStreak(1, 0, FULL_WINDOW, false))
+      .toMatchObject({ streak: 0, fire: false });
+  });
+
+  it('measures against the real elapsed time, not the nominal window', () => {
+    // setInterval is itself throttled in a background tab, so a "5s" window
+    // can actually run far longer. Trusting the nominal length would invent a
+    // stall out of the arithmetic: 40 frames is 8fps over 5s but 1.3fps over
+    // 30s, and only one of those readings is true.
+    expect(nextThrottleStreak(0, 40, 5000, true)).toMatchObject({ fire: false, streak: 0 });
+    const long = nextThrottleStreak(0, 40, 30000, true);
+    expect(long.fps).toBeLessThan(RENDER_MIN_FPS);
+    expect(long.streak).toBe(1);
+  });
+
+  it('refuses to divide by a zero-length window', () => {
+    expect(nextThrottleStreak(1, 0, 0, true)).toMatchObject({ streak: 1, fire: false });
   });
 });

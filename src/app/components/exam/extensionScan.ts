@@ -61,15 +61,127 @@ export function scanForExtensions(): string[] {
   return found;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// GENERIC FOREIGN-DOM DETECTION
+// ══════════════════════════════════════════════════════════════════
+//
+// The fingerprint list above only ever sees extensions somebody thought to
+// add, and it ages the moment an extension renames an element. This finds the
+// shape instead of the name: an extension that injects visible UI has to put
+// a node somewhere, and it cannot put it inside our React tree — it appends at
+// the top level, as a sibling of the app root.
+//
+// That makes the rule cheap AND strict. This app renders entirely into
+// #root — there is not one createPortal in the codebase — so a top-level
+// element that is neither the root nor a script/style tag was not put there by
+// us. The check reads a handful of direct children rather than walking the
+// document, which is what lets it run on every mutation without cost.
+//
+// ── WHY THIS IS A SEPARATE SEVERITY, NOT A LONGER LIST ────────────
+//
+// A named fingerprint match feeds reportExtensionCheck, and the server FREEZES
+// the attempt on tiers that require the extension check. Since D-30 a freeze
+// has no automatic exit — a human has to clear it.
+//
+// A generic detector's whole premise is firing on things nobody enumerated,
+// which is the same thing as saying its false positives are unknowable in
+// advance. Wiring that into a state only an invigilator can leave would mean a
+// password manager, an IME candidate window or some future browser feature
+// could stop a live sitting until someone intervened, once per student.
+//
+// So the two severities are structurally different signals: a named match
+// stays freeze-eligible, and a foreign node is reported as `foreign_dom`,
+// which nothing in the freeze path listens for. The reviewer gets told what
+// was seen; the student keeps writing. That split is asserted by tests, not
+// just intended.
+
+/** Element ids/tags that belong to the page itself and are never foreign. */
+const APP_ROOT_ID = 'root';
+const BENIGN_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'TEMPLATE', 'NOSCRIPT']);
+
+/** Extension-owned URL schemes, across the browsers that expose one. */
+const EXTENSION_SCHEMES = ['chrome-extension://', 'moz-extension://', 'safari-web-extension://', 'ms-browser-extension://'];
+
+/** A short, reviewer-readable description of one node. Never its content. */
+function describeNode(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  const id = el.id ? `#${el.id}` : '';
+  // First class only, and truncated: enough for a reviewer to recognise the
+  // culprit, short enough that a hostile class attribute cannot bloat the
+  // violation detail it ends up in.
+  const cls = !id && typeof el.className === 'string' && el.className.trim()
+    ? `.${el.className.trim().split(/\s+/)[0]}`
+    : '';
+  return `<${tag}${id || cls}>`.slice(0, 80);
+}
+
+/**
+ * Unrecognised top-level nodes and extension-scheme iframes.
+ *
+ * Returns descriptors, not labels — it cannot name what it finds, and saying
+ * "unrecognised element <x-foo>" is the honest report. Naming a guess is the
+ * mistake the DevTools width heuristic used to make.
+ */
+export function scanForForeignDom(): string[] {
+  if (typeof document === 'undefined') return [];
+  const found: string[] = [];
+
+  const inspect = (el: Element) => {
+    if (BENIGN_TAGS.has(el.tagName)) return;
+    if (el.id === APP_ROOT_ID) return;
+    found.push(describeNode(el));
+  };
+
+  try {
+    for (const el of Array.from(document.body?.children ?? [])) inspect(el);
+    // Siblings of <body> — rarer, but an extension that appends to
+    // documentElement would otherwise be invisible to the check above.
+    for (const el of Array.from(document.documentElement?.children ?? [])) {
+      if (el.tagName === 'HEAD' || el.tagName === 'BODY') continue;
+      inspect(el);
+    }
+    // An extension iframe can legitimately live INSIDE our tree (injected into
+    // a container it found), so this one is a document-wide query. It is
+    // scheme-matched rather than shape-matched, so it cannot false-positive on
+    // an iframe the exam itself renders.
+    for (const frame of Array.from(document.querySelectorAll('iframe'))) {
+      const src = frame.getAttribute('src') ?? '';
+      if (EXTENSION_SCHEMES.some((s) => src.startsWith(s))) {
+        found.push(`<iframe ${src.split('/')[2] ?? 'extension'}>`.slice(0, 80));
+      }
+    }
+  } catch {
+    // A detector must never be the thing that breaks an exam.
+  }
+
+  return Array.from(new Set(found));
+}
+
+/** What a settled scan found, split by how much the finding can be trusted. */
+export type ExtensionScanResult = {
+  /** Matched a known fingerprint. Freeze-eligible; blocks entry. */
+  named: string[];
+  /** Unrecognised top-level DOM. Recorded only — never blocks, never freezes. */
+  foreign: string[];
+};
+
 /**
  * Scan twice with a settle delay in between, because some extensions inject
- * their DOM a beat after page load. Resolves to the union of detected labels.
- * The entry gate uses this so a slow-injecting extension isn't missed by a
- * single instant-scan.
+ * their DOM a beat after page load. Resolves to the union of both passes, so a
+ * slow-injecting extension isn't missed by a single instant-scan.
+ *
+ * Runs BOTH detectors, which is the point: the entry gate and the in-exam
+ * monitor now share real coverage rather than a shared file. They still act
+ * differently on the result, because the two surfaces have different costs for
+ * being wrong — a false positive in here locks a student out of an exam
+ * entirely, so only the named half is allowed to do that.
  */
-export async function scanForExtensionsWithSettle(settleMs = 1500): Promise<string[]> {
-  const first = scanForExtensions();
+export async function scanForExtensionsWithSettle(settleMs = 1500): Promise<ExtensionScanResult> {
+  const firstNamed = scanForExtensions();
+  const firstForeign = scanForForeignDom();
   await new Promise((r) => setTimeout(r, settleMs));
-  const second = scanForExtensions();
-  return Array.from(new Set([...first, ...second]));
+  return {
+    named: Array.from(new Set([...firstNamed, ...scanForExtensions()])),
+    foreign: Array.from(new Set([...firstForeign, ...scanForForeignDom()])),
+  };
 }

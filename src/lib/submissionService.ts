@@ -139,8 +139,11 @@ export type ViolationType =
   | 'devtools_open'    // devtools height heuristic / shortcut intercepted
   | 'reload_attempt'   // F5 / Ctrl+R
   | 'keyboard_block'   // blocked key combination
-  | 'extension_detected' // browser extension UI detected in DOM
-  | 'viewport_narrowed'; // something took horizontal space — side panel or docked devtools
+  | 'extension_detected' // a NAMED extension fingerprint matched in the DOM
+  | 'viewport_narrowed'  // something took horizontal space — side panel or docked devtools
+  | 'foreign_dom'        // unrecognised top-level DOM; deliberately unnamed, never freezes
+  | 'focus_state_mismatch' // window has no focus but no blur event ever fired
+  | 'render_throttled';  // rAF running at background rates while claiming to be focused
 
 export type ViolationEvent = {
   type: ViolationType;
@@ -236,6 +239,12 @@ export type IntegrityLog = {
   // on viewport_narrowed in IntegrityEngine. Optional because attempts created
   // before this counter existed will not carry it; every reader defaults it.
   viewportEvents?: number;
+  // Kept apart from extensionEvents on purpose: that counter means "a named
+  // extension was identified", and folding heuristic hits into it would make
+  // a reviewer read a guess as an identification.
+  foreignDomEvents?: number;
+  focusMismatchEvents?: number;
+  renderThrottleEvents?: number;
 
   // Total violation count driving the warning system
   totalViolations: number;
@@ -580,6 +589,9 @@ const VIOLATION_COUNTER: Record<ViolationType, keyof IntegrityLog> = {
   keyboard_block:  'keyboardBlockEvents',
   extension_detected: 'extensionEvents',
   viewport_narrowed:  'viewportEvents',
+  foreign_dom:         'foreignDomEvents',
+  focus_state_mismatch: 'focusMismatchEvents',
+  render_throttled:    'renderThrottleEvents',
 };
 
 // ══════════════════════════════════════════════════════════════════

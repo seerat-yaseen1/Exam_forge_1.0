@@ -13,6 +13,8 @@
  *   Fullscreen: document.fullscreenchange
  *   DevTools  : vertical viewport-loss heuristic (polled every 2 s)
  *   Viewport  : horizontal viewport-loss heuristic — side panel / docked pane
+ *   Focus     : hasFocus() vs blur-event disagreement (polled every 2 s)
+ *   Render    : requestAnimationFrame rate vs claimed foreground state
  *   Unload    : beforeunload (shows browser dialog)
  */
 
@@ -178,6 +180,107 @@ export function readViewportGeometry(
   };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// FOCUS-STATE MISMATCH
+// ══════════════════════════════════════════════════════════════════
+//
+// The blur handler above already reports focus loss, and `focus_loss` is one
+// of the three types that count toward termination. Polling document.hasFocus()
+// as a SECOND source of the same signal would be a serious mistake: hasFocus()
+// is a state and the violation pipeline is edge-triggered, so every tick while
+// unfocused would mint another warning and a student who alt-tabbed once and
+// took five seconds to come back would be terminated.
+//
+// What polling actually adds is not the loss — it is the DISAGREEMENT. The
+// honest sequence is: focus leaves, `blur` fires, hasFocus() reads false. A
+// tool that suppresses the blur event to hide a tab switch cannot also make
+// hasFocus() lie, so a window with no focus and no blur behind it is evidence
+// the event was intercepted.
+//
+// That is reported as its own non-warning type. It can never terminate anyone,
+// which is correct for a signal this indirect — a reviewer looks at it
+// alongside the rest of the record.
+
+/** What the engine has witnessed about focus so far. */
+export type FocusWitness = {
+  /** Has the page held focus at least once? */
+  everFocused: boolean;
+  /** Did a `blur` event fire for the focus loss currently in effect? */
+  blurAcknowledged: boolean;
+};
+
+export function isFocusStateMismatch(
+  witness: FocusWitness,
+  reading: { hasFocus: boolean; hidden: boolean },
+): boolean {
+  // A page opened in a background tab has never held focus, so there is no
+  // loss to have been suppressed — only a page that never gained it.
+  if (!witness.everFocused) return false;
+  // A hidden document is a tab switch, which visibilitychange already reports
+  // and which legitimately produces no blur on some platforms.
+  if (reading.hidden) return false;
+  // Focus is present. Nothing to explain.
+  if (reading.hasFocus) return false;
+  // Focus is gone and the event fired. Ordinary, already reported as
+  // focus_loss, and it stays true for as long as the student is away — which
+  // is why this tracks an acknowledgement rather than the recency of a blur.
+  if (witness.blurAcknowledged) return false;
+  return true;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER THROTTLE
+// ══════════════════════════════════════════════════════════════════
+//
+// Browsers throttle requestAnimationFrame almost to a stop in background tabs.
+// A page that claims to be visible AND focused while its frames have stopped
+// arriving is describing a state the browser does not put pages in — the
+// visibility and focus APIs are being answered by something other than the
+// browser's real state.
+//
+// The thresholds are deliberately far past ordinary jank. A loaded machine
+// running a code editor and face detection still renders well above this; what
+// is being looked for is frames having essentially stopped. Two consecutive
+// windows are required so a single long pause — a garbage collection, a heavy
+// paint, a model loading — cannot produce a finding on its own.
+
+/** Length of one measurement window. Measured, not assumed — see below. */
+export const RENDER_WINDOW_MS = 5000;
+/** Below this, frames have effectively stopped rather than merely slowed. */
+export const RENDER_MIN_FPS = 3;
+/** Consecutive stalled windows before reporting. */
+export const RENDER_STALL_WINDOWS = 2;
+
+/**
+ * Fold one window into the stall streak.
+ *
+ * `elapsedMs` is measured rather than assumed because the interval driving
+ * these windows is itself throttled in a background tab — trusting the nominal
+ * 5s there would compute a frame rate against a window that actually ran much
+ * longer, and invent a stall out of the arithmetic.
+ *
+ * Fires on the window that REACHES the threshold, not on every window past it,
+ * so one sustained episode produces one finding rather than a stream.
+ */
+export function nextThrottleStreak(
+  streak: number,
+  frames: number,
+  elapsedMs: number,
+  claimsForeground: boolean,
+): { streak: number; fire: boolean; fps: number } {
+  // A page that admits to being hidden or unfocused is throttled by the
+  // browser exactly as designed. There is nothing inconsistent to report, and
+  // this is the branch that keeps an honest tab switch quiet.
+  if (!claimsForeground) return { streak: 0, fire: false, fps: 0 };
+  if (elapsedMs <= 0) return { streak, fire: false, fps: 0 };
+
+  const fps = frames / (elapsedMs / 1000);
+  if (fps >= RENDER_MIN_FPS) return { streak: 0, fire: false, fps };
+
+  const next = streak + 1;
+  return { streak: next, fire: next === RENDER_STALL_WINDOWS, fps };
+}
+
 // ── Component ─────────────────────────────────────────────────────
 
 export function IntegrityEngine({
@@ -217,6 +320,14 @@ export function IntegrityEngine({
   // ── Mount all listeners ───────────────────────────────────────
 
   useEffect(() => {
+    // Witnessed focus history, shared by the blur/focus handlers and the
+    // mismatch poll below. A plain object rather than a ref because it never
+    // outlives this effect.
+    const focusWitness: FocusWitness = {
+      everFocused: document.hasFocus(),
+      blurAcknowledged: false,
+    };
+
     // ── 1. Keydown ──────────────────────────────────────────────
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!activeRef.current) return;
@@ -358,6 +469,11 @@ export function IntegrityEngine({
 
     // ── 5. Focus loss (window blur) ─────────────────────────────
     const handleBlur = () => {
+      // Recorded synchronously, before the delay below: the mismatch poll must
+      // see the acknowledgement as soon as the event lands, or a poll landing
+      // inside the 250ms window would read an unacknowledged focus loss and
+      // report the engine's own debounce as evidence of tampering.
+      focusWitness.blurAcknowledged = true;
       // Delay slightly so we don't double-fire alongside visibilitychange
       setTimeout(() => {
         if (!activeRef.current) return;
@@ -366,6 +482,14 @@ export function IntegrityEngine({
         if (sinceVisChange < 500) return; // same event pair — skip
         fire('focus_loss', 'Window lost focus', 1500);
       }, 250);
+    };
+
+    // Focus regained: the loss is over, so the next one needs its own
+    // acknowledgement. Also the only place everFocused becomes true for a page
+    // that started in a background tab.
+    const handleFocus = () => {
+      focusWitness.everFocused = true;
+      focusWitness.blurAcknowledged = false;
     };
 
     // ── 6. Fullscreen change ────────────────────────────────────
@@ -420,6 +544,59 @@ export function IntegrityEngine({
       lastNarrowedState = reading.narrowed;
     }, 2000);
 
+    // ── 9. Focus-state mismatch (polled) ───────────────────────
+    // Reports disagreement between the focus EVENTS and the focus STATE, not
+    // focus loss itself — see the note on isFocusStateMismatch. Long throttle:
+    // a sustained mismatch is one finding, not one every two seconds.
+    const focusPollInterval = setInterval(() => {
+      if (!activeRef.current) return;
+      if (document.hasFocus()) focusWitness.everFocused = true;
+      const mismatch = isFocusStateMismatch(focusWitness, {
+        hasFocus: document.hasFocus(),
+        hidden: document.hidden,
+      });
+      if (mismatch) {
+        fire(
+          'focus_state_mismatch',
+          'Window reports no focus but no blur event was received',
+          30000,
+        );
+      }
+    }, 2000);
+
+    // ── 10. Render throttle (rAF rate) ─────────────────────────
+    let frames = 0;
+    let windowStart = Date.now();
+    let stallStreak = 0;
+    let rafId = requestAnimationFrame(function count() {
+      frames += 1;
+      rafId = requestAnimationFrame(count);
+    });
+
+    const renderInterval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - windowStart;
+      const observed = frames;
+      frames = 0;
+      windowStart = now;
+      if (!activeRef.current) { stallStreak = 0; return; }
+
+      const verdict = nextThrottleStreak(
+        stallStreak,
+        observed,
+        elapsed,
+        !document.hidden && document.hasFocus(),
+      );
+      stallStreak = verdict.streak;
+      if (verdict.fire) {
+        fire(
+          'render_throttled',
+          `Frames stopped (${verdict.fps.toFixed(1)}/s) while the page reported being focused`,
+          60000,
+        );
+      }
+    }, RENDER_WINDOW_MS);
+
     // ── Register all ────────────────────────────────────────────
     document.addEventListener('keydown',           handleKeyDown,        { capture: true });
     document.addEventListener('copy',              handleCopy,           { capture: true });
@@ -429,6 +606,7 @@ export function IntegrityEngine({
     document.addEventListener('visibilitychange',  handleVisibilityChange);
     document.addEventListener('fullscreenchange',  handleFullscreenChange);
     window.addEventListener(  'blur',              handleBlur);
+    window.addEventListener(  'focus',             handleFocus);
     window.addEventListener(  'beforeunload',      handleBeforeUnload);
 
     // ── Cleanup ─────────────────────────────────────────────────
@@ -441,8 +619,12 @@ export function IntegrityEngine({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       window.removeEventListener(  'blur',             handleBlur);
+      window.removeEventListener(  'focus',            handleFocus);
       window.removeEventListener(  'beforeunload',     handleBeforeUnload);
       clearInterval(geometryInterval);
+      clearInterval(focusPollInterval);
+      clearInterval(renderInterval);
+      cancelAnimationFrame(rafId);
     };
   }, []); // mount-once; all mutable state accessed via refs
 

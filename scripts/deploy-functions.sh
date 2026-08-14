@@ -55,6 +55,33 @@ SRC="$ROOT/functions/src/index.ts"
 
 [[ -f "$SRC" ]] || { echo "cannot find $SRC" >&2; exit 1; }
 
+# The repo's OWN firebase-tools, by explicit path. Not `npx firebase`.
+#
+# firebase-tools is a devDependency of functions/, not of the root, and this
+# script runs from wherever the caller happens to be. `npx firebase` from the
+# root therefore resolves nothing locally and falls through to the registry,
+# where it fetches the package literally named `firebase` — the CLIENT SDK,
+# which ships no executable — and dies with:
+#
+#     npm error could not determine executable to run
+#
+# That failure is silent about its cause and looks like a broken deploy rather
+# than a missing CLI. It only ever worked for someone with firebase-tools
+# installed GLOBALLY, which is per-Node-version under nvm: `nvm use 24` is
+# enough to make a deploy that worked yesterday stop working, with no change
+# to this repo at all.
+#
+# The explicit path removes the ambient dependency entirely. It also pins the
+# deploy to the SAME CLI the test suites run against (functions/package.json,
+# firebase-tools ^15.26.0) rather than whatever major is installed globally.
+FIREBASE="$ROOT/functions/node_modules/.bin/firebase"
+
+if [[ ! -x "$FIREBASE" ]]; then
+  echo "cannot find firebase-tools at $FIREBASE" >&2
+  echo "Run: npm --prefix \"$ROOT/functions\" ci" >&2
+  exit 1
+fi
+
 # Every export in index.ts is `export const NAME = onSomething(`. The negative
 # check below fails the run if that ever stops being true, rather than quietly
 # deploying whatever the pattern happened to match.
@@ -89,7 +116,7 @@ while [[ $i -lt $MATCHED ]]; do
   # --force skips the "delete these functions?" prompt. Safe here BECAUSE the
   # list is derived from source: this batch names only functions that exist in
   # the code, so there is nothing for the CLI to propose deleting.
-  npx firebase deploy --only "$targets" --project "$PROJECT" --force
+  "$FIREBASE" deploy --only "$targets" --project "$PROJECT" --force
 
   i=$((i + BATCH))
   # Let the per-minute write quota drain before the next batch. This is the
@@ -106,7 +133,7 @@ echo "── verifying ───────────────────
 # The backstop. A batch that failed silently, or a function that never got
 # deployed because it was missing from the derived list, shows up here as a
 # count that does not match the source.
-LIVE=$(npx firebase functions:list --project "$PROJECT" 2>/dev/null | grep -cP '^\W*\w+\W+v\d' || true)
+LIVE=$("$FIREBASE" functions:list --project "$PROJECT" 2>/dev/null | grep -cP '^\W*\w+\W+v\d' || true)
 echo "source: $MATCHED functions"
 echo "live:   $LIVE functions"
 if [[ "$LIVE" -lt "$MATCHED" ]]; then

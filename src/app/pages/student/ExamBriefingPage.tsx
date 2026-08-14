@@ -783,7 +783,7 @@ export function ExamBriefingPage() {
                     <RuleItem icon={<AlertTriangle size={12} strokeWidth={1.5} />}
                       text="Switching tabs, losing window focus, or opening DevTools will count as violations. After 3 violations, your exam will be automatically terminated." />
                     <RuleItem icon={<ClipboardList size={12} strokeWidth={1.5} />}
-                      text="Copying, pasting, and right-clicking are disabled during the exam. All keyboard shortcuts are restricted." />
+                      text="Copying, pasting, printing, and right-clicking are disabled during the exam. All keyboard shortcuts are restricted." />
                     {/* Stated up front because it is now a HARD gate. A student
                         who reads this before starting can clear their browser
                         in their own time; one who meets it for the first time

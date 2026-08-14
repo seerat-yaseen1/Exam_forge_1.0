@@ -16,11 +16,14 @@
  *   Viewport  : horizontal viewport-loss heuristic — side panel / docked pane
  *   Focus     : hasFocus() vs blur-event disagreement (polled every 2 s)
  *   Render    : requestAnimationFrame rate vs claimed foreground state
+ *   Print     : Ctrl+P intercepted, an @media print rule that hides the paper,
+ *               and beforeprint for the routes that cannot be prevented
  *   Unload    : beforeunload (shows browser dialog)
  */
 
 import { useEffect, useRef } from 'react';
 import type { ViolationType } from '../../../lib/submissionService';
+import { installPrintGuard } from './printGuard';
 
 // ── Constants ─────────────────────────────────────────────────────
 
@@ -450,6 +453,20 @@ export function IntegrityEngine({
         return;
       }
 
+      // Ctrl+P — print / save as PDF
+      //
+      // The only layer that stops a print BEFORE it starts; the stylesheet and
+      // the beforeprint listener in printGuard cover the routes that never
+      // produce a keydown here. Reported as its own type rather than as a
+      // keyboard_block: a blocked shortcut is a student pressing something, a
+      // print attempt is a student trying to take the paper out of the room,
+      // and a reviewer weighs those differently.
+      if (ctrl && key === 'p') {
+        e.preventDefault();
+        fire('print_attempt', 'Ctrl+P blocked');
+        return;
+      }
+
       // Ctrl+W — attempt to close tab
       if (ctrl && key === 'w') {
         e.preventDefault();
@@ -690,6 +707,19 @@ export function IntegrityEngine({
       }
     }, RENDER_WINDOW_MS);
 
+    // ── 12. Print guard ────────────────────────────────────────
+    // Stylesheet + beforeprint live in printGuard; the Ctrl+P intercept is in
+    // the keydown handler above, with the other blocked keys. Installed here
+    // so it is torn down by the same cleanup as everything else — a print rule
+    // that outlived the exam would silently blank a student's results page.
+    //
+    // Not gated on `active`: `fire` already refuses when inactive, and the
+    // STYLESHEET must stay in force behind a modal or a break. Those are
+    // exactly the moments a paper is on screen with nobody typing.
+    const removePrintGuard = installPrintGuard({
+      onPrintAttempt: (detail) => fire('print_attempt', detail, 1500),
+    });
+
     // ── Register all ────────────────────────────────────────────
     document.addEventListener('keydown',           handleKeyDown,        { capture: true });
     document.addEventListener('copy',              handleCopy,           { capture: true });
@@ -714,6 +744,7 @@ export function IntegrityEngine({
       window.removeEventListener(  'blur',             handleBlur);
       window.removeEventListener(  'focus',            handleFocus);
       window.removeEventListener(  'beforeunload',     handleBeforeUnload);
+      removePrintGuard();
       clearInterval(geometryInterval);
       clearInterval(focusPollInterval);
       clearInterval(fullscreenInterval);

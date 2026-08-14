@@ -144,7 +144,8 @@ export type ViolationType =
   | 'viewport_narrowed'  // something took horizontal space — side panel or docked devtools
   | 'foreign_dom'        // unrecognised top-level DOM; deliberately unnamed, never freezes
   | 'focus_state_mismatch' // window has no focus but no blur event ever fired
-  | 'render_throttled';  // rAF running at background rates while claiming to be focused
+  | 'render_throttled'   // rAF running at background rates while claiming to be focused
+  | 'print_attempt';     // Ctrl+P, or a print started from the browser menu
 
 /**
  * WHERE the student was when a violation fired.
@@ -270,6 +271,11 @@ export type IntegrityLog = {
   foreignDomEvents?: number;
   focusMismatchEvents?: number;
   renderThrottleEvents?: number;
+  // Print is its own counter rather than another keyboardBlockEvent: a blocked
+  // shortcut is a student pressing something, and a print attempt is a student
+  // trying to take the paper out of the room. A reviewer weighs those
+  // differently, so the record keeps them apart.
+  printAttempts?: number;
 
   // Total violation count driving the warning system
   totalViolations: number;
@@ -645,6 +651,7 @@ const VIOLATION_COUNTER: Record<ViolationType, keyof IntegrityLog> = {
   foreign_dom:         'foreignDomEvents',
   focus_state_mismatch: 'focusMismatchEvents',
   render_throttled:    'renderThrottleEvents',
+  print_attempt:       'printAttempts',
 };
 
 // ══════════════════════════════════════════════════════════════════

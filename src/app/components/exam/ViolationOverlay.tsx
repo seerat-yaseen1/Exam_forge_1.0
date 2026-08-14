@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Maximize, XOctagon, Eye,
-  ShieldOff, MonitorOff, Clipboard, MousePointer, PanelRight,
+  ShieldOff, MonitorOff, Clipboard, MousePointer, PanelRight, Shield, Loader2,
 } from 'lucide-react';
 import type { ViolationType } from '../../../lib/submissionService';
 
@@ -326,6 +326,93 @@ export function FullscreenRequiredOverlay({ onReturnFullscreen }: FullscreenProp
             exit fullscreen, your exam may be terminated.
           </p>
         </div>
+      </OverlayCard>
+    </Backdrop>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// EXTENSION REQUIRED overlay
+// ──────────────────────────────────────────────────────────────────
+//
+// Shown when the shell is entered — by refresh or by direct URL — with an
+// extension present that the briefing gate would have refused. It gates
+// interaction and nothing more: no violation is fired behind it, and it clears
+// as soon as a re-check comes back clean.
+//
+// The copy has the same problem as the briefing's generic case and takes the
+// same way out. `found` may hold a product name the student recognises, or a
+// bare descriptor like <div#xyz> that names nothing to them. So the remedy
+// that works either way leads, and the list is shown underneath for anyone it
+// helps.
+
+interface ExtensionRequiredProps {
+  found: string[];
+  onRecheck: () => void;
+}
+
+export function ExtensionRequiredOverlay({ found, onRecheck }: ExtensionRequiredProps) {
+  const [checking, setChecking] = useState(false);
+
+  const recheck = async () => {
+    setChecking(true);
+    try { await onRecheck(); } finally { setChecking(false); }
+  };
+
+  return (
+    <Backdrop dim={false}>
+      <OverlayCard
+        title="BROWSER EXTENSION DETECTED"
+        accent="#E3C9C9"
+        footer={
+          <button
+            onClick={recheck}
+            disabled={checking}
+            className="flex items-center gap-2 text-xs px-5 py-2.5"
+            style={{
+              background: 'var(--ef-ink)', color: 'var(--ef-surface)',
+              borderRadius: 2, cursor: checking ? 'wait' : 'pointer',
+              opacity: checking ? 0.6 : 1,
+            }}
+          >
+            {checking && <Loader2 size={12} className="animate-spin" />}
+            {checking ? 'Re-checking…' : 'Re-check'}
+          </button>
+        }
+      >
+        <div className="flex items-start gap-4 mb-5">
+          <div
+            className="flex items-center justify-center flex-shrink-0"
+            style={{
+              width: 40, height: 40, borderRadius: 3,
+              background: '#FBF3F3', border: '1px solid #E3C9C9',
+              color: 'var(--ef-danger)',
+            }}
+          >
+            <Shield size={18} strokeWidth={1.5} />
+          </div>
+          <div>
+            <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>
+              This exam requires a clean browser
+            </p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+              Something on this page is adding content to it. Disable your browser
+              extensions, then click Re-check. Your exam is paused here and your
+              answers are saved — nothing is lost while you fix this.
+            </p>
+          </div>
+        </div>
+        {found.length > 0 && (
+          <div
+            className="px-3 py-3"
+            style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
+          >
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+              Detected: {found.join(', ')}. If this will not clear, contact your
+              invigilator — do not keep waiting, your exam clock is still running.
+            </p>
+          </div>
+        )}
       </OverlayCard>
     </Backdrop>
   );

@@ -361,3 +361,62 @@ describe('in-page AI sidebars are named, not merely foreign', () => {
     expect(scanForExtensions()).toEqual([]);
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// THE RE-ENTRY GATE
+// ══════════════════════════════════════════════════════════════════
+//
+// The briefing refuses entry on any injected DOM, but `/shell` is a separate
+// route in routes.tsx with no guard — so every refusal was one address bar
+// away from being skipped, and an ordinary refresh walked through it without
+// the student meaning to.
+//
+// Structural, like the freeze-separation cases above: what matters is that the
+// shell applies the SAME rule as the briefing and does not turn a recoverable
+// gate into a punishment. Both are one careless edit from disappearing, and
+// neither is visible in a unit test of a pure function.
+
+describe('the shell re-checks extensions on re-entry', () => {
+  const shell = readFileSync(
+    path.resolve(__dirname, '..', '..', 'pages', 'student', 'ExamShell.tsx'), 'utf8',
+  );
+
+  it('runs a scan in the shell, not only on the briefing page', () => {
+    expect(shell).toContain('scanForExtensionsWithSettle');
+  });
+
+  it('applies the same gate rule as the briefing rather than its own', () => {
+    // Both call sites import one function. A second copy of "what counts as
+    // blocking" is how the two surfaces drift into disagreeing.
+    expect(shell).toContain('extensionGateBlocks');
+  });
+
+  it('is gated on the tier flag, so it cannot block a practice exam', () => {
+    expect(shell).toContain("assessment?.requireExtensionCheck !== true");
+  });
+
+  it('gates without firing a violation of its own', () => {
+    // The watchdog is already running and reports what it sees. Firing again
+    // from the re-entry effect would double-count one extension — and on a
+    // warning type that is a third of a termination for a single reload.
+    const effect = shell.slice(
+      shell.indexOf('Re-entry extension gate'),
+      shell.indexOf('const handleRecheckExtensions'),
+    );
+    expect(effect.length).toBeGreaterThan(0);
+    expect(effect).not.toContain('handleViolation');
+    expect(effect).not.toContain('logViolation');
+    expect(effect).not.toContain('reportExtensionCheck');
+  });
+
+  it('never displaces a terminal overlay', () => {
+    // A student being terminated, or in a session conflict, must not have that
+    // replaced by a recoverable "disable your extensions" prompt.
+    const effect = shell.slice(
+      shell.indexOf('Re-entry extension gate'),
+      shell.indexOf('const handleRecheckExtensions'),
+    );
+    expect(effect).toContain('setOverlay((current)');
+    expect(effect).toContain("current.kind === 'fullscreen_required'");
+  });
+});

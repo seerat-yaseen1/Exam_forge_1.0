@@ -11,6 +11,8 @@
  * Exam Browser (high-stake tier, Phase 3).
  */
 
+import { probeExtensionIds } from './extensionIdProbe';
+
 export type Fingerprint = { key: string; selector: string; label: string };
 
 // Conservative — only extensions that insert visible UI elements.
@@ -248,11 +250,47 @@ export function scanForForeignDom(): string[] {
 
 /** What a settled scan found, split by how much the finding can be trusted. */
 export type ExtensionScanResult = {
-  /** Matched a known fingerprint. Freeze-eligible; blocks entry. */
+  /** Matched a known fingerprint, or was proven present by ID. Blocks entry. */
   named: string[];
   /** Unrecognised top-level DOM. Recorded only — never blocks, never freezes. */
   foreign: string[];
+  /**
+   * The ID probe was refused by this page's own CSP.
+   *
+   * Carried so a caller can tell "probed and found nothing" from "never got to
+   * probe". Nothing gates on it today; it exists so that promoting the
+   * Report-Only policy in vercel.json to enforcing surfaces as a visible
+   * degradation rather than as a detector that quietly always passes.
+   */
+  idProbeBlocked?: boolean;
 };
+
+/**
+ * The entry gate's extension condition: ANY finding blocks.
+ *
+ * Both halves of the scan are treated alike here, which is the opposite of how
+ * they are treated inside the exam. The asymmetry is the point, and it follows
+ * from what being wrong costs on each surface:
+ *
+ *   entry    — nothing has started. A false positive costs the student the
+ *              time it takes to disable an extension and press Re-check. The
+ *              remedy is theirs and it is seconds long.
+ *   mid-exam — a freeze has no automatic exit (D-30). A false positive strands
+ *              a student mid-paper until a human intervenes.
+ *
+ * So the generic detector, whose false positives are unknowable by
+ * construction, is allowed to block the recoverable one and never the
+ * unrecoverable one.
+ *
+ * Extracted as a function rather than left inline because it is now the rule
+ * standing between a student and their exam, and both call sites — the mount
+ * scan and the click-time re-scan — have to apply it identically. Two copies
+ * of this condition drifting apart is how the click-time check ends up
+ * admitting exactly the student the mount scan would have refused.
+ */
+export function extensionGateBlocks(result: ExtensionScanResult): boolean {
+  return result.named.length > 0 || result.foreign.length > 0;
+}
 
 /**
  * Scan twice with a settle delay in between, because some extensions inject
@@ -268,9 +306,26 @@ export type ExtensionScanResult = {
 export async function scanForExtensionsWithSettle(settleMs = 1500): Promise<ExtensionScanResult> {
   const firstNamed = scanForExtensions();
   const firstForeign = scanForForeignDom();
-  await new Promise((r) => setTimeout(r, settleMs));
+
+  // The ID probe runs CONCURRENTLY with the settle delay rather than after it.
+  // Both are waits — one for slow-injecting DOM, one for the browser to answer
+  // a handful of local requests — and running them in sequence would add the
+  // probe's budget to the time a student stares at "Checking for browser
+  // extensions…" before they can start.
+  const [, probe] = await Promise.all([
+    new Promise((r) => setTimeout(r, settleMs)),
+    probeExtensionIds().catch(() => ({ found: [], blockedByCsp: false })),
+  ]);
+
   return {
-    named: Array.from(new Set([...firstNamed, ...scanForExtensions()])),
+    // Probe hits join `named` because that is exactly what they are: a
+    // conclusively identified extension. A hit is stronger evidence than any
+    // selector match — a store ID cannot be renamed by a release the way an
+    // element can — so it belongs on the side that acts, not the advisory one.
+    named: Array.from(new Set([
+      ...firstNamed, ...scanForExtensions(), ...probe.found,
+    ])),
     foreign: Array.from(new Set([...firstForeign, ...scanForForeignDom()])),
+    ...(probe.blockedByCsp ? { idProbeBlocked: true } : {}),
   };
 }

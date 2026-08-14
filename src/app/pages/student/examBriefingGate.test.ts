@@ -17,8 +17,12 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { extensionGateBlocks, fullscreenOk, fullscreenSupported } from './ExamBriefingPage';
-import { scanForExtensions, scanForForeignDom } from '../../components/exam/extensionScan';
+import { fullscreenOk, fullscreenSupported } from './ExamBriefingPage';
+import {
+  extensionGateBlocks,
+  scanForExtensions,
+  scanForForeignDom,
+} from '../../components/exam/extensionScan';
 
 /**
  * `fullscreenEnabled` is a getter on the Document prototype in jsdom and is

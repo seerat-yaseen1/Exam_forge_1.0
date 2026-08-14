@@ -65,6 +65,11 @@ import { telemetryEnabled } from '../../../lib/codeTelemetry';
 import { answerTypeForEngine } from '../../../lib/itemTypes';
 import { FaceMonitor } from '../../components/exam/FaceMonitor';
 import { ExtensionWatchdog } from '../../components/exam/ExtensionWatchdog';
+import {
+  scanForExtensionsWithSettle,
+  extensionGateBlocks,
+  type ExtensionScanResult,
+} from '../../components/exam/extensionScan';
 import { SectionTimer } from '../../components/exam/SectionTimer';
 import { QuestionNavigator, answerHasContent } from '../../components/exam/QuestionNavigator';
 import { QuestionRenderer } from '../../components/exam/QuestionRenderer';
@@ -72,6 +77,7 @@ import {
   WarningOverlay,
   FinalWarningOverlay,
   FullscreenRequiredOverlay,
+  ExtensionRequiredOverlay,
   TerminatedOverlay,
 } from '../../components/exam/ViolationOverlay';
 
@@ -119,6 +125,7 @@ type OverlayKind =
   | { kind: 'warning'; violationType: ViolationType; warningNumber: 1 | 2 }
   | { kind: 'final_warning'; violationType: ViolationType }
   | { kind: 'fullscreen_required' }
+  | { kind: 'extension_required'; found: string[] }
   | { kind: 'terminated'; reason: string; answersMayBeUnsaved?: boolean }
   | { kind: 'session_conflict' }
   | null;
@@ -1371,6 +1378,63 @@ export function ExamShell() {
     const inFs = !!document.fullscreenElement;
     setIsFullscreen(inFs);
     if (!inFs) setOverlay({ kind: 'fullscreen_required' });
+  }, []);
+
+  // ── Re-entry extension gate (covers refresh / direct URL) ──────
+  //
+  // The briefing page refuses entry on any injected DOM. `/shell` is a
+  // SEPARATE ROUTE with no guard in routes.tsx, so every one of those refusals
+  // was one address bar away from being skipped: open the briefing clean, then
+  // reload the shell — or navigate straight to it — with the extension back
+  // on. Nothing re-checked. The same hole is what a student walks through
+  // without meaning to on an ordinary refresh, which is the far more common
+  // case and the one that made this worth fixing.
+  //
+  // Note the shape it borrows. This is the same argument as the fullscreen
+  // effect directly above: the requirement was enforced on one route, and the
+  // shell is reachable without passing through it.
+  //
+  // WHY AN OVERLAY AND NOT A REDIRECT. A redirect to the briefing would look
+  // like the honest fix and would be worse. The attempt already exists and its
+  // clocks are running server-side, so bouncing a student between routes costs
+  // them exam time and risks a loop if the briefing then resumes them straight
+  // back here. The overlay stops interaction where they stand, states what was
+  // found, and clears the moment they fix it.
+  //
+  // It gates rather than punishes: no violation is fired from here. The
+  // watchdog is already running and reports what it sees on its own terms;
+  // firing again from this effect would double-count a single extension, and
+  // on a warning type that is a third of the way to a termination for one
+  // reload.
+  useEffect(() => {
+    if (assessment?.requireExtensionCheck !== true) return;
+    let cancelled = false;
+    // Short settle: the shell has already been open long enough to load an
+    // assessment and an attempt, so a slow-injecting extension has had its
+    // beat. The briefing's full delay would leave the exam interactive while
+    // it ran.
+    scanForExtensionsWithSettle(300).then((result) => {
+      if (cancelled) return;
+      if (!extensionGateBlocks(result)) return;
+      // Never displace a terminal or higher-priority overlay. A student being
+      // terminated, or in a session conflict, must not have that replaced by a
+      // recoverable extension prompt.
+      setOverlay((current) => (current === null || current.kind === 'fullscreen_required')
+        ? { kind: 'extension_required', found: [...result.named, ...result.foreign] }
+        : current);
+    }).catch(() => { /* a detector must never break an exam */ });
+    return () => { cancelled = true; };
+  }, [assessment?.requireExtensionCheck]);
+
+  const handleRecheckExtensions = useCallback(async () => {
+    const result = await scanForExtensionsWithSettle(300)
+      .catch(() => ({ named: [], foreign: [] } as ExtensionScanResult));
+    setOverlay((current) => {
+      if (current?.kind !== 'extension_required') return current;
+      return extensionGateBlocks(result)
+        ? { kind: 'extension_required', found: [...result.named, ...result.foreign] }
+        : null;
+    });
   }, []);
 
   // ── LOAD: assessment + attempt + questions ─────────────────────
@@ -4097,6 +4161,13 @@ export function ExamShell() {
           <FullscreenRequiredOverlay
             key="fullscreen"
             onReturnFullscreen={handleReturnFullscreen}
+          />
+        )}
+        {overlay?.kind === 'extension_required' && (
+          <ExtensionRequiredOverlay
+            key="extension"
+            found={overlay.found}
+            onRecheck={handleRecheckExtensions}
           />
         )}
         {overlay?.kind === 'terminated' && (

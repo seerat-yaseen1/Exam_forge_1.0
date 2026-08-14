@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, getSebToken, getSEBPublicInfo, type Assessment } from '../../../lib/assessmentService';
-import { scanForExtensionsWithSettle, type ExtensionScanResult } from '../../components/exam/extensionScan';
+import { scanForExtensionsWithSettle, extensionGateBlocks } from '../../components/exam/extensionScan';
 import {
   getAllAttemptsByStudentAndAssessment,
   type Attempt,
@@ -78,33 +78,6 @@ export function fullscreenSupported(): boolean {
  */
 export function fullscreenOk(isFullscreen: boolean): boolean {
   return !fullscreenSupported() || isFullscreen;
-}
-
-/**
- * The entry gate's extension condition: ANY finding blocks.
- *
- * Both halves of the scan are treated alike here, which is the opposite of how
- * they are treated inside the exam. The asymmetry is the point, and it follows
- * from what being wrong costs on each surface:
- *
- *   entry    — nothing has started. A false positive costs the student the
- *              time it takes to disable an extension and press Re-check. The
- *              remedy is theirs and it is seconds long.
- *   mid-exam — a freeze has no automatic exit (D-30). A false positive strands
- *              a student mid-paper until a human intervenes.
- *
- * So the generic detector, whose false positives are unknowable by
- * construction, is allowed to block the recoverable one and never the
- * unrecoverable one.
- *
- * Extracted as a function rather than left inline because it is now the rule
- * standing between a student and their exam, and both call sites — the mount
- * scan and the click-time re-scan — have to apply it identically. Two copies
- * of this condition drifting apart is how the click-time check ends up
- * admitting exactly the student the mount scan would have refused.
- */
-export function extensionGateBlocks(result: ExtensionScanResult): boolean {
-  return result.named.length > 0 || result.foreign.length > 0;
 }
 
 // ── Camera permission step ────────────────────────────────────────

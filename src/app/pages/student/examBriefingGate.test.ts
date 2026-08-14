@@ -17,7 +17,8 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { fullscreenOk, fullscreenSupported } from './ExamBriefingPage';
+import { extensionGateBlocks, fullscreenOk, fullscreenSupported } from './ExamBriefingPage';
+import { scanForExtensions, scanForForeignDom } from '../../components/exam/extensionScan';
 
 /**
  * `fullscreenEnabled` is a getter on the Document prototype in jsdom and is
@@ -89,5 +90,66 @@ describe('fullscreenOk', () => {
     setFullscreenEnabled(false);
     setRequestFullscreen(() => Promise.resolve());
     expect(fullscreenOk(false)).toBe(true);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// THE EXTENSION ENTRY GATE
+// ══════════════════════════════════════════════════════════════════
+//
+// Both halves of the scan block entry, which is the opposite of how they are
+// treated inside the exam — and the asymmetry is deliberate, not an
+// inconsistency. Refusing entry is recoverable in seconds by the student
+// themselves; a mid-exam freeze has no automatic exit and needs a human. So
+// the generic detector, whose false positives are unknowable by construction,
+// is allowed to block the cheap one and never the expensive one.
+//
+// This is now the rule standing between a student and their exam, so it is
+// tested rather than trusted.
+
+describe('extensionGateBlocks', () => {
+  it('admits a genuinely clean scan', () => {
+    expect(extensionGateBlocks({ named: [], foreign: [] })).toBe(false);
+  });
+
+  it('blocks on a named extension', () => {
+    expect(extensionGateBlocks({ named: ['Question AI'], foreign: [] })).toBe(true);
+  });
+
+  it('blocks on an unnamed injected node', () => {
+    // The case this change exists for. Previously admitted, on reasoning
+    // imported from the freeze path where the cost of being wrong is not the
+    // same. An unnamed injector is precisely what the fingerprint list cannot
+    // see, so admitting it meant waving through the one finding that had no
+    // other way of being caught.
+    expect(extensionGateBlocks({ named: [], foreign: ['<div#unknown-sidebar>'] })).toBe(true);
+  });
+
+  it('blocks on both together', () => {
+    expect(extensionGateBlocks({
+      named: ['Wordtune'], foreign: ['<x-thing>'],
+    })).toBe(true);
+  });
+
+  it('is satisfiable on an ordinary clean machine', () => {
+    // Not a tautology — it is the property the whole gate rests on. The app's
+    // own Firebase App Check container used to appear in `foreign` on every
+    // load, so this gate would have refused every student on every machine.
+    // scanForForeignDom's allowlist is what makes an empty result reachable,
+    // and if that regresses this gate becomes a total outage rather than a
+    // check. Asserted here, against the real scanner, on a page dressed the
+    // way the app actually renders.
+    document.body.innerHTML = '';
+    const root = document.createElement('div');
+    root.id = 'root';
+    document.body.appendChild(root);
+    const appCheck = document.createElement('div');
+    appCheck.id = 'fire_app_check_[DEFAULT]';
+    document.body.appendChild(appCheck);
+
+    expect(extensionGateBlocks({
+      named: scanForExtensions(),
+      foreign: scanForForeignDom(),
+    })).toBe(false);
   });
 });

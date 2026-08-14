@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, getSebToken, getSEBPublicInfo, type Assessment } from '../../../lib/assessmentService';
-import { scanForExtensionsWithSettle } from '../../components/exam/extensionScan';
+import { scanForExtensionsWithSettle, type ExtensionScanResult } from '../../components/exam/extensionScan';
 import {
   getAllAttemptsByStudentAndAssessment,
   type Attempt,
@@ -78,6 +78,33 @@ export function fullscreenSupported(): boolean {
  */
 export function fullscreenOk(isFullscreen: boolean): boolean {
   return !fullscreenSupported() || isFullscreen;
+}
+
+/**
+ * The entry gate's extension condition: ANY finding blocks.
+ *
+ * Both halves of the scan are treated alike here, which is the opposite of how
+ * they are treated inside the exam. The asymmetry is the point, and it follows
+ * from what being wrong costs on each surface:
+ *
+ *   entry    — nothing has started. A false positive costs the student the
+ *              time it takes to disable an extension and press Re-check. The
+ *              remedy is theirs and it is seconds long.
+ *   mid-exam — a freeze has no automatic exit (D-30). A false positive strands
+ *              a student mid-paper until a human intervenes.
+ *
+ * So the generic detector, whose false positives are unknowable by
+ * construction, is allowed to block the recoverable one and never the
+ * unrecoverable one.
+ *
+ * Extracted as a function rather than left inline because it is now the rule
+ * standing between a student and their exam, and both call sites — the mount
+ * scan and the click-time re-scan — have to apply it identically. Two copies
+ * of this condition drifting apart is how the click-time check ends up
+ * admitting exactly the student the mount scan would have refused.
+ */
+export function extensionGateBlocks(result: ExtensionScanResult): boolean {
+  return result.named.length > 0 || result.foreign.length > 0;
 }
 
 // ── Camera permission step ────────────────────────────────────────
@@ -249,15 +276,40 @@ export function ExamBriefingPage() {
     setExtScanState('scanning');
     scanForExtensionsWithSettle().then((result) => {
       if (cancelled) return;
-      // Only the NAMED half gates entry. The generic foreign-DOM half is shown
-      // as an advisory instead, because the cost of being wrong is different
-      // on this surface than inside the exam: a heuristic false positive here
-      // does not annotate a record, it refuses a student their sitting. It is
-      // still surfaced, so a candidate with a stray extension can act on it
-      // before starting rather than collecting violations for it afterwards.
+      // ── BOTH halves gate entry now ──────────────────────────────
+      //
+      // This used to admit a student over any finding the fingerprint list
+      // could not name, on the reasoning that a heuristic false positive here
+      // refuses somebody their sitting. That reasoning was imported from the
+      // FREEZE path, and it does not survive the move to this surface.
+      //
+      // A freeze is unrecoverable without a human: since D-30 there is no
+      // automatic exit, so a false positive mid-exam strands a student until
+      // an invigilator notices. Refusing ENTRY is the opposite — it is the one
+      // moment in the whole sitting when being wrong costs nothing that cannot
+      // be undone. Nothing has started, no clock is running, no answer exists.
+      // The student disables the extension, presses re-check, and continues.
+      // The remedy is in their hands and takes seconds.
+      //
+      // Against that, admitting them was never free either: an unnamed
+      // injector is precisely the case the named list cannot see, and letting
+      // it through meant the student sat the whole paper accumulating
+      // foreign_dom violations for something they were told was "often
+      // harmless" and could have removed before starting.
+      //
+      // What made this safe to switch on was fixing the detector, not changing
+      // the policy around it. Until this same branch, the app's own Firebase
+      // App Check container was reported as a foreign element on every load —
+      // so this gate would have refused every student on every machine. A
+      // blocking check is only as defensible as its quietest false positive.
+      //
+      // Mid-exam behaviour is deliberately NOT changed: foreign_dom stays a
+      // recorded, non-freezing signal there, because that surface still has
+      // the cost profile the original note described.
       setExtForeign(result.foreign);
-      if (result.named.length > 0) { setExtFound(result.named); setExtScanState('dirty'); }
-      else { setExtFound([]); setExtScanState('clean'); }
+      const blocking = extensionGateBlocks(result);
+      setExtFound(result.named);
+      setExtScanState(blocking ? 'dirty' : 'clean');
     });
     return () => { cancelled = true; };
   }, [assessment, extScanNonce]);
@@ -446,7 +498,12 @@ export function ExamBriefingPage() {
     if (assessment?.requireExtensionCheck === true) {
       const result = await scanForExtensionsWithSettle(300);
       setExtForeign(result.foreign);
-      if (result.named.length > 0) {
+      // Same both-halves rule as the mount scan above. This is the branch that
+      // actually matters for the case it was written for: an extension enabled
+      // AFTER the first scan passed. Somebody turning on a sidebar between
+      // reading the rules and pressing Enter is not doing it by accident, and
+      // the first scan is exactly what they would be stepping around.
+      if (extensionGateBlocks(result)) {
         setExtFound(result.named);
         setExtScanState('dirty');
         return;
@@ -754,6 +811,16 @@ export function ExamBriefingPage() {
                       text="Switching tabs, losing window focus, or opening DevTools will count as violations. After 3 violations, your exam will be automatically terminated." />
                     <RuleItem icon={<ClipboardList size={12} strokeWidth={1.5} />}
                       text="Copying, pasting, and right-clicking are disabled during the exam. All keyboard shortcuts are restricted." />
+                    {/* Stated up front because it is now a HARD gate. A student
+                        who reads this before starting can clear their browser
+                        in their own time; one who meets it for the first time
+                        at the Enter button is troubleshooting under exam
+                        pressure, which is the same requirement delivered at the
+                        worst possible moment. */}
+                    {assessment.requireExtensionCheck === true && (
+                      <RuleItem icon={<Shield size={12} strokeWidth={1.5} />}
+                        text="This exam requires a clean browser. Any browser extension that adds content to the page will block entry until it is disabled — check before you begin." />
+                    )}
                     {assessment.shuffleQuestions && (
                       <RuleItem icon={<Info size={12} strokeWidth={1.5} />}
                         text="Questions are presented in a randomised order unique to your attempt." />
@@ -895,7 +962,13 @@ export function ExamBriefingPage() {
                           <p className="text-xs" style={{ color: extScanState === 'dirty' ? 'var(--ef-danger)' : 'var(--ef-text-subtle)' }}>
                             {extScanState === 'scanning' && 'Checking for browser extensions…'}
                             {extScanState === 'clean' && 'No conflicting extensions detected'}
-                            {extScanState === 'dirty' && 'Browser extension detected — remove it to continue'}
+                            {/* "Browser extension detected" is a claim only the
+                                named half can support. When the block comes
+                                from the generic check the headline says what
+                                was actually observed. */}
+                            {extScanState === 'dirty' && (extFound.length > 0
+                              ? 'Browser extension detected — remove it to continue'
+                              : 'Unrecognised page content — must be cleared to continue')}
                             {extScanState === 'idle' && 'Extension check pending'}
                           </p>
                         </div>
@@ -916,17 +989,28 @@ export function ExamBriefingPage() {
                           then click Re-check.
                         </p>
                       )}
-                      {/* Advisory, never a block. Worded as an observation
-                          rather than an accusation, because the check that
-                          produced it cannot name what it found and may be
-                          looking at something perfectly ordinary. Saying so
-                          plainly is what lets a student act on it without
-                          being told they have done something wrong. */}
+                      {/* Blocking now, and worded for a student who CANNOT act
+                          on the finding as written. A named match says
+                          "Grammarly" and the remedy is obvious; this half can
+                          only say <div#xyz>, which names nothing the student
+                          recognises. So the copy leads with the remedy that
+                          always works regardless of what the element turns out
+                          to be — disable everything, or use a clean profile —
+                          and still shows the descriptor, because a student who
+                          DOES recognise it is one re-check away from being
+                          done. It stays an observation rather than an
+                          accusation: the check genuinely cannot name what it
+                          found, and telling somebody they have cheated on the
+                          strength of an unidentified <div> would be a claim
+                          this code cannot support. */}
                       {extScanState !== 'scanning' && extForeign.length > 0 && (
-                        <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-                          Also on this page: {extForeign.join(', ')}. This is not blocking your
-                          entry, and it is often harmless. If it belongs to a browser extension,
-                          disabling it now avoids it being logged during your exam.
+                        <p className="text-xs mt-2" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
+                          Unrecognised on this page: {extForeign.join(', ')}. This exam requires a
+                          clean browser, so {extForeign.length > 1 ? 'these must' : 'this must'} be
+                          gone before you can enter. It usually belongs to a browser extension.
+                          Disable your extensions — or open this exam in a private/guest window with
+                          extensions off — then click Re-check. If it will not clear, contact your
+                          invigilator rather than waiting; your exam has not started.
                         </p>
                       )}
                     </div>

@@ -84,6 +84,29 @@ export const PROBE_TARGETS: ProbeTarget[] = [
     label: 'Wordtune',
     paths: ['icon.png', 'images/icon128.png', 'assets/logo.png', 'favicon.ico'],
   },
+  // ── Visibility spoofers ───────────────────────────────────────
+  //
+  // These exist to disable exactly the detectors this exam depends on: their
+  // own listing describes overwriting document.visibilityState and
+  // document.hidden and suppressing visibilitychange and blur.
+  //
+  // Both ids resolve to a chromewebstore.google.com/detail listing, and there
+  // are more clones than these under near-identical titles — which is the
+  // argument for apiIntegrity.ts rather than for a longer list here. The
+  // structural check catches every one of them, named or not, and these
+  // entries only add the ability to say WHICH.
+  {
+    // chromewebstore.google.com/detail/always-active-window-—-al/bkedpobpnbpecnojdoileepmkgpedihe
+    id: 'bkedpobpnbpecnojdoileepmkgpedihe',
+    label: 'Always Active Window (visibility spoofer)',
+    paths: ['icon.png', 'icons/48.png', 'data/icon.png', 'images/icon48.png'],
+  },
+  {
+    // chromewebstore.google.com/detail/always-active-window-alwa/ehllkhjndgnlokhomdlhgbineffifcbj
+    id: 'ehllkhjndgnlokhomdlhgbineffifcbj',
+    label: 'Always Active Window (visibility spoofer)',
+    paths: ['icon.png', 'icons/48.png', 'data/icon.png', 'images/icon48.png'],
+  },
 ];
 
 /** Schemes to try per target. Firefox and Safari use their own. */

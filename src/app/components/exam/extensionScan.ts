@@ -12,6 +12,7 @@
  */
 
 import { probeExtensionIds } from './extensionIdProbe';
+import { detectApiTampering } from './apiIntegrity';
 
 export type Fingerprint = { key: string; selector: string; label: string };
 
@@ -322,8 +323,13 @@ export async function scanForExtensionsWithSettle(settleMs = 1500): Promise<Exte
     // conclusively identified extension. A hit is stronger evidence than any
     // selector match — a store ID cannot be renamed by a release the way an
     // element can — so it belongs on the side that acts, not the advisory one.
+    // API tampering joins `named` because it is the least ambiguous finding the
+    // scanner can make. A selector match says an extension is present; a
+    // document that owns its own `hidden` property says something has
+    // deliberately disabled the detectors this exam runs on. It belongs on the
+    // side that blocks, not the advisory one.
     named: Array.from(new Set([
-      ...firstNamed, ...scanForExtensions(), ...probe.found,
+      ...firstNamed, ...scanForExtensions(), ...probe.found, ...detectApiTampering(),
     ])),
     foreign: Array.from(new Set([...firstForeign, ...scanForForeignDom()])),
     ...(probe.blockedByCsp ? { idProbeBlocked: true } : {}),

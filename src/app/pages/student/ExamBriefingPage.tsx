@@ -46,6 +46,40 @@ function formatDuration(minutes: number): string {
   return `${m}m`;
 }
 
+/**
+ * Can this browser be asked for fullscreen at all?
+ *
+ * `fullscreenEnabled` is false when the API is unavailable or forbidden by a
+ * permissions policy — an iframe without `allow="fullscreen"`, and iOS Safari
+ * on iPhone, which grants fullscreen to `<video>` and to nothing else.
+ *
+ * This is checked at call time rather than captured at module load because the
+ * answer is a property of the document as it stands, and a module-level
+ * constant would freeze whatever the very first render happened to see.
+ */
+export function fullscreenSupported(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.fullscreenEnabled === true
+    && typeof document.documentElement.requestFullscreen === 'function';
+}
+
+/**
+ * The entry gate's fullscreen condition.
+ *
+ * On a browser that CAN go fullscreen, being in it is required — no override,
+ * because an exam that merely suggests fullscreen has not gated anything.
+ *
+ * On a browser that cannot, the requirement is unsatisfiable, and enforcing it
+ * would not make that student's sitting more secure — it would make it
+ * impossible. They are let through and the shell's other detectors (tab
+ * switch, focus loss, viewport geometry) carry the load, which is the same
+ * bargain `allowMobile` already strikes. The alternative is a student locked
+ * out of their own exam by a device the institution chose to permit.
+ */
+export function fullscreenOk(isFullscreen: boolean): boolean {
+  return !fullscreenSupported() || isFullscreen;
+}
+
 // ── Camera permission step ────────────────────────────────────────
 
 type CameraState = 'idle' | 'requesting' | 'granted' | 'denied';
@@ -259,7 +293,18 @@ export function ExamBriefingPage() {
     const cameraOk = cameraState === 'granted' || cameraDeclined;
     const extensionOk = extScanState === 'clean';
     const sebOk = sebGate === 'na' || sebGate === 'verified';
-    setReadyToEnter(cameraOk && extensionOk && sebOk);
+    // Fullscreen was already in this effect's dependency list and was never
+    // read — the gate said "recommended" and let the student through without
+    // it. The shell then caught them with its own overlay, so the exam was
+    // never actually interactive outside fullscreen, but the requirement was
+    // being enforced one page too late: the student clicked Enter, the attempt
+    // was created, and only then were they told they had to be in fullscreen.
+    //
+    // Requiring it HERE means the transition into the exam happens from a
+    // known-good state, and the browser's fullscreen request is driven by the
+    // student's own click on the button below — a real user gesture, which is
+    // the only kind Chrome and Safari honour.
+    setReadyToEnter(cameraOk && extensionOk && sebOk && fullscreenOk(isFullscreen));
   }, [cameraState, cameraDeclined, isFullscreen, extScanState, sebGate]);
 
   // Load assessment + existing attempt
@@ -741,10 +786,14 @@ export function ExamBriefingPage() {
                         : <Maximize size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
                       }
                       <p className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>
-                        {isFullscreen ? 'Fullscreen active' : 'Not in fullscreen — recommended before entering'}
+                        {isFullscreen
+                          ? 'Fullscreen active'
+                          : fullscreenSupported()
+                            ? 'Not in fullscreen — required before entering'
+                            : 'This browser cannot enter fullscreen — you may continue'}
                       </p>
                     </div>
-                    {!isFullscreen && (
+                    {!isFullscreen && fullscreenSupported() && (
                       <button
                         onClick={requestFullscreen}
                         className="text-xs px-3 py-1.5"

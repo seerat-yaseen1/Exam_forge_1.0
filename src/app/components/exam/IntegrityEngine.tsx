@@ -10,7 +10,8 @@
  *   Mouse     : contextmenu (right-click)
  *   Visibility: document.visibilitychange
  *   Focus     : window.blur
- *   Fullscreen: document.fullscreenchange
+ *   Fullscreen: document.fullscreenchange, plus a state poll that catches an
+ *               exit whose event never arrived (every 1.5 s)
  *   DevTools  : vertical viewport-loss heuristic (polled every 2 s)
  *   Viewport  : horizontal viewport-loss heuristic — side panel / docked pane
  *   Focus     : hasFocus() vs blur-event disagreement (polled every 2 s)
@@ -226,6 +227,59 @@ export function isFocusStateMismatch(
   // is why this tracks an acknowledgement rather than the recency of a blur.
   if (witness.blurAcknowledged) return false;
   return true;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FULLSCREEN RECONCILIATION
+// ══════════════════════════════════════════════════════════════════
+//
+// `fullscreenchange` is the only thing that used to tell this engine the
+// student had left fullscreen, and an event is exactly the kind of signal a
+// devtools console can take away: `document.removeEventListener` on the
+// captured handler, or a `stopImmediatePropagation` listener registered
+// earlier, and the exit is silent. The gate in ExamShell is driven by the same
+// event, so suppressing it does not merely hide the violation — it leaves the
+// exam interactive outside fullscreen, which is the whole thing the gate
+// exists to prevent.
+//
+// `document.fullscreenElement` is a property read, not a subscription. Nothing
+// short of redefining it on the Document prototype can make it lie, and a poll
+// that reads it needs no cooperation from the event system at all.
+//
+// So the poll does not re-report fullscreen state — the event handler already
+// does that when it fires. It reports DISAGREEMENT between what the engine was
+// told and what is actually true, and repairs the belief. Same shape as
+// isFocusStateMismatch above, and for the same reason: the second source is
+// only worth having where it can contradict the first.
+
+/** How often the real fullscreen state is re-read. */
+export const FULLSCREEN_POLL_MS = 1500;
+
+export type FullscreenReconcile =
+  /** Belief matches reality. Nothing to do. */
+  | { action: 'none' }
+  /** Reality says fullscreen was lost and no event said so. */
+  | { action: 'exit_undetected' }
+  /** Reality says fullscreen was regained and no event said so. */
+  | { action: 'entry_undetected' };
+
+/**
+ * Compare the engine's event-derived belief against the live property.
+ *
+ * Edge-triggered by construction: the caller adopts the observed value as the
+ * new belief, so a student who sits outside fullscreen produces ONE finding
+ * rather than one per tick. This matters more here than anywhere else in the
+ * engine — fullscreen_exit is a warning type, and a state-triggered version of
+ * this would terminate an honest student in four and a half seconds.
+ */
+export function reconcileFullscreen(
+  believedFullscreen: boolean,
+  actualFullscreen: boolean,
+): FullscreenReconcile {
+  if (believedFullscreen === actualFullscreen) return { action: 'none' };
+  return actualFullscreen
+    ? { action: 'entry_undetected' }
+    : { action: 'exit_undetected' };
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -493,8 +547,16 @@ export function IntegrityEngine({
     };
 
     // ── 6. Fullscreen change ────────────────────────────────────
+    // `believedFullscreen` is what the ENGINE has been told, and it is written
+    // here and read by the poll below. It starts from the live property rather
+    // than from `false` so a student already in fullscreen at mount — the
+    // ordinary case, since the briefing page enters it before navigating — is
+    // not reported as an undetected entry on the first tick.
+    let believedFullscreen = !!document.fullscreenElement;
+
     const handleFullscreenChange = () => {
       const isNow = !!document.fullscreenElement;
+      believedFullscreen = isNow;
       onFullscreenChangeRef.current(isNow);
       if (!isNow && activeRef.current) {
         fire('fullscreen_exit', 'Student exited fullscreen', 1000);
@@ -564,7 +626,38 @@ export function IntegrityEngine({
       }
     }, 2000);
 
-    // ── 10. Render throttle (rAF rate) ─────────────────────────
+    // ── 10. Fullscreen reconciliation (polled) ─────────────────
+    // The rules are in reconcileFullscreen above, where they are tested. This
+    // runs regardless of `active`: an exam paused behind a modal is still an
+    // exam that must not be sitting outside fullscreen, and the UI gate needs
+    // to be told either way. Only the VIOLATION is gated on `active` — via
+    // `fire`, which already refuses when inactive.
+    const fullscreenInterval = setInterval(() => {
+      const actual = !!document.fullscreenElement;
+      const verdict = reconcileFullscreen(believedFullscreen, actual);
+      if (verdict.action === 'none') return;
+
+      // Adopt reality BEFORE reporting, so this is a one-shot edge even if a
+      // handler below throws. Without it a suppressed-event exit would fire on
+      // every tick and terminate the student in three.
+      believedFullscreen = actual;
+      onFullscreenChangeRef.current(actual);
+
+      if (verdict.action === 'exit_undetected') {
+        // Reported as fullscreen_exit, not as a separate tamper type: the exam
+        // IS outside fullscreen, which is the fact that matters, and the
+        // student who simply hit Escape on a browser that dropped the event
+        // deserves the same treatment as one who hit it on a browser that did
+        // not. The detail line carries the distinction for the reviewer.
+        fire(
+          'fullscreen_exit',
+          'Not in fullscreen — detected by state poll, no fullscreenchange event was received',
+          1000,
+        );
+      }
+    }, FULLSCREEN_POLL_MS);
+
+    // ── 11. Render throttle (rAF rate) ─────────────────────────
     let frames = 0;
     let windowStart = Date.now();
     let stallStreak = 0;
@@ -623,6 +716,7 @@ export function IntegrityEngine({
       window.removeEventListener(  'beforeunload',     handleBeforeUnload);
       clearInterval(geometryInterval);
       clearInterval(focusPollInterval);
+      clearInterval(fullscreenInterval);
       clearInterval(renderInterval);
       cancelAnimationFrame(rafId);
     };

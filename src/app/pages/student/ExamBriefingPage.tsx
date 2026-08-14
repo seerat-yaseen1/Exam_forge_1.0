@@ -162,6 +162,9 @@ export function ExamBriefingPage() {
   // 'idle' before scan, 'scanning' while checking, 'clean' or 'dirty' after.
   const [extScanState, setExtScanState] = useState<'idle' | 'scanning' | 'clean' | 'dirty'>('idle');
   const [extFound, setExtFound] = useState<string[]>([]);
+  // Generic foreign-DOM findings. Advisory only — never gates entry (see the
+  // scan effect), so it is held apart from extFound rather than merged into it.
+  const [extForeign, setExtForeign] = useState<string[]>([]);
   const [extScanNonce, setExtScanNonce] = useState(0); // bump to re-scan
 
   // ── SEB entry gate (Phase 3, Stage 3) ────────────────────────────
@@ -210,9 +213,16 @@ export function ExamBriefingPage() {
     if (!required) { setExtScanState('clean'); setExtFound([]); return; }
     let cancelled = false;
     setExtScanState('scanning');
-    scanForExtensionsWithSettle().then((found) => {
+    scanForExtensionsWithSettle().then((result) => {
       if (cancelled) return;
-      if (found.length > 0) { setExtFound(found); setExtScanState('dirty'); }
+      // Only the NAMED half gates entry. The generic foreign-DOM half is shown
+      // as an advisory instead, because the cost of being wrong is different
+      // on this surface than inside the exam: a heuristic false positive here
+      // does not annotate a record, it refuses a student their sitting. It is
+      // still surfaced, so a candidate with a stray extension can act on it
+      // before starting rather than collecting violations for it afterwards.
+      setExtForeign(result.foreign);
+      if (result.named.length > 0) { setExtFound(result.named); setExtScanState('dirty'); }
       else { setExtFound([]); setExtScanState('clean'); }
     });
     return () => { cancelled = true; };
@@ -389,9 +399,10 @@ export function ExamBriefingPage() {
     // Click-time extension re-scan (Phase 1c). Catches an extension enabled
     // AFTER the initial scan passed. If dirty, block entry and surface it.
     if (assessment?.requireExtensionCheck === true) {
-      const found = await scanForExtensionsWithSettle(300);
-      if (found.length > 0) {
-        setExtFound(found);
+      const result = await scanForExtensionsWithSettle(300);
+      setExtForeign(result.foreign);
+      if (result.named.length > 0) {
+        setExtFound(result.named);
         setExtScanState('dirty');
         return;
       }
@@ -854,6 +865,19 @@ export function ExamBriefingPage() {
                           Detected: {extFound.join(', ')}. Please disable or remove
                           {extFound.length > 1 ? ' these extensions' : ' this extension'} in your browser,
                           then click Re-check.
+                        </p>
+                      )}
+                      {/* Advisory, never a block. Worded as an observation
+                          rather than an accusation, because the check that
+                          produced it cannot name what it found and may be
+                          looking at something perfectly ordinary. Saying so
+                          plainly is what lets a student act on it without
+                          being told they have done something wrong. */}
+                      {extScanState !== 'scanning' && extForeign.length > 0 && (
+                        <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                          Also on this page: {extForeign.join(', ')}. This is not blocking your
+                          entry, and it is often harmless. If it belongs to a browser extension,
+                          disabling it now avoids it being logged during your exam.
                         </p>
                       )}
                     </div>

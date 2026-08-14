@@ -55,6 +55,9 @@ const VIOLATION_LABELS: Record<ViolationType, string> = {
   // total, so promoting it to a warning type later cannot ship a blank overlay.
   extension_detected: 'Browser extension detected',
   viewport_narrowed:  'Exam window was narrowed',
+  foreign_dom:        'Unrecognised page element',
+  focus_state_mismatch: 'Window focus state inconsistent',
+  render_throttled:   'Display updates were suspended',
 };
 
 const VIOLATION_ICONS: Record<ViolationType, React.ReactNode> = {
@@ -71,6 +74,9 @@ const VIOLATION_ICONS: Record<ViolationType, React.ReactNode> = {
   keyboard_block:  <AlertTriangle size={18} strokeWidth={1.5} />,
   extension_detected: <ShieldOff size={18} strokeWidth={1.5} />,
   viewport_narrowed:  <PanelRight size={18} strokeWidth={1.5} />,
+  foreign_dom:        <ShieldOff size={18} strokeWidth={1.5} />,
+  focus_state_mismatch: <Eye size={18} strokeWidth={1.5} />,
+  render_throttled:   <MonitorOff size={18} strokeWidth={1.5} />,
 };
 
 // ── Card shell ────────────────────────────────────────────────────

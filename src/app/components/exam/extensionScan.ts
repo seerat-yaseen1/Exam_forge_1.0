@@ -40,12 +40,35 @@ export const EXTENSION_FINGERPRINTS: Fingerprint[] = [
   { key: 'lastpass',       selector: 'div[data-lastpass-icon-root], #__lpform_root', label: 'LastPass' },
   { key: 'dashlane',       selector: 'div[data-dashlane-rid], div[data-dashlane-classification]', label: 'Dashlane' },
 
-  // The `[id$="ShadowHostEl"]` half is not decoration: `[id^="qai"]` alone is
-  // three characters and could plausibly collide with an id this app or a
-  // future dependency invents. Anchoring both ends matches every host QuillBot
-  // actually mounts (sidebar, copilot, underline, questionnaire) and nothing
-  // that merely starts with the same letters.
-  { key: 'quillbot',   selector: '[id^="qai"][id$="ShadowHostEl"], [class*="quillbot-"], #quillbot-extension-root', label: 'QuillBot AI' },
+  // ── Question AI ───────────────────────────────────────────────
+  //
+  // `qai` is Question AI, observed on a live briefing page mounting four
+  // shadow hosts: qaiSidebarShadowHostEl, qaiWebPageCopilotShadowHostEl,
+  // qaiUnderlineWordShadowHostEl, qaiChromeosQuestionnaireShadowHostEl.
+  //
+  // It is worth saying plainly that this is the highest-signal entry in the
+  // whole list. Most of the names above are writing aids that happen to be
+  // unwelcome in an exam; this one exists to answer questions on the page it
+  // is looking at, which is the entire threat model in one extension. The
+  // "Questionnaire" and "WebPageCopilot" hosts are that capability naming
+  // itself.
+  //
+  // The label is the product, not the framework, because this string reaches
+  // an examiner deciding about a person. An earlier revision of this line
+  // guessed "QuillBot" from the `qai` prefix — wrong, and wrong in the one
+  // direction that matters, since the record would have accused a student of
+  // running a paraphraser rather than an answer engine. The plasmo entry below
+  // still catches it if these ids ever change; what it cannot do is name it.
+  //
+  // The `[id$="ShadowHostEl"]` half of the selector is not decoration:
+  // `[id^="qai"]` alone is three characters and could plausibly collide with
+  // an id this app or a future dependency invents. Anchoring both ends matches
+  // every host observed and nothing that merely starts with the same letters.
+  { key: 'question-ai', selector: '[id^="qai"][id$="ShadowHostEl"], [class*="question-ai-"], #question-ai-root', label: 'Question AI' },
+
+  // Wordtune — mounts several custom elements, all four observed live:
+  // wordtune-app-toolbar, wordtune-spices-nudge, wordtune-read-toolbar,
+  // wordtune-cards.
   { key: 'wordtune',   selector: 'wordtune-app-toolbar, wordtune-cards, wordtune-read-toolbar, wordtune-spices-nudge, [class*="wordtune-"]', label: 'Wordtune' },
 
   // ── Extension FRAMEWORK markers ───────────────────────────────

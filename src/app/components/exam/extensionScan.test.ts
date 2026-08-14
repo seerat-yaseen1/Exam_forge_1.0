@@ -296,15 +296,46 @@ describe('in-page AI sidebars are named, not merely foreign', () => {
     expect(scanForExtensions()).toContain('Plasmo-based extension (AI sidebar)');
   });
 
-  it('names QuillBot by its shadow host', () => {
+  // The four hosts observed on a live briefing page. Enumerated rather than
+  // sampled because each is a different capability of the same extension, and
+  // a selector that happened to match only the sidebar would leave the answer
+  // engine — the part that matters — undetected on a page where the sidebar
+  // was closed.
+  const QUESTION_AI_HOSTS = [
+    'qaiSidebarShadowHostEl',
+    'qaiWebPageCopilotShadowHostEl',
+    'qaiUnderlineWordShadowHostEl',
+    'qaiChromeosQuestionnaireShadowHostEl',
+  ];
+
+  it.each(QUESTION_AI_HOSTS)('names Question AI by its %s host', (hostId) => {
     const el = document.createElement('plasmo-csui');
-    el.id = 'qaiWebPageCopilotShadowHostEl';
+    el.id = hostId;
     document.body.appendChild(el);
-    expect(scanForExtensions()).toContain('QuillBot AI');
+    expect(scanForExtensions()).toContain('Question AI');
   });
 
-  it('names Wordtune by its custom elements', () => {
-    document.body.appendChild(document.createElement('wordtune-app-toolbar'));
+  it('does not call Question AI something else', () => {
+    // This label reaches an examiner deciding about a person. An earlier
+    // revision guessed "QuillBot" from the `qai` prefix, which would have put
+    // a paraphraser's name on a record about an answer engine.
+    const el = document.createElement('plasmo-csui');
+    el.id = 'qaiSidebarShadowHostEl';
+    document.body.appendChild(el);
+    const found = scanForExtensions();
+    expect(found).toContain('Question AI');
+    expect(found.join(' ')).not.toMatch(/quillbot/i);
+  });
+
+  const WORDTUNE_ELEMENTS = [
+    'wordtune-app-toolbar',
+    'wordtune-spices-nudge',
+    'wordtune-read-toolbar',
+    'wordtune-cards',
+  ];
+
+  it.each(WORDTUNE_ELEMENTS)('names Wordtune by its <%s>', (tag) => {
+    document.body.appendChild(document.createElement(tag));
     expect(scanForExtensions()).toContain('Wordtune');
   });
 
@@ -323,7 +354,7 @@ describe('in-page AI sidebars are named, not merely foreign', () => {
     const el = document.createElement('div');
     el.id = 'qaidTotals';
     document.getElementById('root')!.appendChild(el);
-    expect(scanForExtensions()).not.toContain('QuillBot AI');
+    expect(scanForExtensions()).not.toContain('Question AI');
   });
 
   it('leaves a clean page clean', () => {

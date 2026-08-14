@@ -508,7 +508,7 @@ function answerFingerprint(ans: AttemptAnswer | undefined): string {
 // FREEZE PAUSED OVERLAY  (blocking — exam is halted, clock is paused)
 // ══════════════════════════════════════════════════════════════════
 
-function FreezePausedOverlay({ reason }: { reason?: string }) {
+function FreezePausedOverlay({ reason, automatic }: { reason?: string; automatic?: boolean }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -563,8 +563,31 @@ function FreezePausedOverlay({ reason }: { reason?: string }) {
           <p className="text-xs" style={{ color: 'var(--ef-warning-border)', letterSpacing: '0.12em' }}>
             ASSESSMENT PAUSED
           </p>
+          {/*
+            Who actually did this.
+
+            The line below used to say "paused by an invigilator" on every
+            freeze, including the ones no invigilator touched: the extension
+            check pauses the attempt itself (index.ts, frozenBy:'system'), and
+            a student reading this while nobody had yet looked at their sitting
+            was told something untrue about their own exam. The reason line
+            underneath said "Browser extension detected", so the overlay
+            contradicted itself in the space of two sentences.
+
+            It matters beyond accuracy: a student who believes a human is
+            already watching waits. One who knows the pause was automatic and
+            needs clearing goes and finds somebody, which is the action that
+            actually ends the pause.
+
+            What does NOT change is the paragraph after it. A system freeze
+            still has no automatic exit (D-30), so a person still decides when
+            it resumes and what happens to the time — the promise the copy
+            makes is the same one, made by the same party.
+          */}
           <p className="text-sm" style={{ color: 'var(--ef-surface)', lineHeight: 1.6 }}>
-            Your assessment has been paused by an invigilator.
+            {automatic
+              ? 'Your assessment was paused automatically by the security check.'
+              : 'Your assessment has been paused by an invigilator.'}
           </p>
           <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
             Your answers so far have been saved. Please stay on this screen and
@@ -1136,6 +1159,7 @@ export function ExamShell() {
   // ── Freeze / session state (synced from Firestore) ─────────────
   const [isFrozen, setIsFrozen]                     = useState(false);
   const [frozenReason, setFrozenReason]             = useState<string | undefined>();
+  const [frozenBySystem, setFrozenBySystem]         = useState(false);
   // ── Extension freeze (Phase 1c) ────────────────────────────────
   const [extFrozen, setExtFrozen]                   = useState(false);
   const [extFreezeDetail, setExtFreezeDetail]       = useState<string | undefined>();
@@ -1654,6 +1678,7 @@ export function ExamShell() {
         if (att.frozenAt) {
           setIsFrozen(true);
           setFrozenReason(att.frozenReason);
+          setFrozenBySystem(att.frozenBy === 'system');
           setFrozenAtISO(att.frozenAt);
         }
 
@@ -1841,12 +1866,17 @@ export function ExamShell() {
       if (live.frozenAt) {
         setIsFrozen(true);
         setFrozenReason(live.frozenReason);
+        setFrozenBySystem(live.frozenBy === 'system');
         setFrozenAtISO(live.frozenAt);
         // Drop focus so nothing can be typed into a field behind the overlay.
         (document.activeElement as HTMLElement | null)?.blur?.();
       } else {
         setIsFrozen(false);
         setFrozenReason(undefined);
+        // Cleared with the reason it belongs to. A stale `true` would caption
+        // the NEXT freeze — one an invigilator really did perform — as
+        // automatic, which is the same misattribution in the other direction.
+        setFrozenBySystem(false);
         setFrozenAtISO(null);
       }
       // Session conflict: another device took over
@@ -4183,7 +4213,7 @@ export function ExamShell() {
         )}
         {/* Freeze halts the exam; a session conflict is terminal and outranks it. */}
         {isFrozen && !hasConflict && (
-          <FreezePausedOverlay key="freeze-paused" reason={frozenReason} />
+          <FreezePausedOverlay key="freeze-paused" reason={frozenReason} automatic={frozenBySystem} />
         )}
         {/* Extension freeze (Phase 1c) — server paused for a detected extension. */}
         {extFrozen && !hasConflict && !isFrozen && (

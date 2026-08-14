@@ -19,6 +19,8 @@ import {
   scanForExtensions,
   scanForForeignDom,
   scanForExtensionsWithSettle,
+  classifyForeignElement,
+  FOREIGN_BASELINE_SETTLE_MS,
 } from './extensionScan';
 
 /** The page as the app itself renders it: one root, one module script. */
@@ -170,20 +172,37 @@ describe('scanForExtensionsWithSettle', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════
-// THE HEURISTIC MUST NOT REACH THE FREEZE PATH
+// A PRE-EXISTING ELEMENT MUST NOT REACH THE FREEZE PATH
 // ══════════════════════════════════════════════════════════════════
 //
-// reportExtensionCheck freezes the attempt server-side on tiers requiring the
-// extension check, and a freeze has no automatic exit. ExamShell routes to it
-// from the `extension_detected` branch of handleViolation, so the guarantee
-// that a heuristic cannot freeze a live sitting rests entirely on
-// `foreign_dom` being a different type that nothing in that path matches.
+// This block used to assert something stronger and now asserts something
+// narrower, so it is worth saying exactly what changed and why, rather than
+// leaving a header that describes a rule the code no longer follows.
 //
-// That is invisible in a diff — someone widening the branch to "any extension
-// signal" would look like a tidy-up. Asserted at the source, because there is
-// no unit under here to call.
+// The old guarantee was that NO generic finding could freeze a sitting: the
+// check fires on things nobody enumerated, its false positives are unknowable,
+// and a freeze has no automatic exit (D-30). Everything generic went out as
+// `foreign_dom`, which nothing in the freeze path matches.
+//
+// The entry gate removed the premise. Now that any foreign element refuses
+// entry, a student who is sitting the exam has demonstrated a page with none —
+// so an element that turns up mid-sitting is not an unknown quantity, it is a
+// change against a state this system verified minutes earlier. Those, and only
+// those, are freeze-eligible, as `extension_detected`.
+//
+// What survives unchanged is the part that protects the honest student: an
+// element that was already there — including one that injected late and raced
+// the first paint — is still `foreign_dom`, still recorded, and still cannot
+// freeze anybody. classifyForeignElement is where that line is drawn and the
+// cases above are what hold it.
+//
+// So the assertions below still matter, for the same reason as before: someone
+// collapsing the two branches back into "any foreign element freezes" would
+// look like a tidy-up in a diff, and would put every late-injecting node back
+// on the freeze path. Asserted at the source, because there is no unit under
+// here to call.
 
-describe('the generic detector stays out of the freeze pipeline', () => {
+describe('a baseline element stays out of the freeze pipeline', () => {
   const shell = readFileSync(
     path.resolve(__dirname, '..', '..', 'pages', 'student', 'ExamShell.tsx'), 'utf8',
   );
@@ -207,6 +226,25 @@ describe('the generic detector stays out of the freeze pipeline', () => {
     const watchdog = readFileSync(path.resolve(__dirname, 'ExtensionWatchdog.tsx'), 'utf8');
     expect(watchdog).toContain("'extension_detected'");
     expect(watchdog).toContain("'foreign_dom'");
+  });
+
+  it('the watchdog still classifies before it chooses a severity', () => {
+    // The load-bearing line. If a refactor drops the classify call and reports
+    // every foreign element at one severity, the suite must fail — whichever
+    // severity it picked. Too permissive and mid-exam injection goes back to
+    // being a log line; too strict and a late-injecting node freezes a student
+    // who was admitted with it already on the page.
+    const watchdog = readFileSync(path.resolve(__dirname, 'ExtensionWatchdog.tsx'), 'utf8');
+    expect(watchdog).toContain('classifyForeignElement');
+    expect(watchdog).toContain("severity === 'baseline'");
+  });
+
+  it('the baseline is captured once, not on every re-activation', () => {
+    // `active` drops behind modals and breaks. Re-taking the baseline on the
+    // way back would launder anything installed while the exam was paused —
+    // which is the most attractive moment to install it.
+    const watchdog = readFileSync(path.resolve(__dirname, 'ExtensionWatchdog.tsx'), 'utf8');
+    expect(watchdog).toContain('baselineRef.current === null');
   });
 });
 
@@ -418,5 +456,66 @@ describe('the shell re-checks extensions on re-entry', () => {
     );
     expect(effect).toContain('setOverlay((current)');
     expect(effect).toContain("current.kind === 'fullscreen_required'");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// BASELINE VS APPEARED
+// ══════════════════════════════════════════════════════════════════
+//
+// The entry gate refuses any foreign element, so a student who is sitting the
+// exam has demonstrated a page with none. That changes what a foreign element
+// appearing MID-sitting means: it is no longer an unknown quantity whose false
+// positives are unknowable, it is a change against a state this system checked
+// minutes earlier. Only those are freeze-eligible.
+//
+// The settle window is what keeps that honest, and the case worth protecting
+// is the honest student's: an extension that injects late was present when
+// they were admitted, and freezing them for the timing of somebody else's
+// script would be the exact false positive this design exists to avoid.
+
+describe('classifyForeignElement', () => {
+  const EMPTY: ReadonlySet<string> = new Set();
+
+  it('treats anything already in the baseline as pre-existing', () => {
+    const baseline = new Set(['<div#known>']);
+    expect(classifyForeignElement('<div#known>', baseline, false)).toBe('baseline');
+  });
+
+  it('adopts a first sighting inside the settle window', () => {
+    // A late-injecting extension that was there at entry. Recorded, never
+    // frozen — the student did nothing between being admitted and now.
+    expect(classifyForeignElement('<div#slow>', EMPTY, true)).toBe('baseline');
+  });
+
+  it('flags a first sighting after the window as appeared', () => {
+    // The case the whole change exists for: switched on after a clean entry.
+    expect(classifyForeignElement('<div#sidebar>', EMPTY, false)).toBe('appeared');
+  });
+
+  it('keeps a settled element baseline once the window closes', () => {
+    // The stability property. The caller adopts what it classifies, so an
+    // element seen during settling must not be re-classified as appeared on
+    // the next tick merely because the clock moved past the window.
+    const baseline = new Set<string>();
+    const first = classifyForeignElement('<div#slow>', baseline, true);
+    expect(first).toBe('baseline');
+    baseline.add('<div#slow>');
+    expect(classifyForeignElement('<div#slow>', baseline, false)).toBe('baseline');
+  });
+
+  it('still catches a genuinely new element after others were adopted', () => {
+    // A page that legitimately carried one node must not become a page where
+    // anything is allowed.
+    const baseline = new Set(['<div#slow>']);
+    expect(classifyForeignElement('<div#slow>', baseline, false)).toBe('baseline');
+    expect(classifyForeignElement('<plasmo-csui>', baseline, false)).toBe('appeared');
+  });
+
+  it('gives the settle window enough room for a slow injector', () => {
+    // Not arbitrary: it has to outlast an extension racing the exam's first
+    // paint. Short enough that enabling one mid-paper is never inside it.
+    expect(FOREIGN_BASELINE_SETTLE_MS).toBeGreaterThanOrEqual(3000);
+    expect(FOREIGN_BASELINE_SETTLE_MS).toBeLessThanOrEqual(15000);
   });
 });

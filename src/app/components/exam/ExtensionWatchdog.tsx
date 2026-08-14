@@ -27,7 +27,12 @@
 
 import { useEffect, useRef } from 'react';
 import type { ViolationType } from '../../../lib/submissionService';
-import { EXTENSION_FINGERPRINTS, scanForForeignDom } from './extensionScan';
+import {
+  EXTENSION_FINGERPRINTS,
+  scanForForeignDom,
+  classifyForeignElement,
+  FOREIGN_BASELINE_SETTLE_MS,
+} from './extensionScan';
 import {
   shadowedDocumentMembers,
   describeTampering,
@@ -62,6 +67,15 @@ const MUTATION_COALESCE_MS = 250;
  */
 const MAX_FOREIGN_REPORTS = 10;
 
+/**
+ * Ceiling on FREEZE-ELIGIBLE foreign findings per sitting.
+ *
+ * Much lower than the baseline cap, because these are not advisory. One is
+ * enough to pause the sitting and bring a human in; the rest exist only so a
+ * reviewer can see the shape of what happened.
+ */
+const MAX_APPEARED_REPORTS = 5;
+
 interface ExtensionWatchdogProps {
   active: boolean;
   onViolation: (type: ViolationType, detail: string) => void;
@@ -77,6 +91,20 @@ export function ExtensionWatchdog({
   const activeRef      = useRef(active);
   const seenRef        = useRef<Set<string>>(new Set());
   const foreignReportsRef = useRef(0);
+  const appearedReportsRef = useRef(0);
+
+  /**
+   * What was on the page when this sitting began.
+   *
+   * Captured ONCE and deliberately NOT re-captured when the watchdog
+   * re-activates. `active` goes false behind modals and breaks, and re-taking
+   * the baseline on the way back would launder anything installed while the
+   * exam was paused — which is the most attractive moment to install it. The
+   * dedupe set below is cleared on re-activation, as it always was, so the
+   * same element is reported again; only its SEVERITY is remembered.
+   */
+  const baselineRef = useRef<Set<string> | null>(null);
+  const baselineClosesAtRef = useRef(0);
 
   useEffect(() => { onViolationRef.current = onViolation; }, [onViolation]);
   useEffect(() => { activeRef.current      = active; },      [active]);
@@ -90,6 +118,13 @@ export function ExtensionWatchdog({
     // active→inactive→active cycle and a re-added extension would be missed.
     seenRef.current.clear();
     foreignReportsRef.current = 0;
+    appearedReportsRef.current = 0;
+
+    // First activation only — see the note on baselineRef.
+    if (baselineRef.current === null) {
+      baselineRef.current = new Set();
+      baselineClosesAtRef.current = Date.now() + FOREIGN_BASELINE_SETTLE_MS;
+    }
 
     const scan = () => {
       if (!activeRef.current) return;
@@ -136,17 +171,49 @@ export function ExtensionWatchdog({
         }
       }
 
-      // ── Generic foreign DOM — recorded only ────────────────────
+      // ── Generic foreign DOM — split by when it turned up ───────
+      //
       // Deduped on the descriptor, so a node that survives the whole sitting
       // is reported once rather than every scan. The `foreign:` prefix keeps
-      // the two detectors' keys from colliding in one set.
+      // the detectors' keys from colliding in one set.
+      //
+      // The severity split is the point: see classifyForeignElement. Anything
+      // present when the sitting began is recorded and nothing more, exactly
+      // as before. Anything that APPEARS afterwards is measured against a page
+      // the entry gate verified as clean, which makes it the deliberate act it
+      // looks like rather than the unknowable false positive the old blanket
+      // rule had to assume.
+      const baselineOpen = Date.now() < baselineClosesAtRef.current;
       for (const desc of scanForForeignDom()) {
-        if (foreignReportsRef.current >= MAX_FOREIGN_REPORTS) break;
-        const key = `foreign:${desc}`;
+        const severity = classifyForeignElement(desc, baselineRef.current!, baselineOpen);
+
+        if (severity === 'baseline') {
+          // Adopted, so the answer stays stable once the window closes — a
+          // late-injecting node must not become "appeared" on the next tick
+          // merely because the clock moved.
+          baselineRef.current!.add(desc);
+          if (foreignReportsRef.current >= MAX_FOREIGN_REPORTS) continue;
+          const key = `foreign:${desc}`;
+          if (seenRef.current.has(key)) continue;
+          seenRef.current.add(key);
+          foreignReportsRef.current += 1;
+          onViolationRef.current('foreign_dom', `Unrecognised top-level element ${desc}`);
+          continue;
+        }
+
+        // Freeze-eligible. Capped separately and far lower than the baseline
+        // path: this reports through extension_detected, and the shell's own
+        // extReportedRef already collapses repeats into one server call, so
+        // the cap here only bounds what reaches the attempt document.
+        if (appearedReportsRef.current >= MAX_APPEARED_REPORTS) continue;
+        const key = `appeared:${desc}`;
         if (seenRef.current.has(key)) continue;
         seenRef.current.add(key);
-        foreignReportsRef.current += 1;
-        onViolationRef.current('foreign_dom', `Unrecognised top-level element ${desc}`);
+        appearedReportsRef.current += 1;
+        onViolationRef.current(
+          'extension_detected',
+          `${desc} appeared during the exam — not present when this sitting was admitted`,
+        );
       }
     };
 

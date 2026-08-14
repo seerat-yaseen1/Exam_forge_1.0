@@ -18,6 +18,7 @@ import {
   DEVTOOLS_MIN_DELTA,
   VIEWPORT_MIN_DELTA,
   isFocusStateMismatch,
+  reconcileFullscreen,
   nextThrottleStreak,
   RENDER_MIN_FPS,
   type ViewportSample,
@@ -354,5 +355,63 @@ describe('nextThrottleStreak', () => {
 
   it('refuses to divide by a zero-length window', () => {
     expect(nextThrottleStreak(1, 0, 0, true)).toMatchObject({ streak: 1, fire: false });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// FULLSCREEN RECONCILIATION
+// ══════════════════════════════════════════════════════════════════
+//
+// The poll behind these exists because `fullscreenchange` is a subscription
+// and `document.fullscreenElement` is not. What is tested here is the part
+// that decides, and the property that matters most is the third case: this
+// signal feeds a WARNING type, and a version of it that fired per tick rather
+// than per transition would terminate an honest student inside five seconds.
+
+describe('reconcileFullscreen', () => {
+  it('is silent while belief and reality agree', () => {
+    expect(reconcileFullscreen(true, true)).toEqual({ action: 'none' });
+    expect(reconcileFullscreen(false, false)).toEqual({ action: 'none' });
+  });
+
+  it('reports an exit that produced no event', () => {
+    // Belief says fullscreen, the property says otherwise: either the event
+    // was suppressed or it was never delivered. Either way the exam is not in
+    // fullscreen, which is the fact the gate needs.
+    expect(reconcileFullscreen(true, false)).toEqual({ action: 'exit_undetected' });
+  });
+
+  it('reports an unannounced RE-ENTRY without calling it a violation', () => {
+    // The caller must still be told, or the UI gate stays up over an exam that
+    // is legitimately back in fullscreen and the student cannot continue.
+    expect(reconcileFullscreen(false, true)).toEqual({ action: 'entry_undetected' });
+  });
+
+  it('is edge-triggered: a sustained exit is one finding, not one per tick', () => {
+    // The engine adopts the observed value as the new belief, so the second
+    // and later ticks of the same episode have nothing to report. Simulated
+    // here exactly as the interval does it.
+    let believed = true;
+    const actions: string[] = [];
+    for (let tick = 0; tick < 20; tick++) {
+      const v = reconcileFullscreen(believed, /* still outside */ false);
+      actions.push(v.action);
+      if (v.action !== 'none') believed = false;
+    }
+    expect(actions.filter((a) => a !== 'none')).toEqual(['exit_undetected']);
+  });
+
+  it('re-arms after the student returns, so a second exit is caught', () => {
+    let believed = true;
+    const fired: string[] = [];
+    const tick = (actual: boolean) => {
+      const v = reconcileFullscreen(believed, actual);
+      if (v.action !== 'none') { believed = actual; fired.push(v.action); }
+    };
+    tick(false);  // leaves
+    tick(false);  // still out — quiet
+    tick(true);   // returns
+    tick(false);  // leaves again — must be caught
+    expect(fired).toEqual(['exit_undetected', 'entry_undetected', 'exit_undetected']);
   });
 });

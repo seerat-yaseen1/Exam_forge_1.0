@@ -3096,10 +3096,45 @@ export function ExamShell() {
       ...(sectionIdx >= 0 ? { sectionNumber: sectionIdx + 1 } : {}),
     };
 
-    // Log to Firestore
-    await logViolation(att.id, type, detail, isWarningType ? newWarningCount : undefined,
-      { skipEventDetail, context })
-      .catch((e) => console.error('[ExamShell] logViolation failed', e));
+    // Log to Firestore, and BELIEVE WHAT COMES BACK.
+    //
+    // The server counts warnings itself, from counters only it can write, and
+    // returns both the running total and its own threshold verdict. Until now
+    // that reply was discarded and termination was decided purely from
+    // `warningCountRef` — a number living in client memory, which is the one
+    // place a student with devtools can reach. `enforceIntegrityThreshold`
+    // caught the divergence, but only at RESUME: a student who patched the
+    // local counter and never reloaded finished the sitting untouched, with
+    // the true count sitting in the server log unread.
+    //
+    // It is not only a tampering hole. `warningCount` is `useState(0)` and the
+    // shell remounts on every reload, so two warnings followed by a refresh
+    // honestly reset the count to zero. Adopting the server's total repairs
+    // that case too, and that is the case that actually happens.
+    //
+    // The local count is kept as the floor, not replaced: it is incremented
+    // before this await and is correct for the violation in flight even if the
+    // call fails or the callable is mid-deploy (logViolation fails soft and
+    // returns {}). So the two are combined, never swapped.
+    const verdict = await logViolation(
+      att.id, type, detail, isWarningType ? newWarningCount : undefined,
+      { skipEventDetail, context },
+    ).catch((e) => {
+      console.error('[ExamShell] logViolation failed', e);
+      return {} as { warnings?: number; thresholdReached?: boolean };
+    });
+
+    if (isWarningType && typeof verdict.warnings === 'number'
+        && verdict.warnings > newWarningCount) {
+      newWarningCount = verdict.warnings;
+      setWarningCount(newWarningCount);
+      warningCountRef.current = newWarningCount;
+    }
+    // The server's own verdict, not a re-derivation of it from the count it
+    // sent. If the two ever disagree the threshold belongs to the side that
+    // owns the counters.
+    const thresholdReached = verdict.thresholdReached === true
+      || newWarningCount >= MAX_WARNINGS;
 
     // ── Extension detected (Phase 1c) ──────────────────────────────
     // Report to the server, which decides whether to freeze the attempt
@@ -3114,15 +3149,29 @@ export function ExamShell() {
         });
     }
 
-    // Show overlay based on violation type and warning count
-    if (type === 'fullscreen_exit') {
-      // Fullscreen exit handled by onFullscreenChange — don't double-show warning overlay
-      return;
-    }
-
     if (!isWarningType) return; // Non-warning types are logged but don't show overlay
 
-    if (newWarningCount >= MAX_WARNINGS) {
+    // ── Why fullscreen_exit is no longer skipped up here ──────────
+    //
+    // This used to read `if (type === 'fullscreen_exit') return;` ABOVE the
+    // threshold check below, to avoid stacking a warning card on top of the
+    // fullscreen_required overlay that onFullscreenChange raises. The comment
+    // said termination was "owned by handleViolation" — and this return is
+    // what stopped it from ever happening.
+    //
+    // fullscreen_exit IS one of the three WARNING_VIOLATION_TYPES, so every
+    // exit incremented the count and pushed the counters up server-side, and
+    // then left before the block that acts on them. onFullscreenChange doesn't
+    // cover for it either: it only raises its overlay while the count is BELOW
+    // the maximum, so the third exit produced no warning card, no final
+    // warning, and no termination. A student could leave fullscreen without
+    // limit — the one deterrent this whole gate exists to enforce — and the
+    // only thing that ever caught up with them was enforceIntegrityThreshold
+    // at resume, which needs a reload they had no reason to perform.
+    //
+    // So the skip now applies ONLY below the threshold, which is the case it
+    // was actually written for.
+    if (thresholdReached) {
       // Server-authoritative: finalize the attempt BEFORE the 30-second overlay
       // countdown so killing the tab can't dodge termination. This goes through
       // gradeAttempt (Cloud Function, admin SDK) because student-side writes to
@@ -3183,6 +3232,12 @@ export function ExamShell() {
         }).catch((e) => console.error('[ExamShell] pre-countdown terminate failed', e));
       })();
       setOverlay({ kind: 'final_warning', violationType: type });
+    } else if (type === 'fullscreen_exit') {
+      // Below the threshold the student is already looking at the
+      // fullscreen_required overlay raised by onFullscreenChange, which both
+      // names the violation and gates interaction until they return. A warning
+      // card on top would say the same thing twice and bury the way back.
+      return;
     } else {
       setOverlay({
         kind: 'warning',

@@ -195,7 +195,40 @@ firebase deploy --only functions --project YOUR_PROJECT_ID
 firebase deploy --only functions:gradeAttempt --project YOUR_PROJECT_ID
 ```
 
-All 48 exports live in one `index.ts` and share the helpers the fixes changed — `toCoreAttempt`, `examContractFor`, `computeAttemptLocks`, `assertSequentialAnswerWindowOpen`, `awardFor`. Deploying a subset leaves the rest running an older copy of those helpers, and the failure mode is precisely the class of bug this audit spent two rounds removing: **two paths computing the same fact and disagreeing.**
+Every export lives in one `index.ts` and they share the helpers the fixes changed — `toCoreAttempt`, `examContractFor`, `computeAttemptLocks`, `assertSequentialAnswerWindowOpen`, `awardFor`. Deploying a subset leaves the rest running an older copy of those helpers, and the failure mode is precisely the class of bug this audit spent two rounds removing: **two paths computing the same fact and disagreeing.**
+
+> This paragraph used to open "All 48 exports". There were 56 by the time
+> anyone checked, which is §0's warning landing on §5's own text: a
+> point-in-time count where a description belonged. `scripts/deploy-functions.sh`
+> derives the number from source rather than repeating it.
+
+### The deploy quota, and why a full deploy fails intermittently
+
+`firebase-tools` fires function deploys at a **hardcoded concurrency of 40**
+(`lib/deploy/functions/release/index.js` — there is no flag or environment
+variable to lower it). Past roughly forty functions that exceeds Google's
+per-region write quota and the deploy takes 429s. The CLI retries, but only
+what it classifies as transient — `429`, `409`, `503` — so a Cloud Build that
+gives up under load fails the whole run instead.
+
+That is why re-running "just the failed ones" succeeds: the retry is a small
+deploy that never approaches the quota.
+
+```bash
+# ✅ paced, still deploys EVERY function
+scripts/deploy-functions.sh YOUR_PROJECT_ID
+```
+
+The batches are **pacing, not selection** — the end state is identical to a
+single `--only functions`, so this is not the cherry-picking §5 forbids. The
+one real difference is that the skew window widens from a few minutes to
+around ten, so do not run it during a live sitting. A single deploy already
+lands functions over several minutes; batching stretches that, it does not
+introduce it.
+
+Do **not** reach for export nesting (`export const exam = { startExam, … }`)
+to solve this. It deploys them as `exam-startExam` and every
+`httpsCallable('startExam')` in the client breaks.
 
 `firebase.json` already runs `npm run build` as a `predeploy` step, so the TypeScript is compiled fresh on every deploy. You do not need to build by hand.
 

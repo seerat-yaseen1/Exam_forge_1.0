@@ -21,6 +21,7 @@ import { functions } from './firebase';
 import type { TelemetryEvent } from './codeTelemetry';
 import type { CodeVerdictDoc } from './codeVerdictView';
 import type { AnswerDiscriminant } from './itemTypes';
+import { getDeviceFingerprint, type DeviceFingerprint } from './deviceFingerprint';
 import type { CorrectPair, Question } from './questionBankService';
 import { ensureSebToken, forceRefreshSebToken } from './assessmentService';
 
@@ -546,6 +547,25 @@ export type Attempt = {
     recent: Array<{ at: string; seconds: number }>;
   } | null;
 
+  /**
+   * The machine reported at the START of the sitting. Written by startExam and
+   * never rewritten, which is the point: the baseline is server-held, so a
+   * client comparing against its own copy — trivially defeated — is not what
+   * decides whether the hardware changed.
+   */
+  deviceFingerprint?: DeviceFingerprint | null;
+  /**
+   * Recorded when a heartbeat reports a machine that disagrees with the
+   * baseline. A browser session cannot move between computers, so this is two
+   * incompatible facts about one sitting. See src/lib/deviceFingerprint.ts for
+   * what it can and cannot show.
+   */
+  fingerprintDrift?: {
+    count: number;
+    firstAt: string;
+    changes: string[];
+  } | null;
+
   // ── Phase 1 (freeze state + timing analytics) ─────────────────
   freezeState?: {
     frozen: boolean;
@@ -559,7 +579,16 @@ export type Attempt = {
     minGapSeconds: number | null;
     heartbeatGaps: number;
     maxHeartbeatGapSeconds: number;
+    /** Largest number of integrity events inside any one-minute window. */
+    maxViolationsInMinute?: number;
     anomalyScore: number;
+    /**
+     * What the score is MADE OF. Stored rather than derived so a reviewer can
+     * interrogate the number instead of deferring to it — a bare score says
+     * be suspicious without saying of what. Absent on attempts graded before
+     * this shipped; anomalyScore on those still means what it meant.
+     */
+    riskFactors?: Array<{ code: string; points: number; detail: string }>;
     computedAt: string;
   } | null;
 
@@ -752,6 +781,7 @@ export async function startAttempt(params: {
       sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
       cameraDeclined?: boolean;
       deviceClass?: 'desktop' | 'mobile' | 'tablet';
+      fingerprint?: DeviceFingerprint;
       sebToken?: string;
       sessionId?: string;
     },
@@ -806,6 +836,10 @@ export async function startAttempt(params: {
         sectionStartOrder: params.sectionStartOrder,
         cameraDeclined: params.cameraDeclined,
         deviceClass: detectDeviceClass(),
+        // The baseline machine. Sent once, at the only moment it can be
+        // established — every later report is compared against what the server
+        // stored here, not against anything the client keeps.
+        fingerprint: getDeviceFingerprint(),
         sebToken: params.sebToken,
       ...(activeSessionId ? { sessionId: activeSessionId } : {}),
       });
@@ -1098,14 +1132,24 @@ export async function gradeAttempt(params: {
 
 /** Heartbeat — call on an interval (~15s) while an attempt is in progress. */
 export async function sendHeartbeat(attemptId: string): Promise<void> {
-  const call = httpsCallable<{ attemptId: string; sebToken?: string }, { ok: true; ignored?: boolean }>(
+  const call = httpsCallable<
+    { attemptId: string; sebToken?: string; fingerprint?: DeviceFingerprint },
+    { ok: true; ignored?: boolean }
+  >(
     functions,
     'examHeartbeat',
   );
   try {
     // The heartbeat doubles as the SEB proof refresh: it runs every ~15s,
     // comfortably inside the ~90s token TTL.
-    await withSeb((sebToken) => call({ attemptId, sebToken }).then(() => undefined));
+    //
+    // It also carries the machine fingerprint, for two reasons. It is the only
+    // channel that already runs for the whole sitting on exactly the tiers
+    // that want the check, and the value is computed once per page load and
+    // cached, so riding this interval costs a few dozen bytes rather than a
+    // WebGL context every fifteen seconds.
+    await withSeb((sebToken) =>
+      call({ attemptId, sebToken, fingerprint: getDeviceFingerprint() }).then(() => undefined));
   } catch {
     // Heartbeat failures are non-fatal to the exam UX — a missed beat simply
     // shows up server-side as a gap, which is the intended signal.

@@ -278,6 +278,14 @@ function buildIntegrityRows(exported: ExportedAttempt[]): Record<string, unknown
       'Foreign DOM': il.foreignDomEvents ?? 0,
       'Focus Mismatch': il.focusMismatchEvents ?? 0,
       'Render Throttled': il.renderThrottleEvents ?? 0,
+      'Anomaly Score': attempt.timingAnalysis?.anomalyScore ?? '',
+      // The factors, not just the number — a spreadsheet column of bare scores
+      // sorts papers but cannot justify one, and this export is what leaves
+      // the system for a moderation meeting.
+      'Risk Factors': (attempt.timingAnalysis?.riskFactors ?? [])
+        .map((f) => `${f.code} (+${f.points}): ${f.detail}`)
+        .join(' | '),
+      'Machine Changed': attempt.fingerprintDrift?.count ? 'Yes' : '',
       'Auto-Terminated': il.autoTerminated ? 'Yes' : '',
       'Termination Reason': il.terminatedReason ?? '',
       'Finalized While Frozen': il.finalizedWhileFrozen ? 'Yes' : '',

@@ -210,6 +210,18 @@ function formatDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
+// ── Violation position ────────────────────────────────────────────
+// "Q4 · Section 2" from whatever the event carries. Events logged before the
+// context existed carry neither and render as nothing at all, which is
+// correct: an old event genuinely does not know where the student was, and
+// inventing a position for it would be worse than leaving the line short.
+function formatViolationWhere(v: { questionNumber?: number; sectionNumber?: number }): string {
+  const parts: string[] = [];
+  if (v.questionNumber) parts.push(`Q${v.questionNumber}`);
+  if (v.sectionNumber) parts.push(`Section ${v.sectionNumber}`);
+  return parts.join(' · ');
+}
+
 // ── Risk factors ──────────────────────────────────────────────────
 // Server-side codes (gradeAttempt) → the words a reviewer reads. An unknown
 // code falls back to the code itself, so a factor added server-side shows up
@@ -2810,9 +2822,26 @@ function AttemptDrawer({
                     .map((v, i) => (
                       <div key={i} className="flex items-start justify-between gap-2 py-1.5"
                         style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-                        <span className="text-xs" style={{ color: 'var(--ef-text-subtle)', textTransform: 'capitalize' }}>
-                          {v.type.replace(/_/g, ' ')}{v.warningNumber ? ` (warning ${v.warningNumber})` : ''}
-                        </span>
+                        <div className="min-w-0">
+                          <span className="text-xs" style={{ color: 'var(--ef-text-subtle)', textTransform: 'capitalize' }}>
+                            {v.type.replace(/_/g, ' ')}{v.warningNumber ? ` (warning ${v.warningNumber})` : ''}
+                          </span>
+                          {/* The detail has been written to every one of these
+                              events since the log existed, and this list threw
+                              it away — a reviewer saw "devtools open" where the
+                              record said which heuristic fired and by how much.
+                              Position is the other half: "tab switch at 10:32"
+                              cannot be acted on, the same event against
+                              question 4 of section B can be checked against the
+                              answer, the timing and the mark. */}
+                          {(v.detail || v.questionNumber) && (
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
+                              {formatViolationWhere(v)}
+                              {formatViolationWhere(v) && v.detail ? ' · ' : ''}
+                              {v.detail}
+                            </p>
+                          )}
+                        </div>
                         <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
                           {formatRelative(v.timestamp)}
                         </span>

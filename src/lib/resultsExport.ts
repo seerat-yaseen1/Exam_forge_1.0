@@ -254,6 +254,16 @@ function buildSectionRows(exported: ExportedAttempt[]): Record<string, unknown>[
   return rows;
 }
 
+/**
+ * Violation events written into the integrity sheet's per-attempt row.
+ *
+ * The stored array holds up to 500. Spilling all of them into one spreadsheet
+ * cell produces something no reviewer will read and some tools will truncate
+ * mid-word; the most recent are the ones a moderation meeting asks about, and
+ * the full record remains on the attempt for anyone who needs it.
+ */
+const MAX_EXPORTED_VIOLATION_EVENTS = 25;
+
 function buildIntegrityRows(exported: ExportedAttempt[]): Record<string, unknown>[] {
   return exported.map(({ student, attempt, attemptNumber }) => {
     const il = attempt.integrityLog ?? ({} as Attempt['integrityLog']);
@@ -286,6 +296,26 @@ function buildIntegrityRows(exported: ExportedAttempt[]): Record<string, unknown
         .map((f) => `${f.code} (+${f.points}): ${f.detail}`)
         .join(' | '),
       'Machine Changed': attempt.fingerprintDrift?.count ? 'Yes' : '',
+      // The counters above say how many; this says what and where. A
+      // moderation meeting works from this file, and a row of totals cannot
+      // tell anyone whether the tab switches all landed on one question.
+      // Bounded to the most recent events for the same reason the stored
+      // array is bounded — a spreadsheet cell is not a log viewer.
+      'Recent Violations': (il.violations ?? [])
+        .slice(-MAX_EXPORTED_VIOLATION_EVENTS)
+        .map((v) => {
+          const where = [
+            v.questionNumber ? `Q${v.questionNumber}` : '',
+            v.sectionNumber ? `S${v.sectionNumber}` : '',
+          ].filter(Boolean).join('/');
+          return [
+            v.timestamp,
+            v.type,
+            where,
+            v.detail ?? '',
+          ].filter(Boolean).join(' ');
+        })
+        .join(' | '),
       'Auto-Terminated': il.autoTerminated ? 'Yes' : '',
       'Termination Reason': il.terminatedReason ?? '',
       'Finalized While Frozen': il.finalizedWhileFrozen ? 'Yes' : '',

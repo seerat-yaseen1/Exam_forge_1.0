@@ -1249,6 +1249,8 @@ export function ExamShell() {
   const linearAdvancingRef = useRef(false);
   /** Current question id, readable from stable callbacks (D-25 flush). */
   const currentQIdRef = useRef<string | null>(null);
+  /** The section on SCREEN, for violation context — see handleViolation. */
+  const currentSectionIdxRef = useRef(0);
   /** Whether the student is on the final question, readable from the timer
    *  effect without re-arming it on every change (D-26). */
   const isLastQuestionRef = useRef(false);
@@ -2375,6 +2377,8 @@ export function ExamShell() {
     currentQIdRef.current = currentQId ?? null;
   }, [currentQId]);
 
+  useEffect(() => { currentSectionIdxRef.current = currentSectionIdx; }, [currentSectionIdx]);
+
   useEffect(() => { shellStatusRef.current = shellStatus; }, [shellStatus]);
 
   // ── Per-question timer (Phase 2.5 Stage 3) ─────────────────────
@@ -3063,8 +3067,38 @@ export function ExamShell() {
     totalViolationsRef.current += 1;
     const skipEventDetail = totalViolationsRef.current > MAX_LOGGED_VIOLATION_EVENTS;
 
+    // ── Where the student was ─────────────────────────────────────
+    //
+    // Attached HERE rather than in each detector, and that is the point: every
+    // detector in the shell reports through this one handler, so a detector
+    // added later carries the same context without knowing it exists. The
+    // alternative — each detector supplying its own — is how "consistent
+    // payloads" decays into four different shapes.
+    //
+    // Read from refs, because this callback is not re-created as the student
+    // moves through the paper and the position must be the one at the instant
+    // the violation fired, not the one when the handler was built.
+    //
+    // The section index is the SHELL's, not the attempt document's: during a
+    // transition the document lags the screen by a round trip, and what a
+    // reviewer needs is where the student was looking. Server-side these ids
+    // are checked against the attempt's own paper before being stored.
+    const sectionIdx = currentSectionIdxRef.current;
+    const questionId = currentQIdRef.current ?? undefined;
+    const sectionId = att.sectionIds?.[sectionIdx];
+    const qIdx = questionId && sectionId
+      ? (att.questionOrder?.[sectionId] ?? []).indexOf(questionId)
+      : -1;
+    const context = {
+      ...(questionId ? { questionId } : {}),
+      ...(sectionId ? { sectionId } : {}),
+      ...(qIdx >= 0 ? { questionNumber: qIdx + 1 } : {}),
+      ...(sectionIdx >= 0 ? { sectionNumber: sectionIdx + 1 } : {}),
+    };
+
     // Log to Firestore
-    await logViolation(att.id, type, detail, isWarningType ? newWarningCount : undefined, { skipEventDetail })
+    await logViolation(att.id, type, detail, isWarningType ? newWarningCount : undefined,
+      { skipEventDetail, context })
       .catch((e) => console.error('[ExamShell] logViolation failed', e));
 
     // ── Extension detected (Phase 1c) ──────────────────────────────

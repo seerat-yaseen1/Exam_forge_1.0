@@ -7612,6 +7612,58 @@ interface LogViolationData {
   /** Past the shell's event cap: keep counting, stop appending event objects. */
   skipEventDetail?: boolean;
   sessionId?: string;
+  /** Where the student was. Validated against the attempt — see below. */
+  context?: {
+    questionId?: string;
+    sectionId?: string;
+    questionNumber?: number;
+    sectionNumber?: number;
+  };
+}
+
+/**
+ * Validate the reported position AGAINST THIS ATTEMPT'S OWN PAPER.
+ *
+ * The context is client-supplied and its whole purpose is to be read by a
+ * human deciding whether a student cheated. Storing it as given would let a
+ * hostile client write arbitrary text into that record, or — more quietly, and
+ * worse — attribute its violations to a question the student was never served,
+ * making the timeline disagree with the answers beside it.
+ *
+ * So an id survives only if the attempt's own questionOrder contains it. An id
+ * that does not is dropped rather than rejected: the violation itself is the
+ * thing that must be recorded, and refusing the whole call over a bad position
+ * would turn a garbled context into a missing detection.
+ */
+function sanitiseViolationContext(
+  raw: unknown,
+  attempt: { questionOrder?: Record<string, string[]>; sectionIds?: string[] },
+): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object') return {};
+  const r = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  const order = attempt.questionOrder ?? {};
+  const sectionIds = attempt.sectionIds ?? Object.keys(order);
+
+  if (typeof r.sectionId === 'string' && sectionIds.includes(r.sectionId)) {
+    out.sectionId = r.sectionId;
+  }
+  if (typeof r.questionId === 'string') {
+    const served = Object.values(order).some((qs) => Array.isArray(qs) && qs.includes(r.questionId as string));
+    if (served) out.questionId = r.questionId;
+  }
+  // Positions are display sugar for the id above, so they are only kept when
+  // they are plausible small integers. A number is cheap to store and
+  // impossible to cross-check, so the bound is the whole defence.
+  const pos = (v: unknown) =>
+    typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= 10_000 ? v : undefined;
+  const qn = pos(r.questionNumber);
+  const sn = pos(r.sectionNumber);
+  if (qn !== undefined) out.questionNumber = qn;
+  if (sn !== undefined) out.sectionNumber = sn;
+
+  return out;
 }
 
 /**
@@ -7662,6 +7714,10 @@ export const logViolation = onCall<LogViolationData>(
       status?: string;
       activeSessionId?: string | null;
       integrityLog?: Record<string, unknown>;
+      // Read so the reported position can be checked against the paper this
+      // student was actually served — see sanitiseViolationContext.
+      questionOrder?: Record<string, string[]>;
+      sectionIds?: string[];
     };
     if (att.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
@@ -7693,6 +7749,9 @@ export const logViolation = onCall<LogViolationData>(
         timestamp: nowIso,
         ...(detail ? { detail: String(detail).slice(0, 500) } : {}),
         ...(typeof warningNumber === 'number' ? { warningNumber } : {}),
+        // Position, validated against this attempt's own paper. Spread last so
+        // a caller cannot smuggle `type` or `timestamp` in through it.
+        ...sanitiseViolationContext(request.data?.context, att),
       });
     }
     await ref.update(updates);

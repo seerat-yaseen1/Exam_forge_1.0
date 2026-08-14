@@ -146,12 +146,36 @@ export type ViolationType =
   | 'focus_state_mismatch' // window has no focus but no blur event ever fired
   | 'render_throttled';  // rAF running at background rates while claiming to be focused
 
+/**
+ * WHERE the student was when a violation fired.
+ *
+ * Every detector reports through one handler in ExamShell, so this is attached
+ * at that single choke point rather than being threaded through each detector.
+ * That is what makes it uniform by construction: a detector added later cannot
+ * forget to supply it, because it never supplies it in the first place.
+ *
+ * The reason it exists: a reviewer reading "tab_switch, 10:32" cannot act on
+ * it. The same event against "question 4 of section B" is a fact about the
+ * paper — it can be checked against the answer, the timing and the mark.
+ *
+ * Every field is optional and every field is client-supplied, so the server
+ * validates the ids against the attempt's own paper before storing them; see
+ * sanitiseViolationContext.
+ */
+export type ViolationContext = {
+  questionId?: string;
+  sectionId?: string;
+  /** 1-based positions, stored because a reviewer reads "4 of 12", not an id. */
+  questionNumber?: number;
+  sectionNumber?: number;
+};
+
 export type ViolationEvent = {
   type: ViolationType;
   timestamp: string;
   detail?: string;            // human-readable context
   warningNumber?: number;     // which warning was shown (1, 2, 3)
-};
+} & ViolationContext;
 
 // ── Attempt status ────────────────────────────────────────────────
 
@@ -1372,7 +1396,7 @@ export async function logViolation(
   type: ViolationType,
   detail?: string,
   warningNumber?: number,
-  opts?: { skipEventDetail?: boolean }
+  opts?: { skipEventDetail?: boolean; context?: ViolationContext }
 ): Promise<{ warnings?: number; thresholdReached?: boolean }> {
   // Phase 2 (D-09): the integrity log is no longer a client-writable field.
   //
@@ -1391,6 +1415,7 @@ export async function logViolation(
     {
       attemptId: string; type: ViolationType; detail?: string;
       warningNumber?: number; skipEventDetail?: boolean; sessionId?: string;
+      context?: ViolationContext;
     },
     { ok: true; ignored?: boolean; warnings?: number; thresholdReached?: boolean }
   >(functions, 'logViolation');
@@ -1408,6 +1433,9 @@ export async function logViolation(
       ...(warningNumber !== undefined ? { warningNumber } : {}),
       ...(opts?.skipEventDetail ? { skipEventDetail: true } : {}),
       ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+      ...(opts?.context && Object.keys(opts.context).length > 0
+        ? { context: opts.context }
+        : {}),
     });
     return {
       warnings: res.data.warnings,

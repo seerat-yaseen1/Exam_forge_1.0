@@ -365,6 +365,86 @@ async function R12() {
   check(String(gap?.detail ?? '').includes('longest'), 'its detail carries the longest silence');
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// R-13 · violation context is recorded, and checked against the paper
+// ═══════════════════════════════════════════════════════════════════
+async function R13() {
+  const id = await startWith(MACHINE);
+  const served = A(id).questionOrder.SA;
+
+  await call(fns.logViolation, {
+    attemptId: id, type: 'tab_switch',
+    context: { questionId: served[1], sectionId: 'SA', questionNumber: 2, sectionNumber: 1 },
+  }, STUDENT());
+
+  const ev = A(id).integrityLog.violations[0];
+  eq(ev.questionId, served[1], 'the question is recorded on the event');
+  eq(ev.sectionId, 'SA', 'and the section');
+  eq(ev.questionNumber, 2, 'and the reading position');
+}
+
+async function R14() {
+  const id = await startWith(MACHINE);
+
+  // A position from a paper this student was never served. Stored as given it
+  // would attribute the violation to a question that is not on their script —
+  // the timeline would disagree with the answers printed beside it.
+  await call(fns.logViolation, {
+    attemptId: id, type: 'tab_switch',
+    context: {
+      questionId: 'q_from_another_exam',
+      sectionId: 'SECTION_THAT_DOES_NOT_EXIST',
+      questionNumber: 4,
+    },
+  }, STUDENT());
+
+  const ev = A(id).integrityLog.violations[0];
+  eq(ev.questionId, undefined, 'an unserved question id is dropped');
+  eq(ev.sectionId, undefined, 'an unknown section id is dropped');
+  // The violation itself still lands. Refusing the whole call over a garbled
+  // position would turn a bad context into a MISSING detection, which is the
+  // wrong way to fail.
+  eq(ev.type, 'tab_switch', 'but the violation is still recorded');
+  eq(A(id).integrityLog.tabSwitches, 1, 'and still counted');
+}
+
+async function R15() {
+  const id = await startWith(MACHINE);
+
+  // Junk of every shape the field accepts, plus an attempt to overwrite the
+  // event's own type and timestamp through the context spread.
+  await call(fns.logViolation, {
+    attemptId: id, type: 'right_click',
+    context: {
+      questionId: 'X'.repeat(10_000),
+      questionNumber: -5,
+      sectionNumber: 999_999_999,
+      type: 'multi_person',
+      timestamp: '1999-01-01T00:00:00.000Z',
+      evil: 'Y'.repeat(10_000),
+    },
+  }, STUDENT());
+
+  const ev = A(id).integrityLog.violations[0];
+  eq(ev.type, 'right_click', 'context cannot overwrite the event type');
+  check(ev.timestamp.startsWith('2026'), 'nor the server timestamp', ev.timestamp);
+  eq(ev.questionId, undefined, 'an oversized id is dropped, not clipped and kept');
+  eq(ev.questionNumber, undefined, 'a negative position is dropped');
+  eq(ev.sectionNumber, undefined, 'an absurd position is dropped');
+  eq(ev.evil, undefined, 'unknown keys never reach the record');
+}
+
+async function R16() {
+  const id = await startWith(MACHINE);
+  // No context at all — every detector predating this, and any caller that
+  // simply does not know where the student was.
+  await call(fns.logViolation, { attemptId: id, type: 'paste_attempt', detail: 'Paste blocked' },
+    STUDENT());
+  const ev = A(id).integrityLog.violations[0];
+  eq(ev.detail, 'Paste blocked', 'the detail is still stored');
+  eq(ev.questionId, undefined, 'and no position is invented');
+}
+
 const SCENARIOS = [
   ['R-01', 'the baseline is server-held and written once', R01],
   ['R-02', 'an unchanged machine is silent', R02],
@@ -378,6 +458,10 @@ const SCENARIOS = [
   ['R-10', 'a clean sitting scores zero explicitly', R10],
   ['R-11', 'the score is clamped but the factors are kept', R11],
   ['R-12', 'mid-session heartbeat gaps reach the score', R12],
+  ['R-13', 'violation context is recorded', R13],
+  ['R-14', 'a position off this attempt\'s paper is dropped', R14],
+  ['R-15', 'a hostile context cannot rewrite the event', R15],
+  ['R-16', 'no context is not an invented context', R16],
 ];
 
 (async () => {

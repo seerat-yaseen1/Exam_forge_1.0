@@ -222,13 +222,21 @@ export function DetailsStep({
     assessment?.securityTier ?? 'normal',
   );
   // ── Phase 3 (Stage 4): SEB authority toggle + config file link ───
-  // requireSEB is the settled "default ON for high_stake, disable-able"
-  // decision — until now it had no UI and applyTierDefaults reset it on
-  // every save. Initialised from the existing assessment so an edit-save
-  // no longer silently reverts a manual override. For a new assessment the
-  // default follows the initial tier (normal → false).
+  // requireSEB was "default ON for high_stake, disable-able". D-10 makes it
+  // LOCKED at high_stake, so the toggle is only an authority decision on
+  // 'normal' now; at high_stake it is a read-only statement of what the tier
+  // means. Initialised from the existing assessment so an edit-save does not
+  // silently revert a manual 'normal' opt-in.
+  //
+  // A high_stake assessment carrying requireSEB:false from before the lock
+  // shows ON here, because that is what saving it will store — the toggle
+  // must not display a value the save is about to override. Already-published
+  // ones keep running as they are (grandfathered in startExam), and their
+  // security fields are frozen against edits anyway.
   const [requireSEB, setRequireSEB] = useState<boolean>(
-    assessment?.requireSEB ?? (assessment?.securityTier ?? 'normal') === 'high_stake',
+    (assessment?.securityTier ?? 'normal') === 'high_stake'
+      ? true
+      : assessment?.requireSEB ?? false,
   );
   const [sebConfigFileUrl, setSebConfigFileUrl] = useState(assessment?.sebConfigFileUrl ?? '');
   // Per-exam Config Keys (Stage 4). Held as one-key-per-line text; stored in
@@ -1054,11 +1062,15 @@ export function DetailsStep({
                           // Phase 3 (Stage 4): switching tier re-baselines the
                           // SEB toggle — back to the original override when
                           // returning to the assessment's saved tier, else to
-                          // the new tier's default (high_stake ON, others OFF).
+                          // the new tier's default. D-10: high_stake is not a
+                          // default any more, it is forced, so it wins over a
+                          // stored override on the way in.
                           setRequireSEB(
-                            opt.key === assessment?.securityTier
-                              ? assessment?.requireSEB ?? opt.key === 'high_stake'
-                              : opt.key === 'high_stake',
+                            opt.key === 'high_stake'
+                              ? true
+                              : opt.key === assessment?.securityTier
+                                ? assessment?.requireSEB ?? false
+                                : false,
                           );
                         }}
                         className="flex-1 text-xs px-2 py-1.5 transition-colors"
@@ -1078,28 +1090,32 @@ export function DetailsStep({
                   {securityTier === 'mock'
                     ? 'Practice mode — no proctoring. Camera off, phones allowed.'
                     : securityTier === 'high_stake'
-                      ? 'Maximum security — camera required, desktop only, Safe Exam Browser (default on).'
+                      ? 'Maximum security — camera, desktop-only and Safe Exam Browser all required.'
                       : 'Deterrent proctoring — camera on by default, extension check, desktop by default.'}
                 </p>
               </div>
 
               {/* ── Phase 3 (Stage 4): Safe Exam Browser ──────────────────
-                  The authority toggle. High-stake defaults ON but is
-                  disable-able (a school without SEB rollout can still run
-                  high-stake with the web-tier deterrents); normal is opt-in;
-                  mock never (applyTierDefaults forces it false). The server
-                  re-derives this from the doc at startExam and freezes it
-                  into the attempt's securityConfig. */}
+                  D-10: LOCKED ON at high-stake, joining camera / desktop-only /
+                  extension-check. It is the only control that reaches remote
+                  desktop, VPNs and userscript managers, so a high-stake exam
+                  without it was enforcing strictly less than the tier claims.
+                  A school without an SEB rollout runs 'normal' — the tier that
+                  means web deterrents only. Normal stays opt-in; mock never
+                  (applyTierDefaults forces it false). The server re-derives
+                  this at startExam and freezes it into securityConfig. */}
               {securityTier !== 'mock' && (
                 <div className="space-y-2">
                   <SettingsToggle
                     icon={<Shield size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
                     label="Require Safe Exam Browser"
                     hint={securityTier === 'high_stake'
-                      ? 'Locks the exam to genuine SEB — blocks VPNs, remote desktop, userscripts. Default on for high-stake.'
+                      ? 'Locks the exam to genuine SEB — blocks VPNs, remote desktop, userscripts. Always on at high-stake; choose Normal to run without it.'
                       : 'Opt-in SEB lockdown for this exam. Students need SEB and the .seb config to enter.'}
                     value={requireSEB}
                     onChange={setRequireSEB}
+                    locked={securityTier === 'high_stake'}
+                    lockReason={securityTier === 'high_stake' ? 'Required at high-stake' : undefined}
                   />
                   {requireSEB && (
                     <div className="space-y-1.5 px-4 py-3"

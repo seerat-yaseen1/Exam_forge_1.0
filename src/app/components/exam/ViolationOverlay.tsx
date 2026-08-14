@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Maximize, XOctagon, Eye,
-  ShieldOff, MonitorOff, Clipboard, MousePointer,
+  ShieldOff, MonitorOff, Clipboard, MousePointer, PanelRight,
 } from 'lucide-react';
 import type { ViolationType } from '../../../lib/submissionService';
 
@@ -54,6 +54,7 @@ const VIOLATION_LABELS: Record<ViolationType, string> = {
   // before this overlay is ever asked to render it. Adding it makes the maps
   // total, so promoting it to a warning type later cannot ship a blank overlay.
   extension_detected: 'Browser extension detected',
+  viewport_narrowed:  'Exam window was narrowed',
 };
 
 const VIOLATION_ICONS: Record<ViolationType, React.ReactNode> = {
@@ -69,6 +70,7 @@ const VIOLATION_ICONS: Record<ViolationType, React.ReactNode> = {
   reload_attempt:  <AlertTriangle size={18} strokeWidth={1.5} />,
   keyboard_block:  <AlertTriangle size={18} strokeWidth={1.5} />,
   extension_detected: <ShieldOff size={18} strokeWidth={1.5} />,
+  viewport_narrowed:  <PanelRight size={18} strokeWidth={1.5} />,
 };
 
 // ── Card shell ────────────────────────────────────────────────────

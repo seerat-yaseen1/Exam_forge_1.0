@@ -4640,6 +4640,7 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       status: string;
       answers: Record<string, AttemptAnswerDoc & { answeredAt?: string }>;
       lastHeartbeatAt?: string | null;
+      heartbeatGaps?: { count?: number; maxSeconds?: number } | null;
       createdAt?: string;
       freezeState?: { frozen?: boolean } | null;
       freezes?: FreezeLedgerEntry[];
@@ -4916,13 +4917,21 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       const gap = (answerTimes[i] - answerTimes[i - 1]) / 1000;
       if (minGapSeconds === null || gap < minGapSeconds) minGapSeconds = gap;
     }
-    let heartbeatGaps = 0;
-    let maxHeartbeatGapSeconds = 0;
+    // Mid-session silences, recorded by examHeartbeat as they happened. Before
+    // that existed this pair could only ever describe the FINAL gap, because
+    // lastHeartbeatAt is overwritten by each beat — so a student offline for
+    // ten minutes mid-exam and back before the end scored zero here. Seeding
+    // from the recorded gaps and then folding in the final one keeps a single
+    // meaning for the field: every silence over the threshold, wherever it
+    // fell. Absent on attempts that predate the recording, which then behave
+    // exactly as before.
+    let heartbeatGaps = attempt.heartbeatGaps?.count ?? 0;
+    let maxHeartbeatGapSeconds = attempt.heartbeatGaps?.maxSeconds ?? 0;
     if (attempt.lastHeartbeatAt) {
       const gapToSubmit = (submitMs - Date.parse(attempt.lastHeartbeatAt)) / 1000;
       if (gapToSubmit > 60) {
-        heartbeatGaps = 1;
-        maxHeartbeatGapSeconds = Math.round(gapToSubmit);
+        heartbeatGaps += 1;
+        maxHeartbeatGapSeconds = Math.max(maxHeartbeatGapSeconds, Math.round(gapToSubmit));
       }
     }
     let anomalyScore = 0;
@@ -6171,8 +6180,35 @@ export const getServerTime = onCall(
 // stamps lastHeartbeatAt. A gap (heartbeat→submit) is later flagged by
 // gradeAttempt: a student who blocks Firestore to hide violations also
 // stops heartbeating, so the gap becomes a server-visible signal.
+//
+// ── Why gaps are recorded HERE and not derived later ──────────────
+//
+// lastHeartbeatAt is a single overwritten field, so it carries no history.
+// gradeAttempt can therefore only ever measure ONE gap — the final
+// heartbeat→submit interval — and every silence DURING the sitting is
+// overwritten by the next successful beat and lost. A student offline for ten
+// minutes in the middle of an exam and back before the end looks, at grade
+// time, exactly like a student who never stopped.
+//
+// The gap only exists at the moment the beat lands and the previous stamp is
+// still readable, so it is measured and recorded then. The read is free: the
+// document is already fetched above for the ownership and SEB checks.
 interface HeartbeatData { attemptId: string;   sebToken?: string;
 }
+
+/**
+ * Silence past this is recorded as a gap. Matches the threshold gradeAttempt
+ * already applies to the final heartbeat→submit interval, so mid-session and
+ * end-of-session gaps mean the same thing.
+ *
+ * Four missed beats at the client's 15s interval. Comfortably past an ordinary
+ * page reload or a few seconds of bad wifi, which is the point: this counts
+ * silences worth a reviewer's attention, not every network hiccup.
+ */
+const HEARTBEAT_GAP_SECONDS = 60;
+
+/** Bound on the stored gap list. Counters stay exact; only detail is capped. */
+const MAX_HEARTBEAT_GAPS_STORED = 20;
 
 export const examHeartbeat = onCall<HeartbeatData>(
   EXAM_HOT_PATH,
@@ -6189,6 +6225,12 @@ export const examHeartbeat = onCall<HeartbeatData>(
     const a = snap.data() as {
       studentId: string; status: string; assessmentId: string;
       securityConfig?: { requireSEB?: boolean } | null;
+      lastHeartbeatAt?: string | null;
+      heartbeatGaps?: {
+        count?: number;
+        maxSeconds?: number;
+        recent?: Array<{ at: string; seconds: number }>;
+      } | null;
     };
     // Phase 3 Stage 2b — the proof must hold for the WHOLE exam, not just the
     // door. A student who starts in SEB and switches to Chrome fails here
@@ -6201,7 +6243,43 @@ export const examHeartbeat = onCall<HeartbeatData>(
       // Ignore heartbeats on finished/frozen attempts — not an error.
       return { ok: true, ignored: true };
     }
-    await ref.update({ lastHeartbeatAt: new Date().toISOString() });
+
+    const nowIso = new Date().toISOString();
+    const updates: Record<string, unknown> = { lastHeartbeatAt: nowIso };
+
+    // ── Gap measurement ───────────────────────────────────────────
+    //
+    // No previous stamp means this is the attempt's first beat and there is no
+    // interval to measure. A freeze does not produce a false gap either: the
+    // early return above means a paused attempt's stamp is never advanced, and
+    // the release path (closeFreezeUpdates) re-stamps lastHeartbeatAt at the
+    // moment of release — so the pause is excluded rather than counted as
+    // silence. That matters, because an invigilator freeze can easily run past
+    // this threshold and would otherwise manufacture a gap on every release.
+    const prevIso = a.lastHeartbeatAt;
+    const prevMs = prevIso ? Date.parse(prevIso) : NaN;
+    if (Number.isFinite(prevMs)) {
+      const gapSeconds = Math.round((Date.parse(nowIso) - prevMs) / 1000);
+      if (gapSeconds > HEARTBEAT_GAP_SECONDS) {
+        const prior = a.heartbeatGaps ?? {};
+        const recent = [
+          ...(prior.recent ?? []),
+          { at: nowIso, seconds: gapSeconds },
+        ].slice(-MAX_HEARTBEAT_GAPS_STORED);
+        // Written as a whole object from the snapshot read above rather than
+        // with increment(): count and maxSeconds have to agree with the list,
+        // and one attempt has one live session beating every 15s, so there is
+        // no writer to race. A dropped record under an unexpected race costs a
+        // reviewer one data point and cannot corrupt the attempt.
+        updates.heartbeatGaps = {
+          count: (prior.count ?? 0) + 1,
+          maxSeconds: Math.max(prior.maxSeconds ?? 0, gapSeconds),
+          recent,
+        };
+      }
+    }
+
+    await ref.update(updates);
     return { ok: true };
   },
 );
@@ -7300,6 +7378,7 @@ const VIOLATION_COUNTER_S: Record<string, string> = {
   reload_attempt: 'tabSwitches',
   keyboard_block: 'keyboardBlockEvents',
   extension_detected: 'extensionEvents',
+  viewport_narrowed: 'viewportEvents',
 };
 
 /** Warning-type violations — the three that drive the termination threshold.
@@ -8009,6 +8088,12 @@ function closeFreezeUpdates(
     frozenAt: FieldValue.delete(),
     frozenBy: FieldValue.delete(),
     frozenReason: FieldValue.delete(),
+    // The heartbeat clock restarts at the release. examHeartbeat ignores beats
+    // on a paused attempt, so without this the first beat after a release
+    // measures the whole pause and records it as a gap — turning every freeze
+    // an invigilator grants into a tamper signal against the student. Both
+    // release paths run through here, so neither can produce that.
+    lastHeartbeatAt: opts.nowIso,
     updatedAt: opts.nowIso,
   };
   applyLockUpdates(updates, computeAttemptLocks(
@@ -8550,12 +8635,29 @@ export const startExam = onCall<StartExamData>(
       : tier === 'high_stake'
         ? true
         : (a.requireExtensionCheck ?? true);
-    // Phase 3 — SEB requirement, re-derived server-side (never trusted raw).
-    // Legacy assessments (no tier) never require SEB. high_stake defaults to
-    // true but may be disabled by the authority; other tiers are opt-in.
+    // ── Phase 3 — SEB requirement, re-derived server-side ─────────
+    //
+    // D-10: high_stake now LOCKS this on, joining camera / mobile / extension
+    // above. It was the one high-stake control an authority could switch off,
+    // and it is the only one that reaches remote-desktop tools, VPNs and
+    // userscript managers — everything the in-page deterrents are explicitly
+    // unable to see. A high-stake exam with SEB disabled was running on the
+    // deterrent layer alone while presenting itself as the strictest tier.
+    //
+    // GRANDFATHERED: an assessment whose security config was already frozen
+    // (securityLockedAt) and which explicitly stored requireSEB:false keeps
+    // running without it. Tightening those would be P-01/P-18 in reverse — an
+    // exam already published, possibly already scheduled and briefed, would
+    // start rejecting every candidate at the door for want of a .seb file
+    // nobody was told to install. The lock binds at publish, like every other
+    // frozen field; it does not reach back through one.
+    const sebGrandfathered =
+      tier === 'high_stake' && a.requireSEB === false && !!a.securityLockedAt;
     const requireSEB = isLegacy
       ? false
-      : (a.requireSEB ?? (tier === 'high_stake'));
+      : tier === 'high_stake'
+        ? !sebGrandfathered   // LOCKED on, except for a pre-lock opt-out
+        : (a.requireSEB ?? false);
 
     // Phase 3 gate. Uses the SERVER-derived requireSEB, never the client's
     // claim, and binds the proof to this caller's uid. Placed before any
@@ -8895,7 +8997,8 @@ export const startExam = onCall<StartExamData>(
         tabSwitches: 0, focusLosses: 0, fullscreenExits: 0, copyAttempts: 0,
         pasteAttempts: 0, rightClickAttempts: 0, multiPersonEvents: 0,
         faceAbsenceEvents: 0, devtoolsEvents: 0, keyboardBlockEvents: 0,
-        extensionEvents: 0, totalViolations: 0, violations: [], autoTerminated: false,
+        extensionEvents: 0, viewportEvents: 0,
+        totalViolations: 0, violations: [], autoTerminated: false,
       },
       cameraDeclined: cameraDeclined ?? false,
       deviceClass,

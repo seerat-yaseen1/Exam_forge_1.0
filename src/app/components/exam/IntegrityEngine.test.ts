@@ -10,7 +10,15 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import path from 'path';
-import { CODE_EDITOR_ATTR, codeEditorPasteAllowed } from './IntegrityEngine';
+import {
+  CODE_EDITOR_ATTR,
+  codeEditorPasteAllowed,
+  initialViewportBaseline,
+  readViewportGeometry,
+  DEVTOOLS_MIN_DELTA,
+  VIEWPORT_MIN_DELTA,
+  type ViewportSample,
+} from './IntegrityEngine';
 
 describe('codeEditorPasteAllowed', () => {
   it('allows paste in practice, silently', () => {
@@ -93,5 +101,116 @@ describe('the code-editor paste exemption is applied exactly once', () => {
           || readFileSync(f, 'utf8').includes(`'${CODE_EDITOR_ATTR}'`);
     });
     expect(offenders.map((f) => path.basename(f))).toEqual([]);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// VIEWPORT GEOMETRY
+// ══════════════════════════════════════════════════════════════════
+//
+// This heuristic writes into a counter an examiner reads when deciding whether
+// to void a paper, so the thing under test is not only "does it notice" but
+// "does it say the right thing about what it noticed". Every case below is one
+// the old single-threshold check got wrong.
+
+const NORMAL: ViewportSample = { w: 16, h: 74, dpr: 1 };  // scrollbar + title bar
+
+describe('readViewportGeometry', () => {
+  it('says nothing about an ordinary window', () => {
+    const reading = readViewportGeometry(NORMAL, initialViewportBaseline(NORMAL));
+    expect(reading).toMatchObject({ kind: 'measured', devtoolsOpen: false, narrowed: false });
+  });
+
+  it('names DevTools when the loss is vertical', () => {
+    // Bottom-docked DevTools. Nothing else docks there, so the accusation is safe.
+    const base = initialViewportBaseline(NORMAL);
+    const reading = readViewportGeometry({ ...NORMAL, h: NORMAL.h + 300 }, base);
+    expect(reading).toMatchObject({ kind: 'measured', devtoolsOpen: true, narrowed: false });
+  });
+
+  it('does NOT name DevTools when the loss is horizontal', () => {
+    // A 360px side panel. The old check reported this as devtools_open, which
+    // is the misattribution this split exists to stop: a student who opened
+    // Chrome's side panel and a student who opened DevTools produced the same
+    // counter, and only one of them was doing something a reviewer can act on.
+    const base = initialViewportBaseline(NORMAL);
+    const reading = readViewportGeometry({ ...NORMAL, w: NORMAL.w + 360 }, base);
+    expect(reading).toMatchObject({ kind: 'measured', devtoolsOpen: false, narrowed: true });
+  });
+
+  it('reports a right-docked DevTools as narrowed, not as DevTools', () => {
+    // Deliberate: from in here it is indistinguishable from a side panel, and
+    // reporting the honest observation beats reporting a confident guess.
+    const base = initialViewportBaseline(NORMAL);
+    const reading = readViewportGeometry({ ...NORMAL, w: NORMAL.w + 500 }, base);
+    expect(reading).toMatchObject({ devtoolsOpen: false, narrowed: true });
+  });
+
+  it('catches a narrow pane the old 160px threshold missed entirely', () => {
+    const base = initialViewportBaseline(NORMAL);
+    const pane = 130;                       // under 160, over VIEWPORT_MIN_DELTA
+    expect(pane).toBeLessThan(DEVTOOLS_MIN_DELTA);
+    expect(pane).toBeGreaterThan(VIEWPORT_MIN_DELTA);
+    const reading = readViewportGeometry({ ...NORMAL, w: NORMAL.w + pane }, base);
+    expect(reading).toMatchObject({ narrowed: true });
+  });
+
+  it('measures the CHANGE, so a machine with fat chrome is not accused at rest', () => {
+    // A window with unusually large borders. Absolute thresholds measured the
+    // machine; deltas measure the student.
+    const chunky: ViewportSample = { w: 100, h: 140, dpr: 1 };
+    const reading = readViewportGeometry(chunky, initialViewportBaseline(chunky));
+    expect(reading).toMatchObject({ devtoolsOpen: false, narrowed: false });
+  });
+
+  it('still reports a panel that was already open when the exam started', () => {
+    // The case a plain baseline would silently absorb — and the likeliest one,
+    // since anyone intending to use a panel opens it before they begin.
+    const preOpened: ViewportSample = { w: 16 + 400, h: 74 + 300, dpr: 1 };
+    const base = initialViewportBaseline(preOpened);
+    expect(base).toMatchObject({ w: 0, h: 0 });
+    const reading = readViewportGeometry(preOpened, base);
+    expect(reading).toMatchObject({ devtoolsOpen: true, narrowed: true });
+  });
+
+  it('re-baselines on browser zoom instead of firing', () => {
+    // Zooming in shrinks innerWidth/innerHeight in CSS pixels while the outer
+    // dimensions hold, so both diffs jump. Reporting that would make an
+    // integrity signal out of an accessibility setting.
+    const base = initialViewportBaseline(NORMAL);
+    const zoomed: ViewportSample = { w: NORMAL.w + 220, h: NORMAL.h + 200, dpr: 1.5 };
+    const reading = readViewportGeometry(zoomed, base);
+    expect(reading.kind).toBe('rebaselined');
+    if (reading.kind !== 'rebaselined') throw new Error('unreachable');
+    // And the new baseline is the zoomed geometry, so the next poll is quiet…
+    expect(readViewportGeometry(zoomed, reading.baseline))
+      .toMatchObject({ devtoolsOpen: false, narrowed: false });
+    // …while a panel opened AFTER the zoom is still caught.
+    expect(readViewportGeometry({ ...zoomed, w: zoomed.w + 300 }, reading.baseline))
+      .toMatchObject({ narrowed: true });
+  });
+
+  it('is unmoved by the student resizing the window', () => {
+    // Dragging a window smaller moves outer and inner together, so the diff
+    // holds. This is why the diff is the measured quantity and not innerWidth.
+    const base = initialViewportBaseline(NORMAL);
+    expect(readViewportGeometry(NORMAL, base))
+      .toMatchObject({ devtoolsOpen: false, narrowed: false });
+  });
+
+  it('treats each axis independently', () => {
+    const base = initialViewportBaseline(NORMAL);
+    const both = readViewportGeometry(
+      { ...NORMAL, w: NORMAL.w + 300, h: NORMAL.h + 300 }, base,
+    );
+    expect(both).toMatchObject({ devtoolsOpen: true, narrowed: true });
+  });
+
+  it('is exclusive at the threshold, so a value exactly on it does not fire', () => {
+    const base = initialViewportBaseline(NORMAL);
+    expect(readViewportGeometry({ ...NORMAL, w: NORMAL.w + VIEWPORT_MIN_DELTA }, base))
+      .toMatchObject({ narrowed: false });
+    expect(readViewportGeometry({ ...NORMAL, h: NORMAL.h + DEVTOOLS_MIN_DELTA }, base))
+      .toMatchObject({ devtoolsOpen: false });
   });
 });

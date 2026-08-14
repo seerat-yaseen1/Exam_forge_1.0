@@ -1106,11 +1106,18 @@ export function applyTierDefaults(
       allowMobile: false,            // LOCKED desktop-only
       autoResume: overrides?.autoResume ?? false,
       requireExtensionCheck: true,   // LOCKED on
-      // Phase 3: SEB is the only real lockdown for high-stake. Default ON,
-      // but (per authority decision) it may be disabled — unlike camera /
-      // mobile / extension, which are locked. Deliberate: a school without
-      // SEB rollout can still run high-stake with the web-tier deterrents.
-      requireSEB: overrides?.requireSEB ?? true,
+      // Phase 3 / D-10: SEB is the only real lockdown for high-stake, and it
+      // is now LOCKED on with the other three rather than being the one strict
+      // control an author could switch off. The web-tier deterrents cannot see
+      // remote-desktop tools, VPNs or userscript managers at all, so
+      // high_stake-without-SEB was a tier promising more than it enforced.
+      //
+      // A school without an SEB rollout runs 'normal', which is the tier that
+      // means "web deterrents only" — that choice stays available, it just has
+      // to be named honestly. Assessments ALREADY published with SEB disabled
+      // are grandfathered server-side (see startExam); this governs new and
+      // still-editable ones, where the lock costs nobody a sitting.
+      requireSEB: true,              // LOCKED on
     };
   }
   // normal
@@ -1390,7 +1397,14 @@ export async function duplicateAssessment(
         requireExtensionCheck: src.requireExtensionCheck,
         // Phase 3 — a duplicated high-stake exam must not silently lose its
         // SEB requirement. Copied with the rest of the security contract.
-        requireSEB: src.requireSEB,
+        //
+        // D-10: except that a high_stake source predating the lock may carry
+        // requireSEB:false, and startExam grandfathers exactly that pair
+        // (opted out AND already published). Copying it forward would make
+        // the exemption inheritable — a new exam, published today, running
+        // high-stake without SEB because its ancestor did. The grandfather is
+        // for sittings already promised, not a template.
+        requireSEB: src.securityTier === 'high_stake' ? true : src.requireSEB,
         sebConfigKeys: src.sebConfigKeys,
         sebConfigFileUrl: src.sebConfigFileUrl,
       }

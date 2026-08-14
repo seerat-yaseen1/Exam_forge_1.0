@@ -249,6 +249,73 @@ export function scanForForeignDom(): string[] {
   return Array.from(new Set(found));
 }
 
+// ══════════════════════════════════════════════════════════════════
+// BASELINE — what was already here, versus what turned up
+// ══════════════════════════════════════════════════════════════════
+//
+// The long note above explains why a foreign element is recorded mid-exam and
+// never freezes: the check fires on things nobody enumerated, so its false
+// positives are unknowable, and a freeze has no automatic exit.
+//
+// The ENTRY GATE changed the premise that argument rests on. Since any foreign
+// element now refuses entry, a student who is sitting the exam has already
+// demonstrated a page with none. A password manager, an IME, a corporate
+// agent — every ordinary injector the note worried about — was caught at the
+// door or the student never got in.
+//
+// So a top-level node that appears mid-sitting is no longer an unknown
+// quantity. It is a change against a state this system verified minutes
+// earlier, and the set of things that produce one is small and deliberate:
+// somebody enabled an extension after passing the check.
+//
+// That is worth a freeze, and it is the last route an extension had into a
+// sitting — entry blocks it, re-entry blocks it, and until now switching it on
+// once inside merely wrote a line in a log nobody reads until afterwards.
+//
+// ── THE SETTLE WINDOW, AND WHY IT IS NOT A LOOPHOLE ───────────────
+//
+// Not everything present at entry is present at the first scan. Extensions
+// inject late, and the exam's own first paint races them. Treating a slow
+// arrival as "appeared" would freeze a student for something that was already
+// there when they were admitted — the precise false positive this whole
+// design is organised against.
+//
+// So findings in the first few seconds join the baseline instead of firing.
+// The cost is a student who enables an extension inside that window getting
+// baseline treatment; they are still recorded as foreign_dom, and they have to
+// do it in the opening seconds of a paper. Set against freezing an honest
+// student for a late-loading node, that trade is not close.
+
+/** How long after the sitting starts a new finding is still treated as pre-existing. */
+export const FOREIGN_BASELINE_SETTLE_MS = 6000;
+
+/** Was this element here when the student was admitted, or did it turn up after? */
+export type ForeignSeverity =
+  /** Present at (or racing) the start. Recorded, never freezes. */
+  | 'baseline'
+  /** Appeared against a page verified clean at entry. Freeze-eligible. */
+  | 'appeared';
+
+/**
+ * Classify one foreign descriptor against what was already known.
+ *
+ * Pure, and the caller owns the baseline set — the same split as
+ * readViewportGeometry in IntegrityEngine, for the same reason: the rule is
+ * the part worth testing and the measurement is not.
+ *
+ * `baselineOpen` is the settle window. While it holds, everything is baseline;
+ * the caller is expected to add it to the set so the answer stays stable once
+ * the window closes.
+ */
+export function classifyForeignElement(
+  descriptor: string,
+  baseline: ReadonlySet<string>,
+  baselineOpen: boolean,
+): ForeignSeverity {
+  if (baseline.has(descriptor)) return 'baseline';
+  return baselineOpen ? 'baseline' : 'appeared';
+}
+
 /** What a settled scan found, split by how much the finding can be trusted. */
 export type ExtensionScanResult = {
   /** Matched a known fingerprint, or was proven present by ID. Blocks entry. */

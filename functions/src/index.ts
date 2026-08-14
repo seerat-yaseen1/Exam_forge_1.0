@@ -7642,6 +7642,7 @@ const VIOLATION_COUNTER_S: Record<string, string> = {
   foreign_dom: 'foreignDomEvents',
   focus_state_mismatch: 'focusMismatchEvents',
   render_throttled: 'renderThrottleEvents',
+  print_attempt: 'printAttempts',
 };
 
 /** Warning-type violations — the three that drive the termination threshold.
@@ -9337,7 +9338,7 @@ export const startExam = onCall<StartExamData>(
         tabSwitches: 0, focusLosses: 0, fullscreenExits: 0, copyAttempts: 0,
         pasteAttempts: 0, rightClickAttempts: 0, multiPersonEvents: 0,
         faceAbsenceEvents: 0, devtoolsEvents: 0, keyboardBlockEvents: 0,
-        extensionEvents: 0, viewportEvents: 0, foreignDomEvents: 0,
+        extensionEvents: 0, viewportEvents: 0, foreignDomEvents: 0, printAttempts: 0,
         focusMismatchEvents: 0, renderThrottleEvents: 0,
         totalViolations: 0, violations: [], autoTerminated: false,
       },

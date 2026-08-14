@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Maximize, XOctagon, Eye,
-  ShieldOff, MonitorOff, Clipboard, MousePointer, PanelRight, Shield, Loader2,
+  ShieldOff, MonitorOff, Clipboard, MousePointer, PanelRight, Shield, Loader2, Printer,
 } from 'lucide-react';
 import type { ViolationType } from '../../../lib/submissionService';
 
@@ -58,6 +58,7 @@ const VIOLATION_LABELS: Record<ViolationType, string> = {
   foreign_dom:        'Unrecognised page element',
   focus_state_mismatch: 'Window focus state inconsistent',
   render_throttled:   'Display updates were suspended',
+  print_attempt:      'Print attempt blocked',
 };
 
 const VIOLATION_ICONS: Record<ViolationType, React.ReactNode> = {
@@ -77,6 +78,7 @@ const VIOLATION_ICONS: Record<ViolationType, React.ReactNode> = {
   foreign_dom:        <ShieldOff size={18} strokeWidth={1.5} />,
   focus_state_mismatch: <Eye size={18} strokeWidth={1.5} />,
   render_throttled:   <MonitorOff size={18} strokeWidth={1.5} />,
+  print_attempt:      <Printer size={18} strokeWidth={1.5} />,
 };
 
 // ── Card shell ────────────────────────────────────────────────────

@@ -136,10 +136,11 @@ export type ViolationType =
   | 'right_click'      // contextmenu
   | 'multi_person'     // 2+ faces detected by camera
   | 'face_absent'      // 0 faces detected for > threshold
-  | 'devtools_open'    // devtools width heuristic
+  | 'devtools_open'    // devtools height heuristic / shortcut intercepted
   | 'reload_attempt'   // F5 / Ctrl+R
   | 'keyboard_block'   // blocked key combination
-  | 'extension_detected'; // browser extension UI detected in DOM
+  | 'extension_detected' // browser extension UI detected in DOM
+  | 'viewport_narrowed'; // something took horizontal space — side panel or docked devtools
 
 export type ViolationEvent = {
   type: ViolationType;
@@ -231,6 +232,10 @@ export type IntegrityLog = {
   devtoolsEvents: number;
   keyboardBlockEvents: number;
   extensionEvents: number;
+  // Horizontal viewport loss that is NOT confidently DevTools — see the note
+  // on viewport_narrowed in IntegrityEngine. Optional because attempts created
+  // before this counter existed will not carry it; every reader defaults it.
+  viewportEvents?: number;
 
   // Total violation count driving the warning system
   totalViolations: number;
@@ -516,6 +521,21 @@ export type Attempt = {
   lastExtensionCheck?: { at: string; passed: boolean; found?: string[] } | null;
   resumeRequiresVerification?: boolean;
   lastHeartbeatAt?: string | null;
+  /**
+   * Silences longer than the server's threshold, measured by examHeartbeat at
+   * the moment each beat lands. lastHeartbeatAt alone cannot support this —
+   * it is overwritten by every beat, so gaps DURING a sitting leave no trace
+   * and only the final heartbeat→submit interval survives to grade time.
+   *
+   * Absent on attempts that predate the field, and on any sitting that never
+   * fell silent. `recent` is bounded server-side; `count` and `maxSeconds`
+   * stay exact.
+   */
+  heartbeatGaps?: {
+    count: number;
+    maxSeconds: number;
+    recent: Array<{ at: string; seconds: number }>;
+  } | null;
 
   // ── Phase 1 (freeze state + timing analytics) ─────────────────
   freezeState?: {
@@ -559,6 +579,7 @@ const VIOLATION_COUNTER: Record<ViolationType, keyof IntegrityLog> = {
   reload_attempt:  'tabSwitches',
   keyboard_block:  'keyboardBlockEvents',
   extension_detected: 'extensionEvents',
+  viewport_narrowed:  'viewportEvents',
 };
 
 // ══════════════════════════════════════════════════════════════════

@@ -274,6 +274,7 @@ function buildIntegrityRows(exported: ExportedAttempt[]): Record<string, unknown
       'DevTools Events': il.devtoolsEvents ?? 0,
       'Keyboard Blocks': il.keyboardBlockEvents ?? 0,
       'Extension Events': il.extensionEvents ?? 0,
+      'Viewport Narrowed': il.viewportEvents ?? 0,
       'Auto-Terminated': il.autoTerminated ? 'Yes' : '',
       'Termination Reason': il.terminatedReason ?? '',
       'Finalized While Frozen': il.finalizedWhileFrozen ? 'Yes' : '',

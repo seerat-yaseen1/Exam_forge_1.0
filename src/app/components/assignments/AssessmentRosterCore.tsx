@@ -43,6 +43,7 @@ import {
   type AttemptAnswer,
   type GradedAnswer,
 } from '../../../lib/submissionService';
+import { deriveQuiet, formatQuiet, type QuietState } from '../../../lib/heartbeatQuiet';
 import {
   CODE_STATE_STAFF_NOTE,
   MAX_JUDGE_ATTEMPTS,
@@ -207,6 +208,37 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}m ${s}s`;
+}
+
+// ── "Quiet for" — heartbeat silence on a live sitting ─────────────
+// The rule lives in src/lib/heartbeatQuiet.ts; this is its presentation.
+
+const QUIET_TONE: Record<QuietState['tone'], { bg: string; border: string; text: string }> = {
+  notice:  { bg: 'var(--ef-canvas)',    border: 'var(--ef-border)',          text: 'var(--ef-text-muted)' },
+  concern: { bg: '#FEF9EC',             border: 'var(--ef-warning-border)',  text: 'var(--ef-warning)' },
+  alarm:   { bg: 'var(--ef-danger-bg)', border: 'var(--ef-danger-border)',   text: 'var(--ef-danger)' },
+};
+
+function QuietBadge({ quiet }: { quiet: QuietState }) {
+  const cfg = QUIET_TONE[quiet.tone];
+  const mins = Math.floor(quiet.seconds / 60);
+  return (
+    <span
+      className="text-xs px-1.5 flex-shrink-0"
+      title={
+        `No heartbeat from this student's browser for ${
+          mins < 1 ? `${quiet.seconds} seconds` : `${mins} minute${mins === 1 ? '' : 's'}`
+        }. The exam tab may be closed, the machine asleep, the network down, or `
+        + 'the connection to the server blocked. Their answers and timer are unaffected.'
+      }
+      style={{
+        background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 2,
+        color: cfg.text, fontVariantNumeric: 'tabular-nums', lineHeight: '16px',
+      }}
+    >
+      {formatQuiet(quiet)}
+    </span>
+  );
 }
 
 function totalAnswered(attempt: Attempt): number {
@@ -2791,6 +2823,10 @@ function RosterTableRow({
   const { student, attempt, bestAttempt, rosterStatus, isBlocked } = row;
   const isLive    = rosterStatus === 'in_progress';
   const breakInfo = attempt && isLive ? getBreakState(attempt, sections, nowMs) : null;
+  // Reuses the roster's existing per-second tick rather than adding a second
+  // timer — nowMs is already threaded here for the break countdown, and one
+  // shared interval for the whole table is the point of that prop.
+  const quiet     = isLive && !breakInfo ? deriveQuiet(attempt, nowMs) : null;
   const isFrozen  = rosterStatus === 'frozen';
   const isDone    = rosterStatus === 'submitted' || rosterStatus === 'auto_submitted' || rosterStatus === 'terminated';
   const freezeLoading = freezeLoadingId === (attempt?.id ?? '');
@@ -2860,10 +2896,13 @@ function RosterTableRow({
           </p>
         )}
         {attempt && isLive && !breakInfo && (
-          <p className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>
-            Section {attempt.currentSectionIdx + 1}/{attempt.sectionIds.length}
-            {' · '}{totalAnswered(attempt)}/{totalQuestions(attempt)} answered
-          </p>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p className="text-xs truncate" style={{ color: 'var(--ef-text-subtle)' }}>
+              Section {attempt.currentSectionIdx + 1}/{attempt.sectionIds.length}
+              {' · '}{totalAnswered(attempt)}/{totalQuestions(attempt)} answered
+            </p>
+            {quiet && <QuietBadge quiet={quiet} />}
+          </div>
         )}
         {attempt && isFrozen && (
           <p className="text-xs" style={{ color: '#1D4ED8' }}>Paused {formatRelative(attempt.frozenAt!)}</p>

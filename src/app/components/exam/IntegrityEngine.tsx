@@ -11,7 +11,8 @@
  *   Visibility: document.visibilitychange
  *   Focus     : window.blur
  *   Fullscreen: document.fullscreenchange
- *   DevTools  : window resize heuristic (polled every 2 s)
+ *   DevTools  : vertical viewport-loss heuristic (polled every 2 s)
+ *   Viewport  : horizontal viewport-loss heuristic — side panel / docked pane
  *   Unload    : beforeunload (shows browser dialog)
  */
 
@@ -78,6 +79,103 @@ export function codeEditorPasteAllowed(
   if (tier === 'high_stake') return false;   // LOCKED
   if (tier === 'mock') return override ?? true;
   return override ?? false;                  // 'normal', and unknown/legacy tiers
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VIEWPORT GEOMETRY — two conclusions from one measurement
+// ══════════════════════════════════════════════════════════════════
+//
+// The old check was `widthDiff > 160 || heightDiff > 160 → devtools_open`, and
+// the width half of that was a guess reported as a fact. Nothing docks to the
+// BOTTOM of a browser window except DevTools, so vertical loss names itself.
+// Horizontal loss does not: a right-docked DevTools panel, Chrome's side
+// panel, a translate pane and an extension sidebar all shrink innerWidth the
+// same way and are indistinguishable from in here. A typical side panel is
+// 320-400px, so it comfortably cleared 160 and was written into devtoolsEvents
+// — a counter an examiner reads as "this student opened DevTools" when
+// deciding whether to void a paper.
+//
+// So: height → devtools_open (confident). Width → viewport_narrowed, which
+// reports what was observed and leaves the naming to the reviewer. Neither is
+// a warning type, so neither counts toward termination; the unambiguous
+// DevTools signal remains the intercepted keyboard shortcut. The width
+// threshold is LOWER than the old 160 precisely because it no longer has to
+// carry an accusation — a 120px pane is worth recording.
+
+/** Vertical viewport loss. DevTools is the only thing that docks below. */
+export const DEVTOOLS_MIN_DELTA = 160;
+/** Horizontal viewport loss. Any pane; deliberately unattributed. */
+export const VIEWPORT_MIN_DELTA = 120;
+
+export type ViewportSample   = { w: number; h: number; dpr: number };
+export type ViewportBaseline = { w: number; h: number; dpr: number };
+
+export type ViewportReading =
+  | { kind: 'rebaselined'; baseline: ViewportBaseline }
+  | { kind: 'measured'; devtoolsOpen: boolean; narrowed: boolean; wDelta: number; hDelta: number };
+
+function measureViewport(): ViewportSample {
+  return {
+    w: window.outerWidth  - window.innerWidth,
+    h: window.outerHeight - window.innerHeight,
+    dpr: window.devicePixelRatio,
+  };
+}
+
+/**
+ * The baseline, and why it is conditional.
+ *
+ * outerWidth - innerWidth is never zero: scrollbars and window borders take
+ * some of it, and how much varies by OS and browser. Comparing that absolute
+ * figure to a fixed threshold therefore measures the MACHINE as much as the
+ * student, so what gets compared is the change since the exam began.
+ *
+ * But a plain baseline would silently absorb a panel that was ALREADY open
+ * when the exam started — the case most worth catching, since anyone intending
+ * to use one opens it before they begin. So a gap that already exceeds the
+ * threshold at mount is not accepted as this machine's ordinary chrome: the
+ * baseline stays at zero on that axis and the first poll reports it.
+ */
+export function initialViewportBaseline(sample: ViewportSample): ViewportBaseline {
+  return {
+    w: sample.w > VIEWPORT_MIN_DELTA ? 0 : sample.w,
+    h: sample.h > DEVTOOLS_MIN_DELTA ? 0 : sample.h,
+    dpr: sample.dpr,
+  };
+}
+
+/**
+ * Classify one sample against the baseline.
+ *
+ * Browser zoom changes innerWidth/innerHeight in CSS pixels while the outer
+ * dimensions hold, so zooming in shifts both diffs upward and would read as a
+ * panel appearing out of nowhere. devicePixelRatio moves with browser zoom, so
+ * a change in it identifies the zoom, and the answer is to re-baseline rather
+ * than to fire: zoom is ordinary accessibility behaviour and reporting it as
+ * an integrity signal would punish the students most likely to need it.
+ *
+ * Resizing the window is not affected either way — dragging a window smaller
+ * moves outer and inner together, so the diff, and therefore the delta, holds.
+ */
+export function readViewportGeometry(
+  sample: ViewportSample,
+  baseline: ViewportBaseline,
+): ViewportReading {
+  if (sample.dpr !== baseline.dpr) {
+    return {
+      kind: 'rebaselined',
+      baseline: { w: sample.w, h: sample.h, dpr: sample.dpr },
+    };
+  }
+  const wDelta = sample.w - baseline.w;
+  const hDelta = sample.h - baseline.h;
+  return {
+    kind: 'measured',
+    devtoolsOpen: hDelta > DEVTOOLS_MIN_DELTA,
+    narrowed:     wDelta > VIEWPORT_MIN_DELTA,
+    wDelta,
+    hDelta,
+  };
 }
 
 // ── Component ─────────────────────────────────────────────────────
@@ -287,17 +385,39 @@ export function IntegrityEngine({
       e.returnValue = 'You have an active exam in progress. Are you sure you want to leave?';
     };
 
-    // ── 8. DevTools width heuristic (polled) ───────────────────
+    // ── 8. Chrome-geometry heuristics (polled) ─────────────────
+    // Measurement and cleanup live here; the rules are in
+    // readViewportGeometry above, where they can be tested.
+    let baseline = initialViewportBaseline(measureViewport());
     let lastDevtoolsState = false;
-    const devtoolsInterval = setInterval(() => {
+    let lastNarrowedState = false;
+
+    const geometryInterval = setInterval(() => {
       if (!activeRef.current) return;
-      const widthDiff  = window.outerWidth  - window.innerWidth;
-      const heightDiff = window.outerHeight - window.innerHeight;
-      const isOpen = widthDiff > 160 || heightDiff > 160;
-      if (isOpen && !lastDevtoolsState) {
-        fire('devtools_open', `DevTools detected (diff: ${widthDiff}×${heightDiff})`, 8000);
+
+      const reading = readViewportGeometry(measureViewport(), baseline);
+      if (reading.kind === 'rebaselined') {
+        baseline = reading.baseline;
+        return;
       }
-      lastDevtoolsState = isOpen;
+
+      if (reading.devtoolsOpen && !lastDevtoolsState) {
+        fire(
+          'devtools_open',
+          `DevTools docked (viewport lost ${reading.hDelta}px vertically)`,
+          8000,
+        );
+      }
+      lastDevtoolsState = reading.devtoolsOpen;
+
+      if (reading.narrowed && !lastNarrowedState) {
+        fire(
+          'viewport_narrowed',
+          `Exam window narrowed by ${reading.wDelta}px — side panel or docked DevTools`,
+          8000,
+        );
+      }
+      lastNarrowedState = reading.narrowed;
     }, 2000);
 
     // ── Register all ────────────────────────────────────────────
@@ -322,7 +442,7 @@ export function IntegrityEngine({
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       window.removeEventListener(  'blur',             handleBlur);
       window.removeEventListener(  'beforeunload',     handleBeforeUnload);
-      clearInterval(devtoolsInterval);
+      clearInterval(geometryInterval);
     };
   }, []); // mount-once; all mutable state accessed via refs
 

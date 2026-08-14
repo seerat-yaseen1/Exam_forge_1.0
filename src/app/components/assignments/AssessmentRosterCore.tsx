@@ -210,6 +210,20 @@ function formatDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
+// ── Risk factors ──────────────────────────────────────────────────
+// Server-side codes (gradeAttempt) → the words a reviewer reads. An unknown
+// code falls back to the code itself, so a factor added server-side shows up
+// here as something readable-ish rather than disappearing from the panel — a
+// reviewer seeing a raw code knows to ask, whereas a silently dropped row
+// leaves the score unexplainable.
+const RISK_FACTOR_LABEL: Record<string, string> = {
+  answer_burst:      'Answers in final 30s',
+  answer_cadence:    'Fastest answer gap',
+  heartbeat_gap:     'Connectivity/heartbeat gap',
+  violation_cluster: 'Integrity events clustered',
+  device_drift:      'Machine changed mid-sitting',
+};
+
 // ── "Quiet for" — heartbeat silence on a live sitting ─────────────
 // The rule lives in src/lib/heartbeatQuiet.ts; this is its presentation.
 
@@ -2699,21 +2713,52 @@ function AttemptDrawer({
                         {score}/100
                       </span>
                     </div>
+                    {/* What the score is MADE OF.
+                        A bare number tells a reviewer to be suspicious without
+                        telling them of what, and a figure nobody can
+                        interrogate is one that gets deferred to. The server
+                        stores the factors that produced the score, so this
+                        reads them rather than re-deriving a different set.
+                        Attempts graded before riskFactors existed fall back to
+                        the three rows this panel always showed — their score
+                        still means exactly what it meant. */}
                     <div className="flex flex-col gap-1">
-                      {[
-                        { label: 'Answers in final 30s', value: `${a.burstLast30s}/${a.totalAnswers}` },
-                        { label: 'Fastest answer gap', value: a.minGapSeconds !== null ? `${a.minGapSeconds.toFixed(1)}s` : '—' },
-                        ...(a.heartbeatGaps > 0
-                          ? [{ label: 'Connectivity/heartbeat gap', value: `${a.maxHeartbeatGapSeconds}s` }]
-                          : []),
-                      ].map((item) => (
-                        <div key={item.label} className="flex items-center justify-between px-3 py-1.5"
+                      {(a.riskFactors && a.riskFactors.length > 0
+                        ? a.riskFactors.map((f) => ({
+                            label: RISK_FACTOR_LABEL[f.code] ?? f.code,
+                            value: f.detail,
+                            points: f.points,
+                          }))
+                        : [
+                            { label: 'Answers in final 30s', value: `${a.burstLast30s}/${a.totalAnswers}`, points: 0 },
+                            { label: 'Fastest answer gap', value: a.minGapSeconds !== null ? `${a.minGapSeconds.toFixed(1)}s` : '—', points: 0 },
+                            ...(a.heartbeatGaps > 0
+                              ? [{ label: 'Connectivity/heartbeat gap', value: `${a.maxHeartbeatGapSeconds}s`, points: 0 }]
+                              : []),
+                          ]
+                      ).map((item) => (
+                        <div key={item.label} className="flex items-start justify-between gap-3 px-3 py-1.5"
                           style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-                          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{item.label}</span>
-                          <span className="text-xs" style={{ color: 'var(--ef-text-subtle)' }}>{item.value}</span>
+                          <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
+                            {item.label}
+                            {item.points > 0 && (
+                              <span style={{ color: 'var(--ef-text-subtle)' }}> +{item.points}</span>
+                            )}
+                          </span>
+                          <span className="text-xs text-right" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.5 }}>
+                            {item.value}
+                          </span>
                         </div>
                       ))}
                     </div>
+                    {/* A score of zero with no factors is a positive finding —
+                        "nothing flagged" — not an empty panel a reviewer has to
+                        interpret as either clean or broken. */}
+                    {a.riskFactors && a.riskFactors.length === 0 && (
+                      <p className="text-xs px-3 py-1.5" style={{ color: 'var(--ef-text-muted)' }}>
+                        Nothing flagged on this sitting.
+                      </p>
+                    )}
                   </div>
                 );
               })()}

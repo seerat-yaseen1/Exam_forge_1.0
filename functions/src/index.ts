@@ -4641,6 +4641,8 @@ export const gradeAttempt = onCall<GradeAttemptData>(
       answers: Record<string, AttemptAnswerDoc & { answeredAt?: string }>;
       lastHeartbeatAt?: string | null;
       heartbeatGaps?: { count?: number; maxSeconds?: number } | null;
+      fingerprintDrift?: { count?: number; changes?: string[] } | null;
+      integrityLog?: { violations?: Array<{ timestamp?: string }> } | null;
       createdAt?: string;
       freezeState?: { frozen?: boolean } | null;
       freezes?: FreezeLedgerEntry[];
@@ -4934,17 +4936,81 @@ export const gradeAttempt = onCall<GradeAttemptData>(
         maxHeartbeatGapSeconds = Math.max(maxHeartbeatGapSeconds, Math.round(gapToSubmit));
       }
     }
-    let anomalyScore = 0;
-    if (totalAnswers > 0 && burstLast30s / totalAnswers > 0.5) anomalyScore += 40;
-    if (minGapSeconds !== null && minGapSeconds < 1.5 && totalAnswers > 3) anomalyScore += 30;
-    if (heartbeatGaps > 0) anomalyScore += 30;
+    // ── Violation clustering ──────────────────────────────────────
+    //
+    // A total says how many times something happened; it cannot say whether
+    // they happened together. Fifteen tab switches spread over a two-hour
+    // paper is a student with a notification problem. Fifteen inside one
+    // minute is a student doing something, and the two are indistinguishable
+    // in the counters an examiner currently reads.
+    //
+    // Measured as the largest number of events falling inside any one-minute
+    // window, over a sorted list — a sliding pair of indices rather than a
+    // window per event, because a busy sitting can carry hundreds and this
+    // runs inside grading.
+    const violationTimes = (attempt.integrityLog?.violations ?? [])
+      .map((v) => Date.parse((v as { timestamp?: string })?.timestamp ?? ''))
+      .filter((t) => !isNaN(t))
+      .sort((x, y) => x - y);
+    let maxViolationsInMinute = 0;
+    for (let lo = 0, hi = 0; hi < violationTimes.length; hi++) {
+      while (violationTimes[hi] - violationTimes[lo] > 60_000) lo++;
+      maxViolationsInMinute = Math.max(maxViolationsInMinute, hi - lo + 1);
+    }
+
+    // ── Risk score ────────────────────────────────────────────────
+    //
+    // DETECTIVE ONLY. Nothing auto-actions on this — it exists so a reviewer
+    // opening a flagged paper starts from the evidence rather than from a
+    // wall of counters. That is also why the factors are STORED rather than
+    // just summed: a bare "78" tells a reviewer to be suspicious without
+    // telling them of what, and a number nobody can interrogate is a number
+    // that gets deferred to. Each row names itself and carries its own detail.
+    const riskFactors: Array<{ code: string; points: number; detail: string }> = [];
+    const addFactor = (code: string, points: number, detail: string) =>
+      riskFactors.push({ code, points, detail });
+
+    if (totalAnswers > 0 && burstLast30s / totalAnswers > 0.5) {
+      addFactor('answer_burst', 40,
+        `${burstLast30s} of ${totalAnswers} answers landed in the final 30 seconds`);
+    }
+    if (minGapSeconds !== null && minGapSeconds < 1.5 && totalAnswers > 3) {
+      addFactor('answer_cadence', 30,
+        `fastest gap between answers was ${minGapSeconds.toFixed(2)}s`);
+    }
+    if (heartbeatGaps > 0) {
+      addFactor('heartbeat_gap', 30,
+        `${heartbeatGaps} silence${heartbeatGaps === 1 ? '' : 's'} over 60s, longest ${maxHeartbeatGapSeconds}s`);
+    }
+    if (maxViolationsInMinute >= 5) {
+      addFactor('violation_cluster', 25,
+        `${maxViolationsInMinute} integrity events inside one minute`);
+    }
+    // The heaviest single factor, and deliberately so. Every other row here
+    // describes behaviour that an honest student could produce on a bad day —
+    // a flaky network, a fast typist, a laptop that slept. A machine that
+    // changes mid-sitting is not a version of the same sitting going badly; a
+    // browser session cannot move between computers. See the note on
+    // sanitiseFingerprint for what still limits it.
+    const drift = attempt.fingerprintDrift;
+    if (drift?.count) {
+      addFactor('device_drift', 50,
+        `machine changed during the sitting (${(drift.changes ?? []).join('; ') || 'details unavailable'})`);
+    }
+
+    // Clamped, because the factors are independent and their weights were
+    // chosen to rank papers against each other, not to sum to a probability.
+    const anomalyScore = Math.min(100, riskFactors.reduce((s, f) => s + f.points, 0));
+
     updates.timingAnalysis = {
       totalAnswers,
       burstLast30s,
       minGapSeconds,
       heartbeatGaps,
       maxHeartbeatGapSeconds,
+      maxViolationsInMinute,
       anomalyScore,
+      riskFactors,
       computedAt: nowIso,
     };
 
@@ -6193,7 +6259,11 @@ export const getServerTime = onCall(
 // The gap only exists at the moment the beat lands and the previous stamp is
 // still readable, so it is measured and recorded then. The read is free: the
 // document is already fetched above for the ownership and SEB checks.
-interface HeartbeatData { attemptId: string;   sebToken?: string;
+interface HeartbeatData {
+  attemptId: string;
+  sebToken?: string;
+  /** The machine as it looks NOW, compared server-side against the baseline. */
+  fingerprint?: DeviceFingerprintS;
 }
 
 /**
@@ -6231,6 +6301,8 @@ export const examHeartbeat = onCall<HeartbeatData>(
         maxSeconds?: number;
         recent?: Array<{ at: string; seconds: number }>;
       } | null;
+      deviceFingerprint?: DeviceFingerprintS | null;
+      fingerprintDrift?: { count?: number; firstAt?: string; changes?: string[] } | null;
     };
     // Phase 3 Stage 2b — the proof must hold for the WHOLE exam, not just the
     // door. A student who starts in SEB and switches to Chrome fails here
@@ -6275,6 +6347,35 @@ export const examHeartbeat = onCall<HeartbeatData>(
           count: (prior.count ?? 0) + 1,
           maxSeconds: Math.max(prior.maxSeconds ?? 0, gapSeconds),
           recent,
+        };
+      }
+    }
+
+    // ── Fingerprint drift ─────────────────────────────────────────
+    //
+    // Compared against the baseline THIS FUNCTION reads from the document, not
+    // against anything the caller supplied alongside the current reading — the
+    // caller gets to describe the machine it is on and nothing else.
+    //
+    // An attempt with no baseline (created before this shipped, or by a
+    // browser that reported nothing readable) is left alone rather than having
+    // the first heartbeat adopt one. A late baseline would be a fingerprint of
+    // whoever happens to be holding the sitting now, which is precisely the
+    // thing being checked for, and it would make the record say the machine
+    // was verified when it never was.
+    const current = sanitiseFingerprint(request.data?.fingerprint);
+    if (a.deviceFingerprint && current) {
+      const changes = fingerprintDriftS(a.deviceFingerprint, current);
+      if (changes.length > 0) {
+        const prior = a.fingerprintDrift ?? {};
+        updates.fingerprintDrift = {
+          count: (prior.count ?? 0) + 1,
+          // The first is what matters — it dates the moment the sitting stopped
+          // being on the machine it started on.
+          firstAt: prior.firstAt ?? nowIso,
+          // Union, capped: the same drift repeats on every subsequent beat, so
+          // storing each occurrence would fill the document with one fact.
+          changes: Array.from(new Set([...(prior.changes ?? []), ...changes])).slice(0, 8),
         };
       }
     }
@@ -7258,6 +7359,92 @@ interface StartExamData {
   deviceClass?: 'desktop' | 'mobile' | 'tablet';
   /** Phase 2 — the browser session claiming this attempt (INV-5a). */
   sessionId?: string;
+  /** The baseline machine, stored once. See sanitiseFingerprint. */
+  fingerprint?: DeviceFingerprintS;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DEVICE FINGERPRINT — the baseline lives here, not on the client
+// ══════════════════════════════════════════════════════════════════
+//
+// A browser session cannot move between machines, so a sitting that reports
+// one machine at startExam and a different one on a later heartbeat was
+// resumed somewhere else. That is a stronger signal than any single
+// client-side report, because it is not an observation about behaviour a
+// student could explain — it is two incompatible facts about one sitting.
+//
+// The BASELINE is written once, server-side, and never rewritten by a later
+// call. That placement is the whole design: a client that compared against its
+// own stored copy would be defeated by editing the copy, so the comparison has
+// to happen somewhere the student cannot reach.
+//
+// What this does NOT do, stated plainly so nobody builds on a stronger claim:
+// the values are client-reported, so a client that lies can report the
+// baseline forever, and one that runs the entire exam inside a VM reports the
+// VM consistently and drifts from nothing. It catches an HONEST client on
+// changed hardware. SEB remains the only control that reaches virtualisation
+// and remote desktop.
+
+interface DeviceFingerprintS {
+  gpu?: string;
+  cores?: number;
+  memory?: number;
+  platform?: string;
+}
+
+/** Bound on each stored string — these land in an attempt document. */
+const MAX_FINGERPRINT_FIELD = 120;
+
+/**
+ * Never store the caller's object as given. It is client-supplied, so it can
+ * carry arbitrary keys and unbounded strings straight into a document with a
+ * hard size ceiling. Only the four known fields survive, each clipped.
+ */
+function sanitiseFingerprint(raw: unknown): DeviceFingerprintS | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown) =>
+    typeof v === 'string' ? v.trim().slice(0, MAX_FINGERPRINT_FIELD) : '';
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const out: DeviceFingerprintS = {
+    gpu: str(r.gpu),
+    cores: num(r.cores),
+    memory: num(r.memory),
+    platform: str(r.platform),
+  };
+  // Nothing readable at all — a hardened browser, or a caller sending {}.
+  // Storing an all-empty baseline would make every later report "drift from
+  // nothing", so there is nothing worth recording.
+  if (!out.gpu && !out.cores && !out.memory && !out.platform) return null;
+  return out;
+}
+
+/**
+ * Which fields disagree. Server twin of fingerprintDrift in
+ * src/lib/deviceFingerprint.ts — KEEP IN SYNC.
+ *
+ * A field empty on either side is NOT drift. Browsers withhold these values
+ * situationally — a privacy setting toggled mid-sitting, a WebGL context that
+ * failed to create once — and "could not read it this time" is an absence of
+ * evidence, not evidence of a different machine. Only two populated values
+ * that disagree count.
+ */
+function fingerprintDriftS(
+  baseline: DeviceFingerprintS | null | undefined,
+  current: DeviceFingerprintS | null | undefined,
+): string[] {
+  if (!baseline || !current) return [];
+  const drifted: string[] = [];
+  for (const field of ['gpu', 'cores', 'memory', 'platform'] as const) {
+    const a = baseline[field];
+    const b = current[field];
+    if (a === undefined || b === undefined) continue;
+    if (a === '' || b === '' || a === 0 || b === 0) continue;
+    if (a !== b) {
+      drifted.push(`${field}: ${String(a).slice(0, 40)} → ${String(b).slice(0, 40)}`);
+    }
+  }
+  return drifted;
 }
 
 // ── startExam ─────────────────────────────────────────────────────
@@ -9006,6 +9193,11 @@ export const startExam = onCall<StartExamData>(
       },
       cameraDeclined: cameraDeclined ?? false,
       deviceClass,
+      // The machine baseline. Written at creation and never rewritten — every
+      // later heartbeat is compared against THIS, server-side.
+      ...(sanitiseFingerprint(request.data?.fingerprint)
+        ? { deviceFingerprint: sanitiseFingerprint(request.data?.fingerprint) }
+        : {}),
       // Phase 2 (INV-5a): the session that opened this sitting owns it from
       // the first instant, so there is no unclaimed window in which a second
       // device could slip in ahead of the real one.

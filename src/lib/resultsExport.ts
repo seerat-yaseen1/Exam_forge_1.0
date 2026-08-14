@@ -60,7 +60,7 @@ export type ResultsExportOptions = {
 
 // ── Internal row shapes ───────────────────────────────────────────
 
-type ExportedAttempt = {
+export type ExportedAttempt = {
   student: Student;
   attempt: Attempt;
   attemptNumber: number;   // 1-based, by startedAt order within the student
@@ -264,7 +264,21 @@ function buildSectionRows(exported: ExportedAttempt[]): Record<string, unknown>[
  */
 const MAX_EXPORTED_VIOLATION_EVENTS = 25;
 
-function buildIntegrityRows(exported: ExportedAttempt[]): Record<string, unknown>[] {
+/**
+ * Blank rather than 0 for a sitting that was never paused.
+ *
+ * A zero in a spreadsheet column reads as a measured quantity — "paused, and
+ * given nothing back" — which is the opposite of what an unpaused sitting
+ * means, and the one reading that would send a reviewer to the wrong student.
+ */
+const secondsOrBlank = (s: number): number | '' => (s > 0 ? Math.round(s) : '');
+
+/**
+ * Exported for tests. This sheet is what a moderation meeting works from, so
+ * the mapping from a stored record to the row a human reads is worth asserting
+ * rather than eyeballing after a spreadsheet has already been circulated.
+ */
+export function buildIntegrityRows(exported: ExportedAttempt[]): Record<string, unknown>[] {
   return exported.map(({ student, attempt, attemptNumber }) => {
     const il = attempt.integrityLog ?? ({} as Attempt['integrityLog']);
     return {
@@ -319,6 +333,37 @@ function buildIntegrityRows(exported: ExportedAttempt[]): Record<string, unknown
       'Auto-Terminated': il.autoTerminated ? 'Yes' : '',
       'Termination Reason': il.terminatedReason ?? '',
       'Finalized While Frozen': il.finalizedWhileFrozen ? 'Yes' : '',
+      // ── The pause record ──────────────────────────────────────
+      // A freeze takes time from a student and a named human decides how much
+      // to give back — and may deduct more on top. That decision is exactly
+      // what an appeal is about, and until now it left this file entirely:
+      // the only freeze column was "Finalized While Frozen", which says a
+      // sitting ended during a pause but nothing about the pause itself.
+      'Pauses': (attempt.freezes ?? []).length || '',
+      'Paused Total': secondsOrBlank(
+        (attempt.freezes ?? []).reduce((s, f) => s + (f.elapsedMs ?? 0), 0) / 1000),
+      'Time Credited Back': secondsOrBlank(
+        (attempt.freezes ?? []).reduce((s, f) => s + (f.grantedMs ?? 0), 0) / 1000),
+      'Time Deducted': secondsOrBlank(
+        (attempt.penalties ?? []).reduce((s, p) => s + (p.amountMs ?? 0), 0) / 1000),
+      'Pause Log': (attempt.freezes ?? [])
+        .map((f) => {
+          const elapsed = Math.round((f.elapsedMs ?? 0) / 1000);
+          const granted = Math.round((f.grantedMs ?? 0) / 1000);
+          const deducted = (attempt.penalties ?? [])
+            .filter((p) => p.freezeId === f.id)
+            .map((p) => `-${Math.round(p.amountMs / 1000)}s ${p.clock}`)
+            .join(' ');
+          return [
+            f.startedAt,
+            f.reason,
+            f.endedAt ? `${elapsed}s elapsed, ${granted}s credited` : 'still open',
+            deducted,
+            f.decidedBy ? `by ${f.decidedBy}` : '',
+            f.note ? `"${f.note}"` : '',
+          ].filter(Boolean).join(' ');
+        })
+        .join(' | '),
       'Session Conflict': attempt.sessionConflictAt ? 'Yes' : '',
       'Device': attempt.deviceClass ?? '',
       'Camera Declined': attempt.cameraDeclined ? 'Yes' : '',

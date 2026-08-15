@@ -452,7 +452,22 @@ attestation is being paid for (reCAPTCHA round-trip on every client) without the
 benefit. Enforcing needs a staged rollout — turn on monitoring in the console first, confirm token
 coverage, then flip `enforceAppCheck` on the hot path.
 
-> **Partly addressed (2026-08-15).** The ten `EXAM_HOT_PATH` callables now carry
+> **Extended to all 53 callables (2026-08-15), on evidence.** The first pass covered only the ten
+> hot-path functions and reasoned that staff callables were "a different client population and
+> deserve their own soak". That was the right caution with no data. The data now exists: the
+> project's App Check console reports **Cloud Firestore at 100% verified / 0% unverified** with the
+> web app registered against reCAPTCHA — and staff surfaces read and write Firestore constantly, so
+> the population is the same registered app. Splitting the rollout would only have meant two
+> switches instead of one. All 53 now read the same `APP_CHECK_ENFORCED` flag, still defaulting to
+> false; the three scheduled functions are excluded, having no client to attest.
+>
+> **What the console does *not* show:** there is no Cloud Functions row in the APIs tab, because
+> callable enforcement is code-side (`enforceAppCheck`) rather than a console toggle. Firestore's
+> 100% is a strong proxy for token coverage, not a direct measurement of the callable surface.
+> Authentication reads 99%/1%, and that 1% is worth understanding before Auth is ever enforced —
+> it does not affect the callable flag.
+>
+> **Original note.** The ten `EXAM_HOT_PATH` callables now carry
 > `enforceAppCheck: APP_CHECK_ENFORCED`, read from `process.env.APP_CHECK_ENFORCED` and
 > **defaulting to false** — so behaviour is unchanged until someone opts in. The point is to make
 > the flip a config change (`functions/.env.<project>` + redeploy, reversible the same way) rather
@@ -746,6 +761,21 @@ than merely unreached.
 > a successor of every state would have made `submitted → loading → ready` reachable — trading the
 > absorbing-terminal guarantee, which is the whole point of the machine, to describe an auth
 > refresh. A reset is the sitting being set up again, not a move within one.
+>
+> **Stage 2b prep done (2026-08-15) — the evidence is now readable.**
+>
+> Shadow mode was shipped logging to `console.warn`, which is a defect in the change itself: its
+> whole purpose is to produce the evidence that decides whether the table is safe to enforce, and
+> that evidence was landing in the **candidate's own browser console** — a place nobody reads, and
+> one that is unreachable inside Safe Exam Browser. Evidence somewhere no one can read is not
+> evidence.
+>
+> Illegal transitions now ride the `examHeartbeat` that already runs every 15s for the whole
+> sitting, so they reach `firebase functions:log` without a new endpoint. Bounded on both sides —
+> 5 per beat, 200 chars each, newlines stripped — because the sender is a browser in an exam.
+> Logged before the heartbeat's guards, deliberately: a warning is most interesting in exactly the
+> cases where the beat is then refused. Drained before the call rather than after it resolves, so a
+> run of failed beats cannot re-send the same lines.
 >
 > **Stage 2b** flips shadow to enforcing once a full exam cycle logs no `SHADOW` lines, and adds
 > the guard `handleTerminate` lacks. Until then the divergence stays observable rather than

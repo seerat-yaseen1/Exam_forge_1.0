@@ -12927,6 +12927,8 @@ interface RunCodeSampleData {
   questionId: string;
   language: string;
   source: string;
+  /** D-01: the browser session driving this sitting (INV-5a). */
+  sessionId?: string;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -12956,6 +12958,8 @@ interface RecordTelemetryData {
   questionId: string;
   seq: number;
   events: unknown[];
+  /** D-01: the browser session driving this sitting (INV-5a). */
+  sessionId?: string;
 }
 
 export const recordCodeTelemetry = onCall<RecordTelemetryData>(
@@ -12983,6 +12987,9 @@ export const recordCodeTelemetry = onCall<RecordTelemetryData>(
       assessmentId: string;
       instituteId?: string;
       status?: string;
+      // D-01/D-03: the session that owns this sitting, and the paper it sat.
+      activeSessionId?: string | null;
+      examSnapshot?: { sections?: unknown };
     };
 
     // The owning student only, and only while they are actually sitting. A
@@ -12992,6 +12999,16 @@ export const recordCodeTelemetry = onCall<RecordTelemetryData>(
     if (callerRole !== 'student' || callerStudentId !== attempt.studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
+    // ── D-01: and only from the device that owns the sitting ─────
+    //
+    // The sentence above is the whole reason this gate belongs here. A device
+    // that LOST the session can extend the record in exactly the way the
+    // comment forbids, and the rows it writes are indistinguishable from the
+    // real candidate's — which makes the evidence worse than useless, because
+    // it looks authoritative. Every other student-facing exam callable has
+    // called assertSession since Phase 2; this one was written afterwards and
+    // never acquired it.
+    assertSession(attempt, request.data?.sessionId, 'recordCodeTelemetry');
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'This attempt is not in progress.');
     }
@@ -13070,6 +13087,8 @@ export const runCodeSample = onCall<RunCodeSampleData>(
       freezes?: FreezeLedgerEntry[];
       answersLockedAfter?: unknown;
       codeRuns?: Record<string, SampleRunState>;
+      /** D-01: which browser session owns this sitting (INV-5a). */
+      activeSessionId?: string | null;
     };
 
     // ── Who ──────────────────────────────────────────────────────
@@ -13079,6 +13098,16 @@ export const runCodeSample = onCall<RunCodeSampleData>(
     if (callerRole !== 'student' || callerStudentId !== attempt.studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
+    // ── D-01: from the device that owns the sitting ──────────────
+    //
+    // "The student's quota" is the phrase above, and a quota is exactly what a
+    // second browser spends. Sample runs are metered — maxPerQuestion, a
+    // cooldown, real compute on a shared judge — so a superseded device
+    // reaching this is a second person working the paper on the candidate's
+    // allowance. INV-5a says one sitting, one session; P-15 proves the loser
+    // cannot submit a section, and this is the path where that stopped being
+    // true.
+    assertSession(attempt, request.data?.sessionId, 'runCodeSample');
 
     // ── When ─────────────────────────────────────────────────────
     if (attempt.status !== 'in_progress') {

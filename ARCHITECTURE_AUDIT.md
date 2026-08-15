@@ -381,7 +381,7 @@ Stated target in code comments: **10,000 concurrent students**.
 | Window expiry polled every 30 s; UI clock every 500 ms | `ExamShell.tsx:1933, 929` | Client-side only; deadlines are server-authoritative via `examTimingCore` |
 | SEB token TTL 90 s, refreshed by the 15 s heartbeat | `api/seb-verify.js:54` | Comfortable margin (6×) |
 | SEB config-key cache 2 minutes | `api/seb-verify.js:55` | A key added on the settings page is live within 2 min, no redeploy |
-| **`scheduledJudgeCoding` processes `.limit(50)` per 5-minute run** | `index.ts:13444` | **⚠ This is the capacity gap.** Ceiling is **600 papers/hour**. A 10,000-student cohort with coding items needs **~17 hours** to drain. The sweep is correctly designed to drain across runs rather than outlast its timeout — but the rate was not sized against the stated 10k target |
+| ~~**`scheduledJudgeCoding` processes `.limit(50)` per 5-minute run**~~ **FIXED (2026-08-15)** | `index.ts` | Was a hard ceiling of **600 papers/hour** — ~17 hours to drain a 10k cohort. **The count was the wrong knob and the loop was the real defect:** the cluster runs `replicas: 4` — its own compose file calls that "the real concurrency ceiling of the whole platform" — and the sweep awaited one paper at a time, leaving three workers idle. Now a bounded-concurrency pool (default 4, matching the replicas) under a **wall-clock budget** rather than a paper count, since a paper's cost is not knowable in advance. Budget defaults to 240s: **below the 300s schedule interval**, because Cloud Scheduler does not wait for the previous run and two overlapping sweeps would judge the same paper twice, spending two of its five attempts for one result. Covered by `G-27`, which fails on each count if either half is reverted |
 | A paper exhausts at `MAX_JUDGE_ATTEMPTS` (5) with **no in-product re-arm** | `DEPLOY.md §2` | `regradeAttempts` re-reads existing verdicts; it does not re-judge. An exhausted paper needs manual intervention |
 | Deploy skew: a full functions deploy lands over several minutes; `deploy-functions.sh` batching widens it to ~10 min | `DEPLOY.md §5` | Explicitly "do not run during a live sitting" |
 
@@ -782,7 +782,7 @@ Ordered by (risk reduced) ÷ (effort).
 
 | # | Action | Addresses | Effort |
 |---|---|---|---|
-| R-1 | Raise `scheduledJudgeCoding`'s per-run limit and/or shorten the interval; size it against the real cohort. Add an alert on `codeJudgePending` backlog age | §5 capacity gap | S |
+| R-1 | ~~Raise the sweep's per-run limit~~ **DONE, re-diagnosed** — the limit was never the bottleneck; the serial loop against a 4-replica cluster was. Concurrency pool (default 4) + wall-clock budget instead of a paper count + a `BACKLOG` warning when a batch is not cleared. Pinned by `G-27` | §5 capacity gap | S |
 | R-2 | ~~Delete or wire `setHierarchyNodeLifecycle`~~ **DONE — wired, not deleted.** Callable widened to the UI's two-tier grant, client rewired, rules fenced, `R-10` added | F-4 | S |
 | R-3 | ~~Add a `report-uri` to the report-only CSP~~ **DONE** — `/api/csp-report` sink added and both policies now report. Promotion to enforcing still pending a soak (tighten `script-src` first) | F-5 | S |
 | R-4 | Move the frontend Firebase config to `import.meta.env` so staging is possible without a code edit | S-7 | S |

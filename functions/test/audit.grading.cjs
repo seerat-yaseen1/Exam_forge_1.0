@@ -1135,6 +1135,68 @@ async function G26() {
   eq(again.telemetryDeleted, 0, 'a second pass finds nothing and does not throw');
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// G-27 · the sweep drains a cohort, and feeds the cluster in parallel
+//
+// Audit R-1. The sweep took `.limit(50)` and awaited one paper at a time —
+// a hard ceiling of 600 papers an hour at a five-minute schedule, which is
+// ~17 HOURS to drain the 10,000-student cohort this platform is sized for
+// everywhere else.
+//
+// The count was also the wrong knob, and the loop was the real defect: the
+// cluster runs four worker replicas — docker-compose.yml calls that "the real
+// concurrency ceiling of the whole platform" — and three of them were idle
+// while a cohort waited.
+//
+// Both halves are asserted: more than the old cap is cleared in ONE run, and
+// the judge really does see overlapping work rather than a queue of one.
+// ═══════════════════════════════════════════════════════════════════
+async function G27() {
+  // Sixty DISTINCT candidates — one paper each. sitCodingPaper() reuses one
+  // student, and a second sitting is refused by the attempt limit, which is
+  // itself the correct behaviour (see X-02 in the concurrency suite).
+  seedQ('c1', { engine: 'code', tests: suite(10) });
+  seedExam([{ questionId: 'c1', marks: 10, order: 0 }]);
+  const ids = [];
+  for (let i = 0; i < 60; i++) {
+    const who = STUDENT(`stu_uid_${i}`, `stu_${i}`, 'inst_1');
+    const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, who);
+    const id = started.attempt.id;
+    answer(id, 'c1', { language: 'python3', source: 'solve()' }, 'SA', 'code');
+    await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, who);
+    ids.push(id);
+  }
+  eq(ids.length, 60, 'sixty papers are queued');
+
+  // Instrumented judge: records how many submissions are in flight at once.
+  let inFlight = 0, peak = 0;
+  const judge = {
+    name: 'concurrent', calls: [],
+    async run(sub) {
+      this.calls.push(sub);
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));   // a paper takes real time
+      inFlight--;
+      return completed(10, 7);
+    },
+    async health() { return true; },
+  };
+
+  fns.setJudgeAdapter(judge);
+  try { await fns.scheduledJudgeCoding.run({}); }
+  finally { fns.setJudgeAdapter(null); }
+
+  eq(judge.calls.length > 50, true,
+    `one run clears more than the old cap of 50 (cleared ${judge.calls.length})`);
+  eq(peak > 1, true,
+    `the judge sees overlapping work rather than a queue of one (peak in flight ${peak})`);
+  eq(peak <= 4, true,
+    `and never more than the cluster's replica count (peak ${peak})`);
+
+  const unsettled = ids.filter((id) => A(id).codeJudgePending);
+  eq(unsettled.length, 0, 'every queued paper is settled in the one run');
+}
+
 const SCENARIOS = [
   ['G-01', 'a text answer can be marked by a human', G01],
   ['G-02', 'no FAILED verdict on a half-marked paper', G02],
@@ -1162,6 +1224,7 @@ const SCENARIOS = [
   ['G-24', 'telemetry records the proctored tiers, and never practice', G24],
   ['G-25', 'who may write telemetry, and when', G25],
   ['G-26', 'erasure reaches the records that hang off an attempt', G26],
+  ['G-27', 'the sweep drains a cohort, and feeds the cluster in parallel', G27],
 ];
 
 (async () => {

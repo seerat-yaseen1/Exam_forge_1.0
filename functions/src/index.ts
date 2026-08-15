@@ -6577,6 +6577,43 @@ export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
 // 'system', the same set assertCanUnfreeze already treats as ownerless.
 interface VerifyAndResumeData { attemptId: string; sebToken?: string; }
 
+/**
+ * How much time the AUTOMATIC release may hand back across one sitting (C-02).
+ *
+ * D8 — "an automatic state needs an automatic exit in the student's favour" —
+ * was implemented literally: the whole pause, granted every time, with no
+ * ceiling. That is right for the interruption it was written for. It is not
+ * right when the pause is one the STUDENT'S OWN CLIENT declares.
+ *
+ * reportExtensionCheck({passed:false}) opens the pause and
+ * reportExtensionCheck({passed:true}) makes it clearable. So on a normal-tier
+ * exam with auto-resume the loop
+ *
+ *     report failed -> think for as long as you like -> report passed -> resume
+ *
+ * handed back exactly the time it consumed and could be run again. Measured:
+ * two forty-minute cycles moved the overall deadline eighty minutes later on a
+ * sixty-minute exam. That is not a grace period, it is an untimed exam,
+ * reachable from the console by the person being examined.
+ *
+ * TEN MINUTES, CUMULATIVE, PER SITTING. Generous against the case this exists
+ * for — an antivirus false positive, cleared in seconds once the student closes
+ * the offending extension — and finite against the loop. A cap per pause would
+ * not terminate the loop at all, which is why the budget is per sitting.
+ *
+ * WHAT IS NOT CAPPED: an invigilator's grant, here or in unfreezeAttempt. A
+ * human deciding a pause was genuine can still give back all of it, and that
+ * decision carries an actor, an instant and an audit row — the three things the
+ * automatic path cannot produce. A student who genuinely lost half an hour to a
+ * misbehaving machine is not refused their time; they are asked to get it from
+ * somebody who can be accountable for the decision.
+ *
+ * The pause is still MEASURED in full either way: elapsedMs on the ledger row
+ * is the wall-clock truth, grantedMs is what was given. Capping the grant must
+ * never falsify the record an invigilator reviews afterwards.
+ */
+const AUTO_RESUME_CREDIT_CAP_MS = 10 * 60_000;
+
 export const verifyAndResume = onCall<VerifyAndResumeData>(
   { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
@@ -6711,6 +6748,17 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
         return Number.isFinite(ms) ? Math.max(0, Date.now() - ms) : 0;
       })();
 
+      // ── C-02: the automatic path spends from a fixed budget ──────
+      //
+      // Only the automatic path. An invigilator clearing an extension freeze
+      // here is making the same decision unfreezeAttempt exists for, and is
+      // trusted with it in exactly the same way.
+      const autoSpent = (a.freezes ?? []).reduce(
+        (sum, f) => sum + (f.autoGranted ? Math.max(0, f.grantedMs ?? 0) : 0), 0);
+      const grantedForThis = isInvigilator
+        ? elapsedForGrant
+        : Math.min(elapsedForGrant, Math.max(0, AUTO_RESUME_CREDIT_CAP_MS - autoSpent));
+
       const aSnap = a.assessmentId
         ? await txn.get(db.collection('assessments').doc(a.assessmentId))
         : null;
@@ -6719,11 +6767,16 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
         a as unknown as Record<string, unknown>,
         aSnap?.exists ? (aSnap.data() as Record<string, unknown>) : null,
         {
-          grantedMs: elapsedForGrant,
+          grantedMs: grantedForThis,
           decidedBy: isInvigilator ? request.auth!.uid : null,
-          note: 'extension check cleared',
+          // The shortfall is named on the row, so the next person to look at
+          // this sitting sees a capped grant rather than a short pause.
+          note: !isInvigilator && grantedForThis < elapsedForGrant
+            ? 'extension check cleared; automatic credit capped'
+            : 'extension check cleared',
           nowIso,
           clearedBy: isInvigilator ? 'invigilator' : 'auto',
+          autoGranted: !isInvigilator,
         },
       );
 
@@ -8035,6 +8088,21 @@ type FreezeLedgerEntry = {
   decidedAt?: string | null;
   note?: string | null;
   /**
+   * This pause was released by the STUDENT, not by a human decision (C-02).
+   *
+   * The one field that distinguishes a grant nobody chose from a grant an
+   * invigilator chose, and the reason the automatic ceiling can be a per-
+   * SITTING budget rather than a per-pause one: summing grantedMs over the
+   * rows carrying this flag says how much time the auto-resume path has
+   * already handed back, which is the only number that makes the loop
+   * "freeze, wait, resume, repeat" terminate.
+   *
+   * Recorded on the row rather than derived from `decidedBy == null`, because
+   * the synthetic pre-ledger migration row (preLedgerCreditEntry) also carries
+   * no decider and is not an automatic release of anything.
+   */
+  autoGranted?: boolean | null;
+  /**
    * The freezer's ROLE at the instant they froze (§3, §8).
    *
    * Authority attaches per freeze, and unfreezing requires the freezer or
@@ -8379,6 +8447,8 @@ function closeFreezeUpdates(
     penalties?: { questionMs?: number; sectionMs?: number; overallMs?: number };
     decidedByRole?: string;
     clearedBy?: 'invigilator' | 'auto' | 'sweep';
+    /** C-02: mark the row as credit granted without a human deciding it. */
+    autoGranted?: boolean;
   },
 ): {
   updates: Record<string, unknown>;
@@ -8420,6 +8490,7 @@ function closeFreezeUpdates(
     decidedBy: opts.decidedBy,
     decidedAt: opts.nowIso,
     ...(opts.note ? { note: String(opts.note).slice(0, 500) } : {}),
+    ...(opts.autoGranted ? { autoGranted: true } : {}),
   };
   if (idx >= 0) ledger[idx] = closed; else ledger.push(closed);
 

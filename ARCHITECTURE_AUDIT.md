@@ -596,6 +596,40 @@ and `logout` — all backed by the same `auth` singleton and distinguished only 
 A single parameterised provider with a role-specific session builder would collapse ~1,500 lines
 into a few hundred. The MFA path (Web Owner only) is the one genuine divergence.
 
+> **Stage 1 done (2026-08-15) — the admission decision is now stated once.**
+>
+> Collapsing the four providers is the large half of this finding and is *not* what was done. This
+> is the half where a divergence is a **security** bug rather than a maintenance cost.
+>
+> Three of the four contexts each carried their own copy of the same admission decision — is the
+> institute disabled or soft-deleted, is the member, has the access window closed. Three copies,
+> two shapes (the institute context has no member document), nothing holding them together.
+>
+> **That divergence has already shipped once.** `StudentAuthContext` records it: soft delete sets
+> `lifecycleState`, **not** `status`, so a gate checking only `status` let deleted accounts — and
+> members of a deleted institute — sign in and sit exams exactly as before. The fix had to be
+> applied to each copy separately, and nothing would have failed if one had been missed.
+>
+> `src/lib/accessGate.ts` is that decision, pure and tested (16 assertions). `hasExpired` joined
+> `instituteValidity.ts`, where the *display* half of the same `activeUntil` parse already lived —
+> that module's header is about three display helpers each parsing the field their own way; the
+> three auth gates were the fourth copy of it.
+>
+> **Proven a substitution, not a rewrite.** A differential test runs the original expression
+> (`String(x ?? '')` coercion and all) against `hasExpired` across every shape that matters —
+> absent, empty, whitespace, unparseable, past, future, boundary, non-string — and asserts they
+> agree. The boundary stays strictly `<`, and absent/empty/unparseable still mean *no expiry*
+> rather than 1970 — the case whose blast radius is every institute that never set one.
+>
+> Precedence is now written down rather than coincidental: `disabled` outranks `expired`, because
+> telling someone their institute's access lapsed when an admin actually disabled their account
+> sends them to the wrong person to get it fixed. All three sites already agreed; a fourth can no
+> longer quietly pick the other order.
+>
+> **Left open:** the provider collapse itself, and the Web Owner's cosmetic copy divergence
+> (`'New password is too weak.'` against the other three's `'Password is too weak.'`) — a product
+> copy decision rather than a refactor, so it is flagged rather than unified.
+
 **F-9 · `ExamShell.tsx` state is unmanaged at its scale (S-3).**
 44 `useState` + 29 `useRef` + 32 `useEffect` in one component, coordinating server-authoritative
 attempt state (via `subscribeToAttempt`), local answer drafts, timers, integrity counters, overlay
@@ -712,7 +746,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-8 | Automate the pre-exam `minInstances` warm-up (a scheduled bump keyed off the assessment window) rather than relying on a documented manual step | §5 cold start | M |
 | R-9 | ~~Add `functions` to the workspace, extract `shared/`~~ **RE-SCOPED — M was too cheap.** Firebase packages only `functions/`, so a shared package needs a predeploy vendoring step. Guard extended to the four unguarded twins instead (incl. the functions↔rules one); the restructure is left as a deliberate decision | F-2 | L |
 | R-10 | Refactor `InstituteQuestionsPage` / `FacultyQuestionsPage` onto `QuestionBankCore`, matching how reports and rosters already work | F-7 | M |
-| R-11 | Collapse the four auth contexts into one parameterised provider with a role-specific session builder | F-8 | M |
+| R-11 | ~~Collapse the four auth contexts~~ **STAGE 1 DONE** — the admission decision extracted to a tested `accessGate.ts`, all three role gates rewired, differential-tested against the expression it replaced. The provider collapse itself still open | F-8 | M |
 | R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |
 | R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGES 1 + 2a DONE** — `examMachine.ts` extracted (26 edges, 27-test sweep) and now wired into ExamShell in **shadow mode**: every transition classified and logged, none blocked. Stage 2b (flip to enforcing after a clean exam cycle, plus the `handleTerminate` guard) still open | F-9, S-3 | L |
 | R-14 | Document a SEB secret-rotation runbook that updates Vercel and Firebase together | S-6 | S |

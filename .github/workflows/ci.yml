@@ -51,6 +51,36 @@ permissions:
   contents: read
 
 jobs:
+  # ── Do all the Node pins still name the same major? ─────────────
+  #
+  # The 2026-08-14 upgrade moved three pins in one commit because "a mismatch
+  # between any two of them is worse than either value alone", and it was
+  # right. Nothing then kept them together: firebase-tools checks engines
+  # against firebase.json at DEPLOY time, and everything else was held by
+  # whoever remembered to grep.
+  #
+  # Two things had already slipped by the time this job was written, and both
+  # were a MISSING pin rather than a wrong one — which is why reading the files
+  # that did carry a version never found them. The root package.json had no
+  # `engines` at all, so Vercel took the major for the frontend AND for
+  # api/seb-verify.js — the SEB proof minter — from a dashboard setting no file
+  # here records. And infra/judge0/README.md told you to run the pre-exam
+  # acceptance gate in a container built on the PREVIOUS major, which builds
+  # functions/ and imports the compiled adapter.
+  #
+  # No install, no build: it reads files and compares integers, so it finishes
+  # in seconds and fails with the specific line to change.
+  node-pins:
+    name: Node version pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No setup-node on purpose. This job must not depend on the pin it is
+      # checking, and the runner's preinstalled Node is enough to read JSON.
+      - name: Every pin names the same major
+        run: node scripts/check-node-pins.mjs
+
   # ── Frontend: does it typecheck under `strict`? ─────────────────
   typecheck:
     name: Frontend typecheck
@@ -58,9 +88,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # .nvmrc, not a literal. The major used to be written out here, which
+      # made this the third copy of a number that has to agree with
+      # firebase.json and both engines fields; node-version-file removes the
+      # copy rather than checking it.
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
 
       # `npm install`, not `npm ci`: the root has NO package-lock.json.
       #
@@ -107,12 +141,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Matches functions/package.json engines.node — the deployed runtime is
-      # nodejs24 (firebase.json), and a suite that passes on a different major
-      # is not evidence about production.
+      # .nvmrc, which the node-pins job asserts equals functions/package.json
+      # engines.node and firebase.json's runtime — the deployed runtime is
+      # nodejs24, and a suite that passes on a different major is not evidence
+      # about production.
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: functions/package-lock.json
 

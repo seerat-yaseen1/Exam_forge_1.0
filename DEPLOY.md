@@ -250,6 +250,30 @@ Two client files changed and they are **not** covered by `firebase deploy --only
 
 This repo deploys its frontend through Vercel (`vercel.json`), not Firebase Hosting, so that half follows your usual Vercel flow — no `firebase deploy --only hosting`.
 
+### The Vercel Node version now comes from the repo — check it once
+
+Until 2026-08-15 the root `package.json` had no `engines` field, so Vercel took
+its Node major from **Project Settings → Build and Deployment**, a value no file
+here recorded. That covered more than the build: `api/csp-report.js` and
+`api/seb-verify.js` are Vercel serverless functions, and **`/api/seb-verify` is
+the SEB proof minter** (§9) — so the runtime for a security-critical endpoint was
+set in a dashboard, invisible to review, while the functions half was pinned to
+`nodejs24` in three places.
+
+`engines.node` is now `24.x`, and Vercel prefers it over the dashboard setting.
+**On the next deploy the frontend and both `api/` functions move to Node 24** —
+from whatever the dashboard said, which may not have been 24.
+
+One thing to do on your side: look at the current dashboard value **before** the
+next Vercel deploy, so you know whether this is a no-op or a major bump. If it
+is a bump, deploy it outside a live sitting like any other runtime change, and
+re-run the `/api/seb-verify` check in §9's procedure afterwards.
+
+To change the major later, edit `.nvmrc` — it is the single source of truth, and
+`scripts/check-node-pins.mjs` (CI job **Node version pins**) fails the build if
+`package.json`, `functions/package.json`, `firebase.json`, the workflow or any
+documented `node:<major>` container disagrees with it.
+
 ---
 
 ## 7 · One repo-hygiene change to be aware of

@@ -3,14 +3,16 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  sendPasswordResetEmail,
-  updatePassword,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
 import { evaluateAccess } from '../../lib/accessGate';
-import { revokeOtherSessionsKeepCurrent } from '../../lib/sessionSecurity';
+import {
+  RESET_VIA_EMAIL_MESSAGE,
+  changeRolePassword,
+  requestRolePasswordReset,
+} from '../../lib/roleAuth';
 import { getInstituteLogo } from '../../lib/firebaseService';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -225,89 +227,30 @@ export function FacultyAuthProvider({ children }: { children: React.ReactNode })
 
   const changePassword = useCallback(
     async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
-      const fbUser = auth.currentUser;
-      if (!fbUser || !session) return { success: false, error: 'Not authenticated.' };
-      if (newPassword.length < 8) {
-        return { success: false, error: 'Password must be at least 8 characters.' };
-      }
-      try {
-        await updatePassword(fbUser, newPassword);
-        // BOOKKEEPING, NOT THE OPERATION — and it must not be able to fail
-        // the operation (audit 2026-08-07).
-        //
-        // This was a bare `await` inside the same try as updatePassword, so a
-        // rejection here reported "Failed to change password" AFTER the
-        // password had already been changed, and — worse — skipped the
-        // revokeOtherSessionsKeepCurrent below, which is the whole security
-        // point of this flow: signing out anyone still holding the old or
-        // provisioned credential.
-        //
-        // It rejects routinely. updateDoc REQUIRES the document to exist, and
-        // facultyCredentials is empty — createAuthUser stopped writing
-        // credential docs when the plaintext password was removed, so only
-        // pre-migration accounts have one. Verified against the live project:
-        // purge-legacy-credentials --dry reports 0 documents in all three
-        // credential collections.
-        //
-        // A not-found is also HARMLESS, which is why warning is the right
-        // response rather than repairing the document. Every auth context
-        // reads this flag as `credSnap.exists() ? Boolean(...) : false`, so an
-        // absent document already means firstLoginRequired === false — the
-        // exact state this write was trying to reach.
-        try {
-          await updateDoc(doc(db, 'facultyCredentials', session.facultyId), {
-            firstLoginRequired: false,
-          });
-        } catch (e) {
-          console.warn(
-            '[FacultyAuth] could not clear firstLoginRequired — the password change stands',
-            e,
-          );
-        }
+      if (!session) return { success: false, error: 'Not authenticated.' };
+      // The operation is identical for all three roles — only the credential
+      // document differs (audit F-8 stage 2). lib/roleAuth owns the sequence,
+      // including the bookkeeping-must-not-fail-the-operation subtlety that was
+      // written out three times; this context owns its own session shape.
+      const res = await changeRolePassword({
+        newPassword,
+        credentialCollection: 'facultyCredentials',
+        credentialDocId: session.facultyId,
+        logLabel: '[FacultyAuth]',
+      });
+      if (res.success) {
         setSession((prev) => (prev ? { ...prev, firstLoginRequired: false } : null));
-        // C'-1 (scoped): the credential changed — sign out every other
-        // session (covers first-login forced changes too, killing anyone
-        // else holding the provisioned password). Best-effort; the password
-        // change has already succeeded. This device is re-authenticated with
-        // the new password inside the helper so it survives the revocation.
-        await revokeOtherSessionsKeepCurrent(newPassword);
-        return { success: true };
-      } catch (err: unknown) {
-        const code = (err as { code?: string })?.code;
-        if (code === 'auth/requires-recent-login') {
-          return { success: false, error: 'Please sign out and back in, then change your password.' };
-        }
-        if (code === 'auth/weak-password') {
-          return { success: false, error: 'Password is too weak.' };
-        }
-        console.error('Faculty change password error:', err);
-        return { success: false, error: 'Failed to change password. Please try again.' };
       }
+      return res;
     },
     [session]
   );
 
   const requestPasswordReset = useCallback(
-    async (
-      instituteCode: string,
-      email: string
-    ): Promise<{ success: boolean; error?: string; emailSent?: boolean }> => {
-      try {
-        void instituteCode; // kept for API compat; the previous institute-code
-        // pre-check ran an UNAUTHENTICATED Firestore query — denied by the
-        // security rules (flow was silently broken) and it leaked whether a
-        // code exists. Firebase Auth keys the reset on the email alone.
-        const emailNorm = email.toLowerCase().trim();
-        await sendPasswordResetEmail(auth, emailNorm);
-        return { success: true, emailSent: true };
-      } catch (err: unknown) {
-        const code = (err as { code?: string })?.code;
-        if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
-          return { success: true, emailSent: true };
-        }
-        console.error('Faculty reset request error:', err);
-        return { success: false, error: 'Failed to send reset email. Please try again.' };
-      }
+    async (instituteCode: string, email: string): Promise<{ success: boolean; error?: string; emailSent?: boolean }> => {
+      void instituteCode;   // kept for API compatibility; unused since the
+                            // institute code stopped gating the reset email.
+      return requestRolePasswordReset(email, '[FacultyAuth]');
     },
     []
   );
@@ -315,7 +258,7 @@ export function FacultyAuthProvider({ children }: { children: React.ReactNode })
   const resetPassword = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
     return {
       success: false,
-      error: 'Password reset is now handled via the email link. Please check your inbox.',
+      error: RESET_VIA_EMAIL_MESSAGE,
     };
   }, []);
 

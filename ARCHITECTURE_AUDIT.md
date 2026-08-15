@@ -707,9 +707,37 @@ into a few hundred. The MFA path (Web Owner only) is the one genuine divergence.
 > sends them to the wrong person to get it fixed. All three sites already agreed; a fourth can no
 > longer quietly pick the other order.
 >
-> **Left open:** the provider collapse itself, and the Web Owner's cosmetic copy divergence
-> (`'New password is too weak.'` against the other three's `'Password is too weak.'`) — a product
-> copy decision rather than a refactor, so it is flagged rather than unified.
+> **Stage 2 done (2026-08-15) — the password operations, and a divergence they hid.**
+>
+> `changePassword` was **byte-identical** across the three contexts apart from three parameters:
+> the credential collection, the document id, and the string in a console warning. Forty lines,
+> three times, including the subtle part — the `updateDoc` that must not be able to fail the
+> operation, whose long explanatory comment was also written out three times.
+>
+> `src/lib/roleAuth.ts` owns it now, and the split is deliberate: the **decisions** are pure
+> functions with tests (`passwordChangeError`, `resetRequestIsBenign`), and the async wrappers only
+> sequence SDK calls around them. The part worth getting right is the part that can be checked.
+> **−249 / +70 lines across the three contexts.**
+>
+> **The extraction surfaced a real divergence.** Institute and Faculty swallowed
+> `auth/invalid-email` on a reset request and reported success; Student did not. So a student who
+> mistyped their address saw *"Failed to send reset email"* while the same typo on the faculty form
+> silently reported success. Resolved toward **Student's narrower reading**: `auth/user-not-found`
+> stays benign, because reporting it honestly turns the form into an account-existence oracle, but
+> a malformed address is a format problem the person can see and fix, and it reveals nothing about
+> whether an account exists. The two roles that swallowed it were hiding a typo.
+>
+> **Deliberately not extracted**, and each for a reason:
+>
+> | | Why it stays |
+> |---|---|
+> | `login` + session building | Where the roles genuinely differ — Institute has no member document, Student carries program tags. A shared version needs a callback per difference, which is the twelve-boolean-props outcome that reads worse than three honest copies |
+> | `logout` | Four lines, differing only in which state setter is called. The extraction would be longer than the code |
+> | Web Owner's context | Its password change re-authenticates first and it carries the whole TOTP flow. A different operation that happens to share a name |
+>
+> **Still open:** the Web Owner's cosmetic copy divergence (`'New password is too weak.'` against
+> the other three's `'Password is too weak.'`) — a product copy decision rather than a refactor, so
+> it is flagged rather than unified.
 
 **F-9 · `ExamShell.tsx` state is unmanaged at its scale (S-3).**
 44 `useState` + 29 `useRef` + 32 `useEffect` in one component, coordinating server-authoritative
@@ -842,7 +870,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-8 | Automate the pre-exam `minInstances` warm-up (a scheduled bump keyed off the assessment window) rather than relying on a documented manual step | §5 cold start | M |
 | R-9 | ~~Add `functions` to the workspace, extract `shared/`~~ **RE-SCOPED — M was too cheap.** Firebase packages only `functions/`, so a shared package needs a predeploy vendoring step. Guard extended to the four unguarded twins instead (incl. the functions↔rules one); the restructure is left as a deliberate decision | F-2 | L |
 | R-10 | ~~Refactor the two question pages onto `QuestionBankCore`~~ **RE-SCOPED + STAGE 1 DONE** — their differences are real features, so the merge needs a heavily parameterised shell. The cheap, high-value part was elsewhere: 11 copies of `formatDate` (3 formats, 6 variants) and 4 of `truncate` folded into a tested `dateFormat.ts` with the missing invalid-input guard | F-7 | M |
-| R-11 | ~~Collapse the four auth contexts~~ **STAGE 1 DONE** — the admission decision extracted to a tested `accessGate.ts`, all three role gates rewired, differential-tested against the expression it replaced. The provider collapse itself still open | F-8 | M |
+| R-11 | ~~Collapse the four auth contexts~~ **STAGES 1 + 2 DONE** — admission decision in `accessGate.ts`, password operations in `roleAuth.ts` (−249/+70), both tested. `login`/session-building stay per-role deliberately; Web Owner stays separate (MFA) | F-8 | M |
 | R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |
 | R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGES 1 + 2a DONE** — `examMachine.ts` extracted (26 edges, 27-test sweep) and now wired into ExamShell in **shadow mode**: every transition classified and logged, none blocked. Stage 2b (flip to enforcing after a clean exam cycle, plus the `handleTerminate` guard) still open | F-9, S-3 | L |
 | R-14 | ~~Document a SEB rotation runbook~~ **DONE, and the constraint removed** — `DEPLOY.md §9`. Writing it established there was no zero-downtime rotation; the follow-up it named is now done too: both sides take a comma-separated list, the edge **mints with the first** and the functions **accept any**, so rotation no longer needs a window. Pinned by `R-17` | S-6 | S |

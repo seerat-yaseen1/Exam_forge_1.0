@@ -26,14 +26,10 @@ import { TrashPanel } from '../components/TrashPanel';
 import { daysUntilExpiry, NO_EXPIRY_LABEL } from '../../lib/instituteValidity';
 import { SubjectRequestsInbox } from '../components/SubjectRequestsInbox';
 import { ErasurePolicyPanel } from '../components/ErasurePolicyPanel';
+import { formatDate } from '../../lib/dateFormat';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-}
 
 function formatSyncAge(date: Date): string {
   const s = Math.floor((Date.now() - date.getTime()) / 1000);

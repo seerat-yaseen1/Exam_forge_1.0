@@ -16,6 +16,7 @@ import { getAllSubjects, getAllTopics, type Subject, type Topic } from '../../..
 import { QuestionTypeEngine, type QuestionDraft } from './QuestionTypeEngine';
 import { QuestionGroupEditor, type GroupEditorSave } from './QuestionGroupEditor';
 import { QuestionPreview } from './QuestionPreview';
+import { formatDate, truncate } from '../../../lib/dateFormat';
 
 // ══════════════════════════════════════════════════════════════════
 // QuestionBankCore — the shared Question Pool (list + create/edit/delete
@@ -38,11 +39,7 @@ export interface QuestionBankCoreProps {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const truncate = (s: string, n = 100) => (s.length > n ? s.slice(0, n) + '…' : s);
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 // ── Badge chips ───────────────────────────────────────────────────────────────
 

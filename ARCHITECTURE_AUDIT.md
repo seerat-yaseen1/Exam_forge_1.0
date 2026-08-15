@@ -590,6 +590,52 @@ The same shape repeats in the auth contexts: Institute and Faculty differ by 196
 much of that role-name substitution. Four providers × ~370 lines is four places to fix any session
 bug.
 
+> **Stage 1 done (2026-08-15) — the duplicated *presentation* logic, not the page structure.**
+>
+> Reading the two pages closely changed what the fix should be. They are ~65% identical by line
+> count, but the differences are **real features**, not drift: Faculty has question sharing, a
+> requests tab and the rights-mode machinery; Institute has author labels and institute-wide
+> visibility. Folding them onto one component would need a heavily parameterised shell — the kind
+> with a dozen boolean props that is harder to follow than the two copies. That restructure is
+> still worth doing, but it is not the cheap part, and the cheap part turned out to be elsewhere.
+>
+> `function formatDate(iso: string)` appeared **11 times across `src/`, in 6 syntactically
+> distinct forms** — differing by a trailing comma or a return annotation — implementing only
+> **three** actual formats:
+>
+> | Format | Copies | Variants |
+> |---|---|---|
+> | short — `Aug 15, 2026` | 7 | 4 |
+> | long — `August 15, 2026` | 3 | 2 |
+> | date + time | 1 | 1 |
+>
+> `truncate` was a fourth helper with 4 byte-identical copies.
+>
+> **None of the eleven guarded its input.** `new Date(x).toLocaleDateString(…)` renders the literal
+> string `"Invalid Date"` for absent, empty or unparseable input — it does not throw, so nothing
+> surfaces until a user reads it. That is the exact bug `instituteValidity.ts` was written to fix
+> for `activeUntil`, and its header is the record of it.
+>
+> **Stated precisely, because the difference matters:** the one call site that field still reaches
+> — `validityLabel` in `UserManagementPage` — *is* correctly guarded, by checking
+> `daysUntilExpiry(...) === null` before formatting. So this is not a live rendering bug that was
+> found. It is that **the guard lives at the call site**, where it has to be remembered by each of
+> them independently, rather than in the formatter, where forgetting it is impossible. Eleven
+> formatters and roughly twenty callers is a lot of remembering.
+>
+> `src/lib/dateFormat.ts` is the three formats with the guard moved inside (14 tests). The
+> deliberate behaviour change is that an unformattable date now renders `—` instead of
+> `"Invalid Date"` — the latter is not a state a user can act on and reads as a crash.
+>
+> Wiring cost no call-site churn: the long and date+time consumers import their format
+> **aliased to `formatDate`**, so all ~20 call sites are untouched and each keeps its original
+> semantics. `builder/shared.ts` re-exports `truncate` rather than dropping it, so its two
+> consumers are unaffected. **Net −52 / +14 lines across 12 files.**
+>
+> **Left open:** the page-structure merge above, and `builder/shared.ts`'s own `formatDateShort`
+> and `formatDateTime` — two more formatters in a module that is now half re-export, and the
+> obvious next thing to fold in.
+
 **F-8 · Four parallel auth contexts, one Firebase Auth instance.**
 Each role gets its own provider, session shape, login, `changePassword`, `requestPasswordReset`
 and `logout` — all backed by the same `auth` singleton and distinguished only by the `role` claim.
@@ -745,7 +791,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-7 | ~~Gitignore `functions/lib/`~~ **DONE, retargeted** — `lib/` was already ignored; the real tracked artefact was `functions/timing-core.cjs`, now untracked and ignored | F-6 | S |
 | R-8 | Automate the pre-exam `minInstances` warm-up (a scheduled bump keyed off the assessment window) rather than relying on a documented manual step | §5 cold start | M |
 | R-9 | ~~Add `functions` to the workspace, extract `shared/`~~ **RE-SCOPED — M was too cheap.** Firebase packages only `functions/`, so a shared package needs a predeploy vendoring step. Guard extended to the four unguarded twins instead (incl. the functions↔rules one); the restructure is left as a deliberate decision | F-2 | L |
-| R-10 | Refactor `InstituteQuestionsPage` / `FacultyQuestionsPage` onto `QuestionBankCore`, matching how reports and rosters already work | F-7 | M |
+| R-10 | ~~Refactor the two question pages onto `QuestionBankCore`~~ **RE-SCOPED + STAGE 1 DONE** — their differences are real features, so the merge needs a heavily parameterised shell. The cheap, high-value part was elsewhere: 11 copies of `formatDate` (3 formats, 6 variants) and 4 of `truncate` folded into a tested `dateFormat.ts` with the missing invalid-input guard | F-7 | M |
 | R-11 | ~~Collapse the four auth contexts~~ **STAGE 1 DONE** — the admission decision extracted to a tested `accessGate.ts`, all three role gates rewired, differential-tested against the expression it replaced. The provider collapse itself still open | F-8 | M |
 | R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |
 | R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGES 1 + 2a DONE** — `examMachine.ts` extracted (26 edges, 27-test sweep) and now wired into ExamShell in **shadow mode**: every transition classified and logged, none blocked. Stage 2b (flip to enforcing after a clean exam cycle, plus the `handleTerminate` guard) still open | F-9, S-3 | L |

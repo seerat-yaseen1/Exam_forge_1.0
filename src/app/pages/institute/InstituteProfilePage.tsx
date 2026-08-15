@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Building2, Mail, Hash, CalendarDays, Upload, Loader2 } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
 import { daysUntilExpiry, NO_EXPIRY_LABEL } from '../../../lib/instituteValidity';
+import { formatDateLong as formatDate } from '../../../lib/dateFormat';
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
@@ -23,11 +24,6 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric',
-  });
-}
 
 function validityStatus(activeUntil: string) {
   const days = daysUntilExpiry(activeUntil);

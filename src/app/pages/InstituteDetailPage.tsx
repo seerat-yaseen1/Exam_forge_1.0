@@ -22,10 +22,8 @@ import { StudentTab } from '../components/student/StudentTab';
 import { SchoolsTab } from '../components/schools/SchoolsTab';
 import { TrashPanel } from '../components/TrashPanel';
 import { daysUntilExpiry, NO_EXPIRY_LABEL } from '../../lib/instituteValidity';
+import { formatDateLong as formatDate } from '../../lib/dateFormat';
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
 
 function validityInfo(activeUntil: string) {
   const days = daysUntilExpiry(activeUntil);

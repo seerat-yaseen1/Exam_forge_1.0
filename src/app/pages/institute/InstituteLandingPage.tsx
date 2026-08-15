@@ -22,6 +22,7 @@ import { getPendingDeletionRequestCount } from '../../../lib/deletionRequestServ
 import { getPendingRequestCount } from '../../../lib/questionRequestService';
 import { FacultyTab } from '../../components/faculty/FacultyTab';
 import { StudentTab } from '../../components/student/StudentTab';
+import { formatDate } from '../../../lib/dateFormat';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -29,11 +30,6 @@ type Tab = 'faculties' | 'students' | 'schools' | 'approvals';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-}
 
 function formatSyncAge(d: Date) {
   const s = Math.floor((Date.now() - d.getTime()) / 1000);

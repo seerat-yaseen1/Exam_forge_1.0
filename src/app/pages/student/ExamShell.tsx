@@ -1165,18 +1165,26 @@ export function ExamShell() {
   // written synchronously so two changes in a single tick are classified
   // against the right predecessor instead of producing a phantom warning.
   const machineStateRef = useRef<ExamState>('loading');
+  /** Illegal transitions seen since the last heartbeat; drained by it. */
+  const machineWarningsRef = useRef<string[]>([]);
 
   const setShellStatus = useCallback((next: ShellStatus) => {
     const from = machineStateRef.current;
     const outcome = observeTransition(from, next as ExamState);
     if (outcome.kind === 'illegal') {
-      // Deliberately console.warn and not an error report: in shadow mode this
-      // is evidence about the TABLE, not yet evidence about the sitting.
-      console.warn(
-        `[examMachine] SHADOW ${from} → ${next}: ${outcome.reason}`
-        + ' — allowed anyway (shadow mode); if this line is absent from a full'
-        + ' exam cycle the table is ready to enforce',
-      );
+      const line = `${from} -> ${next}: ${outcome.reason}`;
+      // Still to the local console, which is what a developer with devtools
+      // open will look at first.
+      console.warn(`[examMachine] SHADOW ${line} — allowed anyway (shadow mode)`);
+      // And queued for the next heartbeat (audit F-9 stage 2b). The console
+      // alone was not enough: shadow mode exists to produce the evidence that
+      // decides whether the table is safe to enforce, and that evidence was
+      // landing in the CANDIDATE'S browser — unread, and unreachable inside
+      // SEB. Bounded here as well as server-side so a pathological loop cannot
+      // grow this ref without limit between beats.
+      if (machineWarningsRef.current.length < 5) {
+        machineWarningsRef.current.push(line);
+      }
     }
     machineStateRef.current = next as ExamState;
     setShellStatusRaw(next);
@@ -1986,7 +1994,14 @@ export function ExamShell() {
     if (tier !== 'normal' && tier !== 'high_stake') return;
     const beat = () => {
       const att = attemptRef.current;
-      if (att?.id) void sendHeartbeat(att.id);
+      if (!att?.id) return;
+      // Drain BEFORE the call, not after it resolves. A heartbeat that fails
+      // is exactly the case where a warning is most interesting, and holding
+      // the queue until success would let a run of failures accumulate the
+      // same lines and re-send them on every beat.
+      const warnings = machineWarningsRef.current;
+      machineWarningsRef.current = [];
+      void sendHeartbeat(att.id, warnings);
     };
     beat();
     const interval = setInterval(beat, 15_000);

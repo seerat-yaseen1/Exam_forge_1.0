@@ -1180,9 +1180,17 @@ export async function gradeAttempt(params: {
 // Thin callable wrappers. The server owns all the logic; these just relay.
 
 /** Heartbeat — call on an interval (~15s) while an attempt is in progress. */
-export async function sendHeartbeat(attemptId: string): Promise<void> {
+export async function sendHeartbeat(
+  attemptId: string,
+  machineWarnings?: string[],
+): Promise<void> {
   const call = httpsCallable<
-    { attemptId: string; sebToken?: string; fingerprint?: DeviceFingerprint },
+    {
+      attemptId: string;
+      sebToken?: string;
+      fingerprint?: DeviceFingerprint;
+      machineWarnings?: string[];
+    },
     { ok: true; ignored?: boolean }
   >(
     functions,
@@ -1197,8 +1205,20 @@ export async function sendHeartbeat(attemptId: string): Promise<void> {
     // that want the check, and the value is computed once per page load and
     // cached, so riding this interval costs a few dozen bytes rather than a
     // WebGL context every fifteen seconds.
+    // machineWarnings rides the same beat (audit F-9 stage 2b). The exam
+    // machine's shadow mode logs illegal transitions, and its entire purpose is
+    // to produce evidence that the table is safe to enforce — but it was
+    // logging to the CANDIDATE'S console, which nobody reads and which is
+    // unreachable inside SEB. Evidence in a place no one can read is not
+    // evidence. This is the only channel that already runs for a whole sitting,
+    // so the warnings ride it rather than earning a new endpoint.
     await withSeb((sebToken) =>
-      call({ attemptId, sebToken, fingerprint: getDeviceFingerprint() }).then(() => undefined));
+      call({
+        attemptId,
+        sebToken,
+        fingerprint: getDeviceFingerprint(),
+        ...(machineWarnings && machineWarnings.length > 0 ? { machineWarnings } : {}),
+      }).then(() => undefined));
   } catch {
     // Heartbeat failures are non-fatal to the exam UX — a missed beat simply
     // shows up server-side as a gap, which is the intended signal.

@@ -197,6 +197,26 @@ console.log(
  * the cold-start cliff, and back to 0 afterwards. Applied ONLY to these six —
  * the other 34 are staff-driven and will never see a cohort-sized burst.
  */
+/**
+ * Every callable that is NOT on the exam hot path.
+ *
+ * Carries the same App Check flag (audit F-3). The original change scoped
+ * enforcement to the ten hot-path functions and said the staff callables were
+ * "a different client population and deserve their own soak" — that was the
+ * right caution with no data, and the data now exists: the project's App Check
+ * console reports Cloud Firestore at 100% verified / 0% unverified, and staff
+ * surfaces read and write Firestore constantly. The population is the same
+ * registered web app, so splitting the rollout would only mean flipping two
+ * switches instead of one.
+ *
+ * Still governed by the single APP_CHECK_ENFORCED variable, so this widens
+ * WHAT the flag covers without changing whether it is on.
+ */
+const CALLABLE_BASE = {
+  region: 'us-central1' as const,
+  enforceAppCheck: APP_CHECK_ENFORCED,
+};
+
 const EXAM_HOT_PATH = {
   region: 'us-central1',
   secrets: [SEB_SIGNING_SECRET],
@@ -334,7 +354,7 @@ function authorizeCaller(
 }
 
 export const createAuthUser = onCall<CreateAuthUserData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     // ── 1. AuthN
     if (!request.auth) {
@@ -1090,7 +1110,7 @@ async function performInstituteCascade(
  * Read-only; safe to call whenever.
  */
 export const getInstitutePurgePreview = onCall<{ instituteId: string }>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     if ((request.auth.token.role as string) !== 'webOwner') {
@@ -1270,7 +1290,7 @@ export const restoreEntity = onCall<{
   role: Role;
   uid: string;
   reason?: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const { role, uid, reason } = request.data || ({} as never);
@@ -1364,7 +1384,7 @@ export const purgeEntity = onCall<{
   /** Faculty only — who inherits their content, validated at execution. */
   successorId?: string;
   reason?: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
   const actor = actorFrom(request);
   if (actor.actorRole !== 'webOwner') {
@@ -2174,7 +2194,7 @@ async function performAccountDeletion(
 }
 
 export const deleteAuthUser = onCall<DeleteAuthUserData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerRole = request.auth.token.role as Role | undefined;
@@ -2513,7 +2533,7 @@ export const setHierarchyNodeLifecycle = onCall<{
   nodeId: string;
   action: 'archive' | 'restore';
   reason?: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const { collection, nodeId, action, reason } = request.data || ({} as never);
@@ -2676,7 +2696,7 @@ export const submitDeletionRequest = onCall<{
   entityType: 'student' | 'faculty';
   entityId: string;
   reason?: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const { entityType, entityId, reason } = request.data || ({} as never);
@@ -2795,7 +2815,7 @@ export const resolveDeletionRequest = onCall<{
   requestId: string;
   decision: 'approve' | 'reject';
   reviewNote?: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const { requestId, decision, reviewNote } = request.data || ({} as never);
@@ -3065,7 +3085,7 @@ export const executeErasure = onCall<{
   acknowledgeRetentionOverride?: boolean;
   /** Recorded verbatim on the request before it is redacted. */
   decision?: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const actor = actorFrom(request);
@@ -3255,7 +3275,7 @@ export const submitSubjectRequest = onCall<{
   basis?: string;
   /** When the PERSON asked — ISO date. Defaults to now if omitted. */
   receivedAt?: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const { type, subjectRole, subjectId, basis, receivedAt } = request.data || ({} as never);
@@ -3329,7 +3349,7 @@ export const decideSubjectRequest = onCall<{
   decision?: string;
   /** Set when an access export was produced for the person. */
   exportGenerated?: boolean;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const { requestId, outcome, decision, exportGenerated } = request.data || ({} as never);
@@ -3486,7 +3506,7 @@ async function collectDoc(
 export const getSubjectData = onCall<{
   role: 'student' | 'faculty';
   uid: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const { role, uid } = request.data || ({} as never);
@@ -3631,7 +3651,7 @@ async function countWhere(
 export const getDeletionImpact = onCall<{
   entityType: 'institute' | 'faculty' | 'student' | 'assessment';
   entityId: string;
-}>({ region: 'us-central1' }, async (request) => {
+}>(CALLABLE_BASE, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
   const { entityType, entityId } = request.data || ({} as never);
@@ -4767,7 +4787,7 @@ function scoreAttemptAnswers(params: {
 }
 
 export const gradeAttempt = onCall<GradeAttemptData>(
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  { ...CALLABLE_BASE, secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
@@ -5274,7 +5294,7 @@ interface RegradeAttemptsData {
 }
 
 export const regradeAttempts = onCall<RegradeAttemptsData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
@@ -5458,7 +5478,7 @@ interface SetManualMarkData {
 }
 
 export const setManualMark = onCall<SetManualMarkData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
@@ -5648,7 +5668,7 @@ interface GetAnswerKeysData {
 }
 
 export const getAnswerKeysForReview = onCall<GetAnswerKeysData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
@@ -6281,7 +6301,7 @@ function sanitizeAssessmentForStudent(
 }
 
 export const getStudentAssessments = onCall(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const role        = request.auth.token.role        as string | undefined;
@@ -6367,7 +6387,7 @@ interface SoftDeleteAttemptData {
 }
 
 export const softDeleteAttempt = onCall<SoftDeleteAttemptData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
 
@@ -6455,7 +6475,7 @@ interface AttemptSectionTiming {
 // clientNow, so the countdown display stays accurate even if the local
 // clock is later tampered with.
 export const getServerTime = onCall(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     return { serverTime: Date.now() };
@@ -6495,6 +6515,37 @@ interface HeartbeatData {
   sebToken?: string;
   /** The machine as it looks NOW, compared server-side against the baseline. */
   fingerprint?: DeviceFingerprintS;
+  /**
+   * Exam-machine shadow warnings (audit F-9 stage 2b).
+   *
+   * DIAGNOSTIC ONLY — nothing is stored, nothing is decided, and no attempt
+   * field moves. They are logged so an operator can answer "is the transition
+   * table safe to enforce yet?" from `firebase functions:log`, which was the
+   * whole point of shadow mode and was not achievable while the warnings went
+   * to the candidate's own console — a place nobody reads, and one that is
+   * unreachable inside SEB.
+   */
+  machineWarnings?: string[];
+}
+
+/**
+ * Bound anything client-supplied before it reaches a log line.
+ *
+ * Same discipline as sanitiseFingerprint and the CSP sink: an untrusted string
+ * that reaches a log unbounded is a log-flooding amplifier, and one containing
+ * a newline can forge a second entry. Count, length and newlines are all
+ * capped here because the caller is a browser in an exam, which is the least
+ * trusted thing in the system.
+ */
+const MAX_MACHINE_WARNINGS = 5;
+const MAX_MACHINE_WARNING_CHARS = 200;
+
+function sanitiseMachineWarnings(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((w): w is string => typeof w === 'string' && w.trim() !== '')
+    .slice(0, MAX_MACHINE_WARNINGS)
+    .map((w) => w.replace(/[\r\n\t]+/g, ' ').trim().slice(0, MAX_MACHINE_WARNING_CHARS));
 }
 
 /**
@@ -6518,6 +6569,18 @@ export const examHeartbeat = onCall<HeartbeatData>(
     const callerStudentId = request.auth.token.studentId as string | undefined;
     const { attemptId, sebToken } = request.data || ({} as HeartbeatData);
     if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
+
+    // Logged BEFORE the attempt is loaded and before any gate, deliberately.
+    // These are diagnostics about the CLIENT, and they are most interesting in
+    // exactly the cases where the heartbeat then goes on to be refused — a
+    // superseded session, a closed window, an expired SEB proof. Logging them
+    // after a guard would drop the ones worth reading.
+    const machineWarnings = sanitiseMachineWarnings(
+      (request.data as HeartbeatData | undefined)?.machineWarnings,
+    );
+    for (const w of machineWarnings) {
+      console.warn(`[examMachine] SHADOW attempt=${attemptId} ${w}`);
+    }
 
     const db = getFirestore();
     const ref = db.collection('attempts').doc(attemptId);
@@ -6629,7 +6692,7 @@ interface ReportExtensionCheckData {
 }
 
 export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  { ...CALLABLE_BASE, secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerUid = request.auth.uid;
@@ -6773,7 +6836,7 @@ interface VerifyAndResumeData { attemptId: string; sebToken?: string; }
 const AUTO_RESUME_CREDIT_CAP_MS = 10 * 60_000;
 
 export const verifyAndResume = onCall<VerifyAndResumeData>(
-  { region: 'us-central1', secrets: [SEB_SIGNING_SECRET] },
+  { ...CALLABLE_BASE, secrets: [SEB_SIGNING_SECRET] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerRole        = request.auth.token.role        as Role   | undefined;
@@ -7614,7 +7677,7 @@ interface SebDiagnosticsData {
 }
 
 export const sebDiagnostics = onCall<SebDiagnosticsData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     if (request.auth.token.role !== 'webOwner') {
@@ -8897,7 +8960,7 @@ interface GradeProvisionalData {
 }
 
 export const gradeProvisional = onCall<GradeProvisionalData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     const { attemptId } = request.data || ({} as GradeProvisionalData);
     if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
@@ -8989,7 +9052,7 @@ export const gradeProvisional = onCall<GradeProvisionalData>(
 );
 
 export const freezeAttempt = onCall<FreezeAttemptData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     const { attemptId, reason } = request.data || ({} as FreezeAttemptData);
     if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
@@ -9113,7 +9176,7 @@ interface UnfreezeAttemptData {
  * cannot regress no matter who calls it or how stale their screen is.
  */
 export const unfreezeAttempt = onCall<UnfreezeAttemptData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     const { attemptId, grantedMs, note } = request.data || ({} as UnfreezeAttemptData);
     if (!attemptId) throw new HttpsError('invalid-argument', 'attemptId is required.');
@@ -11634,7 +11697,7 @@ interface QWritePayload {
 
 /** Create a question as institute/faculty, gated by the create right. */
 export const createQuestionAsRole = onCall<QWritePayload>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -11695,7 +11758,7 @@ interface BulkQuestionItem {
 }
 
 export const createQuestionsBulkAsRole = onCall<{ items?: BulkQuestionItem[] }>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -11771,7 +11834,7 @@ export const createQuestionsBulkAsRole = onCall<{ items?: BulkQuestionItem[] }>(
 
 /** Edit a question as institute/faculty — gated by the edit right AND ownership. */
 export const editQuestionAsRole = onCall<QWritePayload>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -11798,7 +11861,7 @@ export const editQuestionAsRole = onCall<QWritePayload>(
 
 /** Soft-delete a question as institute/faculty — gated by the delete right AND ownership. */
 export const deleteQuestionAsRole = onCall<{ id?: string; subjectId?: string | null; topicId?: string | null }>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -11857,7 +11920,7 @@ const MAX_GROUP_CHILDREN = 249;
  * ordinary topic rules and can be drawn into an exam as unanswerable items.
  */
 export const createQuestionGroupAsRole = onCall<GroupWritePayload>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -11934,7 +11997,7 @@ export const createQuestionGroupAsRole = onCall<GroupWritePayload>(
  * question — this callable does not touch them.
  */
 export const editQuestionGroupAsRole = onCall<GroupWritePayload>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -11981,7 +12044,7 @@ export const editQuestionGroupAsRole = onCall<GroupWritePayload>(
  * container deletes what only made sense inside it.
  */
 export const deleteQuestionGroupAsRole = onCall<{ id?: string; subjectId?: string | null; topicId?: string | null }>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -12050,7 +12113,7 @@ export const shareQuestionsAsRole = onCall<{
   recipients?: Array<{ id: string; type: 'faculty' | 'institute' }>;
   note?: string;
 }>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -12103,7 +12166,7 @@ interface RequestPayload {
  * share), and writes a PENDING questionRequests doc. Does NOT mutate anything.
  */
 export const submitQuestionRequest = onCall<RequestPayload>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -12181,7 +12244,7 @@ export const submitQuestionRequest = onCall<RequestPayload>(
  * On REJECT, just marks it. Idempotent-ish: a non-pending request is refused.
  */
 export const resolveQuestionRequest = onCall<{ requestId?: string; decision?: 'approve' | 'reject'; reviewNote?: string }>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const db = getFirestore();
@@ -12539,7 +12602,7 @@ interface ResolveAllocationData {
 }
 
 export const resolveAllocation = onCall<ResolveAllocationData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     requireWebOwner(request);
     const { assessmentId, nodeType, nodeIds, expectedVersion, dryRun } =
@@ -12755,7 +12818,7 @@ interface AddManualMemberData {
 }
 
 export const addManualMember = onCall<AddManualMemberData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     requireWebOwner(request);
     const { assessmentId, studentId } = request.data || ({} as AddManualMemberData);
@@ -12845,7 +12908,7 @@ interface GetAllocationPreviewPageData {
 }
 
 export const getAllocationPreviewPage = onCall<GetAllocationPreviewPageData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     requireWebOwner(request);
     const { assessmentId, limit, cursor, source } = request.data || ({} as GetAllocationPreviewPageData);
@@ -12915,7 +12978,7 @@ export const getAllocationPreviewPage = onCall<GetAllocationPreviewPageData>(
 // change re-prompts; explicit "sign out everywhere" expects it).
 
 export const revokeSessions = onCall(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     await getAuth().revokeRefreshTokens(request.auth.uid);
@@ -13121,7 +13184,7 @@ interface RecordTelemetryData {
 }
 
 export const recordCodeTelemetry = onCall<RecordTelemetryData>(
-  { region: 'us-central1' },
+  CALLABLE_BASE,
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerRole      = request.auth.token.role      as Role   | undefined;
@@ -13260,7 +13323,7 @@ export const recordCodeTelemetry = onCall<RecordTelemetryData>(
 );
 
 export const runCodeSample = onCall<RunCodeSampleData>(
-  { region: 'us-central1', secrets: [JUDGE0_AUTH_TOKEN], ...JUDGE_ACCESS },
+  { ...CALLABLE_BASE, secrets: [JUDGE0_AUTH_TOKEN], ...JUDGE_ACCESS },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     const callerRole      = request.auth.token.role      as Role   | undefined;
@@ -13479,7 +13542,7 @@ interface RejudgeCodingData {
 
 export const rejudgeAttemptCoding = onCall<RejudgeCodingData>(
   {
-    region: 'us-central1',
+    ...CALLABLE_BASE,
     // Judges inline rather than waiting for the next sweep: this is a person
     // pressing a button and watching, and "it will fix itself within five
     // minutes" is how someone presses it four more times.

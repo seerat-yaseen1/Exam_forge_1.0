@@ -460,6 +460,20 @@ function isAnswerWindowClosed(e: unknown): boolean {
 }
 
 /**
+ * Is this failure "the sitting is paused" rather than something wrong? (C-04.)
+ *
+ * saveAnswerNoAdvance accepts a flush that was already in flight when a pause
+ * landed, and refuses one that arrives a minute later — because a pause the
+ * student can keep writing into is a pause that stops the clock but not the
+ * student. Past that window the refusal is the gate doing its job, and the
+ * same reasoning as isAnswerWindowClosed applies: an expected refusal reported
+ * as a broken save is alarming, and wrong.
+ */
+function isAttemptPaused(e: unknown): boolean {
+  return String((e as { message?: string })?.message ?? '').includes('ATTEMPT_PAUSED');
+}
+
+/**
  * The inverse of `answerHasContent`, and deliberately nothing more.
  *
  * This used to be its own rule, dispatching on the VALUE's shape rather than
@@ -2307,7 +2321,17 @@ export function ExamShell() {
           setConfirmedAnswers((prev) => ({ ...prev, [qid]: answerFingerprint(ans) }));
         }
       } catch (e) {
-        console.error('[ExamShell] sequential answer flush (no-advance) failed', e);
+        // C-04: the server now bounds how long after a pause it will still
+        // accept this flush — one minute, the width of "already in flight".
+        // Past that a refusal is the gate working, not a failure, and the same
+        // reasoning as isAnswerWindowClosed applies: reporting an expected
+        // refusal as a broken save is alarming and wrong. The answer stays
+        // unconfirmed either way, which is what the durability layer reads.
+        if (isAttemptPaused(e)) {
+          console.info('[ExamShell] answer flush refused: the sitting is paused');
+        } else {
+          console.error('[ExamShell] sequential answer flush (no-advance) failed', e);
+        }
       }
       return;
     }

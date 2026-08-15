@@ -42,6 +42,29 @@
 > New suite `functions/test/audit.round3.cjs`, 15 probes / 52 checks. `npm test` now runs all five suites and is green: **13,446 timing states · 84,062 assertions · 64 freeze · 85 e2e · 93 round-2 · 52 round-3.**
 >
 > Deployment: see **[DEPLOY.md](./DEPLOY.md)** — functions only, no rules, no indexes, no migration.
+>
+> ## 🔁 ROUND 4 (2026-08-15) — the pause, and the second door into it
+>
+> Rounds 2 and 3 unified the freeze. **F6** gave both entrances one shape — one ledger entry, one `status: 'frozen'`, one set of legacy mirrors. **F4/F7** then made `unfreezeAttempt`'s release the single implementation of *"the pause is over"*, and routed `verifyAndResume` through it so that *"the invigilator path and the system path cannot reach different state"*.
+>
+> They share the **write**. Round 4 asked whether they share the **decision** and the **consequences**. They did not.
+>
+> | # | Defect | Measured |
+> |---|---|---|
+> | **C-01** | `verifyAndResume` never asks `assertCanUnfreeze` | a **student cleared a faculty member's deliberate pause**; a peer invigilator cleared a colleague's; no audit row either way |
+> | **C-02** | the automatic release grants the whole pause, every time, with no ceiling | a student-driven `freeze → wait → resume` loop moved a 60-minute exam's deadline **+80 minutes** in two cycles |
+> | **C-03** | only one of the two releases deletes the provisional grade | a **stale mark survived on a live attempt** the student went on answering |
+> | **C-04** | `saveAnswerNoAdvance` accepts a frozen attempt without bound | a student **frozen at 9:01 of a 30-minute section was still writing answers into it at 9:41** |
+>
+> **The shape of this round.** Round 3's was *"one fix, four readers it did not reach."* This one is narrower and sharper: **one rule, expressed once, and a second caller that never asked it.** `assertCanUnfreeze` is the §3/§8 authority ladder — written down, commented at length, and called from exactly one of the two functions that end a pause. The same is true of the provisional-grade deletion, of the audit row, and of the transaction.
+>
+> What makes all three reachable is that `lastExtensionCheck.passed` is **not a fact about the machine**. It is written by the student's own `reportExtensionCheck` call, with the value their client chose.
+>
+> Round 3's B-09 is named *"verifyAndResume honours the auto-resume policy"* and reaches none of this: it seeds the `mock` tier, where `requireExtensionCheck` is false, so nothing ever freezes and the probe asserts a constant. That is where C-01, C-02 and C-03 were sitting.
+>
+> New suite `functions/test/audit.round4.cjs` (5 probes / 65 checks) plus `X-05` in the emulator-backed concurrency suite, both wired into `npm test`. Every suite green: **13,446 timing states · 84,062 assertions · 64 freeze · 85 e2e · 111 round-2 · 63 round-3 · 65 round-4 · 157 grading · 91 manual · 51 risk**.
+>
+> Written up in full at **[§10](#10--round-4-2026-08-15--the-pause-and-the-second-door-into-it)**.
 
 ---
 
@@ -411,3 +434,228 @@ PROBE_TRACE=1 node test/audit.probe.cjs   # with stack traces
 ---
 
 <sub>Audit performed against commit `62bf880`. Every finding traced to a `file:line` reference and reproduced by an executable probe driving the compiled production handlers.</sub>
+
+---
+
+# 10 · ROUND 4 (2026-08-15) — the pause, and the second door into it
+
+> **Scope:** the freeze — who may end one, what ending one hands back, what has to be true afterwards, and what a student may do while one is open.
+> **Method:** unchanged. `functions/test/audit.round4.cjs` drives the compiled production callables (`functions/lib/index.js`) against an in-memory Firestore and a virtual clock. Every number below was written by a real handler.
+> **Result:** 5 probes, **13 red across 4 distinct defects**, all four now fixed and green. The eleven pre-existing suites were green before and after.
+
+## 10.1 · Why here
+
+Round 2 froze the paper and the clocks onto the attempt. Round 3 went at the readers round 2 had not reached. Round 4 went at the thing rounds 2 and 3 **built**: the unified freeze.
+
+The unification was real and it was good. **F6** collapsed two freeze mechanisms with different shapes into one — one ledger entry, one `status: 'frozen'`, one set of legacy mirrors — and put the difference between them where it belongs, in `reason`. **F4/F7** made `closeFreezeUpdates` the single implementation of *"the pause is over"*, and its own comment states the goal:
+
+> `verifyAndResume` performs the same release through the same function, so the invigilator path and the system path **cannot reach different state** (F4 / F7).
+
+That is true of the **write**. It is not true of the **decision that authorises the write**, nor of the **things that must also happen** when a pause ends. Sharing an implementation makes two callers agree about *what is written*; it says nothing about what each of them checked first, or cleaned up after. Four separate defects lived in that gap, and they compose: the same student, on the same ordinary configuration, could end a pause they were never entitled to end, be paid for it, leave a stale mark behind, and keep writing answers throughout.
+
+**One configuration reaches all four**, and it is not exotic: `securityTier: 'normal'` with **auto-resume** enabled. On that tier `requireExtensionCheck` defaults **on**, so the automatic freeze is armed; auto-resume is the author's choice in the builder. (`mock` cannot freeze — `requireExtensionCheck` is false — and `startExam:9256` forces auto-resume **off** for `high_stake` regardless of what the document says. Normal is the tier where both are live at once.)
+
+## 10.2 · The enabler, stated once
+
+Three of the four defects rest on one fact:
+
+> **`lastExtensionCheck.passed` is not a measurement. It is a value the student's own client chose.**
+
+`reportExtensionCheck` (`index.ts:6473`) takes `passed` from `request.data` and stores it. That is unavoidable — the check runs in the student's browser, and a browser can lie. The design already accepts the lie in one direction: a student who hides an extension reports `passed: true` and the server cannot know. What was not noticed is that the **other** direction is also available, and is worth more:
+
+- `reportExtensionCheck({ passed: false })` → **the student pauses their own sitting**, stopping every server clock.
+- `reportExtensionCheck({ passed: true })` → **the student satisfies the only condition `verifyAndResume` checked before releasing it.**
+
+A field the subject of a measurement can write is not a measurement — the comment above `registerSession` (`:7783`) says exactly this about `activeSessionId`. The same sentence applies here and had not been applied.
+
+---
+
+## 10.3 · 🔴 C-01 · The authority ladder has a second door, and it is unlocked
+
+**Probe:** `C-01` · **Evidence:** `index.ts:6617` (`verifyAndResume`), `:8277` (`assertCanUnfreeze`), `:8996` (`unfreezeAttempt`'s call to it)
+
+§3/§8 attach authority to the individual pause, and `assertCanUnfreeze` is that rule written down:
+
+```txt
+Frozen by          Cleared by
+faculty            that faculty · their institute admin · web owner
+institute admin    that institute admin · web owner
+web owner          that web owner only
+system / extension any invigilator
+```
+
+> **NEVER A PEER.** Two faculty at the same institute cannot undo each other's decisions — the whole reason authority is recorded is that a pause is a judgement about a student, and one colleague overruling another silently is the thing this prevents.
+
+`unfreezeAttempt` reads it from the open ledger entry, inside its transaction, before anything is written. `verifyAndResume` ends the same pause, through the same `closeFreezeUpdates`, and **never called it**. It asked two other questions:
+
+```ts
+// the whole of the old admission test, as it stood before this round
+const autoResume   = a.securityConfig?.autoResume === true;
+const latestPassed = a.lastExtensionCheck?.passed === true;
+const mayResume = isInvigilator || (isStudentOwner && autoResume && latestPassed);
+```
+
+Neither says anything about **who paused this sitting, or why**. So both halves of the ladder were reachable from the wrong side.
+
+**Measured.** Faculty `fac_1` pauses a sitting with `reason: 'suspected phone use'`. The ledger entry records `reason: 'invigilator'`, `frozenByRole: 'faculty'`.
+
+| Caller | `unfreezeAttempt` | `verifyAndResume` |
+|---|---|---|
+| the student, having posted `passed: true` | *not reachable — students cannot call it* | ✅ **resumed** |
+| `fac_2`, a peer | ❌ `FREEZE_AUTHORITY` | ✅ **resumed** |
+| `fac_1`, the freezer | ✅ resumed | ✅ resumed |
+
+An invigilator's deliberate pause — an act with a named human, a timestamp, a reason string and an `attemptFrozen` audit row — was undone by its own subject, in one call, with no refusal.
+
+**And no record of the undoing.** `freezeAttempt` writes `attemptFrozen`; `unfreezeAttempt` writes `attemptUnfrozen`. `verifyAndResume` wrote **neither**, so a pause could begin with an audit row and end without one — including when an invigilator ended it here, which is the same act `unfreezeAttempt` records.
+
+**FIXED** (`d0b2e46`). The only question a student is now asked is the one that is theirs to answer: was this pause one nobody chose (`reason` of `extension_check` or `system` — the same ownerless set `assertCanUnfreeze` already recognises)? Staff go through `assertCanUnfreeze` itself. Legacy pre-ledger pauses are classified by which path wrote which field, and a pause that cannot be classified is treated as a human's, because that is the direction that cannot invent authority.
+
+Two things came with it, both of which `unfreezeAttempt` already had:
+
+- **The release is transactional.** `closeFreezeUpdates` rebuilds the whole `freezes` array from the document it was handed and writes it back wholesale, so a plain read-then-`update()` drops any entry appended in between — the exact hazard `reportExtensionCheck` was made transactional to avoid ("*an append read-modify-written outside a transaction can lose a concurrent entry*").
+- **The release leaves a record**, automatic clearances included, and names them as such. *"Nobody decided this"* is itself the fact a reviewer needs.
+
+---
+
+## 10.4 · 🔴 C-02 · Self-service resume mints time without bound
+
+**Probe:** `C-02` · **Evidence:** `index.ts:6756` (the grant, now budgeted), `:6473` (`reportExtensionCheck` — who opens the pause)
+
+`verifyAndResume` granted the **whole pause, every time, with no ceiling**, and the reasoning was sound as far as it went — doctrine D8, an automatic state needs an automatic exit in the student's favour:
+
+> Nobody decided this one: an automated check paused the student. […] An invigilator who judges the pause the student's own fault can still deduct it with `unfreezeAttempt`'s penalties.
+
+The premise is that the pause is something that *happened to* the student. §10.2 is why it is not. The student opens the pause and the student satisfies the release condition, so the loop
+
+```
+report failed → think for as long as you like → report passed → verifyAndResume
+```
+
+returns exactly the time it consumed, and can be run again.
+
+**Measured.** 60-minute exam, born with `overallLockedAfter = t0 + 60:30`.
+
+| Moment | Overall deadline | |
+|---|---|---|
+| Birth | `t0 + 60:30` | |
+| After one self-declared 40-minute pause | `t0 + 100:30` | ❌ **+40 min** |
+| After a second | `t0 + 140:30` | ❌ **+80 min, and repeatable** |
+
+That is not a grace period. It is an exam with no overall time limit, reachable from the console by the person being examined — and the deduction remedy the comment points at requires an invigilator to notice a pause that has already ended.
+
+**FIXED** (`63968c9`). **Ten minutes, cumulative, per sitting.** Generous against the case the grant exists for — an antivirus false positive, cleared in seconds once the student closes the offending extension — and finite against the loop. The budget is per **sitting** rather than per pause deliberately: a per-pause cap does not make the loop terminate.
+
+**What is not capped:** an invigilator's grant, here or in `unfreezeAttempt`. A human deciding a pause was genuine can still return all of it, and that decision carries an actor, an instant and an audit row — the three things the automatic path cannot produce. A student who really did lose half an hour is not refused the time; they are asked to get it from someone who can be accountable for giving it.
+
+**The pause is still measured in full.** `elapsedMs` on the ledger row is the wall-clock truth, `grantedMs` is what was given, and a capped row says so in its note. Capping a grant must never falsify the record an invigilator reviews afterwards. `autoGranted` is recorded on the row rather than inferred from a null decider, because `preLedgerCreditEntry`'s synthetic migration row also has no decider and is not an automatic release of anything.
+
+---
+
+## 10.5 · 🟡 C-03 · A provisional grade outlives the pause that justified it
+
+**Probe:** `C-03` · **Evidence:** `index.ts:8718` (the design note), `:9036` (the deletion that was the only one), `:6801` (the one that was missing)
+
+A9 rules out storing a provisional score on the attempt — *"a stale score sitting on a live attempt is exactly the quiet wrongness this whole project has been about"* — and `gradeProvisional` solves it with a sibling document. Its design note says why that is safe:
+
+> `unfreezeAttempt` deletes the row, so the grade cannot outlive the pause that justified it. **Invalidation is not a cleanup step someone must remember** — the score has nowhere to go stale.
+
+It is a cleanup step someone must remember, and only one of the two releases remembered.
+
+**Measured.** Student answers `q1`, is paused by the extension check, an invigilator takes a provisional grade (`10 / 40`, stamped with the open `freezeId`). The student clears their own pause and carries on:
+
+- attempt → `in_progress`, answering again ✅
+- `provisionalGrades/{attemptId}` → **still there**, still `10 / 40`, still stamped with a `freezeId` that is no longer open ❌
+
+Staff surfaces read that row. The guarantee A9 bought by choosing a storage shape instead of a discipline only holds if **every** writer of the state shares it.
+
+**FIXED** (`a3cbbb1`). Deleted in the same transaction as the release, for the same reason `unfreezeAttempt` does it there: a failure between the two leaves a stale grade on a running attempt. The design note is corrected too, rather than left describing a guarantee one function short of being true.
+
+---
+
+## 10.6 · 🔴 C-04 · A paused student can keep writing answers, with the clock stopped
+
+**Probe:** `C-04` · **Evidence:** `index.ts:7260` (`saveAnswerNoAdvance`'s status gate), `:8467` (F5)
+
+F5 named the rule when it moved a frozen sitting to `status: 'frozen'`:
+
+> A pause is a state the student cannot write from. […] A pause that stops the clock but not the student is an **unbounded time grant** to anyone willing to call the callable directly.
+
+Every write path obeys it except one:
+
+| Path | A paused attempt |
+|---|---|
+| standard-mode direct write | ❌ refused — `firestore.rules` require `in_progress` on both sides |
+| `submitAnswerAndAdvance` | ❌ refused — `status !== 'in_progress'` |
+| `runCodeSample` | ❌ refused — *"Running code during a freeze would be doing the exam while the clock is stopped"* |
+| `recordCodeTelemetry` | ❌ refused — `status !== 'in_progress'` |
+| **`saveAnswerNoAdvance`** | ✅ **accepted, without limit** |
+
+The allowance is deliberate and the reason is good: the client learns of a freeze through its Firestore subscription, so a flush already in flight lands *just after* the pause, and refusing it would fail the one call that exists to save the answer in front of a student being paused.
+
+**What was never bounded is how long "just after" lasts.** And the window was not merely open, it was **untimed**: `effectiveNowMs` pins the resolver's clock at the freeze, so `assertSequentialAnswerWindowOpen` — the A-03 gate, right below — cannot refuse a paused student either.
+
+**Measured.** Linear delivery, 30-minute section. Invigilator freezes at `+1:00`. At `+41:00`, still paused, still frozen:
+
+- `saveAnswerNoAdvance({ value: 'beta' })` → **stored**, and `scoreAttemptAnswers` marks it like any other answer.
+
+This is **A-03's shape in the same place**: sequential delivery, the *more* controlled mode, is the weaker one. It also leaves an asymmetry that is worst exactly where it matters most — on a coding paper, the answer kept changing while `recordCodeTelemetry` refused every event, so the record of how the answer was produced had a hole precisely where the answer changed.
+
+**FIXED** (`e32e070`). **One minute**, measured from the start of the open pause: long enough for a debounced flush, a 6s client timeout and a slow subscription; far short of working through a pause. A student whose subscription is broken for longer loses edits made after it broke, and that is the right side to fail on — the alternative is the exam continuing for whoever can keep a tab open. A legacy pause with no ledger entry falls back to `frozenAt`, and an unreadable start instant still allows the write: *a missing bound is not an expired bound*. The shell learned the new refusal exactly as it learned `ANSWER_WINDOW_CLOSED` for A-03, so an expected refusal is not reported as a broken save.
+
+---
+
+## 10.7 · ✅ Verified working — and one probe corrected
+
+`C-05` is the other half of every fix above: the ordinary case must still work.
+
+| Probe | Property |
+|---|---|
+| **C-05** | A genuine 90-second extension freeze is still self-cleared by the student, **granted in full**, with the deadline moving by exactly what the pause cost them, `freezeState`/`resumeRequiresVerification` cleared and the legacy `frozenAt` mirror deleted. With auto-resume **off**, the student still cannot self-resume (`RESUME_BLOCKED`) and stays paused until staff act. An in-flight flush arriving 2 seconds after a pause is still saved. An invigilator can still grant a full 20-minute pause through `unfreezeAttempt` — the C-02 ceiling binds the automatic path only. |
+
+**One probe was corrected rather than reported.** Round 3's `B-09`, *"verifyAndResume honours the auto-resume policy"*, seeds `securityTier: 'mock'` — on which `requireExtensionCheck` is false, so `reportExtensionCheck` never froze anything and the probe fell through to its own `'extension check did not freeze'` branch and asserted a constant. It has never exercised the auto-resume path it is named for. That is where C-01, C-02 and C-03 were. It is annotated in place rather than deleted — it still proves the mock tier does not freeze, and a probe whose blind spot is written down is worth more than one quietly removed. `C-05` covers its stated intent on a tier where the freeze actually happens.
+
+**The transactional half, proved where it can be.** `fakeFirestore` commits transactions with no read set, so `audit.round4.cjs` passes whether or not the release is transactional — the same honest limitation round 3 recorded for B-13/B-14. It is covered instead by a new scenario in the emulator-backed suite:
+
+| Probe | Property |
+|---|---|
+| **X-05** (`concurrency.suite.cjs`) | An invigilator granting **zero** races the student's auto-resume granting **everything**. Exactly one release must survive, the ledger must hold one closed entry, `creditedFreezeMs` must equal what that release decided, and one release must produce one audit row. |
+
+Against the pre-fix handler X-05 measures **both taking effect** — `expected 1, got 2` — with the non-transactional automatic full grant landing on top of the human's zero-grant decision. That is F4's shape one more time: two writers, one field, and credit moving for a reason nobody authorised.
+
+## 10.8 · ⚠️ Contradiction found and closed
+
+| # | Where | What it said | What shipped |
+|---|---|---|---|
+| **C-7** | `index.ts:7260` (`saveAnswerNoAdvance`) | *"freezeAttempt opens a ledger entry and leaves `status` at `'in_progress'`, while reportExtensionCheck writes `status:'frozen'`"* | Superseded by **F5** in round 3, which moved *both* paths to `status: 'frozen'` — the comment justified the frozen allowance with a distinction that no longer exists. **FIXED** as part of C-04; the note now explains the allowance in terms of the in-flight flush, which is the reason that is still true. |
+
+## 10.9 · Order of action taken
+
+Each defect in its own commit, all suites re-run before moving on.
+
+1. **C-01** `d0b2e46` — the authority ladder, the transaction and the audit row.
+2. **C-02** `63968c9` — a budget for the automatic grant.
+3. **C-03** `a3cbbb1` — the provisional grade dies with its pause, on both releases.
+4. **C-04** `e32e070` — a pause a student can write into is not a pause.
+
+## 10.10 · Reproducing round 4
+
+```bash
+cd functions
+npm install
+npm run build
+
+node test/audit.round4.cjs              # 5 probes — green
+PROBE_TRACE=1 node test/audit.round4.cjs
+
+npm run test:concurrency                # X-05, the emulator half of C-01
+npm test                                # every suite, round 4 included
+```
+
+Reverting any one of the four commits turns exactly the probe that names it red, and nothing else. Building the pre-round-4 `index.ts` and running the concurrency suite reproduces X-05's failure directly.
+
+Deployment: functions only — no rules, no indexes, no migration. `autoGranted` is a new optional field on freeze ledger rows written from this deploy onward; attempts frozen before it read as `undefined`, which sums to zero spent budget, so a sitting in flight is unaffected.
+
+---
+
+<sub>Round 4 performed against commit `309ecb0`. Every finding traced to a `file:line` reference and reproduced by an executable probe driving the compiled production handlers.</sub>

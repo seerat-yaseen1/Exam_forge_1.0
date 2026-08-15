@@ -142,16 +142,17 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Eight suites: the timing property sweep, freeze, e2e, three audit
-      # probe rounds, the rules suite and the concurrency suite.
+      # The timing property sweep, freeze, e2e, groups, four audit probe
+      # rounds, grading, manual grading, risk, the two judge suites, and then
+      # the emulator-backed rules, concurrency and bulk-delete suites.
       #
       # The scenario suites load the COMPILED handlers from lib/
       # (`require('../lib/index.js')`) rather than re-implementing their
       # arithmetic, which is why the build step above is a prerequisite and
       # not a duplicate of it.
       #
-      # The last two are the odd ones out, and deliberately so: both need the
-      # emulator rather than the in-memory fake the other six use. The rules
+      # The last three are the odd ones out, and deliberately so: they need the
+      # emulator rather than the in-memory fake the rest use. The rules
       # suite is the only thing that executes firestore.rules — before it, a
       # rule could be deleted outright and every suite stayed green. The
       # concurrency suite is the only thing that sees a real read set —

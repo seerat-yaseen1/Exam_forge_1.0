@@ -166,11 +166,18 @@ someone remembers a setup step is not a gate.
 cd ~/Exam_forge_1.0
 docker run --rm --network host -v "$PWD":/app -w /app \
   -e JUDGE0_URL=http://10.128.0.2:2358 -e AUTHN_TOKEN="$AUTHN_TOKEN" \
-  node:22-alpine npm run verify:judge0
+  node:24-alpine npm run verify:judge0
 ```
 
 `--network host` is what lets the container reach the API on the host's internal
 interface. Quote the token in either form: base64 contains `/` and `+`.
+
+The image tag has to track `.nvmrc`. This command builds `functions/` and
+imports the compiled adapter, so it is production code — running it on a
+different major makes the gate evidence about something other than what ships.
+This block kept naming the previous major for a while after the runtime moved
+to 24; `scripts/check-node-pins.mjs` now fails CI on that, here and in every
+other Node image reference in the repo's docs, compose files and scripts.
 
 `infra/judge0/verify.mjs` is the only thing in this project that tests the
 sandbox itself. Everything else — limits, comparison, the adapter's failure

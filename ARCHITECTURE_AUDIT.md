@@ -1,247 +1,96 @@
-# Architecture & System Boundaries — Audit
+# Exam Forge — Architecture & System Boundaries
 
-**Scope:** frontend architecture, Firebase Functions, Firestore, Storage, Authentication,
-external services, Admin SDK usage, client/server trust boundaries, shared utilities, state
-management, data flow, dependency graph, single points of failure, critical-path components,
-availability assumptions.
+**What this is.** A reference description of the system as it stands, written for someone who has
+to change it. Not a changelog: where a decision looks odd, the reasoning is here so it doesn't get
+"fixed" by someone who doesn't know what it prevents.
 
-**Method:** static read of the repository at `claude/architecture-audit-boundaries-decg8j`
-(base `e840a4f`). Everything below is grounded in a file and, where a number is claimed, in a
-command that produced it. No runtime, no live project, no emulator — so this audit describes
-the *system as committed*, and says so explicitly wherever the deployed state could differ
-(App Check enforcement, Cloud Scheduler enablement, Judge0 cluster health, Vercel env vars).
+**Status.** Originally an audit (2026-08-15) whose findings have since been worked through. The
+findings, their outcomes, and the three places the audit was *wrong* are in
+[Appendix A](#appendix-a--audit-history). Open work is in [§9](#9--open-work).
+
+**Standing caveat.** Everything here is derived from the repository. Deployed state that source
+cannot establish — App Check console enforcement, Cloud Scheduler enablement, Judge0 cluster
+health, Vercel environment variables, IAM grants — is marked ⚠️ where it appears.
 
 ---
 
-## 0 · System at a glance
+## 0 · At a glance
 
 | | |
 |---|---|
 | Product | STRATUM / Exam Forge — multi-tenant online examination platform |
 | Tenancy | Web Owner (platform) → Institute → Faculty → Student |
-| Frontend | React 18 + Vite 6 SPA, React Router 7, deployed on **Vercel** |
-| API | 53 `onCall` + 3 `onSchedule` Firebase Functions (Gen 2, Node 24), **all `us-central1`** |
-| Data | Firestore (49 rule-governed collections), Firebase Storage (2 prefixes) |
-| Identity | Firebase Auth, single tenant, role carried in **custom claims** |
-| Edge | One Vercel serverless route: `/api/seb-verify` |
-| Sandbox | Self-hosted Judge0 on a VM inside the project VPC, no external IP |
+| Frontend | React 18 + Vite 6 SPA, React Router 7, on **Vercel** |
+| API | **53 callable + 4 scheduled** Firebase Functions (Gen 2, Node 24), all `us-central1` |
+| Data | Firestore, **49 rule-governed collections**; Storage, 2 prefixes |
+| Identity | Firebase Auth, single tenant, role in **custom claims** |
+| Edge | Two Vercel routes: `/api/seb-verify`, `/api/csp-report` |
+| Sandbox | Self-hosted Judge0, 4 workers, private VPC, no external IP |
+| Locale | **`en-GB`** — `15 Aug 2026`, 24-hour clock |
 
-**Size.** ~80,800 LOC frontend (231 files, 24 test files) · 16,420 LOC functions
-(5 files, one of them 13,465 lines) · 1,410 lines of Firestore rules · 64 lines of Storage rules.
+**Size.** ~82,200 LOC frontend (239 files, 28 test files) · 16,914 LOC functions (5 files, one of
+them 13,959) · 1,457 lines of Firestore rules · 63 of Storage rules.
+
+**Tests.** 487 frontend · ~1,071 server assertions across 13 headless suites · 169 more across 3
+emulator suites · plus a 13,446-state timing sweep (84,062 property assertions).
 
 ---
 
-## 1 · Architecture diagram
-
-### 1.1 Runtime topology and trust zones
+## 1 · Trust zones
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ ZONE 0 — UNTRUSTED · the candidate's machine                                 │
-│                                                                              │
 │   Browser / Safe Exam Browser                                                │
-│   ┌────────────────────────────────────────────────────────────────────┐     │
-│   │ React SPA (Vercel-served static bundle)                            │     │
-│   │  Root ─ PlatformSettingsProvider ─ AuthProvider                     │     │
-│   │    ├── /dashboard   DashboardLayout        (Web Owner)              │     │
-│   │    ├── /institute   InstituteRoot  → InstituteAuthProvider          │     │
-│   │    ├── /faculty     FacultyRoot    → FacultyAuthProvider            │     │
-│   │    └── /student     StudentRoot    → StudentAuthProvider            │     │
-│   │            ├── exam/:id/briefing   ErrorBoundary variant="exam"     │     │
-│   │            └── exam/:id/shell      ErrorBoundary variant="exam"     │     │
-│   │                    └── ExamShell (4,279 LOC) ◄── CRITICAL PATH      │     │
-│   │                          IntegrityEngine · FaceMonitor ·            │     │
-│   │                          ExtensionWatchdog · QuestionRenderer       │     │
-│   │  src/lib/*  — 37 service modules, the only Firebase callers         │     │
-│   └────────────────────────────────────────────────────────────────────┘     │
-└───┬───────────────┬──────────────────┬───────────────────┬───────────────────┘
-    │               │                  │                   │
-    │ HTTPS         │ callable         │ Firestore/Storage │ POST + SEB header
-    │ static        │ (ID token +      │ SDK (ID token)    │ + ID token
-    │               │  App Check tok)  │                   │
-    ▼               ▼                  ▼                   ▼
-┌─────────┐   ┌──────────────────┐  ┌──────────────┐  ┌────────────────────────┐
-│ ZONE 1  │   │ ZONE 2 — TRUSTED │  │ ZONE 3       │  │ ZONE 1 — SEMI-TRUSTED  │
-│ Vercel  │   │ Cloud Functions  │  │ Firestore +  │  │ Vercel serverless      │
-│ CDN     │   │ us-central1      │  │ Storage      │  │ /api/seb-verify        │
-│         │   │                  │  │              │  │                        │
-│ SPA     │   │ 53 onCall        │  │ RULES ARE    │  │ · reads SEB hash hdr   │
-│ assets  │   │  3 onSchedule    │  │ THE ONLY     │  │ · verifies Firebase ID │
-│ /models │   │                  │  │ GUARD on     │  │   token (RS256, no SDK)│
-│ weights │   │ ADMIN SDK        │  │ this path    │  │ · reads config keys via│
-│         │   │ ── bypasses ──►  │  │              │  │   Firestore REST + SA  │
-│         │   │ all rules        │  │ 49 collections│ │ · mints HMAC proof     │
-└─────────┘   └────┬─────────────┘  └──────────────┘  │   {uid, aid, exp 90s}  │
-                   │                                   └───────────┬────────────┘
-                   │ VPC connector                                 │
-                   │ exam-forge-connector                          │ shares
-                   │ PRIVATE_RANGES_ONLY                           │ SEB_SIGNING_SECRET
-                   ▼                                               │
-        ┌──────────────────────────┐                               │
-        │ ZONE 4 — PRIVATE         │                               │
-        │ Judge0 VM 10.128.0.2:2358│                               │
-        │ no external IP, 1 host   │◄──────────────────────────────┘
-        │ docker compose, no HA    │        (secret must match exactly,
-        └──────────────────────────┘         across two deploy systems)
+│     React SPA          Root ─ PlatformSettings ─ AuthProvider                │
+│                          ├── /dashboard  (Web Owner)                         │
+│                          ├── /institute · /faculty · /student                │
+│                          └── exam/:id/{briefing,shell}   ← CRITICAL PATH     │
+│                                ExamShell · IntegrityEngine · FaceMonitor     │
+│     src/lib/*          41 service modules — the only Firebase callers        │
+└───┬────────────┬────────────────┬──────────────────────┬─────────────────────┘
+    │            │                │                      │
+    │ static     │ callable       │ Firestore/Storage    │ POST + SEB header
+    │            │ ID + AppCheck  │ SDK · ID token       │ + ID token
+    ▼            ▼                ▼                      ▼
+┌────────┐  ┌──────────────────┐  ┌────────────────┐  ┌─────────────────────────┐
+│ ZONE 1 │  │ ZONE 2 — TRUSTED │  │ ZONE 3         │  │ ZONE 1 — SEMI-TRUSTED   │
+│ Vercel │  │ Cloud Functions  │  │ Firestore +    │  │ Vercel serverless       │
+│ CDN    │  │ us-central1      │  │ Storage        │  │ /api/seb-verify         │
+│        │  │ 53 callable      │  │                │  │ /api/csp-report         │
+│ SPA    │  │  4 scheduled     │  │ RULES ARE THE  │  │                         │
+│ assets │  │                  │  │ ONLY GUARD on  │  │ · reads SEB hash header │
+│ /models│  │ ADMIN SDK        │  │ this path      │  │ · verifies ID token     │
+│        │  │ ─ bypasses ───►  │  │ 49 collections │  │ · mints HMAC proof, 90s │
+└────────┘  └───┬──────────────┘  └────────────────┘  └────────────┬────────────┘
+                │                                                   │
+                │ VPC · PRIVATE_RANGES_ONLY          shares SEB_SIGNING_SECRET
+                ▼                                                   │
+     ┌──────────────────────────┐                                   │
+     │ ZONE 4 — PRIVATE         │◄──────────────────────────────────┘
+     │ Judge0  10.128.0.2:2358  │
+     │ 4 workers · no public IP │
+     └──────────────────────────┘
 
-  EXTERNAL, build/runtime:
-    fonts.googleapis.com   (build-injected <link>, runtime fetch)
-    google reCAPTCHA v3    (App Check attestation)
-    raw.githubusercontent.com (face-api weights — VENDORED, no longer fetched)
-    cdn.sheetjs.com        (vendored to repo; no longer fetched at install)
+  EXTERNAL: fonts.googleapis.com · reCAPTCHA v3 (App Check)
+            face-api weights and xlsx are VENDORED — no install-time fetch
 ```
 
-### 1.2 Exam critical path — data flow
+### The decision that shapes everything
 
-```
-STUDENT                     CLIENT                    SERVER                     STORE
-   │
-   │ open briefing
-   ├───────────────► ExamBriefingPage
-   │                    ├─ getAssessment ─────────────────────────────────► assessments (get)
-   │                    ├─ getSEBPublicInfo ────────────────────────────► publicSettings
-   │                    └─ scanForExtensions (client-only, advisory)
-   │
-   │ if requireSEB:
-   │                 POST /api/seb-verify ──► Vercel edge
-   │                                            ├─ SHA256(url+configKey) vs header
-   │                                            ├─ verify ID token (RS256)
-   │                                            └─ mint v1.<b64>.<hmac>  ── 90 s TTL
-   │
-   ├───────────────► startExam(assessmentId, sebToken, sessionId, fingerprint)
-   │                                          ├─ assertSEB (uid+aid bound)
-   │                                          ├─ assertNotBlocked
-   │                                          ├─ membership: allocationMode
-   │                                          │    'rules' → assessmentMembers/{aid_sid}
-   │                                          │    else    → assignedTo
-   │                                          ├─ freeze examSnapshot ────► attempts (create)
-   │                                          └─ compute deadlines (examTimingCore)
-   │
-   ├───────────────► getExamQuestions ────────► sanitizeQuestionForStudent
-   │                                            (field whitelist; answer keys never sent)
-   │
-   │ answering:
-   │   debounce 1.5 s ──► updateDoc(attempts/{id}) ─────────► RULES: answers+updatedAt only
-   │   sequential mode ─► submitAnswerAndAdvance / saveAnswerNoAdvance (callable)
-   │   heartbeat 15 s ──► examHeartbeat ─────────► gaps, fingerprint drift, SEB re-proof
-   │   violations ──────► logViolation ──────────► server-incremented, append-only
-   │   code "Run" ──────► runCodeSample ─────────► Judge0 (VPC)
-   │
-   ├───────────────► submitSection ──► startSection ──► … ──► gradeAttempt
-   │                                          ├─ scoreAttemptAnswers
-   │                                          ├─ coding? set codeJudgePending ─┐
-   │                                          └─ write scores ────────────────┼─► attempts
-   │                                                                          │
-   │                 scheduledJudgeCoding (every 5 min, LIMIT 50) ◄───────────┘
-   │                    └─ Judge0 ──► attemptVerdicts ──► settle paper
-   │
-   └───────────────► ExamResultsPage ──► getExamVerdict / getAnswerKeysForReview
-```
+**The browser talks to Firestore directly.** There is no API gateway in front of the data.
+Security rules are the only guard on that path, and the Cloud Functions sit *beside* it — not in
+front of it — to own the writes a candidate must never be able to forge.
 
-### 1.3 Frontend module dependency graph (`src/lib`)
-
-```
-                         firebase.ts  (app · db · auth · storage · functions · AppCheck)
-                              ▲
-        ┌─────────────────────┼──────────────────────┬────────────────┬──────────────┐
-        │                     │                      │                │              │
-  firebaseService      subjectService        assessmentService   deletionRights  sessionSecurity
-   (CRUD + hierarchy)   (subjects/topics)          ▲             (ceilings)
-        ▲                     ▲                    │
-        │                     └───────┐            │
-        │                             │            │
-   allocationService          questionBankService ─┘
-   questionRights                ▲   ▲   ▲
-   resultsExport ────────────────┘   │   └──── itemTypes ──┐
-        │                            │                     │
-        │                     questionShareService         │
-        │                     questionAnswerSplit          │
-        │                     codeAuthoring ──► codeSnippets
-        │                                                  │
-        └──────────► submissionService ◄───────────────────┘
-                        ▲   ▲   ▲   ▲
-                        │   │   │   └── deviceFingerprint
-                        │   │   └────── codeTelemetry ──► codeReplay
-                        │   └────────── codeVerdictView
-                        └────────────── heartbeatQuiet, manualGradingService
-
-  NO CYCLES.  Two hubs: firebase.ts (leaf; 19 importers in src/lib, 33 across src/) and
-  questionBankService / submissionService (fan-in from the exam + authoring surfaces).
-```
+That is why the attempt-update whitelist is the single most important control in the system, and
+why so much of §2 is about which fields a client can and cannot move.
 
 ---
 
-## 2 · Component responsibilities
+## 2 · The five crossings
 
-### 2.1 Frontend
-
-| Component | Responsibility | Notes |
-|---|---|---|
-| `src/app/App.tsx` | Outermost `ErrorBoundary` → `Suspense` → `RouterProvider` | Boundary deliberately **above** Suspense so a 404'd lazy chunk after redeploy shows a reload prompt, not a white screen |
-| `src/app/routes.tsx` | Whole route tree; every page lazy, every layout/root eager | Eager shell is deliberate — lazy roots would create a request waterfall |
-| `Root.tsx` | `PlatformSettingsProvider` → `AuthProvider` (Web Owner) | Branding sits above all four role trees |
-| `InstituteRoot` / `FacultyRoot` / `StudentRoot` | Mount the per-role auth provider for their subtree | Three near-identical 14-line files |
-| `context/AuthContext` (378) | Web Owner session **+ TOTP MFA** (enroll/confirm/disable/resolve) | Only role with MFA |
-| `context/InstituteAuthContext` (369) | Institute session, `instituteCode` check, validity window | |
-| `context/FacultyAuthContext` (355) | Faculty session | **~45% identical to Institute's after role-name normalisation** (196 differing lines) |
-| `context/StudentAuthContext` (395) | Student session, program tag arrays, lifecycle + `activeUntil` gate | |
-| `context/PlatformSettingsContext` (85) | Platform branding/name | Extracted out of AuthContext (M4) |
-| `layouts/*DashboardLayout` | Chrome + nav per role | Four files |
-| `pages/student/ExamShell.tsx` | **The sitting.** Section nav, answer state, debounced saves, timers, integrity, overlays, submit | **4,279 LOC · 44 `useState` · 29 `useRef` · 32 `useEffect`** |
-| `components/exam/IntegrityEngine` | Keyboard/focus/clipboard restrictions | |
-| `components/exam/FaceMonitor` | Webcam PiP + TinyFaceDetector; dynamic-imports face-api (~600 KB) | Weights self-hosted at `/models` |
-| `components/exam/ExtensionWatchdog` + `extensionScan` + `extensionIdProbe` | Browser-extension detection (advisory) | |
-| `components/*Core` | Shared bodies: `QuestionBankCore`, `ReportsInboxCore`, `AssessmentRosterCore`, `AllocationPanelCore` | Adoption is **uneven** — see §6.2 |
-
-### 2.2 Service layer (`src/lib`, 37 modules)
-
-| Module | LOC | Responsibility |
-|---|---|---|
-| `assessmentService` | 2,067 | Assessment CRUD, SEB token acquisition, `getStudentAssessments`, `resolveAllocation`, `sebDiagnostics` |
-| `questionBankService` | 2,042 | Question/group CRUD via `*AsRole` callables, `getExamQuestions`, `getAnswerKeysForReview` |
-| `submissionService` | 2,037 | **Whole exam runtime API**: start/section/answer/heartbeat/violation/freeze/verdict/grade + the only two `onSnapshot` listeners |
-| `firebaseService` | 1,519 | Generic Firestore helpers + all identity CRUD + the 9-level academic hierarchy + every permission-flag setter |
-| `itemTypes` | 1,088 | Question-type registry shared by authoring and rendering |
-| `subjectService` | 793 | Subjects/topics, cascade rename/merge |
-| `firebase.ts` | 57 | **The single Firebase entry point.** App, Firestore, Storage, Auth, Functions, App Check |
-| `deletionRights` / `lifecycle` / `deletionAudit` / `bulkDelete` / `erasureService` | ~1,300 | Deletion ceilings, soft-delete lifecycle, audit trail, GDPR erasure |
-| `codeAuthoring` / `codeVerdictView` / `codeTelemetry` / `codeReplay` / `codeSnippets` | ~1,400 | Coding-item authoring, verdict presentation, keystroke telemetry |
-| `twinSync.test.ts` | 290 | **Guards client↔server list drift by reading server source as text** |
-
-### 2.3 Cloud Functions (`functions/src`)
-
-| Module | LOC | Responsibility |
-|---|---|---|
-| `index.ts` | **13,465** | All 56 exports + ~90 helpers. Auth, deletion/lifecycle, grading, exam runtime, SEB verification, question rights, allocation, judging |
-| `examTimingCore.ts` | 1,228 | **The single implementation of every deadline.** Deliberately extracted so the write gate and the resolver cannot disagree |
-| `judgeCore.ts` | 948 | Provider-agnostic judge state machine, language list, comparison modes |
-| `judge0Adapter.ts` | 523 | Judge0-specific: pinned language ids, base64 both ways, never delegates comparison |
-| `allocationCore.ts` | 256 | Hierarchy-rule → student-set resolution |
-
-**Function families (56 exports):**
-
-| Family | Count | Examples |
-|---|---|---|
-| Exam runtime (`EXAM_HOT_PATH`) | 10 | `startExam`, `getExamQuestions`, `submitAnswerAndAdvance`, `saveAnswerNoAdvance`, `examHeartbeat`, `registerSession`, `logViolation`, `startSection`, `submitSection`, `getExamVerdict` |
-| Grading | 6 | `gradeAttempt`, `gradeProvisional`, `regradeAttempts`, `setManualMark`, `getAnswerKeysForReview`, `rejudgeAttemptCoding` |
-| Identity & lifecycle | 9 | `createAuthUser`, `deleteAuthUser`, `restoreEntity`, `purgeEntity`, `setHierarchyNodeLifecycle`, `executeErasure`, … |
-| Deletion governance | 5 | `submitDeletionRequest`, `resolveDeletionRequest`, `getDeletionImpact`, `getInstitutePurgePreview`, … |
-| Question rights | 10 | `createQuestionAsRole`, `editQuestionAsRole`, `deleteQuestionAsRole`, `shareQuestionsAsRole`, `submitQuestionRequest`, … |
-| Allocation | 3 | `resolveAllocation`, `addManualMember`, `getAllocationPreviewPage` |
-| Coding/judge | 3 | `runCodeSample`, `recordCodeTelemetry`, `scheduledJudgeCoding` |
-| Invigilation | 4 | `freezeAttempt`, `unfreezeAttempt`, `softDeleteAttempt`, `reportExtensionCheck` |
-| Scheduled | 3 | `scheduledCloseExpiredAttempts` (60 min), `scheduledPurge` (daily 03:00), `scheduledJudgeCoding` (5 min) |
-
----
-
-## 3 · Trust boundaries
-
-There are **five** crossings. Each is listed with what it actually validates.
-
-### TB-1 · Browser → Firestore/Storage (direct SDK)
-
-The client holds a Firebase ID token and talks to Firestore directly. **Security rules are the
-only guard** — there is no proxy. Authorization rests entirely on custom claims:
+Authorization rests entirely on Firebase Auth custom claims, minted only by `createAuthUser`
+through the Admin SDK. A client cannot self-assign a role.
 
 ```
 { role: 'webOwner' }
@@ -250,645 +99,351 @@ only guard** — there is no proxy. Authorization rests entirely on custom claim
 { role: 'student',   instituteId, studentId }
 ```
 
-Claims are minted **only** by `createAuthUser` (Admin SDK). A client cannot self-assign a role.
-
-What the rules enforce, per the collections that matter:
-
-| Collection | Student | Faculty / Institute | Notes |
+| # | Crossing | Guard | On failure |
 |---|---|---|---|
-| `questions` | **read denied** | read: own-tenant + webOwner content | Students get content *only* via `getExamQuestions`. **Writes narrowed to `isWebOwner()`** so institute/faculty must go through the `*AsRole` callables where the rights ceiling actually lives |
-| `assessments` | `get` only, never `list`, only if assigned | own + assigned-published | List-vs-get split is deliberate |
-| `attempts` | own only; **update whitelisted to `answers` + `updatedAt`** | own institute | `sectionTimings`, `currentSectionIdx`, `integrityLog`, `activeSessionId` are **server-only** — the clock, the violation log and the session claim cannot be forged from the console |
-| `platformSettings` (SEB config keys) | denied | denied | webOwner only; functions read via Admin SDK |
-| `publicSettings` | read if signed in | read | Non-secret half of the SEB info, split out precisely so the keys stay unreadable |
-| `provisionalGrades` | denied | own institute | `allow write: if false` — server-written only |
+| **TB-1** | Browser → Firestore/Storage | Security rules + claims | closed (default deny) |
+| **TB-2** | Browser → callable | Per-handler claim re-derivation; App Check ⚠️ | closed |
+| **TB-3** | SEB → Vercel → functions | Config-key hash, then HMAC proof bound to uid **and** exam | closed on missing secret; **env-key fallback** on Firestore outage |
+| **TB-4** | Functions → Firestore | **none** — Admin SDK bypasses rules; per-handler authz *is* the guard | n/a |
+| **TB-5** | Functions → Judge0 | VPC private range + bearer token | **degrades silently** to manual review |
 
-**Verified strength:** the answer-write whitelist is the load-bearing control of the whole exam.
-`hasOnly()` on top-level keys catches dot-path writes (`answers.q_xyz` counts as `answers`), and
-`answerWriteWindowOpen()` bounds it against the server-materialised lock.
+### TB-1 — what a student can write
 
-### TB-2 · Browser → Cloud Functions (callable)
+One field. The rules narrow a student's attempt patch to `answers` + `updatedAt`, inside a
+server-materialised time window.
 
-Every callable re-derives identity from `request.auth.token` and **never trusts payload identity**.
-The pattern is consistent across the 53 handlers:
+Everything a candidate must not forge lives outside that whitelist, and each was removed for a
+reason worth keeping:
 
-```ts
-if (!request.auth) throw new HttpsError('unauthenticated', …);
-const role = request.auth.token.role as string | undefined;
-const studentId = request.auth.token.studentId as string | undefined;
-if (role !== 'student' || !studentId) throw new HttpsError('permission-denied', …);
+| Field | Why it is server-only |
+|---|---|
+| `integrityLog` | `increment()` client-side was never protection — a plain `updateDoc` could reset the object to zeros. Now append-only via `logViolation`; a reported violation cannot be un-reported |
+| `activeSessionId` | Was writable but compared by nothing, so the dual-device overlay was decoration. `registerSession` now holds a transaction |
+| `sectionTimings`, `currentSectionIdx` | The per-section clock; forgeable from the console otherwise |
+
+Also on this path: **hierarchy lifecycle fields** (`status`, `lifecycleState`, `archivedAt`,
+`archivedBy`, `archivedByRole`, `lifecycleReason`) are fenced across all nine academic
+collections, so archive/restore must go through `setHierarchyNodeLifecycle` — where the
+`schoolsManagementEnabled` permission is actually checked and the audit row written. Renames and
+metadata edits keep the direct path.
+
+> **Why that fence exists.** `canWriteAcademic` gates on role and tenant only — it has never known
+> about `schoolsManagementEnabled`. So the schools permission was decorative for anyone willing to
+> open DevTools: revoking it hid the buttons and stopped nothing. An emulator probe against the
+> unfenced rules confirmed an institute admin could set `status: 'archived'` and forge every field
+> of the lifecycle envelope. Pinned by `R-10` in the rules suite.
+
+### TB-2 — callables
+
+Every handler re-derives identity from `request.auth.token`; none trusts payload identity.
+Client-reported device data (`cameraDeclined`, `deviceClass`, `fingerprint`) is explicitly
+advisory and documented as such. `startExam` still *accepts* client-supplied `sections` /
+`shuffleQuestions` / `sectionStartOrder` for cached-client compatibility and **reads none of
+them** — exam shape is derived server-side.
+
+⚠️ **App Check is wired on all 53 callables but defaults to off.** See [§4](#4--staged-controls).
+
+### TB-3 — why the edge function exists
+
+Safe Exam Browser injects its config-key header **only on same-origin requests**, so it is
+unreadable from `cloudfunctions.net`. Verification therefore happens on the app's own domain, and
+the result crosses to the functions as a short-lived HMAC proof bound to both `uid` (stops one
+student minting proofs for classmates in Chrome) and `aid` (stops a platform-config session being
+replayed against an exam demanding its own key).
+
+Both sides accept a **comma-separated secret list**: the edge mints with the first, the functions
+accept any. That asymmetry is what makes rotation seamless — see `DEPLOY.md §9`.
+
+### TB-4 — the Admin SDK bypasses everything
+
+This is the intended privileged path, and it is what makes TB-1's whitelist workable: everything a
+student must not forge is written here instead. The correctness of the whole model therefore rests
+on each of the 57 handlers doing its own authorization. The consistent guards are `assertSEB`,
+`assertSession`, `assertNotBlocked`, `assertInvigilator`, `assertQuestionRight`,
+`assertInstituteActiveS`, `requireWebOwner`.
+
+---
+
+## 3 · The exam critical path
+
+```
+STUDENT              CLIENT                    SERVER                      STORE
+   │ briefing
+   ├──────────► ExamBriefingPage ─ getAssessment ──────────────────────► assessments (get)
+   │                              ─ getSEBPublicInfo ──────────────────► publicSettings
+   │            (extension scan — client-only, advisory)
+   │
+   │ if requireSEB:  POST /api/seb-verify ──► SHA256(url+configKey) vs header
+   │                                          verify ID token (RS256)
+   │                                          mint v1.<b64>.<hmac>, 90s TTL
+   │
+   ├──────────► startExam ─────────────────► assertSEB · assertNotBlocked
+   │                                          membership: allocationMode 'rules'
+   │                                            → assessmentMembers/{aid_sid}
+   │                                            else legacy assignedTo
+   │                                          freeze examSnapshot ──────► attempts (create)
+   │                                          compute deadlines (examTimingCore)
+   │
+   ├──────────► getExamQuestions ──────────► sanitizeQuestionForStudent
+   │                                          (whitelist; answer keys never sent)
+   │ answering:
+   │   debounce 1.5s ─────────────────────────────────────────────────► attempts
+   │                                          RULES: answers + updatedAt only
+   │   sequential   ─► submitAnswerAndAdvance / saveAnswerNoAdvance
+   │   heartbeat 15s ─► examHeartbeat ──────► gaps · fingerprint drift · SEB re-proof
+   │                                          · examMachine shadow warnings
+   │   violations   ─► logViolation ────────► server-incremented, append-only
+   │   code "Run"   ─► runCodeSample ───────► Judge0 (VPC)
+   │
+   └──────────► submitSection → gradeAttempt ─► scores + codeJudgePending ─► attempts
+                                                          │
+                scheduledJudgeCoding (5 min) ◄────────────┘
+                  4 papers in flight, 240s budget ──► Judge0 ──► attemptVerdicts
 ```
 
-Client-supplied data is treated as **advisory and explicitly documented as such** —
-`cameraDeclined`, `deviceClass`, and the device `fingerprint` all carry comments stating they
-are honest-majority signals, not evidence. `sanitiseFingerprint` clips to four known fields at
-120 chars each before anything reaches a document.
-
-`startExam` still *accepts* `sections`, `shuffleQuestions`, `sectionStartOrder` for cached-client
-compatibility but **reads none of them** — exam shape is derived server-side from the assessment
-(D-07). That is the correct posture and worth preserving.
-
-**Gap:** no callable declares `enforceAppCheck`. App Check is initialised client-side
-(`src/lib/firebase.ts:33`) and the token rides along, but with `enforceAppCheck` unset the v2
-default is permissive — a request **without** an App Check token is still served. See F-3.
-
-### TB-3 · Browser (in SEB) → Vercel edge → Cloud Functions
-
-The most interesting boundary in the system, and correctly reasoned.
-
-SEB injects `X-SafeExamBrowser-ConfigKeyHash` **only on same-origin requests**, so the header is
-unreadable from `cloudfunctions.net`. The design moves verification to the app's own origin and
-bridges with a signed token:
-
-1. `/api/seb-verify` recomputes `SHA256(absoluteURL + configKey)` and compares constant-time
-   against the header.
-2. It verifies the caller's Firebase ID token itself (RS256 against Google's certs, no
-   `firebase-admin` — the bundle stays dependency-free).
-3. It mints `v1.<b64url(JSON)>.<hex HMAC>` bound to **both** `uid` and `aid` (assessment), TTL 90 s.
-4. `assertSEB` in the functions verifies the HMAC and both bindings.
-
-Both bindings are load-bearing and both are present: `uid` stops one student in SEB minting
-proofs for classmates in Chrome; `aid` stops a platform-config session being replayed against an
-exam demanding its own key.
-
-**Fails closed correctly:** missing `SEB_SIGNING_SECRET` → `SEB_NOT_CONFIGURED`, never
-"SEB satisfied". **Fails open by design in one place:** if Firestore is unreachable,
-`resolveConfigKeys` falls back to the `SEB_CONFIG_KEYS` env list rather than bricking a scheduled
-exam. That trade is documented and defensible, but it means the env fallback must be kept current
-or a Firestore outage silently changes which keys are accepted.
-
-### TB-4 · Cloud Functions → Firestore (Admin SDK)
-
-**Admin SDK bypasses all rules.** This is the intended privileged path and is what makes the
-whitelist model in TB-1 work: everything a student must not forge is written here instead.
-`initializeApp()` at `functions/src/index.ts:191` with default credentials.
-
-The correctness of the entire model therefore rests on each of the 56 handlers doing its own
-authorization. Spot-checked across families (`gradeAttempt`, `getExamQuestions`, `startSection`,
-`createQuestionAsRole`, `resolveAllocation`) — all gate on claims before touching data. Dedicated
-guards exist and are used consistently: `assertSEB`, `assertSession`, `assertNotBlocked`,
-`assertInvigilator`, `assertQuestionRight`, `assertInstituteActiveS`, `requireWebOwner`.
-
-### TB-5 · Cloud Functions → Judge0 (VPC)
-
-Private-range egress only, through `exam-forge-connector`. The cluster has no external IP. Both
-judge-touching functions (`runCodeSample`, `scheduledJudgeCoding`) carry `JUDGE_ACCESS`; either one
-missing it fails as `judge_unavailable` against a healthy cluster. Candidate output is redacted
-before return (`redactForCandidate`).
-
-### Boundary summary
-
-| # | Crossing | Guard | Fails |
-|---|---|---|---|
-| TB-1 | Browser → Firestore/Storage | Security rules + custom claims | closed (default deny) |
-| TB-2 | Browser → callable | `request.auth.token` re-derivation | closed |
-| TB-3 | SEB → Vercel → functions | Config-key hash + HMAC proof (uid+aid) | closed on secret; **open to env keys** on Firestore outage |
-| TB-4 | Functions → Firestore | **none** (Admin SDK) — per-handler authz is the guard | n/a |
-| TB-5 | Functions → Judge0 | VPC private range + auth token | **safe-degrades silently** to manual review |
+**Answers take the unmediated path; everything that decides a mark does not.** Timing, section
+transitions, session claims and the violation log all move through Zone 2, where the server can
+refuse them.
 
 ---
 
-## 4 · Single points of failure
+## 4 · Staged controls
 
-Ranked by blast radius.
+Four controls are **built, tested, and deliberately not switched on.** Each waits on evidence or a
+grant that source cannot supply. This is the codebase's established pattern — `examTimingCore`
+shipped inert with its sweep before anything depended on it.
 
-| # | SPOF | Blast radius | Evidence |
-|---|---|---|---|
-| **S-1** | **`functions/src/index.ts` — one 13,465-line module holding all 56 exports** | A bad deploy or a helper regression touches every capability at once. `DEPLOY.md §5` forbids cherry-picking *because* the exports share mutated helpers, so the mitigation for one risk (drift) is the amplifier for the other (blast radius) | `wc -l functions/src/index.ts` |
-| **S-2** | **Single region `us-central1` for all 56 functions** | A regional outage stops every exam in flight, everywhere | 47 explicit `region:` literals, 0 others |
-| **S-3** | **`ExamShell.tsx` — 4,279 LOC, 44 `useState`, 29 `useRef`, 32 `useEffect`** | Every sitting runs through this one component. Its own error boundary can only offer *reload* (correctly — the alternative is walking out of an exam unrecorded) | `routes.tsx:191-198` |
-| **S-4** | **Judge0: one VM, `docker compose up`, no HA, no external IP** | Coding items stop marking. Degrades *safely* (`NullJudgeAdapter` → manual review) but **silently** — one log line is the entire signal | `DEPLOY.md §2` |
-| **S-5** | **`/api/seb-verify` is the only place a SEB header can be read** | Vercel outage or an env drift = every SEB-required exam fails closed and cannot start | `api/seb-verify.js` header comment |
-| **S-6** | **`SEB_SIGNING_SECRET` lives in two deploy systems** (Vercel env + Firebase secret) | A rotation applied to one and not the other rejects every SEB proof platform-wide | `api/seb-verify.js:44`, `index.ts:62` |
-| ~~**S-7**~~ **FIXED** | **Hardcoded Firebase config — zero env vars in the frontend** (now `import.meta.env` with today's project as fallback) | One project only. No staging/prod separation; pointing at another project requires a code edit and redeploy | `grep -rn "import.meta.env" src/` → 0 hits |
-| ~~**S-8**~~ **FIXED** | **`postinstall` curled face-api weights from `raw.githubusercontent.com`** (now vendored + checksummed; a missing weight degrades the feature, not the build) | `npm i` fails ⇒ Vercel build fails. `public/models/` is gitignored so the fetch is mandatory, and the URL points at a third-party repo's `master` | `package.json` scripts; `.gitignore` |
-| **S-9** | **Cloud Scheduler** drives `scheduledJudgeCoding` (5 min), `scheduledCloseExpiredAttempts` (60 min), `scheduledPurge` (daily) | Scheduler disabled ⇒ coding papers never mark, expired attempts never close, purges never run — all silently | `index.ts:1443, 1870, 13425` |
-| **S-10** | **`exam-forge-connector`** — one shared VPC connector | Both judge functions depend on it; connector loss = `judge_unavailable` | `JUDGE_ACCESS`, `index.ts:145` |
-| **S-11** | **Firebase Auth as the single IdP for all four roles** | Auth outage = nobody signs in. No offline or break-glass path exists | four auth contexts |
-
----
-
-## 5 · Availability & capacity assumptions
-
-Stated target in code comments: **10,000 concurrent students**.
-
-| Assumption | Where | Assessment |
+| Control | Flag / state | What it waits on |
 |---|---|---|
-| `maxInstances: 200`, `concurrency: 80` on the 10 hot-path functions ⇒ ~16,000 in-flight | `EXAM_HOT_PATH`, `index.ts:110` | **Sound.** In-flight = arrival × duration; 10k starts over 10 s at ~300 ms ≈ 300 in flight. The headroom is for the cold-start pathological case. The 200 ceiling is a **project CPU quota limit**, not a choice — raising it needs a quota request |
-| `minInstances: 0` — cold-start cliff at exam open | same | **Accepted risk with a manual mitigation.** The comment prescribes setting 2–3 on `startExam`/`getExamQuestions` before a large sitting and back to 0 after. **That procedure is documented but not automated** — it depends on a human remembering |
-| Heartbeat every 15 s per student | `ExamShell.tsx:1951` | At 10k students ≈ **667 rps sustained** on `examHeartbeat` alone, each doing a document read + conditional write. Well inside the instance ceiling; worth watching as a Firestore cost/throughput line |
-| Answer saves debounced 1.5 s, direct to Firestore | `submissionService.ts:909` | One attempt doc per student ⇒ per-document write rate stays under Firestore's ~1 write/s/doc soft limit under normal answering. Rapid-fire answering on one attempt is the contention case |
-| Window expiry polled every 30 s; UI clock every 500 ms | `ExamShell.tsx:1933, 929` | Client-side only; deadlines are server-authoritative via `examTimingCore` |
-| SEB token TTL 90 s, refreshed by the 15 s heartbeat | `api/seb-verify.js:54` | Comfortable margin (6×) |
-| SEB config-key cache 2 minutes | `api/seb-verify.js:55` | A key added on the settings page is live within 2 min, no redeploy |
-| ~~**`scheduledJudgeCoding` processes `.limit(50)` per 5-minute run**~~ **FIXED (2026-08-15)** | `index.ts` | Was a hard ceiling of **600 papers/hour** — ~17 hours to drain a 10k cohort. **The count was the wrong knob and the loop was the real defect:** the cluster runs `replicas: 4` — its own compose file calls that "the real concurrency ceiling of the whole platform" — and the sweep awaited one paper at a time, leaving three workers idle. Now a bounded-concurrency pool (default 4, matching the replicas) under a **wall-clock budget** rather than a paper count, since a paper's cost is not knowable in advance. Budget defaults to 240s: **below the 300s schedule interval**, because Cloud Scheduler does not wait for the previous run and two overlapping sweeps would judge the same paper twice, spending two of its five attempts for one result. Covered by `G-27`, which fails on each count if either half is reverted |
-| A paper exhausts at `MAX_JUDGE_ATTEMPTS` (5) with **no in-product re-arm** | `DEPLOY.md §2` | `regradeAttempts` re-reads existing verdicts; it does not re-judge. An exhausted paper needs manual intervention |
-| Deploy skew: a full functions deploy lands over several minutes; `deploy-functions.sh` batching widens it to ~10 min | `DEPLOY.md §5` | Explicitly "do not run during a live sitting" |
+| **App Check enforcement** | `APP_CHECK_ENFORCED` (default off) — all 53 callables | ⚠️ Console shows Firestore 100% verified. Flip is a config change + redeploy, reversible the same way |
+| **Exam state machine** | Shadow mode — classifies every transition, blocks none | One exam cycle with no `[examMachine] SHADOW` lines in `examHeartbeat` logs |
+| **CSP** | Report-only for the meaningful directives; `/api/csp-report` collects | A quiet soak. Two entries look already-dead: `raw.githubusercontent.com` (now vendored) and `cdn.jsdelivr.net` |
+| **Pre-exam warm-up** | `WARMUP_ENABLED` (default off) | ⚠️ `roles/run.developer` on the functions service account, **and** a spending decision — warm instances bill continuously |
+
+Each fails safe: off means today's behaviour, exactly.
 
 ---
 
-## 6 · Findings
+## 5 · Components
 
-### 6.1 Structural
+### Frontend
 
-**F-1 · `functions/src/index.ts` is a 13,465-line module (S-1).**
-Five modules were already extracted — `examTimingCore`, `judgeCore`, `judge0Adapter`,
-`allocationCore` — and each extraction was clearly worth it (the timing core exists precisely
-because "every timing defect in this module has been two expressions of the same rule
-disagreeing"). The same argument applies to the families that remain co-resident: grading,
-deletion governance, question rights, and the exam runtime share nothing but the file. Splitting
-them does **not** conflict with `DEPLOY.md §5` — that rule is about deploying all *exports*
-together, which stays true regardless of how many source files they live in.
-
-**F-2 · Client and server share no code; only text-matching guards the twins.**
-`pnpm-workspace.yaml` lists `packages: ['.']` — `functions/` is outside the workspace, so a shared
-package is not currently possible. At least six lists are duplicated with "keep in EXACT sync"
-comments: `ANSWER_KEYS`/`ANSWER_KEYS_S`, `JUDGE_LANGUAGES` (×3 copies),
-`MAX_JUDGE_ATTEMPTS`, the student question whitelist, `breakAfterCompletion`, grading defaults.
-
-`twinSync.test.ts` is a genuinely good mitigation and its header documents a **real** production
-failure this class of drift already caused (coding answer keys written to the public question
-document while every grading path read an empty suite). But it guards by *regex over source text*
-— it covers the lists someone thought to add, and a rename breaks the test rather than the twin.
-
-> **Partly addressed, and the recommendation corrected (2026-08-15).**
->
-> The original advice — "add `functions` to the workspace and extract a `shared/` package" — was
-> rated **M** and that was too cheap. `firebase.json` sets `"source": "functions"`, and the CLI
-> packages *that directory* for deployment: a `file:../shared` dependency is not in the upload, so
-> the install step fails in Cloud Build. The twins are not merely an oversight; the deployment
-> model actively pushes toward them. A real shared package needs a predeploy step that vendors
-> `shared/` **into** `functions/src` before the build — workable, but it is a new moving part in a
-> repo whose own config files carry warnings that Figma Make regenerates them on push. That is a
-> deliberate decision, not a tidy-up, so it is left to be made rather than made here.
->
-> What was done instead: **the guard now covers the twins that were unguarded**, including the two
-> introduced by the F-4 fix in this same audit — declaring a new twin and not pinning it would have
-> been the exact mistake this file exists to correct.
->
-> | Twin | Spans | Was |
-> |---|---|---|
-> | `HIERARCHY_COLLECTIONS` | functions ↔ client | unguarded (new) |
-> | `COLLECTION_BY_LEVEL` | functions ↔ `SchoolsTab` | unguarded (new) |
-> | lifecycle fields | functions ↔ **`firestore.rules`** | unguarded (new) |
-> | `DEFAULT_QUESTION_GRACE_SECONDS` | `examTimingCore` ↔ client | unguarded (pre-existing) |
->
-> The third is the security-critical one and the first twin in this repo to span **three
-> languages**: TypeScript cannot check a rules file and the rules engine cannot check TypeScript,
-> so nothing but this test connects them. If the callable starts writing a seventh lifecycle field
-> and the fence is not updated, that field becomes forgeable from any staff console — and nothing
-> fails. The test asserts the correspondence in *both* directions, with `updatedAt` named as the
-> one deliberate exception so that adding a second has to be written down.
->
-> **Each new guard was mutation-tested** — drift introduced on one side, failure confirmed, side
-> restored — because a twin guard that cannot fail is worse than none: it reads as coverage.
-
-**F-3 · App Check is initialised but not enforced on callables.**
-`initializeAppCheck` runs in `src/lib/firebase.ts:33` with a reCAPTCHA v3 provider, so clients
-attach tokens. No callable sets `enforceAppCheck: true` (0 occurrences in `functions/src`), and the
-firebase-functions v2 default is permissive — a request with **no** App Check token is still
-served. Firestore/Storage enforcement is a console setting this repo cannot show. Net: the
-attestation is being paid for (reCAPTCHA round-trip on every client) without the callable-side
-benefit. Enforcing needs a staged rollout — turn on monitoring in the console first, confirm token
-coverage, then flip `enforceAppCheck` on the hot path.
-
-> **Extended to all 53 callables (2026-08-15), on evidence.** The first pass covered only the ten
-> hot-path functions and reasoned that staff callables were "a different client population and
-> deserve their own soak". That was the right caution with no data. The data now exists: the
-> project's App Check console reports **Cloud Firestore at 100% verified / 0% unverified** with the
-> web app registered against reCAPTCHA — and staff surfaces read and write Firestore constantly, so
-> the population is the same registered app. Splitting the rollout would only have meant two
-> switches instead of one. All 53 now read the same `APP_CHECK_ENFORCED` flag, still defaulting to
-> false; the three scheduled functions are excluded, having no client to attest.
->
-> **What the console does *not* show:** there is no Cloud Functions row in the APIs tab, because
-> callable enforcement is code-side (`enforceAppCheck`) rather than a console toggle. Firestore's
-> 100% is a strong proxy for token coverage, not a direct measurement of the callable surface.
-> Authentication reads 99%/1%, and that 1% is worth understanding before Auth is ever enforced —
-> it does not affect the callable flag.
->
-> **Original note.** The ten `EXAM_HOT_PATH` callables now carry
-> `enforceAppCheck: APP_CHECK_ENFORCED`, read from `process.env.APP_CHECK_ENFORCED` and
-> **defaulting to false** — so behaviour is unchanged until someone opts in. The point is to make
-> the flip a config change (`functions/.env.<project>` + redeploy, reversible the same way) rather
-> than a code change that has to clear review while a cohort waits. A cold-start log line states
-> the resolved value, so "is enforcement on?" is answerable from `functions:log` instead of
-> inferred. Steps 1–2 of the rollout — register the provider for every domain, then watch the
-> verified/unverified split reach ~100% over a full exam cycle — are console work this repository
-> cannot do or verify. The staff-driven callables are deliberately not covered: they are a
-> different client population and deserve their own soak.
-
-**F-4 · ~~An exported callable with zero callers~~ — the audited path existed and the product used an unaudited one.**
-
-> **Revised and fixed (2026-08-15).** The original finding said `setHierarchyNodeLifecycle` is
-> deployed, reachable and exercised by nothing, and recommended "wire it or remove it". Removing it
-> would have been **exactly backwards**, and the reason only surfaced on a second look: the
-> capability is not unused, it is being exercised through a *different, worse* door.
-
-`SchoolsTab` archived a hierarchy node by patching `status: 'archived'` straight onto the document
-via `firebaseService.archiveNode()`. That worked, and it skipped every guarantee the callable
-exists to provide:
-
-| | Direct write (what the product did) | `setHierarchyNodeLifecycle` |
+| | LOC | Owns |
 |---|---|---|
-| `deletionAudit` row | **none** — clients cannot write that collection | written |
-| Lifecycle envelope | only `status` moved; `lifecycleState`, `archivedAt`, `archivedBy`, `archivedByRole` left unset | all written |
-| `schoolsManagementEnabled` | **not checked** — `canWriteAcademic` gates on role and tenant only | now checked, both tiers |
-| Restore | **impossible** — the direct path only ever set `'archived'` | supported |
+| `App.tsx` | 41 | Error boundary **above** Suspense — a 404'd lazy chunk after redeploy rejects rather than suspends, so it needs the error boundary, not the Suspense one |
+| `routes.tsx` | 223 | Whole route tree. Every page lazy; layouts and roots eager, to avoid a request waterfall |
+| `ExamShell.tsx` | ~4,300 | **The sitting.** Sections, answers, timers, integrity, overlays, submit. 44 `useState`, 29 `useRef`, 32 `useEffect` |
+| `AuthContext` | 378 | Web Owner + **TOTP MFA** — the only role with a second factor |
+| `{Institute,Faculty,Student}AuthContext` | ~300 ea. | Per-role session shape and `login`. Admission and password ops are shared (below) |
 
-The third row is the security half, and it is the same shape as the question-rights gap S-02
-closed: **the schools permission was decorative for anyone willing to open DevTools.** Revoking it
-hid the buttons and stopped nothing.
+### Service layer — `src/lib`, 41 modules
 
-**Proven, not asserted.** An emulator probe against the *unmodified* rules confirmed an institute
-admin could set `status: 'archived'` and forge `lifecycleState`, `archivedBy`, `archivedAt`,
-`archivedByRole` and `lifecycleReason` — every one `ALLOWED`. Against the fixed rules, all denied.
+| | Owns |
+|---|---|
+| `submissionService` | The whole exam runtime API, and the only two realtime listeners |
+| `assessmentService` · `questionBankService` | Assessment and question surfaces |
+| `firebaseService` | Generic Firestore helpers, identity CRUD, the 9-level academic hierarchy |
+| `firebase.ts` | **The single Firebase entry point** — env-configurable, 19 importers in `lib`, 33 across `src` |
+| **`examMachine`** | 10 states, 26 edges — the exam's legal transitions, as data. Inert; see §4 |
+| **`accessGate`** | May this person sign in? Institute + member lifecycle, expiry. One tested implementation |
+| **`roleAuth`** | Password change / reset, shared across the three role contexts |
+| **`dateFormat`** | Five `en-GB` formats, guarded against unparseable input |
+| `instituteValidity` | `activeUntil` semantics — the display *and* enforcement halves |
+| `twinSync.test.ts` | Guards client↔server↔rules list drift by reading source as text |
 
-**Fixed** in three coordinated parts, because any one alone leaves a door open:
+### Cloud Functions — `functions/src`
 
-1. **The callable now matches the product.** Its old comment — *"Faculty are excluded — hierarchy
-   shape is an admin concern"* — was a coherent policy and not the one shipped: `SchoolsTab`
-   renders on `FacultyLandingPage` behind a `canManage` gate. It now enforces the same two-tier
-   grant the UI reads (`institutes/{id}.schoolsManagementEnabled`, plus
-   `faculty/{id}.schoolsManagementEnabled` for faculty), keyed on `claim.facultyId` rather than the
-   uid — migrated faculty carry a legacy doc id there, and keying on uid would deny a right they
-   hold.
-2. **The client calls it.** `archiveNode` and its nine wrappers are deleted rather than deprecated:
-   a live helper that silently bypasses an audit trail is one import away from being used again.
-3. **The rules fence the lifecycle axis.** A guard blocks changes to the six lifecycle fields on
-   the direct path across all nine collections, so a transition must go through the callable.
-   Deliberately narrow — renames and metadata edits keep the direct path, verified against all
-   three drawers.
+| | LOC | Owns |
+|---|---|---|
+| `index.ts` | **13,959** | All 57 exports + ~90 helpers |
+| `examTimingCore.ts` | 1,228 | **The single implementation of every deadline** |
+| `judgeCore.ts` | 948 | Provider-agnostic judge state machine |
+| `judge0Adapter.ts` | 523 | Judge0 specifics — pinned language ids, base64 both ways |
+| `allocationCore.ts` | 256 | Hierarchy rule → student set |
 
-Covered by a new `R-10` scenario in the rules suite (12 assertions, including a rename that must
-still succeed and a transition smuggled inside one).
+**Scheduled:** `scheduledJudgeCoding` (5 min) · `scheduledWarmup` (5 min, off) ·
+`scheduledCloseExpiredAttempts` (60 min) · `scheduledPurge` (daily 03:00).
 
-> **Deploy order matters here** and it is not the usual one: **functions → frontend → rules.**
-> Rules take effect instantly while the frontend rides Vercel, so shipping rules first would break
-> archiving for every still-cached client. In the order above, each step is a no-op until the next
-> lands.
+---
 
-> **Left open, deliberately:** `canWriteAcademic` still ignores `schoolsManagementEnabled` for
-> *create* and *rename*. Closing that means a callable per hierarchy write, which is a larger change
-> than this finding. The lifecycle axis was the one with the audit trail attached.
->
-> **Noticed in passing:** cross-tenant denials on these collections raise a rules *evaluation
-> error* rather than a clean `false`. It is pre-existing — reproduced identically against unmodified
-> rules — and fails closed, so it is noise rather than a hole, but it masks real errors in the
-> emulator log and deserves its own look.
+## 6 · Single points of failure
 
-**F-5 · Content-Security-Policy is enforcing only four directives.**
-`vercel.json` enforces `frame-ancestors`, `object-src`, `base-uri`, `form-action`. The meaningful
-half — `script-src`, `connect-src`, `default-src`, `img-src` — is in
-`Content-Security-Policy-Report-Only`, and that policy has **no `report-uri`/`report-to`**, so
-violations go to the browser console and nowhere a human will see them. The report-only policy is
-already written; it needs a reporting endpoint, then a promotion. Note `script-src` there includes
-`'unsafe-inline'`, which should be tightened before promotion or the enforced policy will be
-weaker than it looks.
+| | | Status |
+|---|---|---|
+| **S-1** | `index.ts` — one 13,959-line module holds all 57 exports. A helper regression touches every capability at once, and `DEPLOY.md §5` forbids cherry-picking *because* they share mutated helpers | **open** — F-1 |
+| **S-2** | Single region `us-central1`. A regional outage stops every exam in flight | **open** — R-15 |
+| **S-3** | `ExamShell.tsx` is the whole candidate experience. Its error boundary offers only *reload* — correctly, since the alternative is a way out of a supervised sitting | partly mitigated by `examMachine` |
+| **S-4** | Judge0: one VM, `docker compose`, no HA. Degrades *safely* to manual review but **silently** | mitigated — sweep now logs `BACKLOG` |
+| **S-5** | `/api/seb-verify` is the only place a SEB header can be read. Vercel outage ⇒ SEB exams cannot start | inherent to the design |
+| **S-6** | ~~SEB secret in two deploy systems~~ | **fixed** — comma-separated list, rotation without a window |
+| **S-7** | ~~Hardcoded Firebase config~~ | **fixed** — `VITE_*` with current project as fallback |
+| **S-8** | ~~Build fetched face-api weights from a third-party branch~~ | **fixed** — vendored + checksummed |
+| **S-9** | ⚠️ **Cloud Scheduler** drives four functions. Disabled ⇒ coding papers never mark, expired attempts never close, purges never run, warm-up never fires — all silently | operational |
+| **S-10** | One shared VPC connector serves both judge functions | inherent |
+| **S-11** | Firebase Auth is the single IdP for all four roles; no break-glass path | inherent |
 
-> **Partly addressed (2026-08-15).** Added `/api/csp-report`, and wired `report-uri` +
-> `report-to` (with a `Reporting-Endpoints` header) into **both** policies — the enforcing one
-> too, so a real block is recorded as `disposition=enforce` rather than only showing up as a
-> user-visible breakage. Violations now land in the Vercel function log as one greppable
-> `[csp] …` line each.
->
-> The sink accepts both wire formats, because browsers disagree: legacy
-> `application/csp-report` (a single `{"csp-report":{…}}`) and the Reporting API's
-> `application/reports+json` (a *batch* of envelopes). It is unauthenticated by necessity —
-> browsers send reports without credentials — so it is bounded on every axis an anonymous caller
-> controls: 64 KB body, 20 reports per request, 300 chars per field, and newlines stripped from
-> every echoed value so an attacker-chosen `blocked-uri` cannot forge a second log line.
-> Verified against all six of those behaviours before commit.
->
-> **This does not promote the policy**, and deliberately so. Promotion is only responsible after
-> the sink has been quiet across a real exam cycle — that soak is the whole reason the endpoint
-> exists. Two entries look like promotion casualties already and should be checked against the
-> logs rather than assumed dead: `connect-src` still allows `raw.githubusercontent.com` (a
-> *build*-time host, not a runtime one) and `cdn.jsdelivr.net` (no reference found in `src/`).
+---
 
-**F-6 · Tracked generated output — ~~`functions/lib/`~~ `functions/timing-core.cjs`.**
+## 7 · Capacity & availability
 
-> **Correction (2026-08-15).** The original text of this finding said `functions/lib/` is tracked,
-> citing `DEPLOY.md §7`'s self-correction. **That was wrong, and wrong in the same way §7 itself
-> was**: I trusted a prose claim about the repository instead of asking git. `functions/.gitignore`
-> has contained `lib/` (alongside `.env*` and `sa-key.json`) for some time — `git ls-files
-> functions/lib` returns nothing and `git check-ignore` matches. §7's "this describes a state the
-> repo is not in" note is now itself describing a state the repo is not in. The lesson is §0's, one
-> level down: a point-in-time claim about a file rots, so verify against the tool that knows.
+Stated target: **10,000 concurrent students.**
 
-The underlying concern was real, but it applied to exactly one file: **`functions/timing-core.cjs`**
-— 950 lines of output from `npm run build:core`, committed.
+| Assumption | Reading |
+|---|---|
+| `maxInstances: 200`, `concurrency: 80` on 10 hot-path functions ⇒ ~16,000 in flight | Sound. In-flight = arrival × duration; 10k starts over 10s at ~300ms ≈ 300 in flight. The 200 is a **project CPU quota limit**, not a choice |
+| `minInstances: 0` — cold-start cliff at exam open | `scheduledWarmup` automates the fix; ⚠️ off by default |
+| Heartbeat every 15s per student | ~667 rps sustained at 10k. Inside the ceiling; watch as a Firestore cost line |
+| Answer saves debounced 1.5s, one attempt doc per student | Under the ~1 write/s/doc soft limit under normal answering |
+| SEB proof TTL 90s, refreshed by the 15s heartbeat | 6× margin |
+| **Judge sweep: 4 concurrent papers, 240s budget, every 5 min** | Budget is deliberately **below the 300s interval** — Cloud Scheduler does not wait for the previous run, and two overlapping sweeps would judge one paper twice, spending two of its five attempts |
+| A paper exhausts at 5 judge attempts | **No in-product re-arm.** `regradeAttempts` re-reads existing verdicts; it does not re-judge |
+| Deploy skew | A full functions deploy lands over minutes; the paced script widens it to ~10. Not to be run during a live sitting |
 
-The exposure was narrow, which is why this is a P2-shaped fix rather than the integrity hole the
-original text implied. `test:timing` runs `build:core` before `timing.sweep.cjs`, so the npm path
-always regenerates and never consumed a stale copy. The gap was the *direct* invocation:
-`timing.sweep.cjs:19` does a bare `require('./timing-core.cjs')`, so running the sweep by hand
-tested whatever was last committed rather than what is in `examTimingCore.ts` — silently, and with
-a full green pass.
+---
 
-**Fixed:** untracked and added to `functions/.gitignore` (with `.tmp-core/`). A hand-run sweep now
-fails with a module-not-found instead of quietly proving the wrong build — the loud-failure posture
-the rest of this codebase already takes. Root `.gitignore` also gained `.env` / `.env.local` /
-`.DS_Store`, which it lacked; `functions/.gitignore` already covered its own.
+## 8 · Do not regress this
 
-### 6.2 Frontend architecture
-
-**F-7 · Role-surface duplication is real and unevenly addressed.**
-The `*Core` extraction is the right pattern and is fully applied to reports
-(`ReportsInboxCore` — all three roles) and rosters (`AssessmentRosterCore` — all three). It is
-**not** applied to questions: `QuestionsPage` (Web Owner) is 236 lines and delegates to
-`QuestionBankCore`, while `InstituteQuestionsPage` (816) and `FacultyQuestionsPage` (873) only
-*mention* the Core in a comment and hand-roll the whole surface. Those two files are **~65%
-identical** after normalising role names (279 differing lines of ~816/873).
-
-The same shape repeats in the auth contexts: Institute and Faculty differ by 196 of ~360 lines,
-much of that role-name substitution. Four providers × ~370 lines is four places to fix any session
-bug.
-
-> **Stage 1 done (2026-08-15) — the duplicated *presentation* logic, not the page structure.**
->
-> Reading the two pages closely changed what the fix should be. They are ~65% identical by line
-> count, but the differences are **real features**, not drift: Faculty has question sharing, a
-> requests tab and the rights-mode machinery; Institute has author labels and institute-wide
-> visibility. Folding them onto one component would need a heavily parameterised shell — the kind
-> with a dozen boolean props that is harder to follow than the two copies. That restructure is
-> still worth doing, but it is not the cheap part, and the cheap part turned out to be elsewhere.
->
-> `function formatDate(iso: string)` appeared **11 times across `src/`, in 6 syntactically
-> distinct forms** — differing by a trailing comma or a return annotation — implementing only
-> **three** actual formats:
->
-> | Format | Copies | Variants |
-> |---|---|---|
-> | short — `Aug 15, 2026` | 7 | 4 |
-> | long — `August 15, 2026` | 3 | 2 |
-> | date + time | 1 | 1 |
->
-> `truncate` was a fourth helper with 4 byte-identical copies.
->
-> **None of the eleven guarded its input.** `new Date(x).toLocaleDateString(…)` renders the literal
-> string `"Invalid Date"` for absent, empty or unparseable input — it does not throw, so nothing
-> surfaces until a user reads it. That is the exact bug `instituteValidity.ts` was written to fix
-> for `activeUntil`, and its header is the record of it.
->
-> **Stated precisely, because the difference matters:** the one call site that field still reaches
-> — `validityLabel` in `UserManagementPage` — *is* correctly guarded, by checking
-> `daysUntilExpiry(...) === null` before formatting. So this is not a live rendering bug that was
-> found. It is that **the guard lives at the call site**, where it has to be remembered by each of
-> them independently, rather than in the formatter, where forgetting it is impossible. Eleven
-> formatters and roughly twenty callers is a lot of remembering.
->
-> `src/lib/dateFormat.ts` is the three formats with the guard moved inside (14 tests). The
-> deliberate behaviour change is that an unformattable date now renders `—` instead of
-> `"Invalid Date"` — the latter is not a state a user can act on and reads as a crash.
->
-> Wiring cost no call-site churn: the long and date+time consumers import their format
-> **aliased to `formatDate`**, so all ~20 call sites are untouched and each keeps its original
-> semantics. `builder/shared.ts` re-exports `truncate` rather than dropping it, so its two
-> consumers are unaffected. **Net −52 / +14 lines across 12 files.**
->
-> **Follow-up done (2026-08-15).** `builder/shared.ts`'s two formatters are folded in, plus two
-> exact-match copies found by a wider sweep (`StudentLandingPage.formatShortDate`,
-> `ExamBriefingPage.formatDateTime`). The `builder/shared.ts` pair were *closer* to correct than the
-> original eleven — both already returned the em dash for an ABSENT value — but neither handled an
-> unparseable one, so `'not-a-date'` and even `'   '` still rendered `Invalid Date` on an
-> assessment row. Same guard, now shared.
->
-> **The wider sweep also found something that is NOT a refactor, and is left alone deliberately.**
-> Ten more local formatters parse external input, and they do not agree on locale or shape:
->
-> | Shape | Where |
-> |---|---|
-> | `en-GB` day + month (no year) | Institute / Faculty assignment pages |
-> | `en-GB` day + month + year | Faculty assignments |
-> | `en-GB` date + time | SEB settings (×2) |
-> | `en-US` date + time **without** year | Student assessments |
-> | locale-default, no options | Exam results |
->
-> **Answered (2026-08-15): the product speaks `en-GB`.** All ten are folded in, and
-> `lib/dateFormat` moved with them — every date in the product is now `15 Aug 2026`. Two formats
-> were added for shapes that genuinely differ (`formatDayMonth` for compact list columns,
-> `formatDayMonthTime` for the student assessment list).
->
-> **One consequence worth stating, because it is visible:** `en-GB` is a **24-hour** locale, so
-> exam times render `09:30` and `14:00` rather than `9:30 AM` and `2:00 PM` — on the briefing page,
-> the results page and the assessment list. On a platform whose job is telling candidates when a
-> paper opens and closes, losing the AM/PM ambiguity is an improvement; it is asserted in the tests
-> so a drift back to 12-hour fails rather than passing quietly.
->
-> Two call sites keep a local wrapper for a real reason, not as leftovers: `StudentTab` receives
-> either a Firestore `Timestamp` or a string and must keep its `isNaN` guard, because
-> `toISOString()` **throws** on an Invalid Date — removing it would turn an em dash into a crash.
-> The `new Date()` "today" helpers parse nothing and carry no risk.
-
-**F-8 · Four parallel auth contexts, one Firebase Auth instance.**
-Each role gets its own provider, session shape, login, `changePassword`, `requestPasswordReset`
-and `logout` — all backed by the same `auth` singleton and distinguished only by the `role` claim.
-A single parameterised provider with a role-specific session builder would collapse ~1,500 lines
-into a few hundred. The MFA path (Web Owner only) is the one genuine divergence.
-
-> **Stage 1 done (2026-08-15) — the admission decision is now stated once.**
->
-> Collapsing the four providers is the large half of this finding and is *not* what was done. This
-> is the half where a divergence is a **security** bug rather than a maintenance cost.
->
-> Three of the four contexts each carried their own copy of the same admission decision — is the
-> institute disabled or soft-deleted, is the member, has the access window closed. Three copies,
-> two shapes (the institute context has no member document), nothing holding them together.
->
-> **That divergence has already shipped once.** `StudentAuthContext` records it: soft delete sets
-> `lifecycleState`, **not** `status`, so a gate checking only `status` let deleted accounts — and
-> members of a deleted institute — sign in and sit exams exactly as before. The fix had to be
-> applied to each copy separately, and nothing would have failed if one had been missed.
->
-> `src/lib/accessGate.ts` is that decision, pure and tested (16 assertions). `hasExpired` joined
-> `instituteValidity.ts`, where the *display* half of the same `activeUntil` parse already lived —
-> that module's header is about three display helpers each parsing the field their own way; the
-> three auth gates were the fourth copy of it.
->
-> **Proven a substitution, not a rewrite.** A differential test runs the original expression
-> (`String(x ?? '')` coercion and all) against `hasExpired` across every shape that matters —
-> absent, empty, whitespace, unparseable, past, future, boundary, non-string — and asserts they
-> agree. The boundary stays strictly `<`, and absent/empty/unparseable still mean *no expiry*
-> rather than 1970 — the case whose blast radius is every institute that never set one.
->
-> Precedence is now written down rather than coincidental: `disabled` outranks `expired`, because
-> telling someone their institute's access lapsed when an admin actually disabled their account
-> sends them to the wrong person to get it fixed. All three sites already agreed; a fourth can no
-> longer quietly pick the other order.
->
-> **Stage 2 done (2026-08-15) — the password operations, and a divergence they hid.**
->
-> `changePassword` was **byte-identical** across the three contexts apart from three parameters:
-> the credential collection, the document id, and the string in a console warning. Forty lines,
-> three times, including the subtle part — the `updateDoc` that must not be able to fail the
-> operation, whose long explanatory comment was also written out three times.
->
-> `src/lib/roleAuth.ts` owns it now, and the split is deliberate: the **decisions** are pure
-> functions with tests (`passwordChangeError`, `resetRequestIsBenign`), and the async wrappers only
-> sequence SDK calls around them. The part worth getting right is the part that can be checked.
-> **−249 / +70 lines across the three contexts.**
->
-> **The extraction surfaced a real divergence.** Institute and Faculty swallowed
-> `auth/invalid-email` on a reset request and reported success; Student did not. So a student who
-> mistyped their address saw *"Failed to send reset email"* while the same typo on the faculty form
-> silently reported success. Resolved toward **Student's narrower reading**: `auth/user-not-found`
-> stays benign, because reporting it honestly turns the form into an account-existence oracle, but
-> a malformed address is a format problem the person can see and fix, and it reveals nothing about
-> whether an account exists. The two roles that swallowed it were hiding a typo.
->
-> **Deliberately not extracted**, and each for a reason:
->
-> | | Why it stays |
-> |---|---|
-> | `login` + session building | Where the roles genuinely differ — Institute has no member document, Student carries program tags. A shared version needs a callback per difference, which is the twelve-boolean-props outcome that reads worse than three honest copies |
-> | `logout` | Four lines, differing only in which state setter is called. The extraction would be longer than the code |
-> | Web Owner's context | Its password change re-authenticates first and it carries the whole TOTP flow. A different operation that happens to share a name |
->
-> **Still open:** the Web Owner's cosmetic copy divergence (`'New password is too weak.'` against
-> the other three's `'Password is too weak.'`) — a product copy decision rather than a refactor, so
-> it is flagged rather than unified.
-
-**F-9 · `ExamShell.tsx` state is unmanaged at its scale (S-3).**
-44 `useState` + 29 `useRef` + 32 `useEffect` in one component, coordinating server-authoritative
-attempt state (via `subscribeToAttempt`), local answer drafts, timers, integrity counters, overlay
-state and submit flow. There is no reducer, no state machine, no store. The exam has genuinely
-discrete states — briefing → in_progress → frozen → section-break → submitted/terminated — and
-`useReducer` over an explicit machine would make the illegal transitions unrepresentable rather
-than merely unreached.
-
-> **Stage 1 done (2026-08-15) — the machine is extracted and proven, and ships inert.**
->
-> Surveying it first changed the shape of the problem. The machine is not implicit: it is a
-> ten-member `ShellStatus` union driven by **26 scattered `setShellStatus` calls**, plus a
-> `shellStatusRef` shadow copy that exists because "shellStatus updates asynchronously" and three
-> effects need to read it without re-arming. What is missing is not the states — it is any notion
-> of which **transitions** are legal. `ready` is reachable from any line that types it, and the
-> guard keeping a submitted paper out of it is `if (shellStatusRef.current !== 'ready') return;`
-> hand-written at each site: correct everywhere it appears, absent everywhere it does not.
->
-> `src/lib/examMachine.ts` makes the legal edges data — 10 states, **26 edges**, every one derived
-> from a real call site rather than invented. It is pure (no React, no Firestore, no clock) and
-> **nothing imports it yet**, which is the staging `examTimingCore` used for exactly this
-> situation: *"Phase 3a ships it inert, with its sweep, so the logic can be proven before anything
-> depends on it."* On a 4,279-line critical-path component, proving the table and rewiring it are
-> two reviews, not one.
->
-> The sweep (22 tests) asserts the safety properties as **properties over the whole space**, not
-> examples — all 100 pairs decided, terminal states absorbing against all 10 targets, every
-> non-terminal state able to reach an ending, every state reachable from `loading`. Plus seven
-> real sitting paths, including a resumed mid-break entry and a failed-then-retried submit.
-> Mutation-tested: making `submitted → ready` legal fails **four independent tests**.
->
-> **One divergence found, and it is left visible rather than smoothed over.** `handleTerminate`
-> sets `'terminated'` with no guard on current state (`if (!att) return;` and nothing else), so a
-> violation arriving after a successful hand-in would move a *submitted* paper to terminated. The
-> window is small and may be unreachable in practice — the integrity engine is torn down on submit
-> — but "may be" is the problem, and it is precisely what a scattered setter cannot rule out. The
-> table models both terminal states as absorbing, so **wiring stage 2 means adding the guard
-> `handleTerminate` lacks, not relaxing the table to match it.**
->
-> The state list is a twin of `ShellStatus` while it waits, and is pinned as one in
-> `twinSync.test.ts` — an inert module is exactly what rots unnoticed. That guard is scaffolding
-> and says so: when stage 2 lands it should be **deleted**, not left to pass vacuously.
-
-> **Stage 2a done (2026-08-15) — the machine is wired, in shadow mode.**
->
-> ExamShell now routes every status change through the table and **performs it either way**.
-> Nothing is blocked; an illegal move logs `[examMachine] SHADOW <from> → <to>` and proceeds. Same
-> introduction the timing core got — `checkTimingInvariants` logged `INVARIANT VIOLATION` for a
-> whole release before anything depended on the resolver being right — and the asymmetry is what
-> makes it the only sane order: enforcing a table that is wrong in one edge strands a candidate
-> mid-exam; logging one that is wrong in one edge produces a console line.
->
-> The wiring cost **zero call-site churn**. The `useState` setter was renamed to
-> `setShellStatusRaw` and `setShellStatus` redefined as the wrapper, so all 26 sites are unchanged
-> and none could be missed or mangled in a mechanical edit. The wrapper keeps its own
-> synchronously-written `machineStateRef` rather than reusing `shellStatusRef`, which is synced in
-> an effect and therefore lags a render — several guards read that one expecting the committed
-> value, so repurposing it would have changed their meaning.
->
-> **The table was already wrong, and stage 2a is how it was found.** One of the 26 sites is
-> `setShellStatus('loading')` at the top of the load effect, whose deps are
-> `[assessmentId, session, loading]` — `session` is an object from `useStudentAuth`, so an auth
-> refresh re-runs the effect and re-enters `loading` from wherever the shell was. **A call site
-> names a transition's target; only the surrounding effect names its sources.** Stage 1's method
-> could not have seen this.
->
-> It is modelled as a **reset**, outside the transition relation, not as edges. Adding `loading` as
-> a successor of every state would have made `submitted → loading → ready` reachable — trading the
-> absorbing-terminal guarantee, which is the whole point of the machine, to describe an auth
-> refresh. A reset is the sitting being set up again, not a move within one.
->
-> **Stage 2b prep done (2026-08-15) — the evidence is now readable.**
->
-> Shadow mode was shipped logging to `console.warn`, which is a defect in the change itself: its
-> whole purpose is to produce the evidence that decides whether the table is safe to enforce, and
-> that evidence was landing in the **candidate's own browser console** — a place nobody reads, and
-> one that is unreachable inside Safe Exam Browser. Evidence somewhere no one can read is not
-> evidence.
->
-> Illegal transitions now ride the `examHeartbeat` that already runs every 15s for the whole
-> sitting, so they reach `firebase functions:log` without a new endpoint. Bounded on both sides —
-> 5 per beat, 200 chars each, newlines stripped — because the sender is a browser in an exam.
-> Logged before the heartbeat's guards, deliberately: a warning is most interesting in exactly the
-> cases where the beat is then refused. Drained before the call rather than after it resolves, so a
-> run of failed beats cannot re-send the same lines.
->
-> **Stage 2b** flips shadow to enforcing once a full exam cycle logs no `SHADOW` lines, and adds
-> the guard `handleTerminate` lacks. Until then the divergence stays observable rather than
-> assumed away.
-
-### 6.3 What is working well — do not regress it
-
-Recorded because an audit that only lists faults invites someone to "fix" a deliberate design.
+An audit that only lists faults invites someone to "fix" something deliberate.
 
 1. **`examTimingCore` as the single deadline implementation**, with `checkTimingInvariants` logging
-   `INVARIANT VIOLATION` when a callable and the resolver disagree. This is the correct answer to
-   the failure class the codebase kept hitting.
-2. **The attempt-update whitelist.** Moving `sectionTimings`, `integrityLog` and `activeSessionId`
-   out of client reach — with the reasoning recorded inline — is what makes the exam trustworthy.
-   `integrityLog` in particular: `increment()` in the client was never protection, because a plain
-   `updateDoc` could zero the counters.
-3. **`get`-vs-`list` splitting on `assessments`.** Rule statements are additive; granting students
+   when a callable and the resolver disagree. The right answer to the failure class this codebase
+   kept hitting — two expressions of one rule drifting apart.
+2. **The attempt-update whitelist.** See §2. This is what makes the exam trustworthy at all.
+3. **`get` vs `list` splitting on `assessments`.** Rule statements are additive; granting students
    single-document reads without reopening `list` is a precise use of that.
-4. **Server-derived exam shape.** `startExam` accepting but ignoring client-supplied `sections`
-   is exactly right for cached-client compatibility.
-5. **`redactForCandidate` / `sanitizeQuestionForStudent` / `sanitizeAssessmentForStudent`** — field
-   whitelists rather than blacklists, including `blockedStudents` and `attemptOverrides` reduced to
-   the caller's own entry.
-6. **Judge0 never does the comparison.** Delegating correctness to the sandbox would silently
-   downgrade numeric questions to exact string matching.
-7. **The comment discipline throughout.** Nearly every non-obvious decision carries the failure it
-   prevents. This is unusual and it is why this audit could be this specific.
+4. **Server-derived exam shape.** `startExam` accepting and ignoring client-supplied sections is
+   correct, not dead code.
+5. **Whitelist sanitisers, not blacklists** — including reducing `blockedStudents` and
+   `attemptOverrides` to the caller's own entry.
+6. **Judge0 never decides correctness.** Delegating comparison to the sandbox would silently
+   downgrade every numeric question to exact string matching.
+7. **The staged-control pattern.** Ship inert, prove, then enable. Used by `examTimingCore`,
+   `examMachine`, App Check and the warm-up.
+8. **`twinSync.test.ts`.** The client, the functions and the rules are three builds that cannot
+   typecheck each other. It is the only thing connecting them.
+9. **The comment discipline.** Nearly every non-obvious decision records the failure it prevents.
 
 ---
 
-## 7 · Recommendations
+## 9 · Open work
 
-Ordered by (risk reduced) ÷ (effort).
+### Code
 
-| # | Action | Addresses | Effort |
-|---|---|---|---|
-| R-1 | ~~Raise the sweep's per-run limit~~ **DONE, re-diagnosed** — the limit was never the bottleneck; the serial loop against a 4-replica cluster was. Concurrency pool (default 4) + wall-clock budget instead of a paper count + a `BACKLOG` warning when a batch is not cleared. Pinned by `G-27` | §5 capacity gap | S |
-| R-2 | ~~Delete or wire `setHierarchyNodeLifecycle`~~ **DONE — wired, not deleted.** Callable widened to the UI's two-tier grant, client rewired, rules fenced, `R-10` added | F-4 | S |
-| R-3 | ~~Add a `report-uri` to the report-only CSP~~ **DONE** — `/api/csp-report` sink added and both policies now report. Promotion to enforcing still pending a soak (tighten `script-src` first) | F-5 | S |
-| R-4 | ~~Move the Firebase config to `import.meta.env`~~ **DONE** — all seven values env-configurable with today's project as fallback, so an unset deploy behaves identically; a startup line names the project and whether it came from env | S-7 | S |
-| R-5 | ~~Vendor the face-api weights~~ **DONE** — 204 KB committed and checksummed; `postinstall` copies from `vendor/` with no network, and a missing weight degrades face detection instead of failing the build | S-8 | S |
-| R-6 | ~~Set `enforceAppCheck`~~ **PARTLY DONE** — the ten hot-path callables now read an `APP_CHECK_ENFORCED` flag (default off). Remaining: console monitoring, then flip the env var | F-3 | M |
-| R-7 | ~~Gitignore `functions/lib/`~~ **DONE, retargeted** — `lib/` was already ignored; the real tracked artefact was `functions/timing-core.cjs`, now untracked and ignored | F-6 | S |
-| R-8 | ~~Automate the pre-exam warm-up~~ **DONE, shipped disabled** — `scheduledWarmup` sets `minInstances` on `startExam`/`getExamQuestions` via the Cloud Run Admin API when a sitting is within the window, and back to 0 after. Inert unless `WARMUP_ENABLED=true`, because it needs `roles/run.developer` first and warm instances bill continuously | §5 cold start | M |
-| R-9 | ~~Add `functions` to the workspace, extract `shared/`~~ **RE-SCOPED — M was too cheap.** Firebase packages only `functions/`, so a shared package needs a predeploy vendoring step. Guard extended to the four unguarded twins instead (incl. the functions↔rules one); the restructure is left as a deliberate decision | F-2 | L |
-| R-10 | ~~Refactor the two question pages onto `QuestionBankCore`~~ **RE-SCOPED + STAGE 1 DONE** — their differences are real features, so the merge needs a heavily parameterised shell. The cheap, high-value part was elsewhere: 11 copies of `formatDate` (3 formats, 6 variants) and 4 of `truncate` folded into a tested `dateFormat.ts` with the missing invalid-input guard | F-7 | M |
-| R-11 | ~~Collapse the four auth contexts~~ **STAGES 1 + 2 DONE** — admission decision in `accessGate.ts`, password operations in `roleAuth.ts` (−249/+70), both tested. `login`/session-building stay per-role deliberately; Web Owner stays separate (MFA) | F-8 | M |
-| R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |
-| R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGES 1 + 2a DONE** — `examMachine.ts` extracted (26 edges, 27-test sweep) and now wired into ExamShell in **shadow mode**: every transition classified and logged, none blocked. Stage 2b (flip to enforcing after a clean exam cycle, plus the `handleTerminate` guard) still open | F-9, S-3 | L |
-| R-14 | ~~Document a SEB rotation runbook~~ **DONE, and the constraint removed** — `DEPLOY.md §9`. Writing it established there was no zero-downtime rotation; the follow-up it named is now done too: both sides take a comma-separated list, the edge **mints with the first** and the functions **accept any**, so rotation no longer needs a window. Pinned by `R-17` | S-6 | S |
-| R-15 | Evaluate a second region for the exam hot path, or accept and document single-region risk explicitly in the availability contract | S-2 | L |
+| | | Size |
+|---|---|---|
+| **F-1 / R-12** | Split `index.ts` by family. 269 module-level declarations, **69 referenced by 3+ blocks**, so a `shared.ts` extraction comes first, then families one PR at a time | **L** |
+| **R-15** | Second region for the exam hot path, or explicitly accept single-region risk in the availability contract | **L** |
+
+### Waiting on operational evidence
+
+- **Exam machine stage 2b** — flip shadow → enforcing, and add the guard `handleTerminate` lacks
+  (it sets `'terminated'` with no check on current state, so a violation arriving after a
+  successful hand-in would move a *submitted* paper). Needs one clean exam cycle.
+- **CSP promotion** — needs a quiet soak, then tighten `script-src` (it still carries
+  `'unsafe-inline'`) before promoting.
+
+### Operational, no code
+
+1. **Flip `APP_CHECK_ENFORCED=true`** — highest-value item; console evidence already supports it.
+2. Grant `roles/run.developer`, then `WARMUP_ENABLED=true` — see `DEPLOY.md §9a`. Costs money.
+3. Verify `vendor/face-api/face-api-weights.sha256` against upstream — recorded with nothing to
+   check against.
+4. ⚠️ Confirm Cloud Scheduler is enabled (S-9).
+5. Optional: set the `VITE_FIREBASE_*` vars in a preview environment to get staging.
+
+### Known and accepted
+
+- **Storage has no tenancy.** Paths are `question-images/{timestamp}-{random}`, so staff at one
+  institute can list another's images. Closing it needs the prefix to carry the tenant and a
+  migration of existing objects. Staff-only is the containment available without moving every file.
+- **`canWriteAcademic` still ignores `schoolsManagementEnabled` for create and rename.** Only the
+  lifecycle axis is fenced — it was the one with the audit trail attached. Closing the rest needs a
+  callable per hierarchy write.
+- **Web Owner password copy differs** (`'New password is too weak.'` vs the other three's
+  `'Password is too weak.'`). Product copy, not a refactor.
+- **Cross-tenant denials on hierarchy collections raise a rules *evaluation error*** rather than a
+  clean `false`. Pre-existing, reproduced against unmodified rules, fails closed — noise that masks
+  real errors in the emulator log.
 
 ---
 
-*Audit performed against the repository as committed. Deployed-state facts that a static read
-cannot establish — App Check console enforcement, Cloud Scheduler enablement, Judge0 cluster
-health, Vercel environment variables, Firestore quota headroom — are flagged as such above and
-should be verified against the live project before any of them is treated as settled.*
+## Appendix A · Audit history
+
+The original audit (2026-08-15) raised nine findings and fifteen recommendations. All P1s are
+closed. What follows is the record — particularly the parts where the audit was wrong, which are
+kept because the *way* they were wrong is instructive.
+
+### Where the audit was wrong
+
+**F-4 — "an exported callable with zero callers; delete or wire it."**
+Deleting would have been exactly backwards. `setHierarchyNodeLifecycle` was not unused — the
+capability was being exercised through a *worse* door: a direct Firestore write that skipped the
+audit row, left the lifecycle envelope unset, ignored `schoolsManagementEnabled`, and had no
+reverse gear. The audited path existed; the product used the unaudited one.
+*Lesson: "no callers" is a fact about references, not about whether a capability is in use.*
+
+**F-6 — "`functions/lib/` is tracked in git."**
+It is not, and has not been. The claim came from `DEPLOY.md §7`'s own self-correction, trusted
+without checking. The concern was real for exactly one file — `functions/timing-core.cjs`, build
+output that a hand-run sweep could pass against while stale.
+*Lesson: a prose claim about a repository is not evidence about it. Ask git.*
+
+**F-7 — "refactor the two question pages onto `QuestionBankCore`."**
+Assessed and declined. They look ~65% identical but differ on *features*, not drift. The valuable
+work was elsewhere: 11 copies of `formatDate` in 6 spellings, none guarding unparseable input.
+*Lesson: a duplication metric can point at the wrong file.*
+
+**R-9 — "add `functions` to the workspace, extract `shared/`. Effort: M."**
+Too cheap. `firebase.json` sets `"source": "functions"` and the CLI packages that directory, so a
+`file:../shared` dependency fails at install in Cloud Build. The twins are not an oversight — the
+deployment model pushes toward them. Re-scoped to **L**.
+
+**R-1 — "raise the judge sweep's per-run limit."**
+The limit was never the bottleneck. The cluster runs 4 workers — its own compose file calls that
+"the real concurrency ceiling of the whole platform" — and the sweep awaited one paper at a time.
+*Lesson: measure the pipe before widening the tap.*
+
+### Findings and outcomes
+
+| | Finding | Outcome |
+|---|---|---|
+| F-1 | `index.ts` is one 13,959-line module | **open** — the last structural item |
+| F-2 | Client/server twins, guarded only by comments | Guard extended to 4 unpinned twins incl. the functions↔rules one; restructure re-scoped to L |
+| F-3 | App Check initialised but not enforced | All 53 callables wired behind one flag ⚠️ off |
+| F-4 | *(see above)* | Callable widened to the UI's two-tier grant, client rewired, rules fenced, `R-10` added |
+| F-5 | CSP mostly report-only, nowhere to report | `/api/csp-report` added; both policies report |
+| F-6 | *(see above)* | `timing-core.cjs` untracked; root `.gitignore` gained `.env` |
+| F-7 | Role-surface duplication | Formatters folded (13 copies → 1 module, `en-GB`); page merge **declined** |
+| F-8 | Four parallel auth contexts | Admission decision → `accessGate`; password ops → `roleAuth`; `login` stays per-role |
+| F-9 | `ExamShell` state unmanaged | `examMachine` extracted, proven, wired in shadow mode |
+
+### Things found while fixing other things
+
+- **SEB proof verification had zero test coverage.** Every suite set `requireSEB: false`, so the
+  control that makes a locked-down exam locked down was exercised by nothing. Now `R-17`.
+- **The exam machine table was incomplete**, and a call-site reading could not have caught it: one
+  site re-enters `loading` from an effect whose deps include `session`, so an auth refresh resets
+  from anywhere. Modelled as a *reset*, outside the transition relation, so the absorbing-terminal
+  guarantee survives.
+- **Shadow mode logged its evidence to the candidate's browser console** — unread, and unreachable
+  inside SEB. Now rides the heartbeat.
+- **The reset-request error mapping diverged**: Institute and Faculty swallowed
+  `auth/invalid-email`, Student did not. Resolved toward the narrower reading.
+- **The warm-up's first budget (420s) exceeded its 300s schedule**, which would have overlapped
+  runs and judged papers twice. Caught before merge.
+
+### Recommendations
+
+**Done:** R-1 (judge throughput, re-diagnosed) · R-2 (F-4, wired not deleted) · R-3 (CSP sink) ·
+R-4 (env config) · R-5 (vendored weights) · R-6 (App Check, staged) · R-7 (build output,
+retargeted) · R-8 (warm-up, staged) · R-10 (formatters; page merge declined) · R-11 (auth,
+stages 1–2) · R-13 (exam machine, stages 1–2a) · R-14 (rotation runbook, plus the constraint
+removed).
+
+**Open:** R-9 (shared package — L, deployment-constrained) · R-12 (split `index.ts` — L) ·
+R-15 (second region — L).
+
+---
+
+*Derived from the repository. Deployed state marked ⚠️ should be verified against the live project
+before it is treated as settled.*

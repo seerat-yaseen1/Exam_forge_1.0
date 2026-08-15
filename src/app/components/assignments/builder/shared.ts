@@ -139,7 +139,9 @@ export function formatDateShort(iso?: string): string {
   });
 }
 
-export const truncate = (s: string, n = 100) => (s.length > n ? s.slice(0, n) + '…' : s);
+// Re-exported, not redefined (audit F-7): this was the fourth byte-identical
+// copy. Consumers keep importing it from here; there is now one implementation.
+export { truncate } from '../../../../lib/dateFormat';
 
 // ── Status badge ──────────────────────────────────────────────────
 

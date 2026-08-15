@@ -1,9 +1,7 @@
 import { motion } from 'motion/react';
 import { useFacultyAuth } from '../../context/FacultyAuthContext';
+import { formatDateLong as formatDate } from '../../../lib/dateFormat';
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
 
 export function FacultyProfilePage() {
   const { session } = useFacultyAuth();

@@ -9,6 +9,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
+import { formatDate } from '../../../lib/dateFormat';
 import {
   getAssessmentsForStudent,
   type Assessment,
@@ -97,11 +98,6 @@ function getAvailability(a: Assessment, now: Date): AvailabilityState {
   return 'available';
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-}
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {

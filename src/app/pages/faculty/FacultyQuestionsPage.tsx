@@ -24,16 +24,11 @@ import { BulkUploadModal } from '../../components/questions/BulkUploadModal';
 import { ExportModal } from '../../components/questions/ExportModal';
 import { useFacultyAuth } from '../../context/FacultyAuthContext';
 import { Navigate } from 'react-router';
+import { formatDate, truncate } from '../../../lib/dateFormat';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const truncate = (s: string, n = 100) => (s.length > n ? s.slice(0, n) + '…' : s);
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-}
 
 // ── Badges ─────────────────────────────────────────────────────────────────────
 

@@ -38,10 +38,8 @@ import { DeletionImpactPanel } from '../DeletionImpactPanel';
 import { SubjectDataPanel } from '../SubjectDataPanel';
 import { LogSubjectRequestButton } from '../LogSubjectRequestButton';
 import { BulkDeleteBar } from '../BulkDeleteBar';
+import { formatDate } from '../../../lib/dateFormat';
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 function SkeletonRow() {
   return (

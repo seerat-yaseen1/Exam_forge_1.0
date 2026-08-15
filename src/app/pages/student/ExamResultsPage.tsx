@@ -38,6 +38,7 @@ import {
   type QuestionReport,
 } from '../../../lib/questionReportService';
 import { RichText } from '../../components/questions/RichText';
+import { formatDateTime as formatDate } from '../../../lib/dateFormat';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -47,12 +48,6 @@ function formatTime(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  });
-}
 
 // ── Score ring (SVG donut) ─────────────────────────────────────────
 

@@ -422,6 +422,15 @@ async function B09() {
     eq(cleared.resumed ?? true, true, 'an invigilator can clear it');
     eq(A(id).status, 'in_progress', 'and the sitting resumes');
   } else {
+    // ROUND 4 NOTE: this is the branch that runs. seedWorld seeds
+    // securityTier:'mock', on which requireExtensionCheck is false, so nothing
+    // above ever froze and this probe has always asserted a constant. The
+    // auto-resume path it was named for was therefore never exercised here —
+    // which is where C-01, C-02 and C-03 were hiding. audit.round4.cjs seeds a
+    // NORMAL tier and covers this probe's stated intent (C-05) plus what it
+    // could not reach. Left in place rather than deleted: it still proves the
+    // mock tier does not freeze, and a probe whose blind spot is written down
+    // is worth more than one quietly removed.
     check(true, 'extension check did not freeze (requireExtensionCheck off on this tier)');
   }
 }

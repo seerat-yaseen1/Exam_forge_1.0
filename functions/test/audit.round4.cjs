@@ -499,14 +499,16 @@ async function C05() {
   eq(A(id2).status, 'frozen', 'and they stay paused until staff act');
 
   KNOWN_GAPS.push(
-    'C-01\'s transactional half is not asserted. verifyAndResume read the attempt, '
-    + 'computed the whole closed ledger from it and wrote the array back with a plain '
-    + 'update() — the read-modify-write that reportExtensionCheck was made transactional '
-    + 'to avoid ("an append read-modify-written outside a transaction can lose a '
-    + 'concurrent entry"). The release is transactional now, but fakeFirestore commits '
-    + 'transactions with no read set, so this suite would pass either way. '
-    + 'test/concurrency.suite.cjs against the emulator is what can prove it, exactly as '
-    + 'round 3 recorded for B-13/B-14.',
+    'C-01\'s transactional half CANNOT be proved by this suite, and is not asserted here. '
+    + 'verifyAndResume read the attempt, computed the whole closed ledger from it and wrote '
+    + 'the array back with a plain update() — the read-modify-write that reportExtensionCheck '
+    + 'was made transactional to avoid ("an append read-modify-written outside a transaction '
+    + 'can lose a concurrent entry"). fakeFirestore commits transactions with no read set, so '
+    + 'this suite passes either way, exactly as round 3 recorded for B-13/B-14. '
+    + 'It is covered instead by X-05 in test/concurrency.suite.cjs, against the emulator: an '
+    + 'invigilator granting ZERO races the student\'s auto-resume granting everything, and '
+    + 'exactly one release must survive. Against the pre-fix handler X-05 measures BOTH '
+    + 'taking effect, with the automatic full grant landing on top of the human\'s decision.',
   );
 }
 

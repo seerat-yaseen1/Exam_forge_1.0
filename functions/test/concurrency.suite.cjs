@@ -276,11 +276,100 @@ async function X04() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// X-05 · two releases race, and only one decision survives  (C-04 round 4)
+//
+// A pause has two exits: unfreezeAttempt, where a human decides how much of it
+// to give back, and verifyAndResume, where the automatic policy gives back the
+// lot. Both end the SAME pause through the same closeFreezeUpdates, which
+// rebuilds the whole `freezes` array from the document it was handed and writes
+// it back wholesale.
+//
+// unfreezeAttempt has always done that inside a transaction. verifyAndResume
+// did it with a plain read-then-update, which is a read-modify-write on an
+// array — the hazard reportExtensionCheck was made transactional to avoid, in
+// its own words: "an append read-modify-written outside a transaction can lose
+// a concurrent entry."
+//
+// The interleaving that costs something real: an invigilator decides this pause
+// was the student's own fault and grants ZERO, while the student's auto-resume
+// call is already in flight holding a pre-decision copy of the ledger. The
+// non-transactional writer lands last and overwrites the human's decision with
+// a full grant. That is F4 again — two writers, one field, and credit moving
+// for a reason nobody authorised.
+//
+// This asserts the property rather than an ordering, because either caller may
+// legitimately win: EXACTLY ONE release happens, and the stored credit is the
+// one that release decided. The round-4 probe suite cannot test this at all —
+// fakeFirestore commits transactions with no read set, so both callers succeed
+// there whatever the code does.
+// ═══════════════════════════════════════════════════════════════════
+const STAFF = (uid = 'fac_1', role = 'faculty', instituteId = 'inst_1') =>
+  ({ uid, token: { role, instituteId } });
+
+async function X05() {
+  // The one shipping configuration where a student can end their own pause:
+  // normal tier (extension check armed) with auto-resume on.
+  await seedWorld();
+  await db.collection('assessments').doc('asmt_1').set({
+    securityTier: 'normal', requireExtensionCheck: true, autoResume: true,
+    requireCamera: false, allowMobile: true,
+  }, { merge: true });
+
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+
+  // The student's own client opens the pause, then reports the machine clean —
+  // which is the whole of what the auto-resume path used to ask of them.
+  await call(fns.reportExtensionCheck,
+    { attemptId: id, passed: false, found: ['ext_x'] }, STUDENT());
+  const frozen = (await db.collection('attempts').doc(id).get()).data();
+  eq(frozen.status, 'frozen', 'the sitting is paused');
+  await call(fns.reportExtensionCheck, { attemptId: id, passed: true, found: [] }, STUDENT());
+
+  // The race: a human granting nothing, against the policy granting everything.
+  const rs = await settle([
+    call(fns.unfreezeAttempt, { attemptId: id, grantedMs: 0, note: 'not credited' }, STAFF()),
+    call(fns.verifyAndResume, { attemptId: id }, STUDENT()),
+  ]);
+
+  const released = fulfilled(rs).filter((r) => r.value?.resumed !== false);
+  eq(released.length, 1, 'exactly ONE of the two releases took effect');
+
+  const after = (await db.collection('attempts').doc(id).get()).data();
+  eq(after.status, 'in_progress', 'and the sitting is running again');
+
+  const ledger = after.freezes ?? [];
+  eq(ledger.length, 1, 'the ledger holds one entry, not two copies of one pause');
+  const entry = ledger[0];
+  check(!!entry.endedAt, 'and it is closed');
+  eq(after.creditedFreezeMs, entry.grantedMs ?? 0,
+    'stored credit is exactly what the surviving release decided');
+
+  // The sharp one. If the invigilator's transaction committed first, a
+  // non-transactional auto-resume holding a pre-decision copy would write the
+  // full grant back over the top of it.
+  if (entry.decidedBy === 'fac_1') {
+    eq(entry.grantedMs, 0, 'an invigilator\'s zero-grant decision is not overwritten');
+    eq(after.creditedFreezeMs, 0, 'and no credit reached the deadlines');
+  } else {
+    check(entry.decidedBy === null || entry.decidedBy === undefined,
+      'the automatic release won the race, and is recorded as having no decider',
+      JSON.stringify(entry.decidedBy));
+    check(entry.autoGranted === true, 'stamped as automatic, so C-02\'s budget counts it');
+  }
+
+  const rows = (await db.collection('deletionAudit')
+    .where('action', '==', 'attemptUnfrozen').get()).docs;
+  eq(rows.length, 1, 'one release, one audit row — not one row per caller');
+}
+
+// ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['X-01', 'eight simultaneous starts produce exactly one attempt', X01],
   ['X-02', 'the attempt limit holds under contention', X02],
   ['X-03', 'a permitted second sitting is granted exactly once', X03],
   ['X-04', 'racing finalisations grade the paper once', X04],
+  ['X-05', 'two releases race, one decision survives', X05],
 ];
 
 (async () => {

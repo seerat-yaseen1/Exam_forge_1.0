@@ -6780,6 +6780,25 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
         },
       );
 
+      // ── A9 / C-03: this release invalidates the grade too ────────
+      //
+      // gradeProvisional's design note explains why a sibling document is safe
+      // where a score on the attempt would not be: "unfreezeAttempt deletes the
+      // row, so the grade cannot outlive the pause that justified it.
+      // Invalidation is not a cleanup step someone must remember — the score
+      // has nowhere to go stale."
+      //
+      // It was a cleanup step someone had to remember, and only one of the two
+      // releases remembered. A student who cleared their own extension pause
+      // walked away from a stored mark describing a moment that had passed,
+      // still stamped with a freezeId that was no longer open, on an attempt
+      // they went on answering. Staff surfaces read that row.
+      //
+      // In the same transaction as the release, for the same reason
+      // unfreezeAttempt does it there: a failure between the two leaves a stale
+      // grade on a running attempt, which is the exact state A9 forbids.
+      // Deleting a row that is not there is a no-op.
+      txn.delete(db.collection('provisionalGrades').doc(attemptId));
       txn.update(ref, closed.updates);
       return {
         resumed: true as const,
@@ -8645,9 +8664,17 @@ type PenaltyClockS = 'question' | 'section' | 'overall';
 //
 // A sibling document in `provisionalGrades` fixes both by construction. The
 // attempt stays unscored and live; students have no read access in the rules;
-// and unfreezeAttempt deletes the row, so the grade cannot outlive the pause
-// that justified it. Invalidation is not a cleanup step someone must remember
-// — the score has nowhere to go stale.
+// and EVERY RELEASE deletes the row, so the grade cannot outlive the pause that
+// justified it.
+//
+// "Every release" is written that way because it was not true (C-03). This note
+// used to name unfreezeAttempt alone, and unfreezeAttempt alone did it —
+// verifyAndResume, the other release, added for the other freeze, did not. A
+// student who cleared their own extension pause left a stored mark behind on an
+// attempt they went on answering, stamped with a freezeId that was no longer
+// open. Invalidation is a cleanup step somebody has to remember, and being one
+// function short of remembering it everywhere is what "nowhere to go stale"
+// actually costs.
 //
 // NOT a submission. Status is untouched, submittedAt is untouched, no attempt
 // is consumed (A9: unfreezing does not consume another — it is the same

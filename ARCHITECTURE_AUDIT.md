@@ -604,6 +604,41 @@ discrete states — briefing → in_progress → frozen → section-break → su
 `useReducer` over an explicit machine would make the illegal transitions unrepresentable rather
 than merely unreached.
 
+> **Stage 1 done (2026-08-15) — the machine is extracted and proven, and ships inert.**
+>
+> Surveying it first changed the shape of the problem. The machine is not implicit: it is a
+> ten-member `ShellStatus` union driven by **26 scattered `setShellStatus` calls**, plus a
+> `shellStatusRef` shadow copy that exists because "shellStatus updates asynchronously" and three
+> effects need to read it without re-arming. What is missing is not the states — it is any notion
+> of which **transitions** are legal. `ready` is reachable from any line that types it, and the
+> guard keeping a submitted paper out of it is `if (shellStatusRef.current !== 'ready') return;`
+> hand-written at each site: correct everywhere it appears, absent everywhere it does not.
+>
+> `src/lib/examMachine.ts` makes the legal edges data — 10 states, **26 edges**, every one derived
+> from a real call site rather than invented. It is pure (no React, no Firestore, no clock) and
+> **nothing imports it yet**, which is the staging `examTimingCore` used for exactly this
+> situation: *"Phase 3a ships it inert, with its sweep, so the logic can be proven before anything
+> depends on it."* On a 4,279-line critical-path component, proving the table and rewiring it are
+> two reviews, not one.
+>
+> The sweep (22 tests) asserts the safety properties as **properties over the whole space**, not
+> examples — all 100 pairs decided, terminal states absorbing against all 10 targets, every
+> non-terminal state able to reach an ending, every state reachable from `loading`. Plus seven
+> real sitting paths, including a resumed mid-break entry and a failed-then-retried submit.
+> Mutation-tested: making `submitted → ready` legal fails **four independent tests**.
+>
+> **One divergence found, and it is left visible rather than smoothed over.** `handleTerminate`
+> sets `'terminated'` with no guard on current state (`if (!att) return;` and nothing else), so a
+> violation arriving after a successful hand-in would move a *submitted* paper to terminated. The
+> window is small and may be unreachable in practice — the integrity engine is torn down on submit
+> — but "may be" is the problem, and it is precisely what a scattered setter cannot rule out. The
+> table models both terminal states as absorbing, so **wiring stage 2 means adding the guard
+> `handleTerminate` lacks, not relaxing the table to match it.**
+>
+> The state list is a twin of `ShellStatus` while it waits, and is pinned as one in
+> `twinSync.test.ts` — an inert module is exactly what rots unnoticed. That guard is scaffolding
+> and says so: when stage 2 lands it should be **deleted**, not left to pass vacuously.
+
 ### 6.3 What is working well — do not regress it
 
 Recorded because an audit that only lists faults invites someone to "fix" a deliberate design.
@@ -647,7 +682,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-10 | Refactor `InstituteQuestionsPage` / `FacultyQuestionsPage` onto `QuestionBankCore`, matching how reports and rosters already work | F-7 | M |
 | R-11 | Collapse the four auth contexts into one parameterised provider with a role-specific session builder | F-8 | M |
 | R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |
-| R-13 | Model `ExamShell`'s attempt state as an explicit reducer/state machine | F-9, S-3 | L |
+| R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGE 1 DONE** — `examMachine.ts` extracted, 26 edges derived from real call sites, 22-test sweep, shipped inert. Stage 2 (rewire ExamShell onto it, plus the `handleTerminate` guard it lacks) still open | F-9, S-3 | L |
 | R-14 | Document a SEB secret-rotation runbook that updates Vercel and Firebase together | S-6 | S |
 | R-15 | Evaluate a second region for the exam hot path, or accept and document single-region risk explicitly in the availability contract | S-2 | L |
 

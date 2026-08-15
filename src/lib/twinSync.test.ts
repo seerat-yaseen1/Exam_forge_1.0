@@ -40,6 +40,7 @@ import {
 } from './codeVerdictView';
 import { auditActionLabel } from './deletionAudit';
 import { codeVerdictDocId, DEFAULT_QUESTION_GRACE_SECONDS } from './submissionService';
+import { EXAM_STATES } from './examMachine';
 import { HIERARCHY_COLLECTIONS } from './lifecycleService';
 import { JUDGE_LANGUAGES } from '../app/components/exam/judgeTypes';
 
@@ -394,6 +395,39 @@ describe('hierarchy lifecycle — the rules fence covers what the callable write
         + 'does not write it — the fence has outlived its field',
       ).toContain(key);
     }
+  });
+});
+
+describe('exam machine — the table and the union it will replace', () => {
+  // A twin created ON PURPOSE and pinned in the same change (audit F-9,
+  // stage 1). examMachine.ts is inert: nothing imports it yet, which means
+  // nothing else in the repo would notice it drifting from ExamShell.
+  //
+  // That is exactly the condition under which a staged module rots. The timing
+  // core survived the same wait because its sweep ran the whole time; this is
+  // the equivalent for the half a sweep cannot see — that the states it
+  // reasons about are still the states the component has.
+  //
+  // When ExamShell is finally rewired onto the machine this test becomes
+  // redundant and should be DELETED, not left to pass vacuously. It is
+  // scaffolding, and it says so.
+
+  it('EXAM_STATES matches ExamShell.ShellStatus exactly', () => {
+    const shell = read('src/app/pages/student/ExamShell.tsx');
+    const m = shell.match(/type ShellStatus =([^;]*);/);
+    if (!m) {
+      throw new Error(
+        'Could not find the ShellStatus union in ExamShell.tsx. It was renamed '
+        + 'or reshaped — update this test deliberately rather than deleting the '
+        + 'assertion, because the twin it guards is still a twin.',
+      );
+    }
+    const union = Array.from(m[1].matchAll(/'([^']+)'/g)).map((x) => x[1]);
+
+    // Both directions. A state in the component and not the table is a branch
+    // the machine cannot express; one in the table and not the component is an
+    // edge proven against something that no longer exists.
+    expect([...EXAM_STATES].sort()).toEqual([...union].sort());
   });
 });
 

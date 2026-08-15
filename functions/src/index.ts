@@ -68,6 +68,47 @@ const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
 const JUDGE0_BASE_URL = defineString('JUDGE0_BASE_URL', { default: '' });
 const JUDGE0_AUTH_TOKEN = defineSecret('JUDGE0_AUTH_TOKEN');
 
+// ── Coding sweep capacity (audit R-1) ─────────────────────────────
+//
+// Three numbers that must be reasoned about TOGETHER, which is why they are
+// declared together rather than inline at the sweep.
+//
+//   CONCURRENCY  how many papers are in flight at once. Default 4, matching
+//                the cluster's `replicas: 4` in infra/judge0/docker-compose.yml
+//                — described there as "the real concurrency ceiling of the
+//                whole platform". Past it, requests only queue inside Judge0
+//                and the sweep loses its ability to stop cleanly at the
+//                deadline. RAISE THIS WITH THE REPLICA COUNT, not on its own.
+//
+//   BUDGET       wall-clock seconds after which the sweep stops STARTING new
+//                papers. TWO ceilings bound it, and the tighter one is not the
+//                obvious one:
+//                  · timeoutSeconds (540) — work in flight must finish and
+//                    commit; a run killed by the platform loses what it held.
+//                  · THE SCHEDULE INTERVAL (300) — Cloud Scheduler does not
+//                    wait for the previous run. A budget above the interval
+//                    means two sweeps overlap, both see the same
+//                    codeJudgePending papers, and a paper gets judged twice —
+//                    spending two of its five attempts for one result.
+//                240 leaves a minute of margin for the last papers in flight
+//                to land before the next run starts. RAISE THE SCHEDULE FIRST
+//                if this ever needs to grow.
+//
+//   MAX_PAPERS   the query cap. With a time budget this is a memory bound and
+//                a backlog probe rather than a throughput limit, which is why
+//                it can be far larger than the old 50 without risking a
+//                run that overshoots.
+//
+// Read from process.env so they can be re-sized in functions/.env.<project>
+// alongside a cluster change, without a code deploy.
+function envInt(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
+}
+const JUDGE_SWEEP_CONCURRENCY = envInt('JUDGE_SWEEP_CONCURRENCY', 4);
+const JUDGE_SWEEP_BUDGET_SECONDS = envInt('JUDGE_SWEEP_BUDGET_SECONDS', 240);
+const JUDGE_SWEEP_MAX_PAPERS = envInt('JUDGE_SWEEP_MAX_PAPERS', 400);
+
 // ══════════════════════════════════════════════════════════════════
 // APP CHECK — the attestation the client already pays for
 // ══════════════════════════════════════════════════════════════════
@@ -13554,29 +13595,105 @@ export const scheduledJudgeCoding = onSchedule(
   async () => {
     const db = getFirestore();
     const adapter = getJudgeAdapter();
+    const startedAt = Date.now();
 
-    // Bounded per run. The sweep is every five minutes, so a backlog drains
-    // across runs rather than one invocation trying to outlast its timeout.
+    // ── Why this run is bounded by TIME, not by a paper count ──────
+    //
+    // It used to take `.limit(50)` and judge them one after another. At a
+    // five-minute schedule that is a hard ceiling of 600 papers an hour, and
+    // the audit measured what that means against this system's own stated
+    // target: a 10,000-student cohort with coding items takes ~17 HOURS to
+    // drain. The sweep was correctly designed to spread work across runs
+    // rather than outlast its timeout; the rate was simply never sized
+    // against the number the rest of the platform is sized for.
+    //
+    // The count was also the wrong knob. Raising it trades one failure for
+    // another — a run that overshoots `timeoutSeconds` is killed mid-paper —
+    // because the cost of a paper is not knowable in advance: it is however
+    // many submissions it carries times however long their suites take.
+    // A deadline is the honest bound, and it holds whatever a paper costs.
+    const budgetMs = Math.max(60_000, JUDGE_SWEEP_BUDGET_SECONDS * 1000);
+
+    // ── And the real bottleneck was never the limit ────────────────
+    //
+    // The cluster runs FOUR worker replicas — docker-compose.yml calls that
+    // "the real concurrency ceiling of the whole platform" — and this loop
+    // awaited one paper at a time. Three of the four workers were idle while
+    // a cohort waited. Concurrency is what actually moves the number; the
+    // deadline is what keeps it safe.
+    //
+    // Deliberately defaulted to the cluster's replica count rather than
+    // something larger: past it the extra requests only queue inside Judge0,
+    // and the sweep would lose the ability to stop cleanly at its deadline.
+    // Both are env-tunable so the pair can be re-sized together when the
+    // cluster is (see infra/judge0/README.md).
+    const concurrency = Math.max(1, JUDGE_SWEEP_CONCURRENCY);
+
     const pending = await db.collection('attempts')
       .where('codeJudgePending', '==', true)
-      .limit(50)
+      .limit(JUDGE_SWEEP_MAX_PAPERS)
       .get();
 
     let papers = 0;
     let judged = 0;
     let settled = 0;
-    for (const docSnap of pending.docs) {
-      try {
-        const r = await judgeAttemptCoding(db, adapter, docSnap.id);
-        papers++;
-        judged += r.judged;
-        if (r.settled) settled++;
-      } catch (e) {
-        // One bad paper must not stop the sweep — the rest of the cohort is
-        // waiting on it. The attempt keeps its pending flag and is retried.
-        console.error('[judgeCoding] attempt', docSnap.id, e);
+    let skippedForBudget = 0;
+
+    // Shared cursor over the batch; each worker takes the next paper when it
+    // finishes one, so a slow paper cannot stall the others behind it (which
+    // a fixed chunking would).
+    let next = 0;
+    const worker = async () => {
+      for (;;) {
+        if (Date.now() - startedAt > budgetMs) {
+          // Stop STARTING work, never abandon work in flight. The papers not
+          // reached keep codeJudgePending and are picked up next run — the
+          // same across-runs draining the original design intended.
+          skippedForBudget += Math.max(0, pending.docs.length - next);
+          next = pending.docs.length;
+          return;
+        }
+        const i = next++;
+        if (i >= pending.docs.length) return;
+        const docSnap = pending.docs[i];
+        try {
+          const r = await judgeAttemptCoding(db, adapter, docSnap.id);
+          papers++;
+          judged += r.judged;
+          if (r.settled) settled++;
+        } catch (e) {
+          // One bad paper must not stop the sweep — the rest of the cohort is
+          // waiting on it. The attempt keeps its pending flag and is retried.
+          console.error('[judgeCoding] attempt', docSnap.id, e);
+        }
       }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, pending.docs.length) }, worker),
+    );
+
+    // ── The backlog line the audit asked for ───────────────────────
+    //
+    // `papers=0` was previously indistinguishable from "nothing queued" and
+    // "the judge is unreachable", and neither said whether a backlog was
+    // building. `queued` is what the query found; when it equals the cap the
+    // real backlog is at least that and probably larger, which is the signal
+    // worth alerting on. Single greppable line, same prefix as before.
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    const atCap = pending.docs.length >= JUDGE_SWEEP_MAX_PAPERS;
+    console.log(
+      `[judgeCoding] queued=${pending.docs.length}${atCap ? '+' : ''} papers=${papers}`
+      + ` judged=${judged} settled=${settled} deferred=${skippedForBudget}`
+      + ` concurrency=${concurrency} elapsed=${elapsed}s`,
+    );
+    if (atCap || skippedForBudget > 0) {
+      console.warn(
+        `[judgeCoding] BACKLOG queued=${pending.docs.length}${atCap ? '+' : ''}`
+        + ` deferred=${skippedForBudget} — the sweep did not clear its batch;`
+        + ' raise JUDGE_SWEEP_CONCURRENCY with the cluster replica count, or'
+        + ' shorten the schedule, if this persists across runs',
+      );
     }
-    console.log(`[judgeCoding] papers=${papers} judged=${judged} settled=${settled}`);
   },
 );

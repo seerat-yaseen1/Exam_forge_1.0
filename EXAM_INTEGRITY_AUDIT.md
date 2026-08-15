@@ -65,6 +65,26 @@
 > New suite `functions/test/audit.round4.cjs` (5 probes / 65 checks) plus `X-05` in the emulator-backed concurrency suite, both wired into `npm test`. Every suite green: **13,446 timing states · 84,062 assertions · 64 freeze · 85 e2e · 111 round-2 · 63 round-3 · 65 round-4 · 157 grading · 91 manual · 51 risk**.
 >
 > Written up in full at **[§10](#10--round-4-2026-08-15--the-pause-and-the-second-door-into-it)**.
+>
+> ## 🔁 ROUND 5 (2026-08-15) — the surface that never inherited the rules
+>
+> Rounds 2–4 went at the exam itself. Along the way every student-facing exam callable acquired the same gates, and by now the list reads like a contract: **`assertSession`** (one sitting, one browser — INV-5a), **`assertNotBlocked`** (a block stops the sitting, not just a reload — D-21), **`assertSEB`** (the exam-taker is inside Safe Exam Browser).
+>
+> `startExam`, `startSection`, `submitSection`, `submitAnswerAndAdvance`, `saveAnswerNoAdvance`, `getExamVerdict`, `gradeAttempt`, `getExamQuestions`, `logViolation`, `examHeartbeat`, `reportExtensionCheck` and `verifyAndResume` all carry the ones that apply to them. **The coding surface carried none of them.**
+>
+> | # | Defect | Measured |
+> |---|---|---|
+> | **D-01** | `runCodeSample` / `recordCodeTelemetry` never called `assertSession` | a **superseded device kept running code on the candidate's quota, and kept appending to their evidence log** |
+> | **D-02** | neither called `assertNotBlocked` | a **blocked student could still spend judge capacity and still write telemetry** |
+> | **D-03** | `recordCodeTelemetry` never checked `questionId` against the paper | `NOT_A_QUESTION` created a real `attemptTelemetry` row no attempt can explain |
+>
+> `runCodeSample` and `recordCodeTelemetry` were written later, for the judge pipeline, and inherited the gates that were obvious at the time — ownership, status, freeze, the answer window, the paper. The three above were never added. That is round 3's shape again: **a rule that is right everywhere it was written, and absent where it was not.**
+>
+> **SEB is deliberately still open**, and was before this round: `submissionService.ts` says so in writing — *"Deliberately NOT wrapped in withSeb, matching the server… Worth revisiting… but the exposure is small, since a run returns only sample results the candidate can already see inside SEB."* That reasoning holds for `runCodeSample` and is weaker for telemetry. Left as the documented deferral it already is, rather than changed under cover of this round — see [§11.5](#115--what-this-round-deliberately-did-not-close).
+>
+> New suite `functions/test/audit.round5.cjs`, 4 probes / 30 checks, wired into `npm test`.
+>
+> Written up in full at **[§11](#11--round-5-2026-08-15--the-surface-that-never-inherited-the-rules)**.
 
 ---
 
@@ -659,3 +679,130 @@ Deployment: functions only — no rules, no indexes, no migration. `autoGranted`
 ---
 
 <sub>Round 4 performed against commit `309ecb0`. Every finding traced to a `file:line` reference and reproduced by an executable probe driving the compiled production handlers.</sub>
+
+---
+
+# 11 · ROUND 5 (2026-08-15) — the surface that never inherited the rules
+
+> **Scope:** the coding callables — `runCodeSample` and `recordCodeTelemetry` — measured against the gate contract every other student-facing exam callable satisfies.
+> **Method:** unchanged. `functions/test/audit.round5.cjs`, real compiled callables, in-memory Firestore, virtual clock. The judge is the `NullJudgeAdapter` (`JUDGE0_BASE_URL` unset), which is exactly right: these probes ask whether a call is **refused**, not what the judge said about the code.
+> **Result:** 4 probes, **10 red across 3 defects**, all fixed and green. Every other suite green before and after.
+
+## 11.1 · Why here
+
+Round 4 ended on a note it did not follow up. C-04's evidence included this:
+
+> `recordCodeTelemetry` refuses a paused attempt too. That last one is the sharpest: on a coding paper the answer went on changing while the record of how it was produced had a hole exactly there.
+
+That observation was about the **freeze**. It is also a hint about the **surface** — the coding callables were being compared against the exam's rules for the first time, and one comparison had already come out uneven. So this round did the comparison properly, by listing the gates every exam callable applies and checking the two newest ones against the list.
+
+| Gate | What it enforces | Coding surface, before this round |
+|---|---|---|
+| `assertSession` | INV-5a — one sitting, one browser session | ❌ absent from both |
+| `assertNotBlocked` | D-21 — a block stops the sitting, not just a reload | ❌ absent from both |
+| `assertSEB` | Phase 3 — the exam-taker is inside SEB | ❌ absent from both, **deliberately** (§11.5) |
+| ownership / status / freeze / window / paper | rounds 2–4 | ✅ present |
+
+The last row is why this was not obvious. Both callables look careful, because they are: `runCodeSample` checks ownership, refuses a terminal attempt, refuses an open freeze, reads `answersLockedAfter`, resolves the paper through `examContractFor`, enforces the author's language list and meters the run. It reads as a function somebody thought hard about. It was simply written against a different, older list.
+
+## 11.2 · 🔴 D-01 · The judge and the keystroke log did not know about sessions
+
+**Probe:** `D-01` · **Evidence:** `index.ts:13104` (`runCodeSample`), `:12965` (`recordCodeTelemetry`), `:10355` (`assertSession`)
+
+INV-5a: `registerSession` makes the **joining** device the owner — "first device wins" would strand a student whose browser crashed — and records the conflict server-side where a student cannot suppress it. Every exam callable then refuses the loser. `P-15` proves that for `submitSection`.
+
+**Measured.** Device A opens the sitting; device B joins and takes it. Device A then:
+
+| Call | Before | After |
+|---|---|---|
+| `submitSection` | ❌ `SESSION_SUPERSEDED` | ❌ `SESSION_SUPERSEDED` |
+| `runCodeSample` | ✅ **ran the code** | ❌ `SESSION_SUPERSEDED` |
+| `recordCodeTelemetry` | ✅ **wrote a row** | ❌ `SESSION_SUPERSEDED` |
+
+Two consequences, and the second is worse.
+
+**The superseded device keeps the judge.** `runCodeSample`'s own comment refuses staff because *"there is no reason for staff to execute a student's code through the student's quota"* — and a quota is exactly what a second browser spends. Sample runs are metered: `maxPerQuestion`, a cooldown, real compute on a shared cluster. A device that lost the session reaching this is a second person working the paper on the candidate's allowance.
+
+**The superseded device keeps writing the evidence.** `recordCodeTelemetry` refuses a *finished* attempt with this reasoning:
+
+> A finished attempt cannot acquire new telemetry — that would let a record be extended after the fact, which is exactly what an append-only log is supposed to prevent.
+
+A device that lost the session extends it in precisely that way, and its rows are **indistinguishable from the real candidate's**. That is worse than a missing record, because it still looks authoritative.
+
+**FIXED** (`e2f7d59`). Both callables call `assertSession`, and both clients send the `sessionId` they already hold — the module-level value `registerSession` owns, spread exactly as every other exam call spreads it. A client that sends none is still served while `REQUIRE_SESSION_ID` is false, so a stale bundle is not stranded; `D-04` asserts that explicitly.
+
+## 11.3 · 🟡 D-02 · A block stops the exam, but not the compiler
+
+**Probe:** `D-02` · **Evidence:** `index.ts:10398` (`assertNotBlocked`)
+
+D-21 settled that a block must stop the sitting **advancing**, not merely a reload, which is why `assertNotBlocked` sits on both answer paths and both section transitions. Round 3's `B-12` then established that `blockedStudents` is *the* live lever: de-allocating a student mid-sitting deliberately does **not** eject them, so this list is the whole of the mechanism an invigilator has.
+
+**Measured.** Invigilator blocks a student mid-sitting. They cannot answer, cannot advance, cannot submit — and:
+
+- `runCodeSample` → **ran** ❌
+- `recordCodeTelemetry` → **stored** ❌
+
+**FIXED** (`71f3f65`). Both call `assertNotBlocked`, from the assessment document each already loads, so neither costs an extra read. On telemetry it runs **before** the `enabled` early-return, so a blocked student is refused whether or not that exam records anything. Both read `blockedStudents` from the **live** document rather than the snapshot — which is precisely why `examContractFor` leaves it out of the frozen contract.
+
+## 11.4 · 🟢 D-03 · Telemetry accepted a question that was not on the paper
+
+**Probe:** `D-03` · **Evidence:** `index.ts:13089` (the chunk write)
+
+A-09's shape, in the collection built after it. The chunk id is
+
+```
+attemptTelemetry/{attemptId}__{questionId}__{seq}
+```
+
+and `questionId` arrived straight from `request.data` with nothing checked.
+
+**Measured.** `recordCodeTelemetry({ questionId: 'NOT_A_QUESTION' })` created
+
+```
+attempt_…__NOT_A_QUESTION__0000
+```
+
+— a real document, in the collection reviewers read, that no attempt can explain. Meanwhile `runCodeSample`, its sibling, on the same paper, in the same file, already refused the same input: *"That question is not on your paper."*
+
+Nothing is stolen by this. It is unvalidated caller input shaping stored state, which is exactly what A-09 was fixed for.
+
+**FIXED** (`71f3f65`). Checked against the attempt's own contract via `examContractFor`, not the live paper — so a question added to a live exam is not writable by a student who never received it. The two siblings now agree, and the client swallows telemetry failures by design, so no candidate ever sees the refusal.
+
+## 11.5 · What this round deliberately did **not** close
+
+`assertSEB` is the third gate, and it is still absent from both coding callables. That is **not** an oversight — the codebase says so, at `submissionService.ts:1044`:
+
+> Deliberately NOT wrapped in `withSeb`, matching the server: `runCodeSample` does not verify a SEB token today. **Worth revisiting** — the platform's posture is that SEB binds the exam-taker — but the exposure is small, since a run returns only sample results the candidate can already see inside SEB.
+
+The exposure argument holds for `runCodeSample` and is **weaker for telemetry**, which is evidence rather than feedback. It is left as the documented deferral it already is rather than changed under cover of this round, for a reason worth stating plainly: closing it means adding `SEB_SIGNING_SECRET` to both callables and a `withSeb` wrapper to both clients, and `assertSEB` **fails closed on a missing secret** by design. An exam whose candidates cannot run their code because a secret did not reach a deploy is a worse day than the exposure it removes. It belongs in its own change, with its own deploy note.
+
+Also unchanged, and also not a defect: **adaptive delivery is still linear** (round 2's C-2). The builder copy already says so, so nobody is misled; implementing a difficulty ladder is a product decision, not an audit finding.
+
+## 11.6 · ✅ Verified working
+
+| Probe | Property |
+|---|---|
+| **D-04** | The candidate on the owning device runs their code and is told how many runs remain; an unconfigured judge reports `judgeAvailable: false` rather than reading as a wrong answer; keystrokes are recorded as exactly one chunk keyed by attempt and question; a **legacy client that sends no `sessionId` is still served**, as everywhere else; and staff still cannot run a student's code through their quota or write into their record. |
+
+## 11.7 · Order of action taken
+
+1. **D-01** `e2f7d59` — the session gate, server and both clients.
+2. **D-02 / D-03** `71f3f65` — the block and the paper, where the assessment was already loaded.
+
+## 11.8 · Reproducing round 5
+
+```bash
+cd functions
+npm install
+npm run build
+
+node test/audit.round5.cjs              # 4 probes — green
+PROBE_TRACE=1 node test/audit.round5.cjs
+npm test                                # every suite, round 5 included
+```
+
+Deployment: functions only — no rules, no indexes, no migration. Two callables gain an optional `sessionId` in their payload; an older client that omits it is served exactly as before.
+
+---
+
+<sub>Round 5 performed against commit `8ab207d`. Every finding traced to a `file:line` reference and reproduced by an executable probe driving the compiled production handlers.</sub>

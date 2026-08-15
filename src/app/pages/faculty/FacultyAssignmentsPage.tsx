@@ -13,6 +13,7 @@ import {
   Users, BookOpen, Layers, AlertTriangle, Plus, Search, Lock,
 } from 'lucide-react';
 import { useFacultyAuth } from '../../context/FacultyAuthContext';
+import { formatDayMonth as formatDateShort, formatDate } from '../../../lib/dateFormat';
 import {
   getAssessmentsByOwner,
   statusColor,
@@ -22,18 +23,6 @@ import {
 } from '../../../lib/assessmentService';
 
 // ── Helpers ───────────────────────────────────────────────────────
-
-function formatDate(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
-
-function formatDateShort(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
 
 function statusLabel(s: AssessmentStatus): string {
   return s === 'draft' ? 'Draft' : s === 'active' ? 'Active' : 'Closed';

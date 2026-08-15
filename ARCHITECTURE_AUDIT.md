@@ -665,11 +665,21 @@ bug.
 > | `en-US` date + time **without** year | Student assessments |
 > | locale-default, no options | Exam results |
 >
-> Folding these would change what dates look like on those screens — `en-GB` → `en-US` is visible
-> to a user. **Which locale this product speaks is a product decision, not a tidy-up**, so it is
-> reported rather than taken. Two of them (`StudentTab`, and the `new Date()` "today" helpers) are
-> already correct and carry no risk. The rest share the missing-guard defect and should be folded
-> once the locale question is answered.
+> **Answered (2026-08-15): the product speaks `en-GB`.** All ten are folded in, and
+> `lib/dateFormat` moved with them — every date in the product is now `15 Aug 2026`. Two formats
+> were added for shapes that genuinely differ (`formatDayMonth` for compact list columns,
+> `formatDayMonthTime` for the student assessment list).
+>
+> **One consequence worth stating, because it is visible:** `en-GB` is a **24-hour** locale, so
+> exam times render `09:30` and `14:00` rather than `9:30 AM` and `2:00 PM` — on the briefing page,
+> the results page and the assessment list. On a platform whose job is telling candidates when a
+> paper opens and closes, losing the AM/PM ambiguity is an improvement; it is asserted in the tests
+> so a drift back to 12-hour fails rather than passing quietly.
+>
+> Two call sites keep a local wrapper for a real reason, not as leftovers: `StudentTab` receives
+> either a Firestore `Timestamp` or a string and must keep its `isNaN` guard, because
+> `toISOString()` **throws** on an Invalid Date — removing it would turn an em dash into a crash.
+> The `new Date()` "today" helpers parse nothing and carry no risk.
 
 **F-8 · Four parallel auth contexts, one Firebase Auth instance.**
 Each role gets its own provider, session shape, login, `changePassword`, `requestPasswordReset`
@@ -867,7 +877,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-5 | ~~Vendor the face-api weights~~ **DONE** — 204 KB committed and checksummed; `postinstall` copies from `vendor/` with no network, and a missing weight degrades face detection instead of failing the build | S-8 | S |
 | R-6 | ~~Set `enforceAppCheck`~~ **PARTLY DONE** — the ten hot-path callables now read an `APP_CHECK_ENFORCED` flag (default off). Remaining: console monitoring, then flip the env var | F-3 | M |
 | R-7 | ~~Gitignore `functions/lib/`~~ **DONE, retargeted** — `lib/` was already ignored; the real tracked artefact was `functions/timing-core.cjs`, now untracked and ignored | F-6 | S |
-| R-8 | Automate the pre-exam `minInstances` warm-up (a scheduled bump keyed off the assessment window) rather than relying on a documented manual step | §5 cold start | M |
+| R-8 | ~~Automate the pre-exam warm-up~~ **DONE, shipped disabled** — `scheduledWarmup` sets `minInstances` on `startExam`/`getExamQuestions` via the Cloud Run Admin API when a sitting is within the window, and back to 0 after. Inert unless `WARMUP_ENABLED=true`, because it needs `roles/run.developer` first and warm instances bill continuously | §5 cold start | M |
 | R-9 | ~~Add `functions` to the workspace, extract `shared/`~~ **RE-SCOPED — M was too cheap.** Firebase packages only `functions/`, so a shared package needs a predeploy vendoring step. Guard extended to the four unguarded twins instead (incl. the functions↔rules one); the restructure is left as a deliberate decision | F-2 | L |
 | R-10 | ~~Refactor the two question pages onto `QuestionBankCore`~~ **RE-SCOPED + STAGE 1 DONE** — their differences are real features, so the merge needs a heavily parameterised shell. The cheap, high-value part was elsewhere: 11 copies of `formatDate` (3 formats, 6 variants) and 4 of `truncate` folded into a tested `dateFormat.ts` with the missing invalid-input guard | F-7 | M |
 | R-11 | ~~Collapse the four auth contexts~~ **STAGES 1 + 2 DONE** — admission decision in `accessGate.ts`, password operations in `roleAuth.ts` (−249/+70), both tested. `login`/session-building stay per-role deliberately; Web Owner stays separate (MFA) | F-8 | M |

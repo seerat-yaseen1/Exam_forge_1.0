@@ -13,6 +13,7 @@ import {
   Users, BookOpen, Layers, Search, Users2,
 } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
+import { formatDayMonth as formatDateShort } from '../../../lib/dateFormat';
 import {
   getAssessmentsVisibleToInstitute,
   statusColor,
@@ -22,11 +23,6 @@ import {
 } from '../../../lib/assessmentService';
 
 // ── Helpers ───────────────────────────────────────────────────────
-
-function formatDateShort(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
 
 function statusLabel(s: AssessmentStatus): string {
   return s === 'draft' ? 'Draft' : s === 'active' ? 'Active' : 'Closed';

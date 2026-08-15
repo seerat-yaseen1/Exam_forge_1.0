@@ -13015,10 +13015,49 @@ export const recordCodeTelemetry = onCall<RecordTelemetryData>(
 
     const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
-    const assessment = assessmentSnap.data() as {
+    const assessmentRaw = assessmentSnap.data() as Record<string, unknown>;
+    const assessment = assessmentRaw as {
       securityTier?: 'mock' | 'normal' | 'high_stake';
       codeTelemetry?: boolean;
+      blockedStudents?: string[];
     };
+
+    // ── D-02: an invigilator's block reaches here too ────────────
+    //
+    // D-21 settled that a block must stop the sitting advancing rather than
+    // only a reload, which is why assertNotBlocked sits on both answer paths
+    // and both section transitions. B-12 then established that blockedStudents
+    // is THE live lever — de-allocating a student mid-sitting deliberately does
+    // not eject them, so this list is the whole mechanism.
+    //
+    // Pulled, it left the coding surface running: the student could not answer,
+    // advance or submit, and could still spend judge capacity and still append
+    // to their own evidence log. Checked BEFORE the `enabled` return below, so
+    // a blocked student is refused whether or not this exam records anything.
+    //
+    // Read live, never from the snapshot — a block is an invigilation decision
+    // taken NOW, which is exactly why examContractFor leaves it out of the
+    // frozen contract.
+    assertNotBlocked(assessment, attempt.studentId ?? '');
+
+    // ── D-03: and the question must be on the paper THIS student sat ──
+    //
+    // A-09's shape in the collection built after it: caller-supplied input
+    // naming a stored document. The chunk id is
+    // `${attemptId}__${questionId}__${seq}`, and questionId arrived straight
+    // from request.data with nothing checked — so `NOT_A_QUESTION` produced a
+    // real attemptTelemetry row that no attempt could explain, in the
+    // collection reviewers read.
+    //
+    // runCodeSample — its sibling, on the same paper, in the same file —
+    // already refuses this in as many words. The two now agree.
+    const onPaper = normalizeSections(
+      (examContractFor(attempt as unknown as Record<string, unknown>, assessmentRaw)
+        ?? assessmentRaw) as GradingAssessmentDoc,
+    ).some((sec) => sec.questions.some((q) => q.questionId === questionId));
+    if (!onPaper) {
+      throw new HttpsError('permission-denied', 'That question is not on your paper.');
+    }
 
     // THE SERVER DECIDES WHETHER ANYONE IS RECORDED. The client makes the same
     // determination to avoid sending pointless traffic, but a client that
@@ -13142,6 +13181,15 @@ export const runCodeSample = onCall<RunCodeSampleData>(
       attempt as unknown as Record<string, unknown>,
       assessmentSnap.data() as Record<string, unknown>,
     ) as GradingAssessmentDoc & { codingRuns?: Partial<SampleRunConfig> };
+
+    // D-02: the live block, for the reason recordCodeTelemetry's copy of this
+    // comment gives — an invigilation decision taken now, which is why
+    // examContractFor deliberately lets blockedStudents ride in from the live
+    // document rather than freezing it onto the attempt.
+    assertNotBlocked(
+      assessment as { blockedStudents?: string[] },
+      attempt.studentId ?? '',
+    );
 
     const onPaper = normalizeSections(assessment)
       .some((sec) => sec.questions.some((q) => q.questionId === questionId));

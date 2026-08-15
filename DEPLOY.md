@@ -310,7 +310,93 @@ Then run one real sitting end to end on a **mock-tier** exam and check that:
 
 ---
 
-## 9 · Rollback
+## 9 · Rotating `SEB_SIGNING_SECRET`
+
+> Audit S-6 / R-14. Read this **before** touching the secret, not while an exam
+> is failing.
+
+### Why it needs a runbook at all
+
+The secret exists in **two deployment systems that know nothing about each
+other**:
+
+| Where | What it does | How it is set |
+|---|---|---|
+| Vercel env `SEB_SIGNING_SECRET` | `/api/seb-verify` **mints** the HMAC proof | Vercel project settings → redeploy |
+| Firebase secret `SEB_SIGNING_SECRET` | `assertSEB` **verifies** it | `firebase functions:secrets:set` → deploy functions |
+
+They must match exactly. Change one and not the other and **every SEB-required
+exam on the platform stops starting**, with `SEB_REQUIRED: proof signature
+invalid` — which reads like a Safe Exam Browser fault, not a config one.
+
+### There is no zero-downtime rotation today
+
+Both sides hold **one** secret. `api/seb-verify.js` mints with
+`process.env.SEB_SIGNING_SECRET`; `functions/src/index.ts` verifies with
+`SEB_SIGNING_SECRET.value()`. Neither accepts a list, so there is no window in
+which old and new proofs are both valid.
+
+Note the asymmetry: `SEB_CONFIG_KEYS` — the *other* SEB secret, one field over
+in the same file — **is** a comma-separated list, precisely so multiple keys can
+be valid at once. Applying that shape to the signing secret (mint with the
+first, accept any) is what makes rotation seamless, and is the recommended
+follow-up. Until then, rotation takes a window.
+
+### The procedure
+
+**Step 0 — pick the window.** No exam with `requireSEB` may be in progress or
+starting. Check for live attempts before you begin:
+
+```bash
+firebase functions:log --project YOUR_PROJECT_ID --only startExam,examHeartbeat | tail -50
+```
+
+The failure mode during the gap is **fail-closed** — candidates cannot start,
+and nobody sits an unverified exam. That is the correct direction, and it is
+why this is disruptive rather than dangerous.
+
+**Step 1 — generate.** 32 bytes, hex:
+
+```bash
+openssl rand -hex 32
+```
+
+**Step 2 — the verifier first.** Functions deploys take minutes; Vercel takes
+seconds. Doing the slow side first keeps the gap as short as the fast side:
+
+```bash
+firebase functions:secrets:set SEB_SIGNING_SECRET --project YOUR_PROJECT_ID
+scripts/deploy-functions.sh YOUR_PROJECT_ID          # §5 — all functions together
+```
+
+**Step 3 — the minter, immediately after.** Vercel project settings →
+Environment Variables → update `SEB_SIGNING_SECRET` → **redeploy**. An env
+change alone does nothing; the running deployment keeps the old value.
+
+**Step 4 — verify, with a real SEB client.** Nothing else proves it: Chrome
+never sends the config-key header, so a browser check cannot distinguish a
+working secret from a broken one.
+
+```bash
+firebase functions:log --project YOUR_PROJECT_ID --only startExam | grep -i seb
+#   expect NO "SEB_REQUIRED: proof signature invalid"
+#   "SEB_EXPIRED" immediately after rotation is EXPECTED and self-healing —
+#   it is a proof minted with the old secret inside its 90s TTL. The client
+#   re-verifies and recovers.
+```
+
+**Step 5 — record it.** Note the date somewhere the next person will look. A
+secret nobody can date is a secret nobody dares rotate.
+
+### If it goes wrong
+
+Put the **old** value back on both sides, in the same order. The secret is not
+compromised by a failed rotation, and reverting restores service faster than
+completing the change under pressure.
+
+---
+
+## 10 · Rollback
 
 ```bash
 git revert <commit-sha>        # the fixes are one commit per defect

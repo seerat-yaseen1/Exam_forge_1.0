@@ -24,19 +24,13 @@ import {
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, getSebToken, getSEBPublicInfo, type Assessment } from '../../../lib/assessmentService';
 import { scanForExtensionsWithSettle, extensionGateBlocks } from '../../components/exam/extensionScan';
+import { formatDateTime } from '../../../lib/dateFormat';
 import {
   getAllAttemptsByStudentAndAssessment,
   type Attempt,
 } from '../../../lib/submissionService';
 
 // ── Helpers ───────────────────────────────────────────────────────
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  });
-}
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);

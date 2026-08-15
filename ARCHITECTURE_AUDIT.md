@@ -647,9 +647,29 @@ bug.
 > semantics. `builder/shared.ts` re-exports `truncate` rather than dropping it, so its two
 > consumers are unaffected. **Net −52 / +14 lines across 12 files.**
 >
-> **Left open:** the page-structure merge above, and `builder/shared.ts`'s own `formatDateShort`
-> and `formatDateTime` — two more formatters in a module that is now half re-export, and the
-> obvious next thing to fold in.
+> **Follow-up done (2026-08-15).** `builder/shared.ts`'s two formatters are folded in, plus two
+> exact-match copies found by a wider sweep (`StudentLandingPage.formatShortDate`,
+> `ExamBriefingPage.formatDateTime`). The `builder/shared.ts` pair were *closer* to correct than the
+> original eleven — both already returned the em dash for an ABSENT value — but neither handled an
+> unparseable one, so `'not-a-date'` and even `'   '` still rendered `Invalid Date` on an
+> assessment row. Same guard, now shared.
+>
+> **The wider sweep also found something that is NOT a refactor, and is left alone deliberately.**
+> Ten more local formatters parse external input, and they do not agree on locale or shape:
+>
+> | Shape | Where |
+> |---|---|
+> | `en-GB` day + month (no year) | Institute / Faculty assignment pages |
+> | `en-GB` day + month + year | Faculty assignments |
+> | `en-GB` date + time | SEB settings (×2) |
+> | `en-US` date + time **without** year | Student assessments |
+> | locale-default, no options | Exam results |
+>
+> Folding these would change what dates look like on those screens — `en-GB` → `en-US` is visible
+> to a user. **Which locale this product speaks is a product decision, not a tidy-up**, so it is
+> reported rather than taken. Two of them (`StudentTab`, and the `new Date()` "today" helpers) are
+> already correct and carry no risk. The rest share the missing-guard defect and should be folded
+> once the locale question is answered.
 
 **F-8 · Four parallel auth contexts, one Firebase Auth instance.**
 Each role gets its own provider, session shape, login, `changePassword`, `requestPasswordReset`

@@ -5,6 +5,7 @@ import {
   Hash, Layers, Users, Group, ChevronRight, RefreshCw, AlertTriangle,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
+import { formatDate as formatShortDate } from '../../../lib/dateFormat';
 import {
   getMappingsByStudent,
   type AcademicMapping,
@@ -23,12 +24,6 @@ function getGreeting(): string {
 function formatDate(): string {
   return new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-  });
-}
-
-function formatShortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
   });
 }
 

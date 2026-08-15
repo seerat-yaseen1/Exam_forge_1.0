@@ -39,7 +39,8 @@ import {
   TEST_STATUS_LABEL,
 } from './codeVerdictView';
 import { auditActionLabel } from './deletionAudit';
-import { codeVerdictDocId } from './submissionService';
+import { codeVerdictDocId, DEFAULT_QUESTION_GRACE_SECONDS } from './submissionService';
+import { HIERARCHY_COLLECTIONS } from './lifecycleService';
 import { JUDGE_LANGUAGES } from '../app/components/exam/judgeTypes';
 
 const root = path.resolve(__dirname, '../..');
@@ -47,6 +48,12 @@ const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
 const serverIndex = read('functions/src/index.ts');
 const serverJudge = read('functions/src/judgeCore.ts');
+const serverTiming = read('functions/src/examTimingCore.ts');
+// The rules are a THIRD build with its own language, and they carry twins too —
+// see the hierarchy-lifecycle block below. Nothing else in the repo typechecks
+// against them, so reading them as text here is not a shortcut, it is the only
+// mechanism available.
+const rules = read('firestore.rules');
 
 /** Pull the string literals out of a `const NAME = [...]` declaration. */
 function stringArray(source: string, declaration: RegExp, label: string): string[] {
@@ -264,6 +271,143 @@ describe('operator detail stays on the staff side', () => {
     const studentPage = read('src/app/pages/student/ExamResultsPage.tsx');
     expect(studentPage).not.toMatch(/failureReason/);
     expect(studentPage).not.toMatch(/getCodeVerdicts/);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// THE HIERARCHY LIFECYCLE — a twin that spans THREE builds
+// ══════════════════════════════════════════════════════════════════
+//
+// Added with the F-4 fix, and guarded in the same change rather than later,
+// because the whole argument of this file is that a "keep in sync" comment is
+// not a mechanism. Two of the three twins below were created by that fix; not
+// pinning them would have been the exact mistake it was correcting.
+//
+// The second one is the security-critical twin in this repository, because it
+// is the only one where the two copies live in different LANGUAGES and neither
+// build can see the other. TypeScript cannot check a rules file, and the rules
+// engine cannot check TypeScript.
+
+describe('hierarchy lifecycle — the collection list', () => {
+  const server = (() => {
+    const m = serverIndex.match(/const HIERARCHY_COLLECTIONS = \[([\s\S]*?)\] as const;/);
+    if (!m) {
+      throw new Error(
+        'Could not find HIERARCHY_COLLECTIONS in functions/src/index.ts. It was '
+        + 'renamed or reshaped — update this test deliberately rather than '
+        + 'deleting the assertion, because the twin it guards is still a twin.',
+      );
+    }
+    return Array.from(m[1].matchAll(/'([^']+)'/g)).map((x) => x[1]);
+  })();
+
+  it('the client list matches the server list exactly', () => {
+    // Drift is silent in BOTH directions and neither is a type error. A
+    // collection the client offers and the server does not accept fails the
+    // archive with "Unknown hierarchy collection", which reads as a backend
+    // fault. One the server accepts and the client omits is a level of the
+    // hierarchy that simply cannot be archived, with no error at all — the
+    // button works everywhere except there.
+    expect([...HIERARCHY_COLLECTIONS].sort()).toEqual([...server].sort());
+  });
+
+  it('SchoolsTab can name a collection for every drill level', () => {
+    // The third copy. COLLECTION_BY_LEVEL is what turns a UI level into the
+    // argument the callable takes; a missing arm is a TypeScript error, but a
+    // WRONG arm is not, and it would archive a node in the wrong collection.
+    const tab = read('src/app/components/schools/SchoolsTab.tsx');
+    const m = tab.match(/const COLLECTION_BY_LEVEL: Record<NodeLevel, HierarchyCollection> = \{([\s\S]*?)\};/);
+    expect(m).toBeTruthy();
+    const mapped = Array.from(m![1].matchAll(/'([^']+)'/g)).map((x) => x[1]);
+    expect([...mapped].sort()).toEqual([...server].sort());
+  });
+});
+
+describe('hierarchy lifecycle — the rules fence covers what the callable writes', () => {
+  // THE ONE THAT MATTERS. setHierarchyNodeLifecycle exists so that archiving a
+  // node writes an audit row and honours schoolsManagementEnabled; the rules
+  // fence exists so a client cannot skip it by patching the node directly.
+  //
+  // The fence is a LITERAL LIST of field names in a different language. If the
+  // callable ever starts writing a seventh lifecycle field and the rules list
+  // is not updated with it, that field becomes forgeable from any staff
+  // console — and nothing fails. The audit row still gets written for real
+  // archives, the tests still pass, and the only symptom is a field that can
+  // be set by someone who should not be able to set it.
+
+  const written = (() => {
+    const fn = serverIndex.match(
+      /export const setHierarchyNodeLifecycle = onCall<[\s\S]*?batch\.update\(ref, \{([\s\S]*?)\}\);/,
+    );
+    if (!fn) {
+      throw new Error(
+        'Could not find the batch.update inside setHierarchyNodeLifecycle. It '
+        + 'was renamed or reshaped — update this test deliberately rather than '
+        + 'deleting the assertion, because the twin it guards is still a twin.',
+      );
+    }
+    return Array.from(fn[1].matchAll(/^\s{4}([a-zA-Z]+):/gm)).map((x) => x[1]);
+  })();
+
+  const fenced = (() => {
+    const m = rules.match(/function hierarchyLifecycleUntouched\(\) \{[\s\S]*?hasAny\(\[([\s\S]*?)\]\);/);
+    if (!m) {
+      throw new Error(
+        'Could not find hierarchyLifecycleUntouched in firestore.rules. It was '
+        + 'renamed or reshaped — update this test deliberately rather than '
+        + 'deleting the assertion, because the twin it guards is still a twin.',
+      );
+    }
+    return Array.from(m[1].matchAll(/'([^']+)'/g)).map((x) => x[1]);
+  })();
+
+  // `updatedAt` is written by the callable and deliberately NOT fenced: a
+  // rename sets it too, and fencing it would deny every legitimate direct edit.
+  // Named explicitly so that adding a second exception has to be a decision
+  // someone writes down here, rather than a silent widening of the gap.
+  const DELIBERATELY_UNFENCED = new Set(['updatedAt']);
+
+  it('finds both sides', () => {
+    expect(written.length).toBeGreaterThan(0);
+    expect(fenced.length).toBeGreaterThan(0);
+  });
+
+  it('every lifecycle field the callable writes is fenced in the rules', () => {
+    const shouldBeFenced = written.filter((k) => !DELIBERATELY_UNFENCED.has(k));
+    for (const key of shouldBeFenced) {
+      expect(
+        fenced,
+        `${key} is written by setHierarchyNodeLifecycle but is not in `
+        + 'hierarchyLifecycleUntouched(), so a client can set it directly',
+      ).toContain(key);
+    }
+  });
+
+  it('the rules do not fence a field the callable never writes', () => {
+    // The reverse drift. Harmless to security, but it denies a write nobody
+    // is making — and a fence around a field that no longer exists is how a
+    // list stops being read as load-bearing.
+    for (const key of fenced) {
+      expect(
+        written,
+        `${key} is fenced in firestore.rules but setHierarchyNodeLifecycle `
+        + 'does not write it — the fence has outlived its field',
+      ).toContain(key);
+    }
+  });
+});
+
+describe('question grace — one default, two builds', () => {
+  it('the client default matches examTimingCore', () => {
+    // examTimingCore's own header calls this out: index.ts used to hardcode the
+    // question grace as a bare `5` in two places, so a per-assessment override
+    // was honoured by the resolver and ignored by the two functions that flag a
+    // late answer. The server copies were unified; this is the client one, and
+    // it decides whether the shell submits an answer it believes is still in
+    // time.
+    const m = serverTiming.match(/export const DEFAULT_QUESTION_GRACE_SECONDS = (\d+)/);
+    expect(m).toBeTruthy();
+    expect(Number(m![1])).toBe(DEFAULT_QUESTION_GRACE_SECONDS);
   });
 });
 

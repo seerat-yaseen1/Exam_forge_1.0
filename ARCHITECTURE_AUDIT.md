@@ -410,8 +410,38 @@ comments: `ANSWER_KEYS`/`ANSWER_KEYS_S`, `JUDGE_LANGUAGES` (×3 copies),
 failure this class of drift already caused (coding answer keys written to the public question
 document while every grading path read an empty suite). But it guards by *regex over source text*
 — it covers the lists someone thought to add, and a rename breaks the test rather than the twin.
-Adding `functions` to the workspace and extracting a `shared/` package would make the class
-impossible rather than detectable.
+
+> **Partly addressed, and the recommendation corrected (2026-08-15).**
+>
+> The original advice — "add `functions` to the workspace and extract a `shared/` package" — was
+> rated **M** and that was too cheap. `firebase.json` sets `"source": "functions"`, and the CLI
+> packages *that directory* for deployment: a `file:../shared` dependency is not in the upload, so
+> the install step fails in Cloud Build. The twins are not merely an oversight; the deployment
+> model actively pushes toward them. A real shared package needs a predeploy step that vendors
+> `shared/` **into** `functions/src` before the build — workable, but it is a new moving part in a
+> repo whose own config files carry warnings that Figma Make regenerates them on push. That is a
+> deliberate decision, not a tidy-up, so it is left to be made rather than made here.
+>
+> What was done instead: **the guard now covers the twins that were unguarded**, including the two
+> introduced by the F-4 fix in this same audit — declaring a new twin and not pinning it would have
+> been the exact mistake this file exists to correct.
+>
+> | Twin | Spans | Was |
+> |---|---|---|
+> | `HIERARCHY_COLLECTIONS` | functions ↔ client | unguarded (new) |
+> | `COLLECTION_BY_LEVEL` | functions ↔ `SchoolsTab` | unguarded (new) |
+> | lifecycle fields | functions ↔ **`firestore.rules`** | unguarded (new) |
+> | `DEFAULT_QUESTION_GRACE_SECONDS` | `examTimingCore` ↔ client | unguarded (pre-existing) |
+>
+> The third is the security-critical one and the first twin in this repo to span **three
+> languages**: TypeScript cannot check a rules file and the rules engine cannot check TypeScript,
+> so nothing but this test connects them. If the callable starts writing a seventh lifecycle field
+> and the fence is not updated, that field becomes forgeable from any staff console — and nothing
+> fails. The test asserts the correspondence in *both* directions, with `updatedAt` named as the
+> one deliberate exception so that adding a second has to be written down.
+>
+> **Each new guard was mutation-tested** — drift introduced on one side, failure confirmed, side
+> restored — because a twin guard that cannot fail is worse than none: it reads as coverage.
 
 **F-3 · App Check is initialised but not enforced on callables.**
 `initializeAppCheck` runs in `src/lib/firebase.ts:33` with a reCAPTCHA v3 provider, so clients
@@ -613,7 +643,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-6 | ~~Set `enforceAppCheck`~~ **PARTLY DONE** — the ten hot-path callables now read an `APP_CHECK_ENFORCED` flag (default off). Remaining: console monitoring, then flip the env var | F-3 | M |
 | R-7 | ~~Gitignore `functions/lib/`~~ **DONE, retargeted** — `lib/` was already ignored; the real tracked artefact was `functions/timing-core.cjs`, now untracked and ignored | F-6 | S |
 | R-8 | Automate the pre-exam `minInstances` warm-up (a scheduled bump keyed off the assessment window) rather than relying on a documented manual step | §5 cold start | M |
-| R-9 | Add `functions` to `pnpm-workspace.yaml`, extract `shared/` for the twinned lists and types; keep `twinSync.test.ts` for what cannot move | F-2 | M |
+| R-9 | ~~Add `functions` to the workspace, extract `shared/`~~ **RE-SCOPED — M was too cheap.** Firebase packages only `functions/`, so a shared package needs a predeploy vendoring step. Guard extended to the four unguarded twins instead (incl. the functions↔rules one); the restructure is left as a deliberate decision | F-2 | L |
 | R-10 | Refactor `InstituteQuestionsPage` / `FacultyQuestionsPage` onto `QuestionBankCore`, matching how reports and rosters already work | F-7 | M |
 | R-11 | Collapse the four auth contexts into one parameterised provider with a role-specific session builder | F-8 | M |
 | R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |

@@ -43,6 +43,7 @@ adminFs.getFirestore = () => DB;
 require('firebase-admin/app').initializeApp = () => ({});
 
 const fns = require('../lib/index.js');
+const crypto = require('node:crypto');
 
 // ── Harness ────────────────────────────────────────────────────────
 const results = [];
@@ -445,6 +446,106 @@ async function R16() {
   eq(ev.questionId, undefined, 'and no position is invented');
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// R-17 · the SEB proof — the control that makes a locked-down exam locked down
+//
+// THIS PATH HAD NO TESTS AT ALL. Every suite in this repository sets
+// requireSEB: false, so assertSEB and verifySebToken — the chain that decides
+// whether a candidate is really inside Safe Exam Browser — were exercised by
+// nothing. That is the highest-stakes control in the product: without it, an
+// exam that says "SEB required" is a suggestion.
+//
+// Written FIRST as characterisation of the existing rules, then extended to
+// the rotation list (audit S-6 / R-14), so the multi-secret change is provably
+// a superset rather than a rewrite that looks similar.
+// ═══════════════════════════════════════════════════════════════════
+function mintSeb(secret, { uid = 'stu_uid', aid = 'asmt_1', exp = null, v = 2 } = {}) {
+  const body = { uid, aid, exp: exp ?? Math.floor(VNOW / 1000) + 90, v };
+  const b64 = Buffer.from(JSON.stringify(body), 'utf8').toString('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(b64).digest('hex');
+  return `v1.${b64}.${sig}`;
+}
+
+async function startSeb(token, secretEnv) {
+  seedWorld();
+  const a = DB.read('assessments', 'asmt_1');
+  a.requireSEB = true;
+  DB.seed('assessments', 'asmt_1', a);
+  const prev = process.env.SEB_SIGNING_SECRET;
+  process.env.SEB_SIGNING_SECRET = secretEnv;
+  try {
+    return await call(fns.startExam, { assessmentId: 'asmt_1', sebToken: token }, STUDENT());
+  } finally {
+    if (prev === undefined) delete process.env.SEB_SIGNING_SECRET;
+    else process.env.SEB_SIGNING_SECRET = prev;
+  }
+}
+
+async function refused(token, secretEnv, label, expect) {
+  try {
+    await startSeb(token, secretEnv);
+    check(false, label, 'the call was ALLOWED');
+  } catch (e) {
+    check(String(e.message || '').includes(expect), label, `got: ${e.message}`);
+  }
+}
+
+async function R17() {
+  const OLD = 'secret-old-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const NEW = 'secret-new-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+  // ── characterisation: the rules as they already were ────────────
+  const ok = await startSeb(mintSeb(OLD), OLD);
+  check(!!ok?.attempt?.id, 'a correctly signed proof starts the exam');
+
+  await refused(undefined, OLD, 'no proof at all is refused', 'SEB_REQUIRED');
+  await refused('garbage', OLD, 'a malformed proof is refused', 'SEB_REQUIRED');
+  await refused(mintSeb('some-other-secret'), OLD,
+    'a proof signed with the wrong secret is refused', 'proof signature invalid');
+  await refused(mintSeb(OLD, { uid: 'someone_else' }), OLD,
+    'a proof minted for another candidate is refused — the uid binding', 'another user');
+  await refused(mintSeb(OLD, { aid: 'asmt_other' }), OLD,
+    'a proof issued for another exam is refused — the aid binding', 'different exam');
+  await refused(mintSeb(OLD, { exp: Math.floor(VNOW / 1000) - 1 }), OLD,
+    'an expired proof is refused', 'SEB_EXPIRED');
+
+  // Fail-closed on misconfiguration. A missing secret must never read as
+  // "SEB satisfied", and neither must a value that is only separators.
+  await refused(mintSeb(OLD), '', 'an unset secret fails CLOSED', 'SEB_NOT_CONFIGURED');
+  await refused(mintSeb(OLD), ' , , ', 'a secret of only separators fails closed too',
+    'SEB_NOT_CONFIGURED');
+
+  // ── the rotation list (S-6 / R-14) ──────────────────────────────
+  // Step 1 of the runbook: the verifier is taught the new secret while the
+  // minter is still using the old one. BOTH must work, or the window this
+  // whole change exists to remove is still there.
+  const both = `${OLD},${NEW}`;
+  const stillOld = await startSeb(mintSeb(OLD), both);
+  check(!!stillOld?.attempt?.id, 'mid-rotation: a proof from the OLD secret still verifies');
+  const alreadyNew = await startSeb(mintSeb(NEW), both);
+  check(!!alreadyNew?.attempt?.id, 'mid-rotation: a proof from the NEW secret verifies too');
+
+  // Step 3: the old secret is dropped and stops working, which is the point of
+  // rotating rather than merely adding.
+  await refused(mintSeb(OLD), NEW, 'after the old secret is dropped, its proofs are refused',
+    'proof signature invalid');
+
+  // Whitespace around entries is an operator pasting from a console.
+  const spaced = await startSeb(mintSeb(NEW), ` ${OLD} , ${NEW} `);
+  check(!!spaced?.attempt?.id, 'entries are trimmed — a pasted list with spaces still works');
+
+  // A single secret with no comma is the unchanged case, and the one every
+  // existing deployment is in today.
+  const single = await startSeb(mintSeb(NEW), NEW);
+  check(!!single?.attempt?.id, 'a single secret with no comma behaves exactly as before');
+
+  // Belt and braces: lengthening the list must not weaken any binding.
+  await refused(mintSeb(NEW, { aid: 'asmt_other' }), both,
+    'the exam binding still holds with several secrets configured', 'different exam');
+  await refused(mintSeb(NEW, { uid: 'someone_else' }), both,
+    'and so does the candidate binding', 'another user');
+}
+
 const SCENARIOS = [
   ['R-01', 'the baseline is server-held and written once', R01],
   ['R-02', 'an unchanged machine is silent', R02],
@@ -462,6 +563,7 @@ const SCENARIOS = [
   ['R-14', 'a position off this attempt\'s paper is dropped', R14],
   ['R-15', 'a hostile context cannot rewrite the event', R15],
   ['R-16', 'no context is not an invented context', R16],
+  ['R-17', 'the SEB proof — bindings, expiry, and the rotation list', R17],
 ];
 
 (async () => {

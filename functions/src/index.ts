@@ -7784,17 +7784,58 @@ export const sebDiagnostics = onCall<SebDiagnosticsData>(
 // ══════════════════════════════════════════════════════════════════
 
 
-function verifySebToken(token: string, uid: string, secret: string, assessmentId: string): void {
+/**
+ * Split the configured secret into the list of secrets that are VALID RIGHT NOW.
+ *
+ * ── WHY A LIST (audit S-6 / R-14) ─────────────────────────────────
+ *
+ * The signing secret lives in two deployment systems that cannot see each
+ * other: Vercel mints the proof, Cloud Functions verify it. While each side
+ * held exactly ONE secret there was no rotation that did not break exams —
+ * whichever side you changed first, every proof was rejected until the other
+ * caught up, and DEPLOY.md §9 had to tell operators to take a window.
+ *
+ * The shape is not new to this file. `SEB_CONFIG_KEYS` — the other SEB secret,
+ * read a few functions over in api/seb-verify.js — has always been a
+ * comma-separated list, precisely so several can be valid at once. This is
+ * that same idea applied to the secret that actually needed it.
+ *
+ * VERIFY ACCEPTS ANY; THE MINTER USES THE FIRST. That asymmetry is what makes
+ * rotation seamless, and it decides the order of operations:
+ *
+ *   1. append the new secret here   → both old and new proofs verify
+ *   2. put the new secret first in Vercel → new proofs are minted
+ *   3. drop the old secret from here → the old one stops working
+ *
+ * At no point is a proof in flight rejected. A single secret with no comma is
+ * unchanged behaviour, which is what makes this safe to deploy before anyone
+ * intends to rotate.
+ */
+function sebSecrets(raw: string): string[] {
+  return String(raw || '').split(',').map((x) => x.trim()).filter(Boolean);
+}
+
+function verifySebToken(token: string, uid: string, secrets: string[], assessmentId: string): void {
   const parts = String(token || '').split('.');
   if (parts.length !== 3 || parts[0] !== 'v1') {
     throw new HttpsError('permission-denied', 'SEB_REQUIRED: malformed proof.');
   }
   const [, b64, sig] = parts;
 
-  const expected = createHmac('sha256', secret).update(b64).digest('hex');
-  const a = Buffer.from(expected, 'utf8');
+  // Every candidate secret is tried, and the loop does NOT break early on a
+  // match — it records one. Returning as soon as a secret matches would make
+  // the work depend on WHICH secret signed the proof, and during a rotation
+  // that difference is observable: an old-secret proof would take measurably
+  // longer than a new-secret one. Constant work across the list keeps the
+  // timing-safe comparison actually timing-safe.
   const b = Buffer.from(sig, 'utf8');
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+  let matched = false;
+  for (const secret of secrets) {
+    const expected = createHmac('sha256', secret).update(b64).digest('hex');
+    const a = Buffer.from(expected, 'utf8');
+    if (a.length === b.length && timingSafeEqual(a, b)) matched = true;
+  }
+  if (!matched) {
     throw new HttpsError('permission-denied', 'SEB_REQUIRED: proof signature invalid.');
   }
 
@@ -7840,15 +7881,17 @@ function assertSEB(
   assessmentId: string,
 ): void {
   if (requireSEB !== true) return;
-  const secret = SEB_SIGNING_SECRET.value();
-  if (!secret) {
-    // Fail closed. A missing secret must never read as "SEB satisfied".
+  const secrets = sebSecrets(SEB_SIGNING_SECRET.value());
+  if (secrets.length === 0) {
+    // Fail closed. A missing secret must never read as "SEB satisfied" — and
+    // neither must a value that is only commas and whitespace, which is why
+    // this checks the PARSED list rather than the raw string.
     throw new HttpsError('failed-precondition', 'SEB_NOT_CONFIGURED');
   }
   if (!sebToken) {
     throw new HttpsError('permission-denied', 'SEB_REQUIRED: this exam must be taken in Safe Exam Browser.');
   }
-  verifySebToken(sebToken, uid, secret, assessmentId);
+  verifySebToken(sebToken, uid, secrets, assessmentId);
 }
 
 interface StartExamData {

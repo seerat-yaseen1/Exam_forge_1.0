@@ -16,7 +16,32 @@
 // the space removes "nobody thought to try that" as a failure mode.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const C = require('./timing-core.cjs');
+// timing-core.cjs is BUILD OUTPUT, not source: `npm run build:core` compiles
+// it from src/examTimingCore.ts. It is gitignored, because a committed copy
+// could drift from the TypeScript it is generated from and this sweep would
+// then pass against a stale build — green, and proving nothing about the code
+// that ships.
+//
+// The cost of that is this require failing on a fresh clone, so it fails with
+// an instruction rather than a module-resolution stack trace.
+let C;
+try {
+  C = require('./timing-core.cjs');
+} catch (err) {
+  if (err && err.code === 'MODULE_NOT_FOUND' && /timing-core/.test(err.message)) {
+    console.error(
+      '\ntiming-core.cjs has not been built.\n\n'
+      + '  It is generated from src/examTimingCore.ts and deliberately not\n'
+      + '  committed, so that this sweep can never pass against a stale build.\n\n'
+      + '  Run the sweep the way CI does — it builds first:\n\n'
+      + '      npm run test:timing\n\n'
+      + '  Or build it on its own:\n\n'
+      + '      npm run build:core\n',
+    );
+    process.exit(1);
+  }
+  throw err;
+}
 const assert = require('assert');
 
 // Deterministic PRNG — a failing sweep is reproducible.

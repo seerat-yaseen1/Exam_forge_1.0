@@ -41,7 +41,9 @@
  *
  * ENV (Vercel project settings — never exposed to the browser):
  *   SEB_CONFIG_KEYS        comma-separated fallback Config Keys
- *   SEB_SIGNING_SECRET     shared with the Cloud Functions (must match exactly)
+ *   SEB_SIGNING_SECRET     shared with the Cloud Functions. Comma-separated
+ *                          list allowed: this endpoint MINTS with the first,
+ *                          the functions ACCEPT any. See DEPLOY.md §9.
  *   FIREBASE_PROJECT_ID    e.g. exam-forge-1-40ba7
  *   FIREBASE_CLIENT_EMAIL  service account email (Firestore REST reads)
  *   FIREBASE_PRIVATE_KEY   service account private key, \n-escaped
@@ -247,7 +249,13 @@ export default async function handler(req, res) {
 
   const envKeys = String(process.env.SEB_CONFIG_KEYS || '')
     .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const secret = process.env.SEB_SIGNING_SECRET || '';
+  // The MINTER uses the FIRST secret; the verifier in Cloud Functions accepts
+  // ANY of them (see sebSecrets there). That asymmetry is what makes rotation
+  // seamless — a new secret is taught to the verifier first, then promoted to
+  // the front here, and no proof in flight is ever rejected. DEPLOY.md §9 has
+  // the procedure. A single secret with no comma behaves exactly as before.
+  const secret = String(process.env.SEB_SIGNING_SECRET || '')
+    .split(',').map((x) => x.trim()).filter(Boolean)[0] || '';
   const projectId = process.env.FIREBASE_PROJECT_ID || '';
 
   if (!secret || !projectId) {

@@ -408,8 +408,10 @@ describe('exam machine — the table and the union it will replace', () => {
   // the equivalent for the half a sweep cannot see — that the states it
   // reasons about are still the states the component has.
   //
-  // When ExamShell is finally rewired onto the machine this test becomes
-  // redundant and should be DELETED, not left to pass vacuously. It is
+  // Stage 2a wired the machine in SHADOW mode, which does not retire this: the
+  // shell still owns `ShellStatus` and the table still mirrors it. The guard
+  // retires at stage 2b, when the machine becomes the source of truth — at
+  // which point it should be DELETED, not left to pass vacuously. It is
   // scaffolding, and it says so.
 
   it('EXAM_STATES matches ExamShell.ShellStatus exactly', () => {

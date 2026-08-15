@@ -639,6 +639,38 @@ than merely unreached.
 > `twinSync.test.ts` — an inert module is exactly what rots unnoticed. That guard is scaffolding
 > and says so: when stage 2 lands it should be **deleted**, not left to pass vacuously.
 
+> **Stage 2a done (2026-08-15) — the machine is wired, in shadow mode.**
+>
+> ExamShell now routes every status change through the table and **performs it either way**.
+> Nothing is blocked; an illegal move logs `[examMachine] SHADOW <from> → <to>` and proceeds. Same
+> introduction the timing core got — `checkTimingInvariants` logged `INVARIANT VIOLATION` for a
+> whole release before anything depended on the resolver being right — and the asymmetry is what
+> makes it the only sane order: enforcing a table that is wrong in one edge strands a candidate
+> mid-exam; logging one that is wrong in one edge produces a console line.
+>
+> The wiring cost **zero call-site churn**. The `useState` setter was renamed to
+> `setShellStatusRaw` and `setShellStatus` redefined as the wrapper, so all 26 sites are unchanged
+> and none could be missed or mangled in a mechanical edit. The wrapper keeps its own
+> synchronously-written `machineStateRef` rather than reusing `shellStatusRef`, which is synced in
+> an effect and therefore lags a render — several guards read that one expecting the committed
+> value, so repurposing it would have changed their meaning.
+>
+> **The table was already wrong, and stage 2a is how it was found.** One of the 26 sites is
+> `setShellStatus('loading')` at the top of the load effect, whose deps are
+> `[assessmentId, session, loading]` — `session` is an object from `useStudentAuth`, so an auth
+> refresh re-runs the effect and re-enters `loading` from wherever the shell was. **A call site
+> names a transition's target; only the surrounding effect names its sources.** Stage 1's method
+> could not have seen this.
+>
+> It is modelled as a **reset**, outside the transition relation, not as edges. Adding `loading` as
+> a successor of every state would have made `submitted → loading → ready` reachable — trading the
+> absorbing-terminal guarantee, which is the whole point of the machine, to describe an auth
+> refresh. A reset is the sitting being set up again, not a move within one.
+>
+> **Stage 2b** flips shadow to enforcing once a full exam cycle logs no `SHADOW` lines, and adds
+> the guard `handleTerminate` lacks. Until then the divergence stays observable rather than
+> assumed away.
+
 ### 6.3 What is working well — do not regress it
 
 Recorded because an audit that only lists faults invites someone to "fix" a deliberate design.
@@ -682,7 +714,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-10 | Refactor `InstituteQuestionsPage` / `FacultyQuestionsPage` onto `QuestionBankCore`, matching how reports and rosters already work | F-7 | M |
 | R-11 | Collapse the four auth contexts into one parameterised provider with a role-specific session builder | F-8 | M |
 | R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |
-| R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGE 1 DONE** — `examMachine.ts` extracted, 26 edges derived from real call sites, 22-test sweep, shipped inert. Stage 2 (rewire ExamShell onto it, plus the `handleTerminate` guard it lacks) still open | F-9, S-3 | L |
+| R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGES 1 + 2a DONE** — `examMachine.ts` extracted (26 edges, 27-test sweep) and now wired into ExamShell in **shadow mode**: every transition classified and logged, none blocked. Stage 2b (flip to enforcing after a clean exam cycle, plus the `handleTerminate` guard) still open | F-9, S-3 | L |
 | R-14 | Document a SEB secret-rotation runbook that updates Vercel and Firebase together | S-6 | S |
 | R-15 | Evaluate a second region for the exam hot path, or accept and document single-region risk explicitly in the availability contract | S-2 | L |
 

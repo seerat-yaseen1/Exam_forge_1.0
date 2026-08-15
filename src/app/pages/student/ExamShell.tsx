@@ -62,6 +62,7 @@ import {
 } from '../../../lib/questionReportService';
 import { IntegrityEngine, codeEditorPasteAllowed } from '../../components/exam/IntegrityEngine';
 import { telemetryEnabled } from '../../../lib/codeTelemetry';
+import { observeTransition, type ExamState } from '../../../lib/examMachine';
 import { answerTypeForEngine } from '../../../lib/itemTypes';
 import { FaceMonitor } from '../../components/exam/FaceMonitor';
 import { ExtensionWatchdog } from '../../components/exam/ExtensionWatchdog';
@@ -1139,7 +1140,47 @@ export function ExamShell() {
   const localSessionId = useRef(generateSessionId());
 
   // ── Core data ──────────────────────────────────────────────────
-  const [shellStatus, setShellStatus]       = useState<ShellStatus>('loading');
+  const [shellStatus, setShellStatusRaw]    = useState<ShellStatus>('loading');
+
+  // ── examMachine, SHADOW MODE (audit F-9, stage 2a) ──────────────
+  //
+  // Every status change goes through the transition table and is PERFORMED
+  // EITHER WAY. Nothing is blocked; an illegal move is logged and allowed.
+  //
+  // That is the same introduction the timing core got — checkTimingInvariants
+  // logged "INVARIANT VIOLATION" whenever a callable and the resolver
+  // disagreed, for a whole release, before anything depended on the resolver
+  // being right. The asymmetry is what makes it the only sane order here:
+  // enforcing a table that is wrong in one edge strands a candidate mid-exam,
+  // while logging one that is wrong in one edge produces a console line.
+  //
+  // That the table CAN be wrong is not hypothetical. Stage 1 derived it from
+  // the twenty-six call sites and still missed the reset edge, because a call
+  // site names the target of a transition and only the surrounding effect
+  // names its sources. Assume there are others; this is how they surface.
+  //
+  // Its own state ref, deliberately NOT shellStatusRef. That one is synced in
+  // an effect, so it lags a render, and several guards read it expecting the
+  // committed value — repurposing it would change their meaning. This one is
+  // written synchronously so two changes in a single tick are classified
+  // against the right predecessor instead of producing a phantom warning.
+  const machineStateRef = useRef<ExamState>('loading');
+
+  const setShellStatus = useCallback((next: ShellStatus) => {
+    const from = machineStateRef.current;
+    const outcome = observeTransition(from, next as ExamState);
+    if (outcome.kind === 'illegal') {
+      // Deliberately console.warn and not an error report: in shadow mode this
+      // is evidence about the TABLE, not yet evidence about the sitting.
+      console.warn(
+        `[examMachine] SHADOW ${from} → ${next}: ${outcome.reason}`
+        + ' — allowed anyway (shadow mode); if this line is absent from a full'
+        + ' exam cycle the table is ready to enforce',
+      );
+    }
+    machineStateRef.current = next as ExamState;
+    setShellStatusRaw(next);
+  }, []);
   // Sub-state of 'loading' explaining WHY we are still waiting, so a
   // staggered student sees purpose rather than a stalled spinner.
   const [startPhase, setStartPhase]         = useState<'queued' | 'retrying' | null>(null);

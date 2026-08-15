@@ -22,6 +22,7 @@ import {
   canAnswer,
   canTransition,
   isTerminal,
+  observeTransition,
   reachableFrom,
   transition,
   type ExamState,
@@ -172,6 +173,51 @@ describe('exhaustive pair sweep', () => {
     const illegal = transition('ready', 'submitted');
     expect(illegal.ok).toBe(false);
     expect(!illegal.ok && illegal.reason).toMatch(/not a legal transition/);
+  });
+});
+
+describe('reset — the edge a call-site reading could not see', () => {
+  it('re-entering loading is a reset from every state, including terminal ones', () => {
+    // The load effect depends on [assessmentId, session, loading]; a change in
+    // `session` identity re-runs it from wherever the shell was. So this must
+    // hold for all ten, not just the live ones.
+    for (const s of ALL) {
+      expect(observeTransition(s, 'loading'), `${s} → loading`).toEqual({ kind: 'reset' });
+    }
+  });
+
+  it('reset does NOT make loading a legal transition target', () => {
+    // The whole reason it is modelled outside the relation. If this ever
+    // starts passing, `submitted → loading → ready` is reachable and a
+    // submitted paper is answerable again.
+    for (const s of ALL) {
+      if (s === 'loading') continue;
+      expect(canTransition(s, 'loading'), `${s} → loading should not be an edge`).toBe(false);
+    }
+  });
+
+  it('the absorbing property survives the reset carve-out', () => {
+    for (const from of TERMINAL_STATES) {
+      for (const to of ALL) {
+        if (to === 'loading') continue;   // reset, handled above
+        expect(canTransition(from, to), `${from} → ${to}`).toBe(false);
+      }
+    }
+  });
+
+  it('shadow mode classifies legal and illegal moves apart', () => {
+    expect(observeTransition('ready', 'submitting_exam')).toEqual({ kind: 'legal' });
+    const bad = observeTransition('submitted', 'ready');
+    expect(bad.kind).toBe('illegal');
+    expect(bad.kind === 'illegal' && bad.reason).toMatch(/terminal/);
+  });
+
+  it('shadow mode decides every pair', () => {
+    for (const from of ALL) {
+      for (const to of ALL) {
+        expect(['legal', 'reset', 'illegal']).toContain(observeTransition(from, to).kind);
+      }
+    }
   });
 });
 

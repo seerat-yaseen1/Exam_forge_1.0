@@ -12927,6 +12927,8 @@ interface RunCodeSampleData {
   questionId: string;
   language: string;
   source: string;
+  /** D-01: the browser session driving this sitting (INV-5a). */
+  sessionId?: string;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -12956,6 +12958,8 @@ interface RecordTelemetryData {
   questionId: string;
   seq: number;
   events: unknown[];
+  /** D-01: the browser session driving this sitting (INV-5a). */
+  sessionId?: string;
 }
 
 export const recordCodeTelemetry = onCall<RecordTelemetryData>(
@@ -12983,6 +12987,9 @@ export const recordCodeTelemetry = onCall<RecordTelemetryData>(
       assessmentId: string;
       instituteId?: string;
       status?: string;
+      // D-01/D-03: the session that owns this sitting, and the paper it sat.
+      activeSessionId?: string | null;
+      examSnapshot?: { sections?: unknown };
     };
 
     // The owning student only, and only while they are actually sitting. A
@@ -12992,16 +12999,65 @@ export const recordCodeTelemetry = onCall<RecordTelemetryData>(
     if (callerRole !== 'student' || callerStudentId !== attempt.studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
+    // ── D-01: and only from the device that owns the sitting ─────
+    //
+    // The sentence above is the whole reason this gate belongs here. A device
+    // that LOST the session can extend the record in exactly the way the
+    // comment forbids, and the rows it writes are indistinguishable from the
+    // real candidate's — which makes the evidence worse than useless, because
+    // it looks authoritative. Every other student-facing exam callable has
+    // called assertSession since Phase 2; this one was written afterwards and
+    // never acquired it.
+    assertSession(attempt, request.data?.sessionId, 'recordCodeTelemetry');
     if (attempt.status !== 'in_progress') {
       throw new HttpsError('failed-precondition', 'This attempt is not in progress.');
     }
 
     const assessmentSnap = await db.collection('assessments').doc(attempt.assessmentId).get();
     if (!assessmentSnap.exists) throw new HttpsError('not-found', 'Assessment not found.');
-    const assessment = assessmentSnap.data() as {
+    const assessmentRaw = assessmentSnap.data() as Record<string, unknown>;
+    const assessment = assessmentRaw as {
       securityTier?: 'mock' | 'normal' | 'high_stake';
       codeTelemetry?: boolean;
+      blockedStudents?: string[];
     };
+
+    // ── D-02: an invigilator's block reaches here too ────────────
+    //
+    // D-21 settled that a block must stop the sitting advancing rather than
+    // only a reload, which is why assertNotBlocked sits on both answer paths
+    // and both section transitions. B-12 then established that blockedStudents
+    // is THE live lever — de-allocating a student mid-sitting deliberately does
+    // not eject them, so this list is the whole mechanism.
+    //
+    // Pulled, it left the coding surface running: the student could not answer,
+    // advance or submit, and could still spend judge capacity and still append
+    // to their own evidence log. Checked BEFORE the `enabled` return below, so
+    // a blocked student is refused whether or not this exam records anything.
+    //
+    // Read live, never from the snapshot — a block is an invigilation decision
+    // taken NOW, which is exactly why examContractFor leaves it out of the
+    // frozen contract.
+    assertNotBlocked(assessment, attempt.studentId ?? '');
+
+    // ── D-03: and the question must be on the paper THIS student sat ──
+    //
+    // A-09's shape in the collection built after it: caller-supplied input
+    // naming a stored document. The chunk id is
+    // `${attemptId}__${questionId}__${seq}`, and questionId arrived straight
+    // from request.data with nothing checked — so `NOT_A_QUESTION` produced a
+    // real attemptTelemetry row that no attempt could explain, in the
+    // collection reviewers read.
+    //
+    // runCodeSample — its sibling, on the same paper, in the same file —
+    // already refuses this in as many words. The two now agree.
+    const onPaper = normalizeSections(
+      (examContractFor(attempt as unknown as Record<string, unknown>, assessmentRaw)
+        ?? assessmentRaw) as GradingAssessmentDoc,
+    ).some((sec) => sec.questions.some((q) => q.questionId === questionId));
+    if (!onPaper) {
+      throw new HttpsError('permission-denied', 'That question is not on your paper.');
+    }
 
     // THE SERVER DECIDES WHETHER ANYONE IS RECORDED. The client makes the same
     // determination to avoid sending pointless traffic, but a client that
@@ -13070,6 +13126,8 @@ export const runCodeSample = onCall<RunCodeSampleData>(
       freezes?: FreezeLedgerEntry[];
       answersLockedAfter?: unknown;
       codeRuns?: Record<string, SampleRunState>;
+      /** D-01: which browser session owns this sitting (INV-5a). */
+      activeSessionId?: string | null;
     };
 
     // ── Who ──────────────────────────────────────────────────────
@@ -13079,6 +13137,16 @@ export const runCodeSample = onCall<RunCodeSampleData>(
     if (callerRole !== 'student' || callerStudentId !== attempt.studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
     }
+    // ── D-01: from the device that owns the sitting ──────────────
+    //
+    // "The student's quota" is the phrase above, and a quota is exactly what a
+    // second browser spends. Sample runs are metered — maxPerQuestion, a
+    // cooldown, real compute on a shared judge — so a superseded device
+    // reaching this is a second person working the paper on the candidate's
+    // allowance. INV-5a says one sitting, one session; P-15 proves the loser
+    // cannot submit a section, and this is the path where that stopped being
+    // true.
+    assertSession(attempt, request.data?.sessionId, 'runCodeSample');
 
     // ── When ─────────────────────────────────────────────────────
     if (attempt.status !== 'in_progress') {
@@ -13113,6 +13181,15 @@ export const runCodeSample = onCall<RunCodeSampleData>(
       attempt as unknown as Record<string, unknown>,
       assessmentSnap.data() as Record<string, unknown>,
     ) as GradingAssessmentDoc & { codingRuns?: Partial<SampleRunConfig> };
+
+    // D-02: the live block, for the reason recordCodeTelemetry's copy of this
+    // comment gives — an invigilation decision taken now, which is why
+    // examContractFor deliberately lets blockedStudents ride in from the live
+    // document rather than freezing it onto the attempt.
+    assertNotBlocked(
+      assessment as { blockedStudents?: string[] },
+      attempt.studentId ?? '',
+    );
 
     const onPaper = normalizeSections(assessment)
       .some((sec) => sec.questions.some((q) => q.questionId === questionId));

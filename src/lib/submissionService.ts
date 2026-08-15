@@ -1082,8 +1082,18 @@ export async function runCodeSample(params: {
   language: string;
   source: string;
 }): Promise<SampleRunResult> {
-  const call = httpsCallable<typeof params, SampleRunResult>(functions, 'runCodeSample');
-  return (await call(params)).data;
+  const call = httpsCallable<
+    typeof params & { sessionId?: string },
+    SampleRunResult
+  >(functions, 'runCodeSample');
+  // D-01: the server checks this against activeSessionId, as it does on every
+  // other exam path. Sent the same way they send it — from the module-level
+  // value registerSession owns — so a device that lost the sitting cannot go
+  // on spending the candidate's run quota.
+  return (await call({
+    ...params,
+    ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+  })).data;
 }
 
 // ── Code telemetry ────────────────────────────────────────────────
@@ -1099,10 +1109,18 @@ export async function recordCodeTelemetry(params: {
   events: unknown[];
 }): Promise<void> {
   try {
-    const call = httpsCallable<typeof params, { ok: true; stored: number }>(
+    const call = httpsCallable<
+      typeof params & { sessionId?: string },
+      { ok: true; stored: number }
+    >(
       functions, 'recordCodeTelemetry',
     );
-    await call(params);
+    // D-01: telemetry is evidence, so which device produced it is part of the
+    // record. A superseded session is refused server-side.
+    await call({
+      ...params,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    });
   } catch {
     // Deliberately swallowed. See above.
   }

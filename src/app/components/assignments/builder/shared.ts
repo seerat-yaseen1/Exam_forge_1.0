@@ -124,24 +124,26 @@ export function dateToInputLocal(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function formatDateTime(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  });
-}
-
-export function formatDateShort(iso?: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-}
-
-// Re-exported, not redefined (audit F-7): this was the fourth byte-identical
-// copy. Consumers keep importing it from here; there is now one implementation.
-export { truncate } from '../../../../lib/dateFormat';
+// ── Date formatting lives in lib/dateFormat (audit F-7) ───────────
+//
+// These two were the last local formatters. They were closer to correct than
+// the eleven folded in earlier — both already returned the em dash for an
+// ABSENT value — but neither handled an UNPARSEABLE one, so a malformed
+// startDate rendered "Invalid Date" on an assessment row:
+//
+//   undefined     -> —              (guarded)
+//   ''            -> —              (guarded)
+//   'not-a-date'  -> Invalid Date   ← the gap
+//   '   '         -> Invalid Date   ← and whitespace, which `!iso` reads as set
+//
+// Re-exported under their existing names so the three consumers
+// (AssessmentRow, AssessmentModals, DetailsStep) are untouched: same
+// placeholder, same formats, plus the guard they were missing.
+export {
+  truncate,
+  formatDate as formatDateShort,
+  formatDateTime,
+} from '../../../../lib/dateFormat';
 
 // ── Status badge ──────────────────────────────────────────────────
 

@@ -47,3 +47,36 @@ export function daysUntilExpiry(
  * same thing to the same person on consecutive screens.
  */
 export const NO_EXPIRY_LABEL = 'No expiry';
+
+/**
+ * Has this institute's access window closed?
+ *
+ * THE SAME FIELD AND THE SAME THREE-SHAPED "FOREVER" as daysUntilExpiry above,
+ * which is exactly why it belongs here rather than beside the gates that use
+ * it. The module header describes a bug caused by three DISPLAY helpers each
+ * parsing `activeUntil` their own way; the three AUTH gates were the other
+ * copy of that same parse, written as:
+ *
+ *     activeUntil && new Date(activeUntil) < new Date()
+ *
+ * That expression is correct — the truthiness check catches absent and empty,
+ * and NaN's always-false comparison catches unparseable, so all three land on
+ * "not expired". It was correct three times, in three files, with nothing
+ * holding them together. The display half already lives here; this is the
+ * enforcement half joining it.
+ *
+ * BEHAVIOUR IS PRESERVED EXACTLY, including the `String(x ?? '')` coercion the
+ * gates applied before comparing — a caller passing a non-string gets the same
+ * answer it got before, which is what makes this a safe substitution rather
+ * than a rewrite that happens to look similar.
+ */
+export function hasExpired(
+  activeUntil: unknown,
+  now: number = Date.now(),
+): boolean {
+  const raw = String(activeUntil ?? '');
+  if (raw.trim() === '') return false;      // absent or empty → no expiry
+  const t = Date.parse(raw);
+  if (!Number.isFinite(t)) return false;    // unparseable → no expiry, not "1970"
+  return t < now;
+}

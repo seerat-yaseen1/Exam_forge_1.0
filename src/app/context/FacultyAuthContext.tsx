@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
+import { evaluateAccess } from '../../lib/accessGate';
 import { revokeOtherSessionsKeepCurrent } from '../../lib/sessionSecurity';
 import { getInstituteLogo } from '../../lib/firebaseService';
 
@@ -97,15 +98,9 @@ async function buildSessionFromAuthUser(
   // DELETED INSTITUTE — sign in and sit exams exactly as before. Blocking
   // access is the entire point of the deletion, so the lifecycle axis is
   // checked here too.
-  if (
-    inst.status === 'disabled' || fac.status === 'disabled'
-    || inst.lifecycleState === 'softDeleted' || fac.lifecycleState === 'softDeleted'
-  ) {
-    return { session: null, reason: 'disabled', firstLoginRequired: false };
-  }
-  const activeUntil = String(inst.activeUntil ?? '');
-  if (activeUntil && new Date(activeUntil) < new Date()) {
-    return { session: null, reason: 'expired', firstLoginRequired: false };
+  const denial = evaluateAccess(inst, fac);
+  if (denial) {
+    return { session: null, reason: denial, firstLoginRequired: false };
   }
 
   const firstLoginRequired = credSnap.exists()

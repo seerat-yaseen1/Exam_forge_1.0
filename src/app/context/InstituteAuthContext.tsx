@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
+import { evaluateAccess } from '../../lib/accessGate';
 import { revokeOtherSessionsKeepCurrent } from '../../lib/sessionSecurity';
 import {
   getInstituteLogo,
@@ -79,15 +80,15 @@ async function buildSessionFromAuthUser(
   // Feature #15 — soft delete sets `lifecycleState`, NOT `status`. The two are
   // deliberately separate axes (a disabled person is still lifecycle-active),
   // which meant checking only `status` let deleted accounts — and members of a
-  // DELETED INSTITUTE — sign in and sit exams exactly as before. Blocking
-  // access is the entire point of the deletion, so the lifecycle axis is
-  // checked here too.
-  if (inst.status === 'disabled' || inst.lifecycleState === 'softDeleted') {
-    return { session: null, firstLoginRequired: false, reason: 'disabled' };
-  }
-  const activeUntil = String(inst.activeUntil ?? '');
-  if (activeUntil && new Date(activeUntil) < new Date()) {
-    return { session: null, firstLoginRequired: false, reason: 'expired' };
+  // DELETED INSTITUTE — sign in and sit exams exactly as before.
+  //
+  // That fix had to be applied to each of the three contexts separately, and
+  // nothing would have failed if one had been missed — so the decision now
+  // lives in ONE tested place (audit F-8). See lib/accessGate.ts.
+  // No member document: an Institute Admin signs in AS the institute.
+  const denial = evaluateAccess(inst, null);
+  if (denial) {
+    return { session: null, firstLoginRequired: false, reason: denial };
   }
 
   // firstLoginRequired now lives on instituteCredentials/{instituteId}
@@ -104,7 +105,11 @@ async function buildSessionFromAuthUser(
     adminEmail: String(inst.adminEmail ?? fbUser.email ?? ''),
     firstLoginRequired,
     status: (inst.status as 'active' | 'disabled') ?? 'active',
-    activeUntil,
+    // Carried on the session for display (see instituteValidity's helpers).
+    // The gate above no longer needs a local binding for it — evaluateAccess
+    // reads the field itself — but the session still surfaces it, with the
+    // same String(… ?? '') coercion it always had.
+    activeUntil: String(inst.activeUntil ?? ''),
     validityType: String(inst.validityType ?? ''),
     schoolsManagementEnabled: Boolean(inst.schoolsManagementEnabled ?? false),
     canAdminCreateFaculty: Boolean(inst.canAdminCreateFaculty ?? false),

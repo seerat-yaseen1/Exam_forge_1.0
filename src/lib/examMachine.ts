@@ -179,6 +179,61 @@ export function canAnswer(state: ExamState): boolean {
   return state === 'ready';
 }
 
+// ══════════════════════════════════════════════════════════════════
+// RESET — the edge a call-site reading could not see
+// ══════════════════════════════════════════════════════════════════
+//
+// Stage 1 derived the table from the twenty-six `setShellStatus` sites. That
+// was the right method and it still missed something, which is worth recording
+// rather than quietly patching: one of those sites is `setShellStatus('loading')`
+// at the top of the load effect, and the effect's dependency array is
+// `[assessmentId, session, loading]`.
+//
+// `session` is an object from useStudentAuth. If its identity changes — an auth
+// refresh, a token renewal — the effect re-runs and the shell re-enters
+// `loading` from wherever it was. A call site tells you the TARGET of a
+// transition; only the surrounding effect tells you the sources, and here the
+// sources are "any state the shell can be in when auth re-resolves".
+//
+// MODELLED AS A RESET, NOT AS EDGES. The alternative was to add `loading` as a
+// successor of every state, and that would have destroyed the property the
+// machine exists for: `submitted → loading → ready` would make a submitted
+// paper answerable again, so the absorbing-terminal guarantee would have been
+// traded away to describe an auth refresh. A reset is not a move within a
+// sitting; it is the sitting being set up again, which is what a remount is.
+// Keeping it outside the transition relation is what lets both statements stay
+// true at once.
+
+/** Is this target a fresh entry rather than a move within a sitting? */
+export function isReset(to: ExamState): boolean {
+  return to === 'loading';
+}
+
+export type ShadowOutcome =
+  | { kind: 'legal' }
+  | { kind: 'reset' }
+  | { kind: 'illegal'; reason: string };
+
+/**
+ * What SHADOW MODE reports. Classifies without deciding.
+ *
+ * The shell calls this on every status change and performs the change either
+ * way (see `advanceShell` in ExamShell). That is deliberate and matches how
+ * the timing core was introduced: `checkTimingInvariants` logged
+ * "INVARIANT VIOLATION" when a callable and the resolver disagreed, for a
+ * whole release, before anything depended on the resolver being right.
+ *
+ * Enforcing a table that is wrong in one edge would strand a candidate in an
+ * exam. Logging one that is wrong in one edge produces a line in a console.
+ * The reset edge above is precisely the kind of thing that would have been
+ * found this way if it had not been found by reading; assume there are others.
+ */
+export function observeTransition(from: ExamState, to: ExamState): ShadowOutcome {
+  if (isReset(to)) return { kind: 'reset' };
+  const r = transition(from, to);
+  return r.ok ? { kind: 'legal' } : { kind: 'illegal', reason: r.reason };
+}
+
 /** Every state reachable from `loading`, breadth-first. Used by the sweep. */
 export function reachableFrom(start: ExamState): Set<ExamState> {
   const seen = new Set<ExamState>([start]);

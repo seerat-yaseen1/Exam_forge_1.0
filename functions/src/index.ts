@@ -6549,10 +6549,32 @@ export const reportExtensionCheck = onCall<ReportExtensionCheckData>(
 );
 
 // ── verifyAndResume ───────────────────────────────────────────────
-// Clears an extension freeze and resumes the attempt, per the auto-resume
-// policy. Student may self-resume ONLY if the tier is auto-resume AND the
-// latest reported check passed. An invigilator (institute/faculty in the
-// same institute, or webOwner) may always clear.
+// Clears an AUTOMATIC freeze and resumes the attempt, per the auto-resume
+// policy. Student may self-resume ONLY if the pause was automatic, the tier is
+// auto-resume AND the latest reported check passed. An invigilator may clear
+// it subject to the same authority ladder unfreezeAttempt enforces.
+//
+// ── C-01: THIS WAS THE LADDER'S SECOND DOOR ───────────────────────
+//
+// §3/§8 attach authority to the individual pause: the freezer, or someone
+// strictly above them, and never a peer. assertCanUnfreeze is that rule, read
+// from the open ledger entry. unfreezeAttempt calls it. This function ends the
+// same pause, through the same closeFreezeUpdates, and did not — it asked two
+// other questions instead ("is the tier auto-resume", "did the last check
+// pass"), neither of which says anything about who paused the sitting or why.
+//
+// So both halves of the ladder were reachable from the wrong side. A PEER
+// invigilator could clear a colleague's pause here that they were refused one
+// function away. And the STUDENT could clear an invigilator's deliberate pause
+// outright, because `lastExtensionCheck.passed` is not a fact about the
+// machine — it is written by the student's own reportExtensionCheck call, with
+// the value their client chose. Measured: faculty pauses a sitting for
+// suspected phone use, the student posts a passing check and resumes, and the
+// pause ends with no refusal and no record.
+//
+// WHAT MAKES A PAUSE THE STUDENT'S TO END is now the only question this asks
+// of them: the pause must be one nobody chose — reason 'extension_check' or
+// 'system', the same set assertCanUnfreeze already treats as ownerless.
 interface VerifyAndResumeData { attemptId: string; sebToken?: string; }
 
 export const verifyAndResume = onCall<VerifyAndResumeData>(
@@ -6567,50 +6589,91 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
 
     const db = getFirestore();
     const ref = db.collection('attempts').doc(attemptId);
-    const snap = await ref.get();
-    if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
-    const a = snap.data() as {
-      studentId: string;
-      instituteId: string;
-      status: string;
-      assessmentId: string;
-      lastExtensionCheck?: { passed?: boolean } | null;
-      securityConfig?: { autoResume?: boolean; requireSEB?: boolean } | null;
-      // Phase 1: where this freeze started, so its duration can be measured.
-      // Extension freezes stamp freezeState.since; invigilator freezes stamp
-      // frozenAt. Both are read — see the accumulation note below.
-      freezeState?: { frozen?: boolean; since?: string } | null;
-      frozenAt?: string | null;
-      freezes?: FreezeLedgerEntry[];
-    };
 
-    const isStudentOwner = callerRole === 'student' && callerStudentId === a.studentId;
-    const isInvigilator =
-      callerRole === 'webOwner'
-      || ((callerRole === 'institute' || callerRole === 'faculty')
-          && callerInstituteId === a.instituteId);
-    if (!isStudentOwner && !isInvigilator) {
-      throw new HttpsError('permission-denied', 'Not authorized.');
-    }
-    if (a.status !== 'frozen') {
-      return { ok: true, resumed: false, note: 'not frozen' };
-    }
+    // ── TRANSACTIONAL, for the reason reportExtensionCheck already is ──
+    //
+    // "A freeze is a ledger append and an append read-modify-written outside a
+    // transaction can lose a concurrent entry." The RELEASE is the same shape:
+    // closeFreezeUpdates rebuilds the whole `freezes` array from the document
+    // it was handed and writes it back wholesale, so a plain read-then-update
+    // silently discards any entry that appeared in between. unfreezeAttempt
+    // does this work inside a transaction; this one did not.
+    const outcome = await db.runTransaction(async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists) throw new HttpsError('not-found', 'Attempt not found.');
+      const a = snap.data() as {
+        studentId: string;
+        instituteId: string;
+        status: string;
+        assessmentId: string;
+        lastExtensionCheck?: { passed?: boolean } | null;
+        securityConfig?: { autoResume?: boolean; requireSEB?: boolean } | null;
+        // Phase 1: where this freeze started, so its duration can be measured.
+        // Extension freezes stamp freezeState.since; invigilator freezes stamp
+        // frozenAt. Both are read — see the accumulation note below.
+        freezeState?: { frozen?: boolean; since?: string } | null;
+        frozenAt?: string | null;
+        freezes?: FreezeLedgerEntry[];
+      };
 
-    // Phase 3 — SEB applies to the EXAM-TAKER only. An invigilator clearing a
-    // freeze does so from their own (normal) browser; requiring SEB of staff
-    // would lock the student out of their exam permanently.
-    if (isStudentOwner) {
-      assertSEB(request.data?.sebToken, request.auth.uid, a.securityConfig?.requireSEB, a.assessmentId);
-    }
-    const autoResume   = a.securityConfig?.autoResume === true;
-    const latestPassed = a.lastExtensionCheck?.passed === true;
-    const mayResume = isInvigilator || (isStudentOwner && autoResume && latestPassed);
-    if (!mayResume) {
-      throw new HttpsError('failed-precondition',
-        'RESUME_BLOCKED: verification not satisfied; an invigilator must clear this.');
-    }
+      const isStudentOwner = callerRole === 'student' && callerStudentId === a.studentId;
+      const isInvigilator =
+        callerRole === 'webOwner'
+        || ((callerRole === 'institute' || callerRole === 'faculty')
+            && callerInstituteId === a.instituteId);
+      if (!isStudentOwner && !isInvigilator) {
+        throw new HttpsError('permission-denied', 'Not authorized.');
+      }
+      if (a.status !== 'frozen') {
+        return { resumed: false as const };
+      }
 
-    const nowIso = new Date().toISOString();
+      // Phase 3 — SEB applies to the EXAM-TAKER only. An invigilator clearing a
+      // freeze does so from their own (normal) browser; requiring SEB of staff
+      // would lock the student out of their exam permanently.
+      if (isStudentOwner) {
+        assertSEB(request.data?.sebToken, request.auth!.uid, a.securityConfig?.requireSEB, a.assessmentId);
+      }
+
+      // ── C-01: WHOSE PAUSE IS THIS? ──────────────────────────────
+      //
+      // Asked before anything else, because the auto-resume policy answers a
+      // different question — "may this student clear an automatic pause" — and
+      // answering it about an invigilator's pause is how the ladder was
+      // bypassed.
+      //
+      // LEGACY, PRE-LEDGER ATTEMPTS carry no entry, and the two paths are
+      // still distinguishable there: the extension path was the only writer of
+      // freezeState and the invigilator path the only writer of frozenAt. A
+      // pause we cannot classify at all is treated as a human's, which is the
+      // direction that cannot invent authority — worst case a student waits
+      // for staff who can always clear it.
+      const openEntry = (a.freezes ?? []).find((f) => !f.endedAt);
+      const pauseIsAutomatic = openEntry
+        ? (openEntry.reason === 'extension_check' || openEntry.reason === 'system')
+        : a.freezeState?.frozen === true;
+
+      if (isStudentOwner && !isInvigilator) {
+        if (!pauseIsAutomatic) {
+          throw new HttpsError('permission-denied',
+            'FREEZE_AUTHORITY: this session was paused by an invigilator. '
+            + 'Only they, or someone above them, can resume it.');
+        }
+        const autoResume   = a.securityConfig?.autoResume === true;
+        const latestPassed = a.lastExtensionCheck?.passed === true;
+        if (!autoResume || !latestPassed) {
+          throw new HttpsError('failed-precondition',
+            'RESUME_BLOCKED: verification not satisfied; an invigilator must clear this.');
+        }
+      } else {
+        // The same ladder unfreezeAttempt applies, read from the same entry.
+        // A system pause has no human owner and any invigilator may clear it,
+        // which assertCanUnfreeze already encodes — so this narrows nothing
+        // about the extension case it was written for.
+        assertCanUnfreeze({ uid: request.auth!.uid, role: String(callerRole ?? '') }, openEntry);
+      }
+
+      const nowIso = new Date().toISOString();
 
     // ── Release through the SAME function as unfreezeAttempt ──────
     //
@@ -6641,36 +6704,70 @@ export const verifyAndResume = onCall<VerifyAndResumeData>(
     // freezes are granted in full"). An invigilator who judges the pause the
     // student's own fault can still deduct it with unfreezeAttempt's
     // penalties.
-    const elapsedForGrant = (() => {
-      const open = (a.freezes ?? []).find((f) => !f.endedAt);
-      const since = open?.startedAt ?? a.freezeState?.since ?? a.frozenAt ?? null;
-      if (!since) return 0;
-      const ms = Date.parse(since);
-      return Number.isFinite(ms) ? Math.max(0, Date.now() - ms) : 0;
-    })();
+      const elapsedForGrant = (() => {
+        const since = openEntry?.startedAt ?? a.freezeState?.since ?? a.frozenAt ?? null;
+        if (!since) return 0;
+        const ms = Date.parse(since);
+        return Number.isFinite(ms) ? Math.max(0, Date.now() - ms) : 0;
+      })();
 
-    const aSnap = a.assessmentId
-      ? await db.collection('assessments').doc(a.assessmentId).get()
-      : null;
+      const aSnap = a.assessmentId
+        ? await txn.get(db.collection('assessments').doc(a.assessmentId))
+        : null;
 
-    const closed = closeFreezeUpdates(
-      a as unknown as Record<string, unknown>,
-      aSnap?.exists ? (aSnap.data() as Record<string, unknown>) : null,
-      {
-        grantedMs: elapsedForGrant,
-        decidedBy: isInvigilator ? request.auth!.uid : null,
-        note: 'extension check cleared',
-        nowIso,
-        clearedBy: isInvigilator ? 'invigilator' : 'auto',
-      },
-    );
+      const closed = closeFreezeUpdates(
+        a as unknown as Record<string, unknown>,
+        aSnap?.exists ? (aSnap.data() as Record<string, unknown>) : null,
+        {
+          grantedMs: elapsedForGrant,
+          decidedBy: isInvigilator ? request.auth!.uid : null,
+          note: 'extension check cleared',
+          nowIso,
+          clearedBy: isInvigilator ? 'invigilator' : 'auto',
+        },
+      );
 
-    await ref.update(closed.updates);
+      txn.update(ref, closed.updates);
+      return {
+        resumed: true as const,
+        elapsedMs: closed.elapsedMs,
+        grantedMs: closed.grantedMs,
+        byInvigilator: isInvigilator,
+      };
+    });
+
+    if (!outcome.resumed) return { ok: true, resumed: false, note: 'not frozen' };
+
+    // ── The release leaves a record (C-01) ────────────────────────
+    //
+    // freezeAttempt writes `attemptFrozen` and unfreezeAttempt writes
+    // `attemptUnfrozen`. This path wrote neither, so a pause could begin with
+    // an audit row and end without one — including when an invigilator ended
+    // it here, which is the same act unfreezeAttempt records.
+    //
+    // The automatic clearance is recorded too, and named as such: "nobody
+    // decided this" is itself the fact a reviewer needs, and a release that
+    // moved a deadline should never be invisible just because no human moved
+    // it.
+    await writeAuditRow(db, {
+      action: 'attemptUnfrozen',
+      entityType: 'attempt',
+      entityId: attemptId,
+      actorUid: request.auth.uid,
+      actorRole: String(callerRole ?? 'unknown'),
+      reason: outcome.byInvigilator ? 'extension check cleared' : 'auto-resume: extension check passed',
+      impact: { elapsedMs: outcome.elapsedMs, grantedMs: outcome.grantedMs },
+    });
+    // M5: credit was granted here without a human choosing it, which is the
+    // case INV-4a is least likely to be watched on.
+    await auditTimingFromStore(db, 'verifyAndResume', attemptId,
+      ['question', 'section', 'break', 'choose', 'ended', 'not_started']);
+
     return {
       ok: true,
       resumed: true,
-      frozenForSeconds: Math.round(closed.elapsedMs / 1000),
-      grantedMs: closed.grantedMs,
+      frozenForSeconds: Math.round(outcome.elapsedMs / 1000),
+      grantedMs: outcome.grantedMs,
     };
   },
 );

@@ -68,6 +68,55 @@ const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
 const JUDGE0_BASE_URL = defineString('JUDGE0_BASE_URL', { default: '' });
 const JUDGE0_AUTH_TOKEN = defineSecret('JUDGE0_AUTH_TOKEN');
 
+// ══════════════════════════════════════════════════════════════════
+// APP CHECK — the attestation the client already pays for
+// ══════════════════════════════════════════════════════════════════
+//
+// The web app initialises App Check with a reCAPTCHA v3 provider
+// (src/lib/firebase.ts), so every callable request from a real browser already
+// carries an App Check token and every user already pays the reCAPTCHA
+// round-trip. Nothing consumed it: `enforceAppCheck` defaults to FALSE in
+// firebase-functions v2, so a request arriving with NO token — curl, a script,
+// a replayed ID token from outside the app — was served exactly like one from
+// the app. The attestation was bought and not spent.
+//
+// WHY A FLAG AND NOT JUST `true`.
+// Turning enforcement on is a one-way door for any client that cannot produce a
+// token, and the population that cannot is not knowable from this repository:
+// it depends on whether the reCAPTCHA site key is registered for every domain
+// the app is served from, whether debug tokens are allowlisted for the
+// environments QA uses, and whether App Check is already reporting full
+// coverage in the console. Getting that wrong locks students out of live
+// exams. The flag makes the flip a CONFIG change, reversible in a redeploy,
+// rather than a code change that has to go through review while a cohort waits.
+//
+// HOW TO ROLL IT OUT (each step is verifiable before the next):
+//   1. Firebase console → App Check → register the reCAPTCHA v3 provider for
+//      every domain, and set Cloud Functions to MONITOR (not enforce).
+//   2. Watch the "verified vs unverified" split for a full exam cycle. It must
+//      reach ~100% verified. Anything less is a client that will be locked out.
+//   3. Set APP_CHECK_ENFORCED=true in functions/.env.<project> and deploy.
+//      The startup log line below states the resolved value, so the deploy can
+//      be confirmed from `firebase functions:log` rather than assumed.
+//   4. Roll back by setting it to false and redeploying — no code change.
+//
+// SCOPE: applied to EXAM_HOT_PATH, which is the ten functions a candidate's
+// browser calls during a sitting and therefore the ones worth attesting. The
+// staff-driven callables are deliberately not covered yet; add
+// `enforceAppCheck: APP_CHECK_ENFORCED` to their options once step 2 has been
+// observed for staff surfaces too, which is a different population of clients
+// and deserves its own soak.
+const APP_CHECK_ENFORCED = process.env.APP_CHECK_ENFORCED === 'true';
+
+// Stated at cold start, not left to be inferred. Every other silent-degradation
+// trap in this codebase (the null judge adapter, the missing SEB secret) earned
+// its log line the hard way; a security control that is off is exactly as
+// worth saying out loud as a judge that is not marking.
+console.log(
+  `[appcheck] enforced=${APP_CHECK_ENFORCED}`
+  + (APP_CHECK_ENFORCED ? '' : ' — set APP_CHECK_ENFORCED=true in functions/.env.<project> to enforce'),
+);
+
 /**
  * Capacity settings for the SIX functions a whole cohort hits at once
  * (audit P-01 / 10k scale target).
@@ -112,6 +161,9 @@ const EXAM_HOT_PATH = {
   secrets: [SEB_SIGNING_SECRET],
   maxInstances: 200,
   concurrency: 80,
+  // See the APP_CHECK block above. Off by default, so this changes nothing
+  // until the console reports full attestation coverage and the env var is set.
+  enforceAppCheck: APP_CHECK_ENFORCED,
 };
 
 /**
@@ -2372,12 +2424,23 @@ async function writeAuditRow(
 /** Actor identity for an audit row, pulled from the callable's auth context. */
 function actorFrom(request: {
   auth?: { uid?: string; token?: Record<string, unknown> } | null;
-}): { actorUid: string; actorRole: string; instituteId: string | null } {
+}): {
+  actorUid: string;
+  actorRole: string;
+  instituteId: string | null;
+  facultyId: string | null;
+} {
   const token = (request.auth?.token ?? {}) as Record<string, unknown>;
   return {
     actorUid: request.auth?.uid ?? 'unknown',
     actorRole: (token.role as string) ?? 'unknown',
     instituteId: (token.instituteId as string) ?? null,
+    // Additive (audit F-4). NOT interchangeable with actorUid: firestore.rules
+    // records that migrated faculty carry claim.facultyId == the LEGACY doc id
+    // while newer ones carry the uid, so a per-faculty grant keyed on the uid
+    // would silently miss every pre-migration account — denying a right they
+    // hold, which reads as a permissions bug rather than the id mismatch it is.
+    facultyId: (token.facultyId as string) ?? null,
   };
 }
 
@@ -2430,14 +2493,68 @@ export const setHierarchyNodeLifecycle = onCall<{
   const data = snap.data() as Record<string, unknown>;
   const nodeInstituteId = (data.instituteId as string) ?? null;
 
-  // Authorisation mirrors canWriteAcademic in firestore.rules: webOwner
-  // anywhere, institute admin within its own tenant. Faculty are excluded —
-  // hierarchy shape is an admin concern, and Feature #15 does not widen it.
+  // ── Authorisation ────────────────────────────────────────────────
+  //
+  // This used to read "Faculty are excluded — hierarchy shape is an admin
+  // concern, and Feature #15 does not widen it." That was a coherent policy
+  // and it was not the product's. SchoolsTab renders on FacultyLandingPage
+  // behind a `canManage` gate, so archiving hierarchy nodes is a shipped,
+  // permission-gated faculty capability; the callable refusing them is why
+  // nothing ever called it and why every archive in production has been going
+  // through a direct Firestore write with no audit row (audit F-4).
+  //
+  // The gate is now the SAME ONE THE UI USES, which is a two-tier grant and
+  // not a role check:
+  //   webOwner  → always.
+  //   institute → own tenant, AND institutes/{id}.schoolsManagementEnabled.
+  //   faculty   → own tenant, AND *both* that institute flag and their own
+  //               faculty/{id}.schoolsManagementEnabled.
+  // FacultyLandingPage computes exactly this as `instituteSME && facultySME`,
+  // and InstituteLandingPage as `session.schoolsManagementEnabled` — see the
+  // permission effect in each.
+  //
+  // Checking the flags here is a TIGHTENING as well as a widening, and the
+  // tightening is the more important half. `canWriteAcademic` in
+  // firestore.rules gates on role and tenant only; it has never known about
+  // schoolsManagementEnabled. So the schools permission was decorative for
+  // anyone willing to open DevTools — revoking it hid the buttons and stopped
+  // nothing. Same shape as the question-rights gap closed in S-02, same
+  // remedy: put the real check in a callable and make the callable the only
+  // way in (see the hierarchy lifecycle guard in firestore.rules).
   const actor = actorFrom(request);
   if (actor.actorRole !== 'webOwner') {
-    if (actor.actorRole !== 'institute' || !actor.instituteId
+    const role = actor.actorRole;
+    if ((role !== 'institute' && role !== 'faculty')
+        || !actor.instituteId
+        || !nodeInstituteId
         || actor.instituteId !== nodeInstituteId) {
       throw new HttpsError('permission-denied', 'Not permitted for this node.');
+    }
+
+    // Institute-level switch. Absent reads as false — the UI's `?? false`, so
+    // an institute that never enabled the feature cannot reach it by any door.
+    const instSnap = await db.collection('institutes').doc(actor.instituteId).get();
+    if (instSnap.get('schoolsManagementEnabled') !== true) {
+      throw new HttpsError(
+        'permission-denied',
+        'School management is not enabled for this institute.',
+      );
+    }
+
+    // Second tier, faculty only. Keyed by facultyId from the CLAIM, never from
+    // the payload — actorFrom reads the token, so a faculty member cannot
+    // present someone else's grant.
+    if (role === 'faculty') {
+      if (!actor.facultyId) {
+        throw new HttpsError('permission-denied', 'Not permitted for this node.');
+      }
+      const facSnap = await db.collection('faculty').doc(actor.facultyId).get();
+      if (facSnap.get('schoolsManagementEnabled') !== true) {
+        throw new HttpsError(
+          'permission-denied',
+          'You have not been granted school management for this institute.',
+        );
+      }
     }
   }
 

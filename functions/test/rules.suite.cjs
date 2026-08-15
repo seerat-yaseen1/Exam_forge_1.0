@@ -653,6 +653,91 @@ async function R07() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// R-10 · academic hierarchy — the lifecycle axis is callable-only
+//
+// Audit F-4. Two separate holes met in this collection group:
+//
+//   1. NO AUDIT TRAIL. SchoolsTab archived a node by patching
+//      `status: 'archived'` straight onto it. Clients cannot write
+//      deletionAudit, so every archive performed in the product left no record
+//      of who did it — while setHierarchyNodeLifecycle, which writes exactly
+//      that row, sat deployed and uncalled.
+//
+//   2. THE PERMISSION WAS DECORATIVE. canWriteAcademic gates on role and
+//      tenant. It has never known about schoolsManagementEnabled, the flag the
+//      UI gates the whole Schools surface on. Revoking it hid the buttons and
+//      stopped nothing — the same shape as the question-rights gap S-02
+//      closed, and the same fix: the real check lives in the callable, so the
+//      callable has to be the only door.
+//
+// The fence is deliberately narrow. Renames must keep working on the direct
+// path — a rule that broke them would be discovered by users, not tests — so
+// both halves are asserted here: the edit that must still pass, and the
+// transition that must not.
+// ═══════════════════════════════════════════════════════════════════
+async function R10() {
+  await seed(async (db) => {
+    await setDoc(doc(db, 'schools/sch_1'), {
+      id: 'sch_1', instituteId: 'inst_1', name: 'School of Engineering',
+      status: 'active', createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
+    await setDoc(doc(db, 'groups/grp_1'), {
+      id: 'grp_1', instituteId: 'inst_1', name: 'Group A', status: 'active',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
+  });
+
+  const inst = asInstitute('inst_1');
+  const fac = asFaculty('fac_1', 'inst_1');
+
+  // ── still allowed: everything that is not a lifecycle transition ──
+  await allowed('an institute admin CAN still rename a school (NodeDrawer)',
+    () => updateDoc(doc(inst, 'schools/sch_1'), {
+      name: 'School of Engineering & Design', updatedAt: '2026-08-01T10:00:00.000Z',
+    }));
+  await allowed('faculty CAN still rename — the direct edit path is untouched',
+    () => updateDoc(doc(fac, 'groups/grp_1'), {
+      name: 'Group A1', updatedAt: '2026-08-01T10:00:00.000Z',
+    }));
+
+  // ── the fence ────────────────────────────────────────────────────
+  await denied('an institute admin cannot archive by patching status directly',
+    () => updateDoc(doc(inst, 'schools/sch_1'), { status: 'archived' }));
+  await denied('faculty cannot either — this is the path SchoolsTab used to take',
+    () => updateDoc(doc(fac, 'groups/grp_1'), { status: 'archived' }));
+  await denied('nor restore, which the direct path never even offered',
+    () => updateDoc(doc(inst, 'schools/sch_1'), { status: 'active', lifecycleState: 'active' }));
+
+  // Every field the callable writes, not just `status`. A fence around one key
+  // of a six-key envelope is a fence with a gate in it: forging
+  // lifecycleState alone would leave the node reading as archived to every
+  // Feature #15 consumer while `status` still said active.
+  await denied('cannot forge lifecycleState',
+    () => updateDoc(doc(inst, 'schools/sch_1'), { lifecycleState: 'archived' }));
+  await denied('cannot forge archivedBy — attributing the act to someone else',
+    () => updateDoc(doc(inst, 'schools/sch_1'), { archivedBy: 'wo_1' }));
+  await denied('cannot forge archivedAt',
+    () => updateDoc(doc(inst, 'schools/sch_1'), { archivedAt: '2020-01-01T00:00:00.000Z' }));
+  await denied('cannot forge archivedByRole',
+    () => updateDoc(doc(inst, 'schools/sch_1'), { archivedByRole: 'webOwner' }));
+  await denied('cannot forge lifecycleReason',
+    () => updateDoc(doc(inst, 'schools/sch_1'), { lifecycleReason: 'approved by nobody' }));
+
+  // Smuggling: a rename is legitimate, so the interesting attack is a rename
+  // that carries a transition with it. affectedKeys() sees both.
+  await denied('cannot smuggle a transition inside an otherwise-legal rename',
+    () => updateDoc(doc(inst, 'schools/sch_1'), {
+      name: 'Renamed', status: 'archived', updatedAt: '2026-08-01T11:00:00.000Z',
+    }));
+
+  // Tenancy still applies underneath the new guard — the fence must not have
+  // replaced the wall it sits on.
+  await denied('another institute cannot touch this school at all',
+    () => updateDoc(doc(asInstitute('inst_2'), 'schools/sch_1'), { name: 'Hostile' }));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['R-01', 'C1 — an institute cannot rewrite its own governance document', R01],
   ['R-02', 'H1 — instituteCredentials is whitelisted, both directions', R02],
@@ -664,6 +749,7 @@ const SCENARIOS = [
   ['R-05', 'storage.rules — the question bank\'s second door', R05],
   ['R-06', 'questionGroups — the stimulus is bank content, not public', R06],
   ['R-07', 'webowners — self-read by uid, without leaking the directory', R07],
+  ['R-10', 'academic hierarchy — the lifecycle axis is callable-only', R10],
 ];
 
 (async () => {

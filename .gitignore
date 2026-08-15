@@ -12,3 +12,9 @@ dist/
 
 # Downloaded by postinstall (face-api weights), not source
 public/models/
+
+# Local secrets. functions/.gitignore already covers its own .env* — this is
+# the root, which had no such line and is where a stray .env would land.
+.env
+.env.local
+.DS_Store

@@ -439,58 +439,105 @@ service cloud.firestore {
                 && request.auth.token.instituteId == instituteId));
     }
 
+    // ── Hierarchy lifecycle is callable-only (audit F-4) ───────────
+    //
+    // canWriteAcademic above knows about ROLE and TENANT and nothing else. It
+    // has never known about `schoolsManagementEnabled`, which is the flag the
+    // UI actually gates the Schools surface on — institute-level for an admin,
+    // and institute-level AND per-faculty for a faculty member. So the schools
+    // permission was decorative for anyone willing to open DevTools: revoking
+    // it hid the buttons and stopped nothing.
+    //
+    // It also knew nothing about the audit trail. SchoolsTab archived by
+    // patching `status: 'archived'` straight onto the node, which wrote no
+    // deletionAudit row (clients cannot write that collection), left the
+    // lifecycleState envelope unset, and had no reverse gear — restore exists
+    // only on the callable.
+    //
+    // Rather than move every hierarchy write behind a callable, this fences
+    // the LIFECYCLE AXIS only. Renames and metadata edits keep the direct path
+    // (verified: NodeDrawer sends `{name, updatedAt}`, SemesterDrawer adds
+    // type/number, CourseDrawer adds code — none of them touch status), while
+    // any patch that moves a node between active and archived must go through
+    // setHierarchyNodeLifecycle, where both tiers of the permission are
+    // checked and the audit row is written.
+    //
+    // Same remedy as S-02 used for `questions`: put the real check in the
+    // callable, then make the callable the only door.
+    //
+    // `create` is deliberately unaffected — a new node legitimately arrives
+    // carrying `status: 'active'`, and that is a separate allow statement.
+    //
+    // KEEP IN SYNC: HIERARCHY_LIFECYCLE_FIELDS mirrors what
+    // setHierarchyNodeLifecycle writes in functions/src/index.ts. A field it
+    // starts writing that is missing here can still be forged from a client.
+    function hierarchyLifecycleUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['status', 'lifecycleState', 'archivedAt', 'archivedBy',
+                 'archivedByRole', 'lifecycleReason']);
+    }
+
     match /schools/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /academicLevels/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /programs/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /academicSessions/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /academicYears/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /semesters/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /courses/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /sections/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /groups/{id} {
       allow read:   if isStaff();   // N8: students read node names via their denormalized academicMappings, never these collections
       allow create: if canWriteAcademic(request.resource.data.instituteId);
-      allow update: if canWriteAcademic(resource.data.instituteId);
+      allow update: if canWriteAcademic(resource.data.instituteId)
+                       && hierarchyLifecycleUntouched();
       allow delete: if false;
     }
     match /academicMappings/{id} {

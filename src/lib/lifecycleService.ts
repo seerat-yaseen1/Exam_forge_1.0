@@ -69,6 +69,60 @@ export async function purgeEntity(
   return { counts: res.data.counts ?? null };
 }
 
+// ── Academic hierarchy lifecycle ──────────────────────────────────
+//
+// The nine hierarchy collections, named exactly as HIERARCHY_COLLECTIONS in
+// functions/src/index.ts. A twin, and guarded as one — see twinSync.test.ts.
+export const HIERARCHY_COLLECTIONS = [
+  'schools',
+  'academicLevels',
+  'programs',
+  'academicSessions',
+  'academicYears',
+  'semesters',
+  'courses',
+  'sections',
+  'groups',
+] as const;
+
+export type HierarchyCollection = (typeof HIERARCHY_COLLECTIONS)[number];
+
+/**
+ * Archive or restore an academic-hierarchy node.
+ *
+ * REPLACES A DIRECT FIRESTORE WRITE, and the replacement is the point (audit
+ * F-4). SchoolsTab used to archive by patching `status: 'archived'` straight
+ * onto the node. That worked, and it skipped everything the operation is
+ * supposed to carry:
+ *
+ *   • no `deletionAudit` row — clients cannot write that collection at all, so
+ *     the archive left no record of who did it or why;
+ *   • no lifecycle envelope — only `status` moved, while `lifecycleState`,
+ *     `archivedAt`, `archivedBy` and `archivedByRole` stayed unset, so the
+ *     unified vocabulary the rest of Feature #15 reads was simply absent on
+ *     every node archived through the UI;
+ *   • no `schoolsManagementEnabled` check — firestore.rules gates hierarchy
+ *     writes on role and tenant only, so revoking the schools permission hid
+ *     the buttons and stopped nothing;
+ *   • no reverse gear — the direct path only ever set 'archived'. Restore
+ *     exists solely on this callable.
+ *
+ * `reason` is optional and lands on the audit row.
+ */
+export async function setHierarchyNodeLifecycle(
+  collectionName: HierarchyCollection,
+  nodeId: string,
+  action: 'archive' | 'restore',
+  reason?: string,
+): Promise<{ fromState: string; toState: string }> {
+  const call = httpsCallable<
+    { collection: HierarchyCollection; nodeId: string; action: 'archive' | 'restore'; reason?: string },
+    { ok: true; fromState: string; toState: string }
+  >(functions, 'setHierarchyNodeLifecycle');
+  const res = await call({ collection: collectionName, nodeId, action, reason });
+  return { fromState: res.data.fromState, toState: res.data.toState };
+}
+
 // ── Reads ─────────────────────────────────────────────────────────
 
 function mapRecord(role: LifecycleRole, id: string, d: Record<string, unknown>): TrashedRecord {

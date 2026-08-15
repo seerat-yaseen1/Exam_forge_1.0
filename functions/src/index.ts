@@ -2424,12 +2424,23 @@ async function writeAuditRow(
 /** Actor identity for an audit row, pulled from the callable's auth context. */
 function actorFrom(request: {
   auth?: { uid?: string; token?: Record<string, unknown> } | null;
-}): { actorUid: string; actorRole: string; instituteId: string | null } {
+}): {
+  actorUid: string;
+  actorRole: string;
+  instituteId: string | null;
+  facultyId: string | null;
+} {
   const token = (request.auth?.token ?? {}) as Record<string, unknown>;
   return {
     actorUid: request.auth?.uid ?? 'unknown',
     actorRole: (token.role as string) ?? 'unknown',
     instituteId: (token.instituteId as string) ?? null,
+    // Additive (audit F-4). NOT interchangeable with actorUid: firestore.rules
+    // records that migrated faculty carry claim.facultyId == the LEGACY doc id
+    // while newer ones carry the uid, so a per-faculty grant keyed on the uid
+    // would silently miss every pre-migration account — denying a right they
+    // hold, which reads as a permissions bug rather than the id mismatch it is.
+    facultyId: (token.facultyId as string) ?? null,
   };
 }
 
@@ -2482,14 +2493,68 @@ export const setHierarchyNodeLifecycle = onCall<{
   const data = snap.data() as Record<string, unknown>;
   const nodeInstituteId = (data.instituteId as string) ?? null;
 
-  // Authorisation mirrors canWriteAcademic in firestore.rules: webOwner
-  // anywhere, institute admin within its own tenant. Faculty are excluded —
-  // hierarchy shape is an admin concern, and Feature #15 does not widen it.
+  // ── Authorisation ────────────────────────────────────────────────
+  //
+  // This used to read "Faculty are excluded — hierarchy shape is an admin
+  // concern, and Feature #15 does not widen it." That was a coherent policy
+  // and it was not the product's. SchoolsTab renders on FacultyLandingPage
+  // behind a `canManage` gate, so archiving hierarchy nodes is a shipped,
+  // permission-gated faculty capability; the callable refusing them is why
+  // nothing ever called it and why every archive in production has been going
+  // through a direct Firestore write with no audit row (audit F-4).
+  //
+  // The gate is now the SAME ONE THE UI USES, which is a two-tier grant and
+  // not a role check:
+  //   webOwner  → always.
+  //   institute → own tenant, AND institutes/{id}.schoolsManagementEnabled.
+  //   faculty   → own tenant, AND *both* that institute flag and their own
+  //               faculty/{id}.schoolsManagementEnabled.
+  // FacultyLandingPage computes exactly this as `instituteSME && facultySME`,
+  // and InstituteLandingPage as `session.schoolsManagementEnabled` — see the
+  // permission effect in each.
+  //
+  // Checking the flags here is a TIGHTENING as well as a widening, and the
+  // tightening is the more important half. `canWriteAcademic` in
+  // firestore.rules gates on role and tenant only; it has never known about
+  // schoolsManagementEnabled. So the schools permission was decorative for
+  // anyone willing to open DevTools — revoking it hid the buttons and stopped
+  // nothing. Same shape as the question-rights gap closed in S-02, same
+  // remedy: put the real check in a callable and make the callable the only
+  // way in (see the hierarchy lifecycle guard in firestore.rules).
   const actor = actorFrom(request);
   if (actor.actorRole !== 'webOwner') {
-    if (actor.actorRole !== 'institute' || !actor.instituteId
+    const role = actor.actorRole;
+    if ((role !== 'institute' && role !== 'faculty')
+        || !actor.instituteId
+        || !nodeInstituteId
         || actor.instituteId !== nodeInstituteId) {
       throw new HttpsError('permission-denied', 'Not permitted for this node.');
+    }
+
+    // Institute-level switch. Absent reads as false — the UI's `?? false`, so
+    // an institute that never enabled the feature cannot reach it by any door.
+    const instSnap = await db.collection('institutes').doc(actor.instituteId).get();
+    if (instSnap.get('schoolsManagementEnabled') !== true) {
+      throw new HttpsError(
+        'permission-denied',
+        'School management is not enabled for this institute.',
+      );
+    }
+
+    // Second tier, faculty only. Keyed by facultyId from the CLAIM, never from
+    // the payload — actorFrom reads the token, so a faculty member cannot
+    // present someone else's grant.
+    if (role === 'faculty') {
+      if (!actor.facultyId) {
+        throw new HttpsError('permission-denied', 'Not permitted for this node.');
+      }
+      const facSnap = await db.collection('faculty').doc(actor.facultyId).get();
+      if (facSnap.get('schoolsManagementEnabled') !== true) {
+        throw new HttpsError(
+          'permission-denied',
+          'You have not been granted school management for this institute.',
+        );
+      }
     }
   }
 

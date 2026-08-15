@@ -837,13 +837,16 @@ async function getActiveChildren<T extends { status: string }>(
   return all.filter((n) => n.status === 'active');
 }
 
-// Soft-delete helper: sets status to 'archived' and updates updatedAt.
-async function archiveNode(col: string, id: string): Promise<void> {
-  await firestoreUpdate(col, id, {
-    status: 'archived',
-    updatedAt: new Date().toISOString(),
-  });
-}
+// ── archiveNode and its nine wrappers were REMOVED (audit F-4) ─────
+// They set `status: 'archived'` directly on a hierarchy node, which skipped
+// the deletionAudit row, left the lifecycleState envelope unwritten, ignored
+// schoolsManagementEnabled, and had no reverse gear. Archiving now goes
+// through lifecycleService.setHierarchyNodeLifecycle -> the callable of the
+// same name, which does all four.
+//
+// Deleted rather than deprecated on purpose: a live helper that silently
+// bypasses an audit trail is one import away from being used again, and the
+// next caller would have no way to know it was the wrong door.
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — SCHOOL
@@ -868,9 +871,6 @@ export async function updateSchool(id: string, data: Partial<School>): Promise<v
   });
 }
 
-export async function archiveSchool(id: string): Promise<void> {
-  return archiveNode('schools', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — ACADEMIC LEVEL
@@ -898,9 +898,6 @@ export async function updateAcademicLevel(
   });
 }
 
-export async function archiveAcademicLevel(id: string): Promise<void> {
-  return archiveNode('academicLevels', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — PROGRAM
@@ -925,9 +922,6 @@ export async function updateProgram(id: string, data: Partial<Program>): Promise
   });
 }
 
-export async function archiveProgram(id: string): Promise<void> {
-  return archiveNode('programs', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — ACADEMIC SESSION
@@ -955,9 +949,6 @@ export async function updateAcademicSession(
   });
 }
 
-export async function archiveAcademicSession(id: string): Promise<void> {
-  return archiveNode('academicSessions', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — ACADEMIC YEAR
@@ -985,9 +976,6 @@ export async function updateAcademicYear(
   });
 }
 
-export async function archiveAcademicYear(id: string): Promise<void> {
-  return archiveNode('academicYears', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — SEMESTER / TRIMESTER
@@ -1014,9 +1002,6 @@ export async function updateSemester(id: string, data: Partial<Semester>): Promi
   });
 }
 
-export async function archiveSemester(id: string): Promise<void> {
-  return archiveNode('semesters', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — COURSE
@@ -1048,9 +1033,6 @@ export async function updateCourse(id: string, data: Partial<Course>): Promise<v
   });
 }
 
-export async function archiveCourse(id: string): Promise<void> {
-  return archiveNode('courses', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — SECTION
@@ -1095,9 +1077,6 @@ export async function updateSection(id: string, data: Partial<Section>): Promise
   });
 }
 
-export async function archiveSection(id: string): Promise<void> {
-  return archiveNode('sections', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC HIERARCHY — GROUP
@@ -1122,9 +1101,6 @@ export async function updateGroup(id: string, data: Partial<Group>): Promise<voi
   });
 }
 
-export async function archiveGroup(id: string): Promise<void> {
-  return archiveNode('groups', id);
-}
 
 // ══════════════════════════════════════════════════════════════════
 // ACADEMIC MAPPINGS — STUDENT ↔ NODE

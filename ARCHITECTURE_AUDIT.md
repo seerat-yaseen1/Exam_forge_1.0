@@ -433,10 +433,64 @@ coverage, then flip `enforceAppCheck` on the hot path.
 > cannot do or verify. The staff-driven callables are deliberately not covered: they are a
 > different client population and deserve their own soak.
 
-**F-4 · `setHierarchyNodeLifecycle` is an exported callable with zero callers.**
-`grep` across `src/` and `api/` finds no reference outside its own definition and one comment.
-It is deployed, reachable by any authenticated client, and exercised by nothing. Either wire it or
-remove it — an unused privileged endpoint is attack surface that no test covers.
+**F-4 · ~~An exported callable with zero callers~~ — the audited path existed and the product used an unaudited one.**
+
+> **Revised and fixed (2026-08-15).** The original finding said `setHierarchyNodeLifecycle` is
+> deployed, reachable and exercised by nothing, and recommended "wire it or remove it". Removing it
+> would have been **exactly backwards**, and the reason only surfaced on a second look: the
+> capability is not unused, it is being exercised through a *different, worse* door.
+
+`SchoolsTab` archived a hierarchy node by patching `status: 'archived'` straight onto the document
+via `firebaseService.archiveNode()`. That worked, and it skipped every guarantee the callable
+exists to provide:
+
+| | Direct write (what the product did) | `setHierarchyNodeLifecycle` |
+|---|---|---|
+| `deletionAudit` row | **none** — clients cannot write that collection | written |
+| Lifecycle envelope | only `status` moved; `lifecycleState`, `archivedAt`, `archivedBy`, `archivedByRole` left unset | all written |
+| `schoolsManagementEnabled` | **not checked** — `canWriteAcademic` gates on role and tenant only | now checked, both tiers |
+| Restore | **impossible** — the direct path only ever set `'archived'` | supported |
+
+The third row is the security half, and it is the same shape as the question-rights gap S-02
+closed: **the schools permission was decorative for anyone willing to open DevTools.** Revoking it
+hid the buttons and stopped nothing.
+
+**Proven, not asserted.** An emulator probe against the *unmodified* rules confirmed an institute
+admin could set `status: 'archived'` and forge `lifecycleState`, `archivedBy`, `archivedAt`,
+`archivedByRole` and `lifecycleReason` — every one `ALLOWED`. Against the fixed rules, all denied.
+
+**Fixed** in three coordinated parts, because any one alone leaves a door open:
+
+1. **The callable now matches the product.** Its old comment — *"Faculty are excluded — hierarchy
+   shape is an admin concern"* — was a coherent policy and not the one shipped: `SchoolsTab`
+   renders on `FacultyLandingPage` behind a `canManage` gate. It now enforces the same two-tier
+   grant the UI reads (`institutes/{id}.schoolsManagementEnabled`, plus
+   `faculty/{id}.schoolsManagementEnabled` for faculty), keyed on `claim.facultyId` rather than the
+   uid — migrated faculty carry a legacy doc id there, and keying on uid would deny a right they
+   hold.
+2. **The client calls it.** `archiveNode` and its nine wrappers are deleted rather than deprecated:
+   a live helper that silently bypasses an audit trail is one import away from being used again.
+3. **The rules fence the lifecycle axis.** A guard blocks changes to the six lifecycle fields on
+   the direct path across all nine collections, so a transition must go through the callable.
+   Deliberately narrow — renames and metadata edits keep the direct path, verified against all
+   three drawers.
+
+Covered by a new `R-10` scenario in the rules suite (12 assertions, including a rename that must
+still succeed and a transition smuggled inside one).
+
+> **Deploy order matters here** and it is not the usual one: **functions → frontend → rules.**
+> Rules take effect instantly while the frontend rides Vercel, so shipping rules first would break
+> archiving for every still-cached client. In the order above, each step is a no-op until the next
+> lands.
+
+> **Left open, deliberately:** `canWriteAcademic` still ignores `schoolsManagementEnabled` for
+> *create* and *rename*. Closing that means a callable per hierarchy write, which is a larger change
+> than this finding. The lifecycle axis was the one with the audit trail attached.
+>
+> **Noticed in passing:** cross-tenant denials on these collections raise a rules *evaluation
+> error* rather than a clean `false`. It is pre-existing — reproduced identically against unmodified
+> rules — and fails closed, so it is noise rather than a hole, but it masks real errors in the
+> emulator log and deserves its own look.
 
 **F-5 · Content-Security-Policy is enforcing only four directives.**
 `vercel.json` enforces `frame-ancestors`, `object-src`, `base-uri`, `form-action`. The meaningful
@@ -552,7 +606,7 @@ Ordered by (risk reduced) ÷ (effort).
 | # | Action | Addresses | Effort |
 |---|---|---|---|
 | R-1 | Raise `scheduledJudgeCoding`'s per-run limit and/or shorten the interval; size it against the real cohort. Add an alert on `codeJudgePending` backlog age | §5 capacity gap | S |
-| R-2 | Delete or wire `setHierarchyNodeLifecycle` | F-4 | S |
+| R-2 | ~~Delete or wire `setHierarchyNodeLifecycle`~~ **DONE — wired, not deleted.** Callable widened to the UI's two-tier grant, client rewired, rules fenced, `R-10` added | F-4 | S |
 | R-3 | ~~Add a `report-uri` to the report-only CSP~~ **DONE** — `/api/csp-report` sink added and both policies now report. Promotion to enforcing still pending a soak (tighten `script-src` first) | F-5 | S |
 | R-4 | Move the frontend Firebase config to `import.meta.env` so staging is possible without a code edit | S-7 | S |
 | R-5 | Vendor the face-api weights into the repo (as `xlsx` already is) instead of curling GitHub at postinstall | S-8 | S |

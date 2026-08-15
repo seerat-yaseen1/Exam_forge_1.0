@@ -19,17 +19,11 @@ import {
   getSectionsByYearDirect,
   getSectionsByCourse,
   getGroupsBySection,
-  // Archive functions
-  archiveSchool,
-  archiveAcademicLevel,
-  archiveProgram,
-  archiveAcademicSession,
-  archiveAcademicYear,
-  archiveSemester,
-  archiveCourse,
-  archiveSection,
-  archiveGroup,
 } from '../../../lib/firebaseService';
+import {
+  setHierarchyNodeLifecycle,
+  type HierarchyCollection,
+} from '../../../lib/lifecycleService';
 import { HierarchyBreadcrumb, type BreadcrumbNode } from './HierarchyBreadcrumb';
 import { HierarchyPanel, type HierarchyItem } from './HierarchyPanel';
 import { NodeDrawer, type AncestryMap } from './NodeDrawer';
@@ -61,19 +55,33 @@ function toItem(doc: any, level: NodeLevel): HierarchyItem {
   };
 }
 
+/**
+ * A drill level maps 1:1 onto the Firestore collection that holds it, which is
+ * the same nine names the callable accepts.
+ */
+const COLLECTION_BY_LEVEL: Record<NodeLevel, HierarchyCollection> = {
+  school: 'schools',
+  academicLevel: 'academicLevels',
+  program: 'programs',
+  academicSession: 'academicSessions',
+  academicYear: 'academicYears',
+  semester: 'semesters',
+  course: 'courses',
+  section: 'sections',
+  group: 'groups',
+};
+
+/**
+ * Archive a node through the callable rather than by patching `status` here.
+ *
+ * The nine per-collection archive helpers this replaced each did a bare
+ * `firestoreUpdate(col, id, { status: 'archived' })`. See
+ * lifecycleService.setHierarchyNodeLifecycle for what that skipped — the audit
+ * row above all, which clients cannot write, so an archive performed from this
+ * screen left no record of who did it.
+ */
 async function archiveByLevel(level: NodeLevel, id: string): Promise<void> {
-  const fns: Record<NodeLevel, (id: string) => Promise<void>> = {
-    school: archiveSchool,
-    academicLevel: archiveAcademicLevel,
-    program: archiveProgram,
-    academicSession: archiveAcademicSession,
-    academicYear: archiveAcademicYear,
-    semester: archiveSemester,
-    course: archiveCourse,
-    section: archiveSection,
-    group: archiveGroup,
-  };
-  return fns[level](id);
+  await setHierarchyNodeLifecycle(COLLECTION_BY_LEVEL[level], id, 'archive');
 }
 
 function ancestryKey(level: NodeLevel): keyof AncestryMap {

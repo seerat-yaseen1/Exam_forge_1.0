@@ -77,8 +77,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // To enable:
 //   1. Firebase console → App Check → Register web app with reCAPTCHA v3
 //   2. Paste the site key into RECAPTCHA_V3_SITE_KEY below
-//   3. (Dev only) set window.FIREBASE_APPCHECK_DEBUG_TOKEN = true before this
-//      file loads, then copy the printed debug token into the console allowlist.
+//   3. (Dev only) see the debug-token block further down.
 // Env-configurable for the same reason as the project above: a second Firebase
 // project needs its own reCAPTCHA registration, and a staging build pointed at
 // staging data while attesting with production's site key would fail App Check
@@ -88,6 +87,51 @@ const RECAPTCHA_V3_SITE_KEY =
   env.VITE_RECAPTCHA_V3_SITE_KEY ?? '6LfgVkItAAAAAHU_amh7GG6R5IuvFVN6D-YTkg7h';
 
 if (typeof window !== 'undefined' && RECAPTCHA_V3_SITE_KEY) {
+  // ── DEV ONLY — App Check debug token ────────────────────────────
+  //
+  // WHY THIS EXISTS NOW AND DID NOT BEFORE. The callables enforce App Check
+  // (functions/src/index.ts, APP_CHECK_ENFORCED, live since 2026-08-15), so a
+  // client that cannot mint a token no longer degrades — it gets
+  // `unauthenticated` and stops working entirely. reCAPTCHA v3 only issues a
+  // token on a domain registered for the site key, which localhost and every
+  // ephemeral Vercel preview URL are not. So the environments where the code is
+  // actually written became the environments that cannot call the backend.
+  //
+  // The previous note here said to set the global "before this file loads",
+  // which is stricter than the SDK requires and is awkward to arrange in a Vite
+  // app where this module is imported first by almost everything. The SDK reads
+  // the global inside `initializeAppCheck` (initializeDebugMode), so setting it
+  // immediately before that call — as below — is sufficient and keeps the whole
+  // mechanism in one place.
+  //
+  // TWO ACCEPTED SHAPES, and the difference matters:
+  //   VITE_APPCHECK_DEBUG_TOKEN=true    → SDK MINTS a token, persists it in
+  //                                       localStorage and prints it to the
+  //                                       console. Copy it into Firebase console
+  //                                       → App Check → Apps → Manage debug
+  //                                       tokens. Do this once per browser.
+  //   VITE_APPCHECK_DEBUG_TOKEN=<uuid>  → reuse an already-registered token.
+  // The coercion below is NOT cosmetic: Vite env values are always strings, and
+  // the SDK treats any string as a literal token. Passing through the string
+  // "true" would register as a debug token literally named `true`, match nothing,
+  // and fail in a way that looks identical to the token never being set.
+  //
+  // GATED ON import.meta.env.DEV, deliberately and not negotiably. Vite INLINES
+  // VITE_* at build time, so a value set in a Vercel environment would be baked
+  // into the shipped bundle — and a leaked debug token is a permanent App Check
+  // bypass for anyone who reads it. DEV is false for `vite build`, so a
+  // production bundle cannot carry one even if the variable is set by mistake.
+  // Put it in `.env.local` (gitignored), never in Vercel.
+  if (import.meta.env.DEV && env.VITE_APPCHECK_DEBUG_TOKEN) {
+    const raw = String(env.VITE_APPCHECK_DEBUG_TOKEN).trim();
+    (window as unknown as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
+      raw === 'true' ? true : raw;
+    console.warn(
+      '[firebase] App Check DEBUG MODE — this build attests with a debug token,'
+      + ' not real reCAPTCHA. Never set VITE_APPCHECK_DEBUG_TOKEN outside local dev.',
+    );
+  }
+
   try {
     initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
@@ -104,13 +148,26 @@ export const db = getFirestore(app);
 // Initialize Firebase Storage
 export const storage = getStorage(app);
 
-// Firebase Auth — used by Web Owner login (Phase 2). Other roles still use
-// the legacy custom-password flow until they are migrated.
+// Firebase Auth — used by ALL FOUR roles: webOwner, institute, faculty and
+// student. Every one of the four auth contexts (AuthContext,
+// InstituteAuthContext, FacultyAuthContext, StudentAuthContext) imports from
+// 'firebase/auth' and calls signInWithEmailAndPassword and
+// reauthenticateWithCredential against this instance.
+//
+// CORRECTED 2026-08-15. This comment previously read "used by Web Owner login
+// (Phase 2); other roles still use the legacy custom-password flow until they
+// are migrated". That migration completed long ago and there is no legacy
+// custom-password flow anywhere in src/ — the stale wording gave a materially
+// wrong picture of the whole auth layer to anyone reading this file first.
 export const auth = getAuth(app);
 
 // Callable Cloud Functions client — used to invoke admin-only endpoints like
 // createAuthUser(role, profile, password). Region defaults to us-central1;
 // change here if functions are deployed elsewhere.
+//
+// NOTE: these callables enforce App Check. A caller without a valid token gets
+// `unauthenticated` before the handler runs — see the debug-token block above
+// if you are hitting that in local dev.
 export const functions = getFunctions(app);
 
 export default app;

@@ -7201,6 +7201,16 @@ interface SaveAnswerNoAdvanceData {
   answer: { type: string; value: unknown } | null;
 }
 
+/**
+ * How long after a pause begins a durability flush is still accepted (C-04).
+ *
+ * This is the width of "the flush was already in flight", not a grace period
+ * the student may spend. See the note at the status gate in
+ * saveAnswerNoAdvance for why it exists and why it is the only write path that
+ * needs one.
+ */
+const FROZEN_FLUSH_GRACE_MS = 60_000;
+
 export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
   // Born with capacity settings (D-19). Every sequential-mode student will hit
   // this on a debounce plus a periodic durability sweep, so it carries
@@ -7236,6 +7246,10 @@ export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
       }>;
       securityConfig?: { deliveryMode?: string; requireSEB?: boolean } | null;
       activeSessionId?: string | null;
+      // C-04: how long this sitting has been paused, so an in-flight flush can
+      // be told apart from working through the pause.
+      freezes?: FreezeLedgerEntry[];
+      frozenAt?: string | null;
     };
 
     if (attempt.studentId !== studentId) {
@@ -7243,19 +7257,58 @@ export const saveAnswerNoAdvance = onCall<SaveAnswerNoAdvanceData>(
     }
     assertSession(attempt, request.data?.sessionId, 'saveAnswerNoAdvance');
 
-    // ── `frozen` is accepted, and that is the entire point ──────────
+    // ── `frozen` is accepted BRIEFLY, and the bound is the point (C-04) ──
     //
-    // The two freeze mechanisms differ in shape: freezeAttempt opens a ledger
-    // entry and leaves `status` at 'in_progress', while reportExtensionCheck
-    // writes status:'frozen'. More importantly, the client learns of a freeze
-    // through its Firestore subscription — so by the time it flushes, the
-    // freeze has ALREADY landed. Refusing a frozen attempt would fail this
-    // call at precisely the moment it exists to succeed.
+    // The client learns of a freeze through its Firestore subscription, so a
+    // flush already in flight lands just AFTER the pause. Refusing every frozen
+    // attempt would fail this call at precisely the moment it exists to
+    // succeed, which is why 'frozen' is accepted at all.
     //
-    // Terminal attempts are still refused: nothing may be written to a sitting
-    // that has been graded (INV-6).
+    // What was never bounded is how long "just after" lasts, and F5 named the
+    // rule the unbounded version breaks: "A pause is a state the student cannot
+    // write from… a pause that stops the clock but not the student is an
+    // unbounded time grant to anyone willing to call the callable directly."
+    //
+    // The window was not merely open, it was UNTIMED. effectiveNowMs pins the
+    // resolver's clock at the freeze, so assertSequentialAnswerWindowOpen — the
+    // A-03 gate below — cannot refuse a paused student either. Measured: a
+    // student frozen at 9:01 of a 30-minute section was still writing new
+    // answers into it at 9:41, and the answer they composed during the pause is
+    // the one scoreAttemptAnswers marks.
+    //
+    // A-03's shape again, in the same place: sequential delivery, the MORE
+    // controlled mode, was the weaker one. Every other write path already
+    // refuses a pause — firestore.rules require in_progress on both sides of a
+    // standard-mode answer write, submitAnswerAndAdvance refuses anything but
+    // in_progress, runCodeSample refuses an open freeze in as many words, and
+    // recordCodeTelemetry refuses it too. That last one is the sharpest: on a
+    // coding paper the answer went on changing while the record of how it was
+    // produced had a hole exactly there.
+    //
+    // ONE MINUTE, measured from the start of the open pause. Long enough for a
+    // debounced flush, a 6s client timeout and a subscription that is slow to
+    // deliver the freeze; far short of working through a pause. A student whose
+    // subscription is broken for longer than that loses edits made after it
+    // broke, and that is the right side to fail on: the alternative is the
+    // exam continuing for whoever can keep the tab open.
+    //
+    // Terminal attempts are still refused outright: nothing may be written to a
+    // sitting that has been graded (INV-6).
     if (attempt.status !== 'in_progress' && attempt.status !== 'frozen') {
       throw new HttpsError('failed-precondition', 'Attempt is not live.');
+    }
+    if (attempt.status === 'frozen') {
+      const open = (attempt.freezes ?? []).find((f) => !f.endedAt);
+      // Legacy pauses carry no ledger entry; frozenAt is what both pre-ledger
+      // paths wrote. An unreadable start instant means the flush is allowed —
+      // a missing bound is not an expired bound, the same rule the whole timing
+      // module fails on.
+      const sinceIso = open?.startedAt ?? attempt.frozenAt ?? null;
+      const sinceMs = sinceIso ? Date.parse(sinceIso) : NaN;
+      if (Number.isFinite(sinceMs) && Date.now() - sinceMs > FROZEN_FLUSH_GRACE_MS) {
+        throw new HttpsError('failed-precondition',
+          'ATTEMPT_PAUSED: this sitting is paused; answers cannot be saved until it resumes.');
+      }
     }
     assertSEB(sebToken, request.auth.uid, attempt.securityConfig?.requireSEB, attempt.assessmentId);
 

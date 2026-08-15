@@ -38,7 +38,7 @@ import {
   type QuestionReport,
 } from '../../../lib/questionReportService';
 import { RichText } from '../../components/questions/RichText';
-import { formatDateTime as formatDate } from '../../../lib/dateFormat';
+import { formatDateTime as formatDate, formatDate as formatDateOnly } from '../../../lib/dateFormat';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -829,7 +829,7 @@ export function ExamResultsPage() {
                           </span>
                           <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{reasonLabel}</span>
                           <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
-                            {new Date(r.createdAt).toLocaleDateString()}
+                            {formatDateOnly(r.createdAt)}
                           </span>
                         </div>
                         {r.resolution && (

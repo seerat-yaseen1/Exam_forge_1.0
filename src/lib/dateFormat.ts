@@ -1,7 +1,28 @@
 // ══════════════════════════════════════════════════════════════════
-// DATE FORMATTING — three formats, one implementation each
-// (Audit F-7, stage 1)
+// DATE FORMATTING — one locale, five formats, one implementation each
+// (Audit F-7)
 // ══════════════════════════════════════════════════════════════════
+//
+// ── THE PRODUCT SPEAKS en-GB ──────────────────────────────────────
+//
+// Decided deliberately, because it could not be decided by refactoring. The
+// codebase had BOTH: en-GB on the Institute and Faculty assignment pages and
+// SEB settings, en-US everywhere else. Folding them was never a tidy-up — it
+// changes what a date looks like to a user — so the locale was raised as a
+// question and answered, and this module is now the single answer.
+//
+//     15 Aug 2026          short
+//     15 August 2026       long
+//     15 Aug 2026, 09:30   date + time
+//     15 Aug               day + month, for compact list columns
+//     15 Aug, 09:30        day + month + time
+//
+// ONE CONSEQUENCE WORTH KNOWING: en-GB is a 24-HOUR locale, so exam times
+// render `09:30` and `14:00` rather than `9:30 AM` and `2:00 PM`. On a
+// platform whose whole job is telling candidates when a paper opens and
+// closes, losing the AM/PM ambiguity is an improvement rather than a cost —
+// but it IS visible on the briefing page, the results page and the assessment
+// list, so it is stated here rather than discovered.
 //
 // PURE. Takes a string and a locale decision, returns a string.
 //
@@ -12,13 +33,15 @@
 // explicit `: string` return annotation, or nothing at all. Behind that noise
 // there are only three real formats:
 //
-//   short      Aug 15, 2026            7 copies, 4 syntactic variants
-//   long       August 15, 2026         3 copies, 2 variants
-//   date+time  Aug 15, 2026, 9:30 AM   1 copy   (ExamResultsPage)
+//   short      7 copies, 4 syntactic variants
+//   long       3 copies, 2 variants
+//   date+time  1 copy   (ExamResultsPage)
 //
 // Six implementations of three formats is how a platform ends up showing the
 // same field two ways on consecutive screens — the failure instituteValidity's
-// header describes for a different field, in the same words.
+// header describes for a different field, in the same words. A later sweep
+// found ten more under different names, which is where the locale split above
+// came from.
 //
 // ── THE GUARD, AND WHY IT BELONGS HERE ────────────────────────────
 //
@@ -60,34 +83,57 @@ function parsed(iso: unknown): Date | null {
   return new Date(t);
 }
 
-/** `Aug 15, 2026` — the majority format (7 of the 11 copies). */
+/** `15 Aug 2026` — the everyday format. */
 export function formatDate(iso: unknown): string {
   const d = parsed(iso);
   if (!d) return UNKNOWN_DATE_LABEL;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/** `August 15, 2026` — profile headers and the institute detail page. */
+/** `15 August 2026` — profile headers and the institute detail page. */
 export function formatDateLong(iso: unknown): string {
   const d = parsed(iso);
   if (!d) return UNKNOWN_DATE_LABEL;
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 /**
- * `Aug 15, 2026, 9:30 AM` — the results page.
+ * `15 Aug 2026, 09:30` — wherever the CLOCK matters as much as the day.
  *
- * Kept as its own export rather than an option on formatDate. A submission
- * time is a different fact from a date, and the one screen that shows it is
- * the one where a candidate checks when their paper was handed in; collapsing
- * it into a flag is how it eventually gets rendered without the time.
+ * Its own export rather than a flag on formatDate: a submission time is a
+ * different fact from a date, and the screens that show it are the ones where
+ * a candidate checks when a paper opened or when theirs was handed in.
+ * Collapsing it into an option is how it eventually gets rendered without the
+ * time.
  */
 export function formatDateTime(iso: unknown): string {
   const d = parsed(iso);
   if (!d) return UNKNOWN_DATE_LABEL;
-  return d.toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
+  return d.toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/**
+ * `15 Aug` — compact columns where the year is noise.
+ *
+ * The assignment lists show a start and an end side by side in a narrow cell;
+ * repeating the year twice costs width and tells the reader nothing they do
+ * not already know from the page they are on.
+ */
+export function formatDayMonth(iso: unknown): string {
+  const d = parsed(iso);
+  if (!d) return UNKNOWN_DATE_LABEL;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/** `15 Aug, 09:30` — the student assessment list, where the year is implied. */
+export function formatDayMonthTime(iso: unknown): string {
+  const d = parsed(iso);
+  if (!d) return UNKNOWN_DATE_LABEL;
+  return d.toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 }
 

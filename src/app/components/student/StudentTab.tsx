@@ -19,16 +19,21 @@ import { DeletionImpactPanel } from '../DeletionImpactPanel';
 import { SubjectDataPanel } from '../SubjectDataPanel';
 import { LogSubjectRequestButton } from '../LogSubjectRequestButton';
 import { isRequiresApproval, submitDeletionRequest } from '../../../lib/deletionRequestService';
+import { UNKNOWN_DATE_LABEL, formatDate as formatIsoDate } from '../../../lib/dateFormat';
 
+/**
+ * A local wrapper, not a fourth copy: this column receives EITHER a Firestore
+ * Timestamp or an ISO string, and lib/dateFormat takes strings. The isNaN
+ * guard also has to stay — `toISOString()` THROWS on an Invalid Date, so
+ * removing it would turn a bad value from an em dash into a crash.
+ */
 function formatDate(value: unknown): string {
-  if (!value) return '—';
+  if (!value) return UNKNOWN_DATE_LABEL;
   const d =
     typeof value === 'object' && value !== null && 'toDate' in value
       ? (value as { toDate: () => Date }).toDate()
       : new Date(value as string);
-  return isNaN(d.getTime())
-    ? '—'
-    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return isNaN(d.getTime()) ? UNKNOWN_DATE_LABEL : formatIsoDate(d.toISOString());
 }
 function formatSyncAge(d: Date) {
   const s = Math.floor((Date.now() - d.getTime()) / 1000);

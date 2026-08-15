@@ -409,6 +409,58 @@ rather than guessing.
 
 ---
 
+## 9a · Enabling the pre-exam warm-up
+
+> Audit R-8. `scheduledWarmup` ships **disabled** and does nothing until two
+> things are true. Both are deliberate: one is a permission, the other is a
+> spending decision.
+
+**Step 1 — grant the permission.** The functions service account cannot change
+a Cloud Run service by default, and without this every call 403s:
+
+```bash
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member=serviceAccount:YOUR_PROJECT_ID@appspot.gserviceaccount.com \
+  --role=roles/run.developer
+```
+
+**Step 2 — turn it on.** `WARMUP_ENABLED=true` in `functions/.env.<project>`,
+then deploy functions.
+
+**Step 3 — watch one window.** It logs every five minutes whether or not it
+acts:
+
+```bash
+firebase functions:log --project YOUR_PROJECT_ID --only scheduledWarmup
+#   [warmup] window=none candidates=0 minInstances=0 applied=2/2   ← idle, healthy
+#   [warmup] window=open candidates=3 minInstances=3 applied=2/2   ← a sitting is near
+#   [warmup] DENIED on startexam: … lacks run.services.update      ← step 1 was skipped
+```
+
+### What it costs, and the knobs
+
+Warm instances bill continuously while held. Defaults: 3 instances on
+`startExam` and `getExamQuestions` only, from 20 minutes before a sitting until
+30 after. All tunable in `functions/.env.<project>`:
+
+| | Default | |
+|---|---|---|
+| `WARMUP_MIN_INSTANCES` | 3 | Instances held per function |
+| `WARMUP_LOOKAHEAD_MIN` | 20 | How early to warm |
+| `WARMUP_TRAILING_MIN` | 30 | How long to stay warm after the start |
+
+Only two of the ten hot-path functions are warmed: the rest are reached
+*during* a sitting, by which point instances are warm from the opening burst.
+
+### Turning it off
+
+`WARMUP_ENABLED=false` and redeploy. The next run returns immediately without
+touching anything — but note it will **not** reset a `minInstances` it already
+set, because it exits before the API call. Set it to 0 by hand, or leave the
+flag on for one window so its own trailing pass clears it.
+
+---
+
 ## 10 · Rollback
 
 ```bash

@@ -13686,6 +13686,160 @@ export const rejudgeAttemptCoding = onCall<RejudgeCodingData>(
   },
 );
 
+// ══════════════════════════════════════════════════════════════════
+// PRE-EXAM WARM-UP (audit R-8 / §5 cold-start cliff)  — SHIPPED OFF
+// ══════════════════════════════════════════════════════════════════
+//
+// EXAM_HOT_PATH deliberately leaves minInstances at 0, because a warm instance
+// bills continuously whether or not an exam is running. The comment there
+// prescribes the mitigation — "set it to 2-3 on startExam and getExamQuestions
+// before a large scheduled sitting, and back to 0 afterwards" — and that is a
+// correct procedure that depends on a human remembering it on the morning of
+// an exam. This is that procedure, scheduled.
+//
+// ── INERT UNTIL TURNED ON, AND IT NEEDS A GRANT FIRST ─────────────
+//
+// Off unless WARMUP_ENABLED=true, for two reasons rather than caution alone:
+//
+//   1. It needs an IAM permission the functions service account does not have
+//      by default — `run.services.update`, i.e. roles/run.developer. Without
+//      it every call 403s. It fails closed and says so, but a function that
+//      logs a permission error every five minutes is noise, not a feature.
+//   2. Warm instances cost money continuously. Turning this on is a spending
+//      decision, and spending decisions should not arrive inside a merge.
+//
+// TO ENABLE:
+//   gcloud projects add-iam-policy-binding YOUR_PROJECT \
+//     --member=serviceAccount:YOUR_PROJECT@appspot.gserviceaccount.com \
+//     --role=roles/run.developer
+//   then WARMUP_ENABLED=true in functions/.env.<project>, and redeploy.
+//
+// ── WHY THE CLOUD RUN ADMIN API AND NOT A PING ────────────────────
+//
+// A scheduled function that merely CALLS the hot path would warm roughly as
+// many instances as it sends concurrent requests, and each one would show up
+// as a failed unauthenticated call. minInstances is the actual control Cloud
+// Run offers, so this sets it. Gen2 functions ARE Cloud Run services, and the
+// service name is the function name lowercased.
+//
+// ── WHY IT IS SAFE TO GET WRONG ───────────────────────────────────
+//
+// Every failure path here leaves the platform exactly as it is today: no warm
+// instances, and a cold-start cliff at exam open. That is the pre-R-8 status
+// quo, so this can only improve on it or do nothing — which is the property
+// that makes shipping it disabled reasonable rather than lazy.
+
+const WARMUP_ENABLED = process.env.WARMUP_ENABLED === 'true';
+/** How far ahead to look for a sitting, and how long to stay warm after it opens. */
+const WARMUP_LOOKAHEAD_MIN = envInt('WARMUP_LOOKAHEAD_MIN', 20);
+const WARMUP_TRAILING_MIN = envInt('WARMUP_TRAILING_MIN', 30);
+/** Instances to hold on each hot-path function while a window is near. */
+const WARMUP_MIN_INSTANCES = envInt('WARMUP_MIN_INSTANCES', 3);
+
+/**
+ * The two functions a whole cohort hits simultaneously at exam open.
+ *
+ * Not all ten of EXAM_HOT_PATH: the rest are reached DURING a sitting, by
+ * which point instances are warm from the opening burst. Warming ten would
+ * triple the bill to remove a cliff that only two of them stand on.
+ */
+const WARMUP_TARGETS = ['startexam', 'getexamquestions'];
+
+/**
+ * PATCH a Cloud Run service's minInstances annotation.
+ *
+ * Returns true when the service now reads as requested. A 403 is the expected
+ * failure before the IAM grant, and is reported distinctly, because "you have
+ * not granted the permission yet" and "the API is down" want different
+ * responses from whoever reads the log.
+ */
+async function setMinInstances(
+  service: string,
+  value: number,
+  projectId: string,
+  region: string,
+): Promise<boolean> {
+  const { GoogleAuth } = await import('google-auth-library');
+  const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
+  const client = await auth.getClient();
+  const name = `projects/${projectId}/locations/${region}/services/${service}`;
+  const url = `https://run.googleapis.com/v2/${name}?updateMask=template.scaling.minInstanceCount`;
+  try {
+    const res = await client.request({
+      url,
+      method: 'PATCH',
+      data: { template: { scaling: { minInstanceCount: value } } },
+    });
+    return res.status >= 200 && res.status < 300;
+  } catch (e) {
+    const status = (e as { response?: { status?: number } })?.response?.status;
+    if (status === 403) {
+      console.error(
+        `[warmup] DENIED on ${service}: the functions service account lacks`
+        + ' run.services.update. Grant roles/run.developer — see the block above'
+        + ' scheduledWarmup. Nothing was changed.',
+      );
+    } else {
+      console.error(`[warmup] ${service} PATCH failed (status=${status ?? 'none'})`, e);
+    }
+    return false;
+  }
+}
+
+export const scheduledWarmup = onSchedule(
+  { schedule: 'every 5 minutes', timeZone: 'Etc/UTC', region: 'us-central1', timeoutSeconds: 120 },
+  async () => {
+    if (!WARMUP_ENABLED) return;   // the default, and a no-op
+
+    const db = getFirestore();
+    const now = Date.now();
+    const projectId = process.env.GCLOUD_PROJECT ?? '';
+    if (!projectId) {
+      console.error('[warmup] GCLOUD_PROJECT is unset — cannot address the services.');
+      return;
+    }
+
+    // Is a sitting near? `startDate` is an ISO string on the assessment, and
+    // the window is deliberately asymmetric: ahead of the start so instances
+    // exist BEFORE the burst, and trailing it because latecomers and reloads
+    // keep arriving after the bell.
+    const fromIso = new Date(now - WARMUP_TRAILING_MIN * 60_000).toISOString();
+    const toIso = new Date(now + WARMUP_LOOKAHEAD_MIN * 60_000).toISOString();
+    //
+    // A RANGE ON ONE FIELD AND NOTHING ELSE, on purpose. Adding
+    // `.where('status','==','active')` would make this a composite query
+    // needing a (status, startDate) index that does not exist — so enabling
+    // the warm-up would have required an index deploy first, and forgetting
+    // that would fail the query at exactly the moment it was supposed to
+    // help. `startDate` alone is a single-field index, which Firestore
+    // maintains automatically. Status is filtered in memory below; the window
+    // is under an hour wide, so the result set is small enough that this is
+    // cheaper than the coordination.
+    const soon = await db.collection('assessments')
+      .where('startDate', '>=', fromIso)
+      .where('startDate', '<=', toIso)
+      .limit(50)
+      .get();
+
+    const anyLive = soon.docs.some((d) => d.get('status') === 'active');
+    const wanted = anyLive ? WARMUP_MIN_INSTANCES : 0;
+
+    // Idempotent by construction: this runs every five minutes and PATCHes the
+    // same value repeatedly while a window is open, then the same 0 repeatedly
+    // once it closes. Cloud Run treats a no-change PATCH as a no-op, so there
+    // is no state to track and nothing to get out of sync — which matters,
+    // because the alternative is a flag that says "warm" after a failed deploy.
+    let changed = 0;
+    for (const service of WARMUP_TARGETS) {
+      if (await setMinInstances(service, wanted, projectId, 'us-central1')) changed++;
+    }
+    console.log(
+      `[warmup] window=${anyLive ? 'open' : 'none'} candidates=${soon.size} minInstances=${wanted}`
+      + ` applied=${changed}/${WARMUP_TARGETS.length}`,
+    );
+  },
+);
+
 export const scheduledJudgeCoding = onSchedule(
   {
     schedule: 'every 5 minutes',

@@ -9,7 +9,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
-import { formatDate } from '../../../lib/dateFormat';
+import { formatDate, formatDayMonthTime as formatDateTime } from '../../../lib/dateFormat';
 import {
   getAssessmentsForStudent,
   type Assessment,
@@ -98,13 +98,6 @@ function getAvailability(a: Assessment, now: Date): AvailabilityState {
   return 'available';
 }
 
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  });
-}
 
 function timeLeft(endIso: string, now: Date): { label: string; urgent: boolean } {
   const diff = new Date(endIso).getTime() - now.getTime();

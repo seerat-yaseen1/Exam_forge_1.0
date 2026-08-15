@@ -21,6 +21,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
+import { formatDateTime } from '../../lib/dateFormat';
 import {
   Shield, Loader2, AlertTriangle, Plus, Trash2, Eye, EyeOff,
   CheckCircle2, ArrowRight, KeyRound, Upload, FileDown,
@@ -258,9 +259,7 @@ export function SEBSettingsPage() {
 
             {settings.updatedAt && (
               <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)' }}>
-                Last updated {new Date(settings.updatedAt).toLocaleString('en-GB', {
-                  day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
-                })}
+                Last updated {formatDateTime(settings.updatedAt)}
               </p>
             )}
           </div>
@@ -284,9 +283,7 @@ export function SEBSettingsPage() {
                       </a>
                       {fileInfo.updatedAt && (
                         <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                          Uploaded {new Date(fileInfo.updatedAt).toLocaleString('en-GB', {
-                            day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
-                          })}
+                          Uploaded {formatDateTime(fileInfo.updatedAt)}
                         </p>
                       )}
                     </div>

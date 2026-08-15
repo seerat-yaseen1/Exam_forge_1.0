@@ -14,6 +14,8 @@ import {
   formatDate,
   formatDateLong,
   formatDateTime,
+  formatDayMonth,
+  formatDayMonthTime,
   truncate,
 } from './dateFormat';
 
@@ -25,7 +27,7 @@ describe('the guard — what the eleven copies rendered as "Invalid Date"', () =
   // not throw, so nothing surfaced until a user read it.
   const bad: unknown[] = [undefined, null, '', '   ', 'n/a', 'not-a-date', {}, [], NaN];
 
-  for (const fn of [formatDate, formatDateLong, formatDateTime]) {
+  for (const fn of [formatDate, formatDateLong, formatDateTime, formatDayMonth, formatDayMonthTime]) {
     it(`${fn.name} returns the placeholder, never "Invalid Date"`, () => {
       for (const v of bad) {
         const out = fn(v);
@@ -48,19 +50,40 @@ describe('the three formats stay distinguishable', () => {
     expect(formatDateLong(ISO)).toMatch(/August/);
   });
 
+  it('the product speaks en-GB — day before month', () => {
+    // The locale decision, pinned. en-US would render "Aug 15"; a silent
+    // revert to it is exactly the drift this module was built to prevent.
+    expect(formatDate(ISO)).toMatch(/^15 Aug/);
+    expect(formatDateLong(ISO)).toMatch(/^15 August/);
+    expect(formatDayMonth(ISO)).toBe('15 Aug');
+  });
+
   it('all three carry the day and year', () => {
     for (const out of [formatDate(ISO), formatDateLong(ISO), formatDateTime(ISO)]) {
       expect(out).toMatch(/15/);
       expect(out).toMatch(/2026/);
     }
+    // The two compact formats carry the day but deliberately omit the year.
+    for (const out of [formatDayMonth(ISO), formatDayMonthTime(ISO)]) {
+      expect(out).toMatch(/15/);
+      expect(out).not.toMatch(/2026/);
+    }
   });
 
-  it('only the date+time format carries a time', () => {
+  it('only the date+time formats carry a time, and it is 24-hour', () => {
     // The distinction the results page depends on: a candidate checking WHEN
     // their paper was handed in needs the clock, not just the day.
-    expect(formatDateTime(ISO)).toMatch(/\d:\d{2}\s?(AM|PM)/i);
-    expect(formatDate(ISO)).not.toMatch(/AM|PM/i);
-    expect(formatDateLong(ISO)).not.toMatch(/AM|PM/i);
+    //
+    // 24-hour is the en-GB consequence, and it is asserted rather than merely
+    // accepted — on a platform that exists to tell people when a paper opens
+    // and closes, "9:30" without a meridiem would be genuinely ambiguous, so a
+    // drift back to a 12-hour format must fail here.
+    expect(formatDateTime(ISO)).toMatch(/\d{2}:\d{2}/);
+    expect(formatDateTime(ISO)).not.toMatch(/AM|PM/i);
+    expect(formatDayMonthTime(ISO)).toMatch(/\d{2}:\d{2}/);
+    expect(formatDate(ISO)).not.toMatch(/\d{2}:\d{2}/);
+    expect(formatDateLong(ISO)).not.toMatch(/\d{2}:\d{2}/);
+    expect(formatDayMonth(ISO)).not.toMatch(/\d{2}:\d{2}/);
   });
 });
 

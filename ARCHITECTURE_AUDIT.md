@@ -87,7 +87,7 @@ the *system as committed*, and says so explicitly wherever the deployed state co
   EXTERNAL, build/runtime:
     fonts.googleapis.com   (build-injected <link>, runtime fetch)
     google reCAPTCHA v3    (App Check attestation)
-    raw.githubusercontent.com (npm postinstall — face-api weights) ◄── BUILD SPOF
+    raw.githubusercontent.com (face-api weights — VENDORED, no longer fetched)
     cdn.sheetjs.com        (vendored to repo; no longer fetched at install)
 ```
 
@@ -360,8 +360,8 @@ Ranked by blast radius.
 | **S-4** | **Judge0: one VM, `docker compose up`, no HA, no external IP** | Coding items stop marking. Degrades *safely* (`NullJudgeAdapter` → manual review) but **silently** — one log line is the entire signal | `DEPLOY.md §2` |
 | **S-5** | **`/api/seb-verify` is the only place a SEB header can be read** | Vercel outage or an env drift = every SEB-required exam fails closed and cannot start | `api/seb-verify.js` header comment |
 | **S-6** | **`SEB_SIGNING_SECRET` lives in two deploy systems** (Vercel env + Firebase secret) | A rotation applied to one and not the other rejects every SEB proof platform-wide | `api/seb-verify.js:44`, `index.ts:62` |
-| **S-7** | **Hardcoded Firebase config — zero env vars in the frontend** | One project only. No staging/prod separation; pointing at another project requires a code edit and redeploy | `grep -rn "import.meta.env" src/` → 0 hits |
-| **S-8** | **`postinstall` curls face-api weights from `raw.githubusercontent.com`** | `npm i` fails ⇒ Vercel build fails. `public/models/` is gitignored so the fetch is mandatory, and the URL points at a third-party repo's `master` | `package.json` scripts; `.gitignore` |
+| ~~**S-7**~~ **FIXED** | **Hardcoded Firebase config — zero env vars in the frontend** (now `import.meta.env` with today's project as fallback) | One project only. No staging/prod separation; pointing at another project requires a code edit and redeploy | `grep -rn "import.meta.env" src/` → 0 hits |
+| ~~**S-8**~~ **FIXED** | **`postinstall` curled face-api weights from `raw.githubusercontent.com`** (now vendored + checksummed; a missing weight degrades the feature, not the build) | `npm i` fails ⇒ Vercel build fails. `public/models/` is gitignored so the fetch is mandatory, and the URL points at a third-party repo's `master` | `package.json` scripts; `.gitignore` |
 | **S-9** | **Cloud Scheduler** drives `scheduledJudgeCoding` (5 min), `scheduledCloseExpiredAttempts` (60 min), `scheduledPurge` (daily) | Scheduler disabled ⇒ coding papers never mark, expired attempts never close, purges never run — all silently | `index.ts:1443, 1870, 13425` |
 | **S-10** | **`exam-forge-connector`** — one shared VPC connector | Both judge functions depend on it; connector loss = `judge_unavailable` | `JUDGE_ACCESS`, `index.ts:145` |
 | **S-11** | **Firebase Auth as the single IdP for all four roles** | Auth outage = nobody signs in. No offline or break-glass path exists | four auth contexts |
@@ -785,8 +785,8 @@ Ordered by (risk reduced) ÷ (effort).
 | R-1 | ~~Raise the sweep's per-run limit~~ **DONE, re-diagnosed** — the limit was never the bottleneck; the serial loop against a 4-replica cluster was. Concurrency pool (default 4) + wall-clock budget instead of a paper count + a `BACKLOG` warning when a batch is not cleared. Pinned by `G-27` | §5 capacity gap | S |
 | R-2 | ~~Delete or wire `setHierarchyNodeLifecycle`~~ **DONE — wired, not deleted.** Callable widened to the UI's two-tier grant, client rewired, rules fenced, `R-10` added | F-4 | S |
 | R-3 | ~~Add a `report-uri` to the report-only CSP~~ **DONE** — `/api/csp-report` sink added and both policies now report. Promotion to enforcing still pending a soak (tighten `script-src` first) | F-5 | S |
-| R-4 | Move the frontend Firebase config to `import.meta.env` so staging is possible without a code edit | S-7 | S |
-| R-5 | Vendor the face-api weights into the repo (as `xlsx` already is) instead of curling GitHub at postinstall | S-8 | S |
+| R-4 | ~~Move the Firebase config to `import.meta.env`~~ **DONE** — all seven values env-configurable with today's project as fallback, so an unset deploy behaves identically; a startup line names the project and whether it came from env | S-7 | S |
+| R-5 | ~~Vendor the face-api weights~~ **DONE** — 204 KB committed and checksummed; `postinstall` copies from `vendor/` with no network, and a missing weight degrades face detection instead of failing the build | S-8 | S |
 | R-6 | ~~Set `enforceAppCheck`~~ **PARTLY DONE** — the ten hot-path callables now read an `APP_CHECK_ENFORCED` flag (default off). Remaining: console monitoring, then flip the env var | F-3 | M |
 | R-7 | ~~Gitignore `functions/lib/`~~ **DONE, retargeted** — `lib/` was already ignored; the real tracked artefact was `functions/timing-core.cjs`, now untracked and ignored | F-6 | S |
 | R-8 | Automate the pre-exam `minInstances` warm-up (a scheduled bump keyed off the assessment window) rather than relying on a documented manual step | §5 cold start | M |
@@ -795,7 +795,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-11 | ~~Collapse the four auth contexts~~ **STAGE 1 DONE** — the admission decision extracted to a tested `accessGate.ts`, all three role gates rewired, differential-tested against the expression it replaced. The provider collapse itself still open | F-8 | M |
 | R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |
 | R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGES 1 + 2a DONE** — `examMachine.ts` extracted (26 edges, 27-test sweep) and now wired into ExamShell in **shadow mode**: every transition classified and logged, none blocked. Stage 2b (flip to enforcing after a clean exam cycle, plus the `handleTerminate` guard) still open | F-9, S-3 | L |
-| R-14 | Document a SEB secret-rotation runbook that updates Vercel and Firebase together | S-6 | S |
+| R-14 | ~~Document a SEB rotation runbook~~ **DONE** — `DEPLOY.md §9`. Also establishes there is **no zero-downtime rotation today**: both sides hold a single secret, while `SEB_CONFIG_KEYS` one field over is already a list. Applying that shape is the follow-up | S-6 | S |
 | R-15 | Evaluate a second region for the exam hot path, or accept and document single-region risk explicitly in the availability contract | S-2 | L |
 
 ---

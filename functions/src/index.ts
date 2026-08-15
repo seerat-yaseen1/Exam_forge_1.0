@@ -68,6 +68,55 @@ const SEB_SIGNING_SECRET = defineSecret('SEB_SIGNING_SECRET');
 const JUDGE0_BASE_URL = defineString('JUDGE0_BASE_URL', { default: '' });
 const JUDGE0_AUTH_TOKEN = defineSecret('JUDGE0_AUTH_TOKEN');
 
+// ══════════════════════════════════════════════════════════════════
+// APP CHECK — the attestation the client already pays for
+// ══════════════════════════════════════════════════════════════════
+//
+// The web app initialises App Check with a reCAPTCHA v3 provider
+// (src/lib/firebase.ts), so every callable request from a real browser already
+// carries an App Check token and every user already pays the reCAPTCHA
+// round-trip. Nothing consumed it: `enforceAppCheck` defaults to FALSE in
+// firebase-functions v2, so a request arriving with NO token — curl, a script,
+// a replayed ID token from outside the app — was served exactly like one from
+// the app. The attestation was bought and not spent.
+//
+// WHY A FLAG AND NOT JUST `true`.
+// Turning enforcement on is a one-way door for any client that cannot produce a
+// token, and the population that cannot is not knowable from this repository:
+// it depends on whether the reCAPTCHA site key is registered for every domain
+// the app is served from, whether debug tokens are allowlisted for the
+// environments QA uses, and whether App Check is already reporting full
+// coverage in the console. Getting that wrong locks students out of live
+// exams. The flag makes the flip a CONFIG change, reversible in a redeploy,
+// rather than a code change that has to go through review while a cohort waits.
+//
+// HOW TO ROLL IT OUT (each step is verifiable before the next):
+//   1. Firebase console → App Check → register the reCAPTCHA v3 provider for
+//      every domain, and set Cloud Functions to MONITOR (not enforce).
+//   2. Watch the "verified vs unverified" split for a full exam cycle. It must
+//      reach ~100% verified. Anything less is a client that will be locked out.
+//   3. Set APP_CHECK_ENFORCED=true in functions/.env.<project> and deploy.
+//      The startup log line below states the resolved value, so the deploy can
+//      be confirmed from `firebase functions:log` rather than assumed.
+//   4. Roll back by setting it to false and redeploying — no code change.
+//
+// SCOPE: applied to EXAM_HOT_PATH, which is the ten functions a candidate's
+// browser calls during a sitting and therefore the ones worth attesting. The
+// staff-driven callables are deliberately not covered yet; add
+// `enforceAppCheck: APP_CHECK_ENFORCED` to their options once step 2 has been
+// observed for staff surfaces too, which is a different population of clients
+// and deserves its own soak.
+const APP_CHECK_ENFORCED = process.env.APP_CHECK_ENFORCED === 'true';
+
+// Stated at cold start, not left to be inferred. Every other silent-degradation
+// trap in this codebase (the null judge adapter, the missing SEB secret) earned
+// its log line the hard way; a security control that is off is exactly as
+// worth saying out loud as a judge that is not marking.
+console.log(
+  `[appcheck] enforced=${APP_CHECK_ENFORCED}`
+  + (APP_CHECK_ENFORCED ? '' : ' — set APP_CHECK_ENFORCED=true in functions/.env.<project> to enforce'),
+);
+
 /**
  * Capacity settings for the SIX functions a whole cohort hits at once
  * (audit P-01 / 10k scale target).
@@ -112,6 +161,9 @@ const EXAM_HOT_PATH = {
   secrets: [SEB_SIGNING_SECRET],
   maxInstances: 200,
   concurrency: 80,
+  // See the APP_CHECK block above. Off by default, so this changes nothing
+  // until the console reports full attestation coverage and the env var is set.
+  enforceAppCheck: APP_CHECK_ENFORCED,
 };
 
 /**

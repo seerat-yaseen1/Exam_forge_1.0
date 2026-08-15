@@ -422,6 +422,17 @@ attestation is being paid for (reCAPTCHA round-trip on every client) without the
 benefit. Enforcing needs a staged rollout — turn on monitoring in the console first, confirm token
 coverage, then flip `enforceAppCheck` on the hot path.
 
+> **Partly addressed (2026-08-15).** The ten `EXAM_HOT_PATH` callables now carry
+> `enforceAppCheck: APP_CHECK_ENFORCED`, read from `process.env.APP_CHECK_ENFORCED` and
+> **defaulting to false** — so behaviour is unchanged until someone opts in. The point is to make
+> the flip a config change (`functions/.env.<project>` + redeploy, reversible the same way) rather
+> than a code change that has to clear review while a cohort waits. A cold-start log line states
+> the resolved value, so "is enforcement on?" is answerable from `functions:log` instead of
+> inferred. Steps 1–2 of the rollout — register the provider for every domain, then watch the
+> verified/unverified split reach ~100% over a full exam cycle — are console work this repository
+> cannot do or verify. The staff-driven callables are deliberately not covered: they are a
+> different client population and deserve their own soak.
+
 **F-4 · `setHierarchyNodeLifecycle` is an exported callable with zero callers.**
 `grep` across `src/` and `api/` finds no reference outside its own definition and one comment.
 It is deployed, reachable by any authenticated client, and exercised by nothing. Either wire it or
@@ -436,11 +447,50 @@ already written; it needs a reporting endpoint, then a promotion. Note `script-s
 `'unsafe-inline'`, which should be tightened before promotion or the enforced policy will be
 weaker than it looks.
 
-**F-6 · `functions/lib/` is tracked in git.**
-`DEPLOY.md §7` carries a self-correction noting this was supposed to be gitignored and is not.
-Generated output in the tree means `src` and `lib` can be committed out of sync while
-`firebase.json`'s `predeploy` silently rebuilds — so what is tested locally and what is in the
-diff can differ.
+> **Partly addressed (2026-08-15).** Added `/api/csp-report`, and wired `report-uri` +
+> `report-to` (with a `Reporting-Endpoints` header) into **both** policies — the enforcing one
+> too, so a real block is recorded as `disposition=enforce` rather than only showing up as a
+> user-visible breakage. Violations now land in the Vercel function log as one greppable
+> `[csp] …` line each.
+>
+> The sink accepts both wire formats, because browsers disagree: legacy
+> `application/csp-report` (a single `{"csp-report":{…}}`) and the Reporting API's
+> `application/reports+json` (a *batch* of envelopes). It is unauthenticated by necessity —
+> browsers send reports without credentials — so it is bounded on every axis an anonymous caller
+> controls: 64 KB body, 20 reports per request, 300 chars per field, and newlines stripped from
+> every echoed value so an attacker-chosen `blocked-uri` cannot forge a second log line.
+> Verified against all six of those behaviours before commit.
+>
+> **This does not promote the policy**, and deliberately so. Promotion is only responsible after
+> the sink has been quiet across a real exam cycle — that soak is the whole reason the endpoint
+> exists. Two entries look like promotion casualties already and should be checked against the
+> logs rather than assumed dead: `connect-src` still allows `raw.githubusercontent.com` (a
+> *build*-time host, not a runtime one) and `cdn.jsdelivr.net` (no reference found in `src/`).
+
+**F-6 · Tracked generated output — ~~`functions/lib/`~~ `functions/timing-core.cjs`.**
+
+> **Correction (2026-08-15).** The original text of this finding said `functions/lib/` is tracked,
+> citing `DEPLOY.md §7`'s self-correction. **That was wrong, and wrong in the same way §7 itself
+> was**: I trusted a prose claim about the repository instead of asking git. `functions/.gitignore`
+> has contained `lib/` (alongside `.env*` and `sa-key.json`) for some time — `git ls-files
+> functions/lib` returns nothing and `git check-ignore` matches. §7's "this describes a state the
+> repo is not in" note is now itself describing a state the repo is not in. The lesson is §0's, one
+> level down: a point-in-time claim about a file rots, so verify against the tool that knows.
+
+The underlying concern was real, but it applied to exactly one file: **`functions/timing-core.cjs`**
+— 950 lines of output from `npm run build:core`, committed.
+
+The exposure was narrow, which is why this is a P2-shaped fix rather than the integrity hole the
+original text implied. `test:timing` runs `build:core` before `timing.sweep.cjs`, so the npm path
+always regenerates and never consumed a stale copy. The gap was the *direct* invocation:
+`timing.sweep.cjs:19` does a bare `require('./timing-core.cjs')`, so running the sweep by hand
+tested whatever was last committed rather than what is in `examTimingCore.ts` — silently, and with
+a full green pass.
+
+**Fixed:** untracked and added to `functions/.gitignore` (with `.tmp-core/`). A hand-run sweep now
+fails with a module-not-found instead of quietly proving the wrong build — the loud-failure posture
+the rest of this codebase already takes. Root `.gitignore` also gained `.env` / `.env.local` /
+`.DS_Store`, which it lacked; `functions/.gitignore` already covered its own.
 
 ### 6.2 Frontend architecture
 
@@ -503,11 +553,11 @@ Ordered by (risk reduced) ÷ (effort).
 |---|---|---|---|
 | R-1 | Raise `scheduledJudgeCoding`'s per-run limit and/or shorten the interval; size it against the real cohort. Add an alert on `codeJudgePending` backlog age | §5 capacity gap | S |
 | R-2 | Delete or wire `setHierarchyNodeLifecycle` | F-4 | S |
-| R-3 | Add a `report-uri` to the report-only CSP, then promote it to enforcing (tighten `script-src` first) | F-5 | S |
+| R-3 | ~~Add a `report-uri` to the report-only CSP~~ **DONE** — `/api/csp-report` sink added and both policies now report. Promotion to enforcing still pending a soak (tighten `script-src` first) | F-5 | S |
 | R-4 | Move the frontend Firebase config to `import.meta.env` so staging is possible without a code edit | S-7 | S |
 | R-5 | Vendor the face-api weights into the repo (as `xlsx` already is) instead of curling GitHub at postinstall | S-8 | S |
-| R-6 | Turn on App Check monitoring in the console; once coverage is confirmed, set `enforceAppCheck` on the 10 hot-path callables | F-3 | M |
-| R-7 | Gitignore `functions/lib/`, per `DEPLOY.md §7`'s own conclusion | F-6 | S |
+| R-6 | ~~Set `enforceAppCheck`~~ **PARTLY DONE** — the ten hot-path callables now read an `APP_CHECK_ENFORCED` flag (default off). Remaining: console monitoring, then flip the env var | F-3 | M |
+| R-7 | ~~Gitignore `functions/lib/`~~ **DONE, retargeted** — `lib/` was already ignored; the real tracked artefact was `functions/timing-core.cjs`, now untracked and ignored | F-6 | S |
 | R-8 | Automate the pre-exam `minInstances` warm-up (a scheduled bump keyed off the assessment window) rather than relying on a documented manual step | §5 cold start | M |
 | R-9 | Add `functions` to `pnpm-workspace.yaml`, extract `shared/` for the twinned lists and types; keep `twinSync.test.ts` for what cannot move | F-2 | M |
 | R-10 | Refactor `InstituteQuestionsPage` / `FacultyQuestionsPage` onto `QuestionBankCore`, matching how reports and rosters already work | F-7 | M |

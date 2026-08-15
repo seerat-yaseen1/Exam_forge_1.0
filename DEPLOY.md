@@ -312,87 +312,100 @@ Then run one real sitting end to end on a **mock-tier** exam and check that:
 
 ## 9 · Rotating `SEB_SIGNING_SECRET`
 
-> Audit S-6 / R-14. Read this **before** touching the secret, not while an exam
-> is failing.
+> Audit S-6 / R-14. **This is now a zero-downtime procedure.** An earlier
+> version of this section said rotation required a window with no SEB exams
+> running; that was true when each side held a single secret, and is no longer
+> the constraint.
 
-### Why it needs a runbook at all
+### The shape
 
 The secret exists in **two deployment systems that know nothing about each
 other**:
 
-| Where | What it does | How it is set |
+| Where | Role | How it is set |
 |---|---|---|
-| Vercel env `SEB_SIGNING_SECRET` | `/api/seb-verify` **mints** the HMAC proof | Vercel project settings → redeploy |
-| Firebase secret `SEB_SIGNING_SECRET` | `assertSEB` **verifies** it | `firebase functions:secrets:set` → deploy functions |
+| Vercel env `SEB_SIGNING_SECRET` | `/api/seb-verify` **mints** the proof — uses the **first** entry | Vercel settings → redeploy |
+| Firebase secret `SEB_SIGNING_SECRET` | `assertSEB` **verifies** it — accepts **any** entry | `firebase functions:secrets:set` → deploy functions |
 
-They must match exactly. Change one and not the other and **every SEB-required
-exam on the platform stops starting**, with `SEB_REQUIRED: proof signature
-invalid` — which reads like a Safe Exam Browser fault, not a config one.
+Both accept a **comma-separated list**. That asymmetry — mint with one, accept
+several — is what removes the window: a new secret is taught to the verifier
+first, and only promoted to the minter once every function is deploying it.
 
-### There is no zero-downtime rotation today
-
-Both sides hold **one** secret. `api/seb-verify.js` mints with
-`process.env.SEB_SIGNING_SECRET`; `functions/src/index.ts` verifies with
-`SEB_SIGNING_SECRET.value()`. Neither accepts a list, so there is no window in
-which old and new proofs are both valid.
-
-Note the asymmetry: `SEB_CONFIG_KEYS` — the *other* SEB secret, one field over
-in the same file — **is** a comma-separated list, precisely so multiple keys can
-be valid at once. Applying that shape to the signing secret (mint with the
-first, accept any) is what makes rotation seamless, and is the recommended
-follow-up. Until then, rotation takes a window.
+A single secret with no comma is the ordinary case and behaves exactly as it
+always has.
 
 ### The procedure
 
-**Step 0 — pick the window.** No exam with `requireSEB` may be in progress or
-starting. Check for live attempts before you begin:
-
-```bash
-firebase functions:log --project YOUR_PROJECT_ID --only startExam,examHeartbeat | tail -50
-```
-
-The failure mode during the gap is **fail-closed** — candidates cannot start,
-and nobody sits an unverified exam. That is the correct direction, and it is
-why this is disruptive rather than dangerous.
-
-**Step 1 — generate.** 32 bytes, hex:
+**Step 1 — generate.**
 
 ```bash
 openssl rand -hex 32
 ```
 
-**Step 2 — the verifier first.** Functions deploys take minutes; Vercel takes
-seconds. Doing the slow side first keeps the gap as short as the fast side:
+**Step 2 — teach the VERIFIER the new secret, keeping the old.** Order matters:
+the verifier must accept both *before* anything mints the new one.
 
 ```bash
+# value: "<OLD>,<NEW>"   — old first, both valid
 firebase functions:secrets:set SEB_SIGNING_SECRET --project YOUR_PROJECT_ID
-scripts/deploy-functions.sh YOUR_PROJECT_ID          # §5 — all functions together
+scripts/deploy-functions.sh YOUR_PROJECT_ID        # §5 — all functions together
 ```
 
-**Step 3 — the minter, immediately after.** Vercel project settings →
-Environment Variables → update `SEB_SIGNING_SECRET` → **redeploy**. An env
-change alone does nothing; the running deployment keeps the old value.
+Exams keep running throughout: proofs in flight were minted with `<OLD>`, which
+still verifies.
 
-**Step 4 — verify, with a real SEB client.** Nothing else proves it: Chrome
-never sends the config-key header, so a browser check cannot distinguish a
-working secret from a broken one.
+**Step 3 — confirm the deploy actually landed before going further.** This is
+the step that makes the rest safe; skipping it re-introduces the window.
 
 ```bash
 firebase functions:log --project YOUR_PROJECT_ID --only startExam | grep -i seb
-#   expect NO "SEB_REQUIRED: proof signature invalid"
-#   "SEB_EXPIRED" immediately after rotation is EXPECTED and self-healing —
-#   it is a proof minted with the old secret inside its 90s TTL. The client
-#   re-verifies and recovers.
+#   → no "proof signature invalid"
 ```
 
-**Step 5 — record it.** Note the date somewhere the next person will look. A
-secret nobody can date is a secret nobody dares rotate.
+**Step 4 — promote the new secret in the MINTER.** Vercel → Environment
+Variables → set `SEB_SIGNING_SECRET` to `<NEW>` → **redeploy**. An env change
+alone does nothing; the running deployment keeps the old value.
+
+New proofs are now minted with `<NEW>`, which the verifier already accepts.
+Proofs minted seconds earlier with `<OLD>` also still verify, so nothing in
+flight is rejected.
+
+**Step 5 — retire the old secret.** Once the longest possible proof lifetime
+has passed (the TTL is 90s — an hour is ample):
+
+```bash
+# value: "<NEW>"   — old dropped
+firebase functions:secrets:set SEB_SIGNING_SECRET --project YOUR_PROJECT_ID
+scripts/deploy-functions.sh YOUR_PROJECT_ID
+```
+
+**Step 6 — record the date.** A secret nobody can date is a secret nobody dares
+rotate.
+
+### Verifying it
+
+Only a real SEB client proves it end to end — Chrome never sends the
+config-key header, so a browser check cannot tell a working secret from a
+broken one.
+
+```bash
+firebase functions:log --project YOUR_PROJECT_ID --only startExam | grep -i seb
+#   "SEB_REQUIRED: proof signature invalid"  → the lists disagree; go back a step
+#   "SEB_EXPIRED"                            → benign, and self-healing: a proof
+#                                              inside its 90s TTL. The client
+#                                              re-verifies automatically.
+```
+
+`R-17` in `functions/test/risk.suite.cjs` holds this behaviour: both secrets
+valid mid-rotation, the old one refused after it is dropped, and every binding
+(candidate, exam, expiry) still enforced with several secrets configured.
 
 ### If it goes wrong
 
-Put the **old** value back on both sides, in the same order. The secret is not
-compromised by a failed rotation, and reverting restores service faster than
-completing the change under pressure.
+Put the previous value back on the side you changed last and redeploy. Because
+the verifier accepts a list, **widening it is always safe** — if you are unsure
+which secret a client holds, configure both and work it out from the logs
+rather than guessing.
 
 ---
 

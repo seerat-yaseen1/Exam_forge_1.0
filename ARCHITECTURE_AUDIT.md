@@ -825,7 +825,7 @@ Ordered by (risk reduced) ÷ (effort).
 | R-11 | ~~Collapse the four auth contexts~~ **STAGE 1 DONE** — the admission decision extracted to a tested `accessGate.ts`, all three role gates rewired, differential-tested against the expression it replaced. The provider collapse itself still open | F-8 | M |
 | R-12 | Split `functions/src/index.ts` by family (exam runtime / grading / identity+lifecycle / question rights / allocation), keeping a thin `index.ts` that re-exports all 56 | F-1, S-1 | L |
 | R-13 | ~~Model `ExamShell`'s state as an explicit machine~~ **STAGES 1 + 2a DONE** — `examMachine.ts` extracted (26 edges, 27-test sweep) and now wired into ExamShell in **shadow mode**: every transition classified and logged, none blocked. Stage 2b (flip to enforcing after a clean exam cycle, plus the `handleTerminate` guard) still open | F-9, S-3 | L |
-| R-14 | ~~Document a SEB rotation runbook~~ **DONE** — `DEPLOY.md §9`. Also establishes there is **no zero-downtime rotation today**: both sides hold a single secret, while `SEB_CONFIG_KEYS` one field over is already a list. Applying that shape is the follow-up | S-6 | S |
+| R-14 | ~~Document a SEB rotation runbook~~ **DONE, and the constraint removed** — `DEPLOY.md §9`. Writing it established there was no zero-downtime rotation; the follow-up it named is now done too: both sides take a comma-separated list, the edge **mints with the first** and the functions **accept any**, so rotation no longer needs a window. Pinned by `R-17` | S-6 | S |
 | R-15 | Evaluate a second region for the exam hot path, or accept and document single-region risk explicitly in the availability contract | S-2 | L |
 
 ---

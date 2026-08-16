@@ -17,6 +17,9 @@ import { AllocationPanelCore } from '../allocation/AllocationPanelCore';
 import { emptyAllocationDraft, getAllocation, type AllocationDraft, type AllocationNodeType } from '../../../../lib/allocationService';
 import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, computeAutoOverallLimit, sumSectionsAndBreaksMinutes, draftIsLive, draftQuestionCount, DEFAULT_OVERALL_GRACE_SECONDS, type SectionDraft } from './shared';
 import { Field, SectionLabel, selectStyle, DurationIndicator, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle, PenaltyInput } from './controls';
+import { StageHeading, LockedNotice } from './StageHeading';
+import { CapabilityChoice } from './CapabilityChoice';
+import type { BuilderStage } from './stages';
 import { RuleBuilderPanel } from './topicPickers';
 import { InstitutePicker, StudentPicker } from './targetPickers';
 
@@ -86,6 +89,9 @@ function parsePositiveIntOrUndefined(raw: string): number | undefined {
 }
 
 export function DetailsStep({
+  stage,
+  onSaveApi,
+  onNavigate,
   mode, assessment, originalStatus, allQuestions, allGroups = [], sections, setSections, onBack, onSave,
   title, description, subject, status,
   targetType, setTargetType,
@@ -122,6 +128,33 @@ export function DetailsStep({
   allocationPhase: boolean;
   onContinueToAllocation: () => void;
   onBackToRules: () => void;
+  /**
+   * Which stage the workspace is showing. This component owns three of them —
+   * schedule, grading, security — plus allocation, and renders one at a time.
+   *
+   * They were previously one scrolling page headed "STEP 2 OF 3 — RULES &
+   * SETTINGS", which was wrong twice over: it contained no rules (those are in
+   * the sections stage) and it stacked three unrelated decisions into a
+   * two-column wall that an author had to read end to end to find any one of
+   * them.
+   */
+  stage: BuilderStage;
+  /**
+   * Hands the save controls to the workspace.
+   *
+   * The save bar used to live inside this component, at the bottom of the
+   * allocation stage — the ONLY place in the builder that could save anything.
+   * An author who had spent ten minutes on sections and settings had to walk
+   * forward to the last stage before "Save as Draft" existed at all, and in a
+   * workspace where they move around freely that is untenable.
+   *
+   * The bar moved to the panel; the state behind it did not, because every
+   * value a save reads — dates, grading config, SEB file — lives here. So this
+   * publishes the handler instead of relocating four hundred lines of state.
+   */
+  onSaveApi?: (api: { save: (status?: AssessmentStatus) => void; saving: boolean }) => void;
+  /** Move the workspace to another stage — the forward affordances below. */
+  onNavigate: (s: BuilderStage) => void;
 }) {
   const [startDate, setStartDate] = useState(toDateTimeLocal(assessment?.startDate));
   const [endDate, setEndDate] = useState(toDateTimeLocal(assessment?.endDate));
@@ -691,6 +724,14 @@ export function DetailsStep({
     }
   };
 
+  // Republished on every render: handleSave closes over a great deal of state
+  // and is recreated each time, so a dependency array here would either be
+  // wrong or would have to list the whole component. The panel stores it in a
+  // ref, so a new identity costs nothing.
+  useEffect(() => {
+    onSaveApi?.({ save: (status?: AssessmentStatus) => { void handleSave(status); }, saving });
+  });
+
   const totalSectionTime = sections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
 
   // ── Overall timer — Auto value + effective value ───────────────
@@ -722,34 +763,25 @@ export function DetailsStep({
       <div className="flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
         <div style={{ padding: '20px 48px 24px' }}>
 
-          {/* Back link */}
-          <div className="flex items-center gap-2 mb-4">
-            <button onClick={onBack}
-              className="flex items-center gap-1 text-xs transition-opacity hover:opacity-60"
-              style={{ color: 'var(--ef-text-muted)' }}>
-              <X size={11} strokeWidth={1.5} /> Back to Setup
-            </button>
-            <span style={{ color: 'var(--ef-border-muted)', fontSize: 10 }}>·</span>
-            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>STEP 2 OF 3 — RULES &amp; SETTINGS</p>
-          </div>
+          <StageHeading stage={stage} />
+          {originalStatus && originalStatus !== 'draft' && (
+            <LockedNotice status={originalStatus === 'active' ? 'active' : 'closed'} />
+          )}
 
-          {/* Two-column layout: left stacks Schedule/Grading/Section Limits, right holds Settings.
-              Collapses to a single column on screens under ~860px. */}
-          <div
-            className="gap-8"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              alignItems: 'start',
-            }}
-          >
-
-            {/* LEFT COLUMN: Schedule + Grading + Section Limits */}
+          {/* ONE column, not two.
+              These three stages used to share a two-column auto-fit grid:
+              schedule, grading and section limits stacked on the left, the
+              whole security block on the right. It packed a lot onto one
+              screen and made every individual decision harder to find, because
+              nothing on the left had anything to do with anything beside it.
+              One stage at a time reads top to bottom, and the measure stays
+              short enough for the explanatory copy to be worth reading. */}
+          <div style={{ maxWidth: 680 }}>
             <div className="space-y-6" style={{ minWidth: 0 }}>
 
             {/* SCHEDULE */}
+            {stage === 'schedule' && (
             <div className="space-y-3">
-              <SectionLabel label="SCHEDULE" />
               {mut.startDate ? (
                 <StartScheduleControl startDate={startDate} setStartDate={setStartDate} />
               ) : (
@@ -799,10 +831,11 @@ export function DetailsStep({
                 <DurationIndicator startDate={startDate} endDate={endDate} totalSectionTime={totalSectionTime} />
               )}
             </div>
+            )}
 
             {/* GRADING */}
+            {stage === 'grading' && (
             <div className="space-y-3">
-              <SectionLabel label="GRADING" />
               <Field label="Passing Score" hint="(%, optional)">
                 <div className="flex items-center gap-2 px-3 py-2"
                   style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
@@ -1004,9 +1037,10 @@ export function DetailsStep({
                 </div>
               )}
             </div>
+            )}
 
             {/* SECTION LIMITS */}
-            {(sections.some((s) => s.timeLimit) || sections.slice(0, -1).some((s) => parseInt(s.breakAfterMinutes, 10) > 0)) && (
+            {stage === 'grading' && (sections.some((s) => s.timeLimit) || sections.slice(0, -1).some((s) => parseInt(s.breakAfterMinutes, 10) > 0)) && (
               <div className="space-y-3">
                 <SectionLabel label="SECTION LIMITS" />
                 <div className="space-y-1">
@@ -1041,65 +1075,71 @@ export function DetailsStep({
               </div>
             )}
 
-            </div>{/* /LEFT COLUMN */}
+            </div>{/* /column */}
+
 
             {/* RIGHT COLUMN: SETTINGS */}
+            {stage === 'security' && (
             <div className="space-y-3" style={{ minWidth: 0 }}>
-              <SectionLabel label="SETTINGS" />
 
-              {/* Security tier */}
-              <div className="space-y-1.5">
-                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                  Security tier
-                </p>
-                <div className="flex" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', overflow: 'hidden' }}>
-                  {([
-                    { key: 'mock' as const,       label: 'Mock' },
-                    { key: 'normal' as const,     label: 'Normal' },
-                    { key: 'high_stake' as const, label: 'High-stake' },
-                  ]).map((opt, i) => {
-                    const active = securityTier === opt.key;
-                    return (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        onClick={() => {
-                          setSecurityTier(opt.key);
-                          // Phase 3 (Stage 4): switching tier re-baselines the
-                          // SEB toggle — back to the original override when
-                          // returning to the assessment's saved tier, else to
-                          // the new tier's default. D-10: high_stake is not a
-                          // default any more, it is forced, so it wins over a
-                          // stored override on the way in.
-                          setRequireSEB(
-                            opt.key === 'high_stake'
-                              ? true
-                              : opt.key === assessment?.securityTier
-                                ? assessment?.requireSEB ?? false
-                                : false,
-                          );
-                        }}
-                        className="flex-1 text-xs px-2 py-1.5 transition-colors"
-                        style={{
-                          background: active ? 'var(--ef-ink)' : 'transparent',
-                          color: active ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
-                          borderLeft: i === 0 ? 'none' : '1px solid var(--ef-border)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                  {securityTier === 'mock'
-                    ? 'Practice mode — no proctoring. Camera off, phones and tablets allowed.'
-                    : securityTier === 'high_stake'
-                      ? 'Maximum security — camera, computer-only and Safe Exam Browser all required.'
-                      : 'Deterrent proctoring — camera on by default, extension check, computer-only. Tablets can be allowed below.'}
-                </p>
-              </div>
+              {/* ── Security tier ──
+                  Three segmented buttons with one line of grey text before
+                  this: to compare Normal against High-stake an author had to
+                  click one, read, click the other, read, and hold both in
+                  their head — so in practice nobody moved off the default. It
+                  is the decision that governs whether the paper is proctored
+                  at all, and it was presented like a font setting. */}
+              <CapabilityChoice
+                label="Security tier"
+                value={securityTier}
+                onChange={(next) => {
+                  setSecurityTier(next);
+                  // Phase 3 (Stage 4): switching tier re-baselines the SEB
+                  // toggle — back to the original override when returning to
+                  // the assessment's saved tier, else to the new tier's
+                  // default. D-10: high_stake is not a default any more, it is
+                  // forced, so it wins over a stored override on the way in.
+                  setRequireSEB(
+                    next === 'high_stake'
+                      ? true
+                      : next === assessment?.securityTier
+                        ? assessment?.requireSEB ?? false
+                        : false,
+                  );
+                }}
+                options={[
+                  {
+                    value: 'mock',
+                    label: 'Mock',
+                    summary: 'Practice. The result does not count.',
+                    points: [
+                      'Phones and tablets welcome',
+                      'No camera, no browser check',
+                      'Violations recorded but never end the sitting',
+                    ],
+                  },
+                  {
+                    value: 'normal',
+                    label: 'Normal',
+                    summary: 'Proctored by in-page deterrents.',
+                    points: [
+                      'Camera on by default',
+                      'Computer only — tablets optional',
+                      'Three violations end the sitting',
+                    ],
+                  },
+                  {
+                    value: 'high_stake',
+                    label: 'High-stake',
+                    summary: 'Locked down. Everything below is forced on.',
+                    points: [
+                      'Safe Exam Browser required',
+                      'Camera and clean-browser check required',
+                      'Computer only, no exceptions',
+                    ],
+                  },
+                ]}
+              />
 
               {/* ── Device permissions ────────────────────────────────────
                   Phones are LOCKED off at both proctored tiers, so the only
@@ -1272,61 +1312,64 @@ export function DetailsStep({
                 </div>
               )}
 
-              {/* Delivery mode */}
-              <div className="space-y-1.5">
-                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                  Delivery mode
+              {/* ── Delivery mode ──
+                  The other decision that was a segmented control with one line
+                  of grey text. It governs whether a student can go back to a
+                  question — which changes how the paper must be written, not
+                  just how it is served — and the honest facts about each mode
+                  are load-bearing rather than decorative:
+
+                  C-1 / C-2: this copy once claimed enforcement was still to
+                  come for both sequential modes. Linear has been fully enforced
+                  server-side for some time — one question at a time, locked
+                  questions refused, direct answer writes blocked by the rules —
+                  so an author reading "later phase" could ship a genuinely
+                  one-way exam believing it inert. Adaptive is the opposite
+                  error: enforced exactly like Linear, with no difficulty ladder
+                  behind it at all. Both say what actually happens. */}
+              <CapabilityChoice
+                label="Delivery mode"
+                value={deliveryMode}
+                onChange={setDeliveryMode}
+                options={[
+                  {
+                    value: 'standard',
+                    label: 'Standard',
+                    summary: 'The whole paper, navigable.',
+                    points: [
+                      'Students revisit and change answers',
+                      'Question navigator available',
+                    ],
+                  },
+                  {
+                    value: 'linear',
+                    label: 'Linear',
+                    summary: 'One question at a time, no going back.',
+                    points: [
+                      'Enforced server-side, not just hidden',
+                      'Each answer commits as they advance',
+                      'Optional per-question timer',
+                    ],
+                  },
+                  {
+                    value: 'adaptive',
+                    label: 'Adaptive',
+                    summary: 'Identical to Linear today.',
+                    points: [
+                      'Difficulty adaptation is not built yet',
+                      'Negative marking is discarded on save',
+                      'Choose Linear unless you are trialling this',
+                    ],
+                  },
+                ]}
+              />
+              {deliveryMode === 'adaptive' && (
+                <p className="text-xs" style={{ color: '#B4643C', lineHeight: 1.6 }}>
+                  Negative marking is not applied in Adaptive delivery — any penalty
+                  settings on the Grading stage are discarded when you save. Choose
+                  Linear if you need one-at-a-time delivery with negative marking.
                 </p>
-                <div className="flex" style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', overflow: 'hidden' }}>
-                  {([
-                    { key: 'standard' as const, label: 'Standard' },
-                    { key: 'linear' as const,   label: 'Linear' },
-                    { key: 'adaptive' as const, label: 'Adaptive' },
-                  ]).map((opt, i) => {
-                    const active = deliveryMode === opt.key;
-                    return (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        onClick={() => setDeliveryMode(opt.key)}
-                        className="flex-1 text-xs px-2 py-1.5 transition-colors"
-                        style={{
-                          background: active ? 'var(--ef-ink)' : 'transparent',
-                          color: active ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
-                          borderLeft: i === 0 ? 'none' : '1px solid var(--ef-border)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* C-1 / C-2: this copy claimed enforcement was still to come
-                    for both sequential modes. Linear has been fully enforced
-                    server-side for some time — the server serves one question
-                    at a time, refuses any locked or non-current question, and
-                    the rules block direct answer writes — so an author reading
-                    "later phase" could ship a genuinely one-way exam believing
-                    it inert. Adaptive is the opposite error: it is enforced
-                    exactly like linear, and the difficulty ladder does NOT
-                    exist yet (the next question is simply the next in order).
-                    Both now say what actually happens. */}
-                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                  {deliveryMode === 'linear'
-                    ? 'One question at a time, no going back — enforced by the server. Answers are committed as the student advances.'
-                    : deliveryMode === 'adaptive'
-                      ? 'One question at a time, no going back — identical to Linear today. Difficulty adaptation is not implemented yet.'
-                      : 'All questions visible; students navigate freely.'}
-                </p>
-                {deliveryMode === 'adaptive' && (
-                  <p className="text-xs" style={{ color: '#B4643C' }}>
-                    Negative marking is not applied in Adaptive delivery — any penalty
-                    settings below are discarded when you save. Choose Linear if you
-                    need one-at-a-time delivery with negative marking.
-                  </p>
-                )}
-              </div>
+              )}
 
               {/* Section start order */}
               <div className="space-y-1.5">
@@ -1393,12 +1436,34 @@ export function DetailsStep({
                 />
               </div>
             </div>
+            )}
+
+            {/* Forward affordance for the settings stages — AFTER both column
+                groups, so it follows the content on every one of them rather
+                than leading on the stage whose block happens to render last. */}
+            {(stage === 'schedule' || stage === 'grading' || stage === 'security') && (
+              <div className="flex items-center justify-end mt-8">
+                <button
+                  onClick={() => onNavigate(stage === 'schedule' ? 'grading' : stage === 'grading' ? 'security' : 'allocation')}
+                  className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+                  style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
+                  Continue to {stage === 'schedule' ? 'Grading' : stage === 'grading' ? 'Security' : 'Allocation'}
+                  <ChevronRight size={12} strokeWidth={2} />
+                </button>
+              </div>
+            )}
 
           </div>
         </div>
       </div>
 
-      {/* ── BOTTOM: Rule Builder (full width) ── */}
+      {/* ── The Questions stage ──
+          The per-section rule builder. It used to sit below the settings wall
+          on the same screen, so an author scrolled past schedule, grading and
+          the entire security block to reach the thing they had come to do. It
+          is its own stage now — and the "Sections" stage next to it is the
+          section STRUCTURE, which is a genuinely different job. */}
+      {stage === 'questions' && (
       <RuleBuilderPanel
         sections={sections}
         activeSectionIdx={activeSectionIdx}
@@ -1420,17 +1485,21 @@ export function DetailsStep({
           setRowPolicy: patchRowPolicy,
         } : undefined}
       />
+      )}
 
-      {/* Bottom bar — rules phase hands off to Step 3 (Allocation). Saving now
-          happens there, so this bar only advances the wizard. */}
-      <div className="flex items-center justify-end gap-3 px-12 py-5 mt-8"
-        style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
-        <button onClick={onContinueToAllocation}
-          className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
-          Continue to Allocation <ChevronRight size={12} strokeWidth={2} />
-        </button>
-      </div>
+      {/* Advance affordance, matching the setup stages. It used to be a bar
+          with its own top border pinned by mt-8 — which, now that the save bar
+          is workspace chrome pinned below it, collided with it and clipped the
+          button in half. Inline, in the scroll flow, like every other stage. */}
+      {stage === 'questions' && (
+        <div className="flex items-center justify-end px-12 py-6">
+          <button onClick={() => onNavigate('schedule')}
+            className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+            style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
+            Continue to Schedule <ChevronRight size={12} strokeWidth={2} />
+          </button>
+        </div>
+      )}
 
       </>
       ) : (
@@ -1525,42 +1594,6 @@ export function DetailsStep({
           </div>
         </div>
 
-        {/* Save bar — moved verbatim from the rules phase */}
-        <div className="flex items-center justify-end gap-3 px-12 py-5 mt-auto"
-          style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
-          {(() => {
-            // Edit mode on a live or closed assessment: status is locked, single Save Changes.
-            const lockedStatus = mode === 'edit' && (originalStatus === 'active' || originalStatus === 'closed');
-            if (lockedStatus) {
-              return (
-                <button onClick={() => handleSave()} disabled={saving}
-                  className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                  style={{ background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                  {saving
-                    ? <><Loader2 size={11} className="animate-spin" /> Saving…</>
-                    : <><CheckCircle2 size={11} /> Save Changes</>}
-                </button>
-              );
-            }
-            // Create mode, or edit on a draft: offer Save as Draft + Publish.
-            const draftLabel = mode === 'create' ? 'Save as Draft' : 'Save Draft';
-            const publishLabel = mode === 'create' ? 'Create & Publish' : 'Save & Publish';
-            return (
-              <>
-                <button onClick={() => handleSave('draft')} disabled={saving}
-                  className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                  style={{ background: 'var(--ef-surface)', color: 'var(--ef-ink)', border: '1px solid var(--ef-ink)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                  {saving ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : <>{draftLabel}</>}
-                </button>
-                <button onClick={() => handleSave('active')} disabled={saving}
-                  className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                  style={{ background: saving ? 'var(--ef-track)' : 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                  {saving ? <><Loader2 size={11} className="animate-spin" /> Publishing…</> : <><CheckCircle2 size={11} /> {publishLabel}</>}
-                </button>
-              </>
-            );
-          })()}
-        </div>
       </motion.div>
       )}
 

@@ -60,7 +60,7 @@ import {
 } from '../components/assignments/list/ListChrome';
 import { AssessmentRow } from '../components/assignments/list/AssessmentRow';
 import {
-  DuplicateModal, DeleteModal, PreviewModal,
+  DuplicateModal, DeleteModal, PreviewModal, SourcePickerModal,
 } from '../components/assignments/list/AssessmentModals';
 import {
   Field, SectionLabel, inputStyle, selectStyle, DurationIndicator, PresetChip,
@@ -89,6 +89,8 @@ export function AssignmentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Assessment | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState<Assessment | null>(null);
+  /** The "start from existing" source picker, which hands off to DuplicateModal. */
+  const [pickingSource, setPickingSource] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   // Post-duplicate feedback (hierarchy re-resolution result, or failure).
   const [duplicateNotice, setDuplicateNotice] = useState<{ tone: 'info' | 'warn'; text: string } | null>(null);
@@ -253,11 +255,30 @@ export function AssignmentsPage() {
               Create and manage assessments for institutes and students.
             </p>
           </div>
-          <button onClick={openCreate}
-            className="flex items-center justify-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80 self-start md:mt-1"
-            style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}>
-            <Plus size={12} strokeWidth={2} /> Create Assessment
-          </button>
+          {/* ── Two ways in ──
+              Duplicating an exam was already the fastest way to build a new
+              one — the structure, the rules, the grading policy and the
+              security tier all come across — but it lived behind an unlabelled
+              icon at the end of a row, so it was only ever found by authors who
+              went looking. Most exams are a variant of last term's, and a
+              builder whose only visible entry point is a blank form makes
+              every one of those start from nothing.
+
+              Create stays primary. This is the shortcut, not the default. */}
+          <div className="flex items-center gap-2 self-start md:mt-1">
+            {assessments.length > 0 && (
+              <button onClick={() => setPickingSource(true)}
+                className="flex items-center justify-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
+                style={{ background: 'var(--ef-surface)', color: 'var(--ef-text-subtle)', border: '1px solid var(--ef-border)', borderRadius: 2, letterSpacing: '0.03em' }}>
+                <Copy size={12} strokeWidth={1.5} /> Start from existing
+              </button>
+            )}
+            <button onClick={openCreate}
+              className="flex items-center justify-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}>
+              <Plus size={12} strokeWidth={2} /> Create Assessment
+            </button>
+          </div>
         </div>
 
         {/* Duplicate outcome notice */}
@@ -339,6 +360,13 @@ export function AssignmentsPage() {
 
       {/* Delete */}
       <AnimatePresence>
+        {pickingSource && (
+          <SourcePickerModal
+            assessments={assessments}
+            onPick={(a) => { setPickingSource(false); setDuplicateTarget(a); }}
+            onCancel={() => setPickingSource(false)}
+          />
+        )}
         {duplicateTarget && <DuplicateModal assessment={duplicateTarget} onConfirm={handleDuplicate}
           onCancel={() => setDuplicateTarget(null)} duplicating={duplicating} />}
         {deleteTarget && <DeleteModal assessment={deleteTarget} onConfirm={handleDelete}

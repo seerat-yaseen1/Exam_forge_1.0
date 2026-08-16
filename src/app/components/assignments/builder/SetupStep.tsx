@@ -20,6 +20,8 @@ import {
 } from '../../../../lib/itemTypes';
 import { makeSectionId, SECTION_LETTERS, defaultSectionName, mutabilityFor, type SectionDraft } from './shared';
 import { Field, SectionLabel, inputStyle } from './controls';
+import { BUILDER_STAGES, type BuilderStage } from './stages';
+import { StageHeading, LockedNotice } from './StageHeading';
 import { SectionTopicPicker, SubjectPickerPhase, TopicPickerPhase } from './topicPickers';
 
 /**
@@ -41,10 +43,11 @@ function sectionAcceptedTypeCount(engines: ExecutionEngine[]): number {
 }
 
 export function SetupStep({
+  stage,
   title, setTitle, description, setDescription,
   subject, setSubject, status, setStatus,
   sections, setSections,
-  onContinue, originalStatus,
+  onNavigate, originalStatus,
   allQuestions,
   subjectPool, setSubjectPool,
   topicPool, setTopicPool,
@@ -56,7 +59,10 @@ export function SetupStep({
   status: AssessmentStatus; setStatus: (v: AssessmentStatus) => void;
   sections: SectionDraft[];
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
-  onContinue: () => void;
+  /** Move the workspace to another stage. Used by the pickers' own Next/Back
+   *  affordances, which stay because a first-time author following the flow
+   *  should not have to find the rail to advance. */
+  onNavigate: (s: BuilderStage) => void;
   originalStatus?: AssessmentStatus;
   allQuestions: Question[];
   subjectPool: string[];
@@ -64,6 +70,16 @@ export function SetupStep({
   topicPool: string[];
   setTopicPool: React.Dispatch<React.SetStateAction<string[]>>;
   deliveryMode: 'standard' | 'linear' | 'adaptive';
+  /**
+   * Which stage the workspace is showing. This component owns four of them —
+   * basics, subjects, topics, sections — and renders exactly one at a time.
+   *
+   * It used to own all four AT ONCE, stacked, with its own internal three-phase
+   * stepper for the last three. That stepper was the second progress indicator
+   * on screen (the panel's own 1-2-3 was the first) and neither explained
+   * itself; the rail replaces both. See stages.ts.
+   */
+  stage: BuilderStage;
 }) {
   const [titleError, setTitleError] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
@@ -97,13 +113,11 @@ export function SetupStep({
     [taxonomyMaps]
   );
 
-  // ── Right-column phase: 1=Subjects, 2=Topics, 3=Sections ─────
-  // Restore the furthest-completed phase when returning from Step 2.
-  const [rightPhase, setRightPhase] = useState<1 | 2 | 3>(() => {
-    if (topicPool.length > 0) return 3;
-    if (subjectPool.length > 0) return 2;
-    return 1;
-  });
+  // The phase state that used to live here is gone: which stage is on screen
+  // is now the workspace's business, and this component simply renders the one
+  // it is told to. It also no longer has to GUESS the furthest-completed phase
+  // on re-entry, which it did by inspecting the pools — a heuristic that put an
+  // author who had deliberately cleared their topics back at the start.
 
   // ── Toggle subject in pool — cascades prune to topicPool + sections ─
   const toggleSubjectInPool = useCallback((id: string) => {
@@ -239,56 +253,30 @@ export function SetupStep({
 
   const totalSectionTime = sections.reduce((sum, s) => sum + (parseInt(s.timeLimit, 10) || 0), 0);
 
-  const sectionsValid = sections.length > 0 && sections.every((s) => s.name.trim() && parseInt(s.timeLimit, 10) >= 1);
-  const canContinue = title.trim() !== '' && sectionsValid;
 
-  const handleContinue = () => {
-    if (!title.trim()) { setTitleError(true); return; }
-    onContinue();
-  };
+  /** The stage after this one, for the forward affordance below. */
+  const nextStage = BUILDER_STAGES[BUILDER_STAGES.findIndex((x) => x.id === stage) + 1] ?? null;
 
   return (
     <motion.div
-      key="step1"
+      key={`setup-${stage}`}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
       className="flex-1 overflow-y-auto"
-      style={{ padding: '48px 48px 80px' }}
+      style={{ padding: '40px 48px 80px' }}
     >
       <div style={{ width: '100%', maxWidth: 1080, margin: '0 auto' }}>
 
-        {/* Heading */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center justify-center"
-              style={{ width: 28, height: 28, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}>
-              <Layers size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-            </div>
-            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>STEP 1 OF 3</p>
-          </div>
-          <h2 className="text-base mb-1" style={{ color: 'var(--ef-ink)' }}>Assessment Setup</h2>
-          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-            Define the basics and configure sections. Question rules are set in the next step.
-          </p>
-          {originalStatus && originalStatus !== 'draft' && (
-            <div className="flex items-start gap-2.5 mt-4 px-3 py-3"
-              style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-              <Lock size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 1 }} />
-              <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-                {originalStatus === 'active'
-                  ? <>Some fields are locked because this test is <strong>live</strong>.</>
-                  : <>Some fields are locked because this test is <strong>closed</strong>.</>}
-              </p>
-            </div>
-          )}
-        </div>
+        <StageHeading stage={stage} />
+        {originalStatus && originalStatus !== 'draft' && (
+          <LockedNotice status={originalStatus === 'active' ? 'active' : 'closed'} />
+        )}
 
-        {/* Stacked: Basics on top, Phase stepper below */}
-        <div className="space-y-10">
+        <div>
 
-          {/* ── TOP: Basics ── */}
+          {/* ── Basics ── */}
+          {stage === 'basics' && (
           <div className="space-y-5">
-            <SectionLabel label="BASICS" />
 
             {/* Row 1: Title · Subject — targeting now lives in Step 3 (Allocation) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -315,66 +303,21 @@ export function SetupStep({
                 placeholder="Instructions or notes visible to students" />
             </Field>
           </div>
+          )}
 
-          {/* ── BOTTOM: Phase stepper (Subjects → Topics → Sections) ── */}
+          {/* The Subjects → Topics → Sections stepper that used to sit here is
+              gone. It was a second progress indicator competing with the
+              panel's own, and neither was labelled in a way that said which
+              governed what. The rail is now the only answer to "where am I". */}
           <div>
-
-            {/* Phase indicator strip */}
-            <div className="flex items-center mb-6">
-              {[
-                { n: 1 as const, label: 'Subjects' },
-                { n: 2 as const, label: 'Topics' },
-                { n: 3 as const, label: 'Sections' },
-              ].map(({ n, label }, i) => {
-                const isActive = rightPhase === n;
-                const isDone = rightPhase > n;
-                const canGoBack = rightPhase > n;
-                return (
-                  <React.Fragment key={n}>
-                    {i > 0 && (
-                      <div style={{
-                        flex: 1, height: 1, margin: '0 8px',
-                        background: isDone ? 'var(--ef-ink)' : 'var(--ef-border)',
-                        transition: 'background 0.2s',
-                      }} />
-                    )}
-                    <button
-                      type="button"
-                      disabled={!canGoBack}
-                      onClick={() => canGoBack && setRightPhase(n)}
-                      className="flex items-center gap-1.5 flex-shrink-0 transition-opacity"
-                      style={{ cursor: canGoBack ? 'pointer' : 'default', opacity: 1 }}
-                    >
-                      <div style={{
-                        width: 18, height: 18, borderRadius: 9, fontSize: 9,
-                        background: isActive ? 'var(--ef-ink)' : isDone ? 'var(--ef-ink)' : 'var(--ef-border)',
-                        color: (isActive || isDone) ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      }}>
-                        {isDone
-                          ? <CheckCircle2 size={10} strokeWidth={2.5} style={{ color: 'var(--ef-surface)' }} />
-                          : n}
-                      </div>
-                      <span style={{
-                        fontSize: 11,
-                        color: isActive ? 'var(--ef-ink)' : isDone ? 'var(--ef-text-muted)' : 'var(--ef-text-muted)',
-                      }}>
-                        {label}
-                      </span>
-                    </button>
-                  </React.Fragment>
-                );
-              })}
-            </div>
-
             {/* ── Phase 1: Subject Picker ── */}
-            {rightPhase === 1 && (
+            {stage === 'subjects' && (
               <SubjectPickerPhase
                 subjects={allSubjectDocs}
                 allQuestions={allQuestions}
                 selectedIds={subjectPool}
                 onToggle={toggleSubjectInPool}
-                onNext={() => setRightPhase(2)}
+                onNext={() => onNavigate('topics')}
                 loading={loadingSubjects}
                 subjectNameById={taxonomyMaps.subjectNameById}
                 topicNameById={taxonomyMaps.topicNameById}
@@ -382,22 +325,22 @@ export function SetupStep({
             )}
 
             {/* ── Phase 2: Topic Picker ── */}
-            {rightPhase === 2 && (
+            {stage === 'topics' && (
               <TopicPickerPhase
                 allSubjects={allSubjectDocs}
                 allQuestions={allQuestions}
                 selectedSubjectIds={subjectPool}
                 selectedTopics={topicPool}
                 onToggleTopic={toggleTopicInPool}
-                onBack={() => setRightPhase(1)}
-                onNext={() => setRightPhase(3)}
+                onBack={() => onNavigate('subjects')}
+                onNext={() => onNavigate('sections')}
                 subjectNameById={taxonomyMaps.subjectNameById}
                 topicNameById={taxonomyMaps.topicNameById}
               />
             )}
 
             {/* ── Phase 3: Section Builder ── */}
-            {rightPhase === 3 && (
+            {stage === 'sections' && (
               <div>
                 {/* Pool reminder strip */}
                 {topicPool.length > 0 && (
@@ -409,7 +352,7 @@ export function SetupStep({
                     </span>
                     <button
                       type="button"
-                      onClick={() => setRightPhase(2)}
+                      onClick={() => onNavigate('topics')}
                       className="text-xs transition-opacity hover:opacity-70"
                       style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }}
                     >
@@ -713,19 +656,30 @@ export function SetupStep({
           </div>
         </div>
 
-        {/* Continue */}
-        <div className="mt-10 flex items-center justify-end">
-          <button onClick={handleContinue} disabled={!canContinue}
-            className="flex items-center gap-2 text-xs px-5 py-2.5 transition-opacity"
-            style={{
-              background: canContinue ? 'var(--ef-ink)' : 'var(--ef-track)',
-              color: 'var(--ef-surface)', borderRadius: 2,
-              cursor: canContinue ? 'pointer' : 'not-allowed',
-              letterSpacing: '0.03em',
-            }}>
-            Continue to Rules <ChevronRight size={12} strokeWidth={2} />
-          </button>
-        </div>
+        {/* ── Forward affordance ──
+            The rail is how an author navigates, but a first-time author
+            working through the builder in order should not have to find it to
+            advance. This follows the stage list rather than naming a fixed
+            destination — it used to read "Continue to Rules", which named a
+            step that no longer exists under that name and was shown on every
+            phase of the old step 1 regardless of where it would actually go.
+
+            Never disabled. Blocking forward motion on a stage the author has
+            not finished is what made the old wizard feel like a form to be got
+            through; the rail already reports what is outstanding, and nothing
+            is lost by letting them look ahead and come back. */}
+        {nextStage && (
+          <div className="mt-10 flex items-center justify-end">
+            <button onClick={() => onNavigate(nextStage.id)}
+              className="flex items-center gap-2 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
+              style={{
+                background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2,
+                cursor: 'pointer', letterSpacing: '0.03em',
+              }}>
+              Continue to {nextStage.label} <ChevronRight size={12} strokeWidth={2} />
+            </button>
+          </div>
+        )}
       </div>
     </motion.div>
   );

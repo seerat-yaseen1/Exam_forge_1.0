@@ -10,7 +10,7 @@ import { useNavigate, Navigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardList, ChevronRight, Loader2, Calendar, Clock,
-  Users, BookOpen, Layers, AlertTriangle, Plus, Search, Lock,
+  Users, BookOpen, Layers, AlertTriangle, Search, Lock,
 } from 'lucide-react';
 import { useFacultyAuth } from '../../context/FacultyAuthContext';
 import { formatDayMonth as formatDateShort, formatDate } from '../../../lib/dateFormat';

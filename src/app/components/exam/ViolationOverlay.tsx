@@ -25,7 +25,7 @@ function Backdrop({ dim = true, children }: { dim?: boolean; children: React.Rea
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
       style={{ background: dim ? 'rgba(12,12,11,0.72)' : 'rgba(12,12,11,0.92)' }}
     >
       {children}
@@ -100,8 +100,15 @@ function OverlayCard({
       animate={{ scale: 1, opacity: 1, y: 0 }}
       exit={{ scale: 0.95, opacity: 0, y: 12 }}
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+      // `width: 420` was a hard width. Every overlay in this file is built on
+      // this card, so on a 390px phone the whole violation system — including
+      // the terminated screen and the 30-second final warning, neither of
+      // which the student can dismiss — rendered wider than the viewport with
+      // its buttons off the right edge.
+      className="w-full overflow-y-auto"
       style={{
-        width: 420,
+        maxWidth: 420,
+        maxHeight: 'calc(100dvh - 32px)',
         background: 'var(--ef-surface)',
         border: '1px solid var(--ef-border)',
         borderTop: `3px solid ${accent}`,
@@ -110,7 +117,7 @@ function OverlayCard({
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="px-6 py-5">
+      <div className="px-4 sm:px-6 py-5">
         <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
           {title}
         </p>

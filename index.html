@@ -4,7 +4,11 @@
     <head>
       
       <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <!-- viewport-fit=cover is what makes env(safe-area-inset-*) resolve to
+           anything other than 0. Without it the exam's bottom action bar sits
+           underneath the iPhone home indicator, where the last few pixels of
+           "Next" and "Submit" cannot be tapped. -->
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
       <title>Exam Forge 1.0</title>
       <meta name="description" content="This platform offers a secure and streamlined login experience for Web Owners, ensuring strict access control and immediate updates for brand identity." />
       <meta name="robots" content="noindex, nofollow" />

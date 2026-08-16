@@ -34,6 +34,20 @@ interface QuestionNavigatorProps {
   groupIdByQuestion?: Record<string, string | null | undefined>;
   /** groupId → its kind, for the band label. */
   groupKindById?: Record<string, GroupKind>;
+
+  /**
+   * Where this navigator is being drawn.
+   *
+   * 'sidebar' (default) is the desktop column: a fixed 200px, four chips to a
+   * row. 'sheet' is the phone's bottom sheet, which is as wide as the screen —
+   * so it fills its container and fits six chips per row, which turns a
+   * 40-question section from ten rows of scrolling into seven.
+   *
+   * A prop rather than a `useIsMobile()` call inside this component, because
+   * the answer is not "is the viewport narrow" — it is "which of the two
+   * places did my caller put me", and on a tablet in landscape those differ.
+   */
+  layout?: 'sidebar' | 'sheet';
 }
 
 // ── Chip runs (Phase 1) ────────────────────────────────────────────
@@ -198,7 +212,14 @@ export function QuestionNavigator({
   currentSectionNumber,
   groupIdByQuestion,
   groupKindById,
+  layout = 'sidebar',
 }: QuestionNavigatorProps) {
+  const isSheet = layout === 'sheet';
+  // Six across in the sheet, four in the 200px rail. The chip is also taller
+  // there: 32px is comfortable for a mouse and below the ~44px that a finger
+  // hits reliably, and in the sheet these chips ARE the navigation.
+  const chipColumns = isSheet ? 6 : 4;
+  const chipHeight = isSheet ? 44 : 32;
   const answered = questionIds.filter((id) => isAnswered(id, answers)).length;
   const total = questionIds.length;
 
@@ -218,9 +239,13 @@ export function QuestionNavigator({
         title={`Question ${idx + 1}${isAns ? ' (answered)' : ' (unanswered)'}`}
         className="relative flex items-center justify-center text-xs transition-all"
         style={{
-          height: 32,
+          height: chipHeight,
           borderRadius: 2,
           cursor: 'pointer',
+          // Kills the mobile double-tap-zoom delay. In the sheet these chips
+          // are the primary way to move between questions, and a tap that
+          // appears not to have registered gets tapped again.
+          touchAction: 'manipulation',
           border: isCurrent
             ? '2px solid var(--ef-ink)'
             : isAns
@@ -260,10 +285,14 @@ export function QuestionNavigator({
     <div
       className="flex flex-col h-full"
       style={{
-        width: 200,
+        // The sidebar's 200px was hard-coded here, which meant the component
+        // could only ever BE a sidebar. In the sheet it fills the screen width
+        // instead, and drops the right-hand rule that separated it from the
+        // question — in a sheet there is nothing to its right to separate from.
+        width: isSheet ? '100%' : 200,
         flexShrink: 0,
         background: 'var(--ef-canvas-raised)',
-        borderRight: '1px solid var(--ef-border)',
+        borderRight: isSheet ? 'none' : '1px solid var(--ef-border)',
         overflow: 'hidden',
       }}
     >
@@ -309,7 +338,7 @@ export function QuestionNavigator({
               <div
                 key={`solo-${ri}`}
                 className="grid gap-1.5"
-                style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
+                style={{ gridTemplateColumns: `repeat(${chipColumns}, 1fr)` }}
               >
                 {run.ids.map((qId, i) => renderChip(qId, run.startIdx + i))}
               </div>
@@ -331,7 +360,7 @@ export function QuestionNavigator({
                 </p>
                 <div
                   className="grid gap-1.5"
-                  style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
+                  style={{ gridTemplateColumns: `repeat(${chipColumns}, 1fr)` }}
                 >
                   {run.ids.map((qId, i) => renderChip(qId, run.startIdx + i))}
                 </div>

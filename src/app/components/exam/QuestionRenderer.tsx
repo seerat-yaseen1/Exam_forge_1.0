@@ -32,6 +32,11 @@ const OPTION_BASE: React.CSSProperties = {
   alignItems: 'flex-start',
   gap: 12,
   padding: '12px 14px',
+  // An answer option is the most-tapped control in the product, and at 12px
+  // of padding around an 18px radio it came to roughly 42px — just under the
+  // ~44px a finger hits reliably. A near-miss on a multiple-choice option is
+  // not a cosmetic problem: the student believes they answered.
+  minHeight: 44,
   borderRadius: 3,
   cursor: 'pointer',
   transition: 'all 0.12s',
@@ -39,7 +44,28 @@ const OPTION_BASE: React.CSSProperties = {
   width: '100%',
   border: '1px solid var(--ef-border)',
   background: 'var(--ef-surface)',
+  // Removes the ~300ms delay a mobile browser holds every tap for, in case it
+  // becomes a double-tap zoom. Under a countdown that delay reads as the tap
+  // having missed, and the student taps again — which on a multi-select
+  // deselects the option they just chose.
+  touchAction: 'manipulation',
 };
+
+/**
+ * Body copy size inside a question.
+ *
+ * 13px is a deliberate, dense choice for a desktop console and holds up at
+ * arm's length on a large monitor. On a phone at reading distance it is below
+ * what most people read comfortably for an hour, and an exam is the worst
+ * place to make someone squint at the thing they are being marked on.
+ *
+ * A function of the viewport rather than a CSS rule, because this file styles
+ * everything with inline `style={{}}` objects and those beat a stylesheet on
+ * specificity — a `@media` rule for this would simply not apply.
+ */
+function bodyFontSize(isMobile: boolean): number {
+  return isMobile ? 15 : 13;
+}
 
 // ──────────────────────────────────────────────────────────────────
 // MCQ Engine — single / truefalse / fillblank
@@ -55,6 +81,7 @@ function MCQSingleEngine({
   selected: string;
   onChange: (id: string) => void;
 }) {
+  const isMobile = useIsMobile();
   return (
     <div className="space-y-2">
       {options.map((opt, idx) => {
@@ -102,7 +129,7 @@ function MCQSingleEngine({
               <RichText
                 text={opt.text}
                 image={opt.image}
-                style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.6' }}
+                style={{ fontSize: bodyFontSize(isMobile), color: 'var(--ef-ink)', lineHeight: '1.6' }}
               />
             </div>
           </motion.button>
@@ -126,6 +153,7 @@ function MCQMultiEngine({
   selected: string[];
   onChange: (ids: string[]) => void;
 }) {
+  const isMobile = useIsMobile();
   const toggle = (id: string) => {
     if (selected.includes(id)) {
       onChange(selected.filter((s) => s !== id));
@@ -186,7 +214,7 @@ function MCQMultiEngine({
               <RichText
                 text={opt.text}
                 image={opt.image}
-                style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.6' }}
+                style={{ fontSize: bodyFontSize(isMobile), color: 'var(--ef-ink)', lineHeight: '1.6' }}
               />
             </div>
           </motion.button>
@@ -210,6 +238,7 @@ function TextEngine({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const isMobile = useIsMobile();
   const rows = variant === 'long' ? 10 : 4;
   const placeholder =
     variant === 'long'
@@ -229,7 +258,13 @@ function TextEngine({
           border: '1px solid var(--ef-border)',
           borderRadius: 3,
           padding: '12px 14px',
-          fontSize: 13,
+          // 16px on mobile is not a readability choice — it is the threshold
+          // below which iOS Safari ZOOMS THE PAGE when the field takes focus.
+          // In an exam that is unusually bad: the zoom fires the moment the
+          // student starts typing, the layout jumps, the timer and the action
+          // bar go off-screen, and nothing they do returns the page to where
+          // it was. bodyFontSize's 15 would trip it.
+          fontSize: isMobile ? 16 : bodyFontSize(false),
           color: 'var(--ef-ink)',
           lineHeight: 1.7,
           fontFamily: 'inherit',
@@ -306,18 +341,36 @@ function MatchEngine({
     onChange({ ...value, [leftId]: rightId });
   };
 
+  // ── Why this layout has two forms ─────────────────────────────
+  //
+  // The desktop form is genuinely two columns — `1fr auto 1fr` with an arrow
+  // between — and it is the right shape for the question: "match A to B" is a
+  // spatial idea, and seeing both sides at once is how a candidate reasons
+  // about it.
+  //
+  // On a 390px phone each column is about 165px. A stem of any length wraps to
+  // four or five lines, the dropdown beside it wraps to its own, the rows stop
+  // aligning, and the arrow points at whitespace. So on a phone each pair
+  // becomes one stacked block: the item, then the dropdown under it. The
+  // spatial reading is lost, which is a real cost — but it is a smaller cost
+  // than a layout the student has to decode before they can answer.
+  const isMobile = useIsMobile();
+
   return (
     <div className="space-y-3">
       <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)' }}>
         Match each item in Column A with the correct item in Column B.
       </p>
 
-      {/* Column headers */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
-        <p className="text-xs px-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>COLUMN A</p>
-        <div style={{ width: 20 }} />
-        <p className="text-xs px-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>COLUMN B</p>
-      </div>
+      {/* Column headers. Only meaningful beside two actual columns — above a
+          stack they would label nothing. */}
+      {!isMobile && (
+        <div className="grid gap-3" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+          <p className="text-xs px-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>COLUMN A</p>
+          <div style={{ width: 20 }} />
+          <p className="text-xs px-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>COLUMN B</p>
+        </div>
+      )}
 
       {pairs.map((pair, idx) => {
         const selectedRightId = value[pair.leftId] ?? '';
@@ -326,8 +379,13 @@ function MatchEngine({
         return (
           <div
             key={pair.leftId}
-            className="grid items-center gap-3"
-            style={{ gridTemplateColumns: '1fr auto 1fr' }}
+            className={isMobile ? 'flex flex-col gap-2' : 'grid items-center gap-3'}
+            style={isMobile
+              // A visible edge around each pair. Once the columns are gone,
+              // nothing else says which dropdown belongs to which item, and
+              // a mis-grouped answer here is indistinguishable from a wrong one.
+              ? { border: '1px solid var(--ef-border-subtle)', borderRadius: 3, padding: 10 }
+              : { gridTemplateColumns: '1fr auto 1fr' }}
           >
             {/* Left item */}
             <div
@@ -342,12 +400,15 @@ function MatchEngine({
               <RichText
                 text={pair.leftText}
                 image={pair.leftImage}
-                style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.6' }}
+                style={{ fontSize: bodyFontSize(isMobile), color: 'var(--ef-ink)', lineHeight: '1.6' }}
               />
             </div>
 
-            {/* Arrow */}
-            <div style={{ color: 'var(--ef-text-muted)', fontSize: 16, userSelect: 'none' }}>→</div>
+            {/* Arrow. Points across two columns; over a stack it would point
+                at the edge of the screen. */}
+            {!isMobile && (
+              <div style={{ color: 'var(--ef-text-muted)', fontSize: 16, userSelect: 'none' }}>→</div>
+            )}
 
             {/* Right dropdown */}
             <div className="relative">
@@ -360,7 +421,9 @@ function MatchEngine({
                   border: isMatched ? '1.5px solid var(--ef-ink)' : '1px solid var(--ef-border)',
                   borderRadius: 3,
                   padding: '10px 36px 10px 12px',
-                  fontSize: 13,
+                  // 16px on mobile for the same reason as the textarea: below
+                  // it, iOS Safari zooms the page when the control is focused.
+                  fontSize: isMobile ? 16 : bodyFontSize(false),
                   color: selectedRightId ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
                   cursor: 'pointer',
                   minHeight: 48,
@@ -900,7 +963,11 @@ export function QuestionRenderer({
 
   /** Both halves, stacked — every engine but coding, and coding on a phone. */
   const questionColumn = (
-    <div className="px-8 py-6 flex-1">
+    /* px-8 is 64px of a 390px screen — a sixth of the width, spent on nothing,
+       while the question text below it wraps harder for the loss. Held at the
+       original padding from md up, where the column is wide enough that the
+       margin is doing its job. */
+    <div className="px-4 md:px-8 py-5 md:py-6 flex-1">
       {promptBlock}
       {answerBlock}
     </div>

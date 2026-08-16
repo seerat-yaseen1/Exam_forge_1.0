@@ -17,7 +17,8 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { fullscreenOk, fullscreenSupported } from './ExamBriefingPage';
+import { fullscreenOk, fullscreenSupported, deviceGateOk } from './ExamBriefingPage';
+import { effectiveDevicePolicy } from '../../../lib/deviceClass';
 import {
   extensionGateBlocks,
   scanForExtensions,
@@ -155,5 +156,112 @@ describe('extensionGateBlocks', () => {
       named: scanForExtensions(),
       foreign: scanForForeignDom(),
     })).toBe(false);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// THE DEVICE ENTRY GATE
+// ══════════════════════════════════════════════════════════════════
+//
+// The device policy used to be enforced in exactly one place: startExam,
+// server-side, after the student had finished the briefing and pressed Enter.
+// They were then refused with the raw string `DEVICE_NOT_ALLOWED: …`, because
+// nothing on the client translated it.
+//
+// That is the failure the fullscreen gate above was written to fix, and it is
+// worse here: a student can put a browser into fullscreen, and cannot turn a
+// phone into a laptop. Arriving late at this requirement costs them the walk
+// to a different machine plus everything they did on the briefing first.
+//
+// The server still decides. These tests cover the client asking the same
+// question early — and specifically that it derives the EFFECTIVE policy
+// rather than reading the stored fields, because a 'normal' exam published
+// before phones were locked off stores allowMobile:true and the two answers
+// would otherwise disagree.
+
+describe('deviceGateOk', () => {
+  const mock = { securityTier: 'mock' as const };
+  const normal = { securityTier: 'normal' as const };
+  const highStake = { securityTier: 'high_stake' as const };
+
+  it('has no opinion before the assessment loads', () => {
+    // Refusing on a null assessment would flash the wrong-device panel on
+    // every phone for as long as the fetch takes, including on the practice
+    // exams that are allowed to run there.
+    expect(deviceGateOk('mobile', null)).toBe(true);
+  });
+
+  it('never refuses a desktop', () => {
+    for (const a of [mock, normal, highStake]) {
+      expect(deviceGateOk('desktop', a)).toBe(true);
+    }
+  });
+
+  it('lets a practice exam run on a phone', () => {
+    // The whole point of the tier. If this breaks, mock stops being the thing
+    // that distinguishes it.
+    expect(deviceGateOk('mobile', mock)).toBe(true);
+    expect(deviceGateOk('tablet', mock)).toBe(true);
+  });
+
+  it('refuses phones and tablets at high_stake', () => {
+    expect(deviceGateOk('mobile', highStake)).toBe(false);
+    expect(deviceGateOk('tablet', highStake)).toBe(false);
+  });
+
+  it('refuses phones at normal even where the document says otherwise', () => {
+    // An unpublished 'normal' draft carrying allowMobile:true from before the
+    // lock. No securityLockedAt, so no grandfather, so the lock applies — and
+    // the briefing must reach the same verdict startExam will.
+    expect(deviceGateOk('mobile', { ...normal, allowMobile: true })).toBe(false);
+  });
+
+  it('honours the grandfather clause for an already-published exam', () => {
+    // securityLockedAt present AND allowMobile explicitly true: this exam was
+    // published telling students to bring a phone. Refusing it now would
+    // strand a candidate mid-window over a device their institution chose.
+    expect(deviceGateOk('mobile', {
+      ...normal, allowMobile: true, securityLockedAt: '2026-01-01T00:00:00.000Z',
+    })).toBe(true);
+  });
+
+  it('does not grandfather an exam that never opted in', () => {
+    expect(deviceGateOk('mobile', {
+      ...normal, allowMobile: false, securityLockedAt: '2026-01-01T00:00:00.000Z',
+    })).toBe(false);
+  });
+
+  it('lets tablets through at normal when the authority admitted them', () => {
+    expect(deviceGateOk('tablet', { ...normal, allowTablet: true })).toBe(true);
+    // …and still refuses phones, which is the reason the flag was split.
+    expect(deviceGateOk('mobile', { ...normal, allowTablet: true })).toBe(false);
+  });
+
+  it('refuses tablets at normal by default', () => {
+    expect(deviceGateOk('tablet', normal)).toBe(false);
+  });
+
+  it('leaves a legacy assessment with no tier open', () => {
+    // Nothing was ever gated on these, and startExam's isLegacy branch says
+    // the same. A briefing stricter than the server would refuse a student the
+    // server would have admitted.
+    expect(deviceGateOk('mobile', {})).toBe(true);
+    expect(deviceGateOk('tablet', {})).toBe(true);
+  });
+});
+
+describe('effectiveDevicePolicy — tablets inherit the pre-split flag', () => {
+  it('reads a pre-split normal exam that allowed mobile as allowing tablets', () => {
+    // Before the split, one flag covered both. A 'normal' exam that admitted
+    // phones certainly admitted tablets, so the absent allowTablet field
+    // inherits rather than defaulting to false and silently narrowing an exam
+    // that was already published.
+    expect(effectiveDevicePolicy({
+      securityTier: 'normal', allowMobile: true,
+    }).allowTablet).toBe(true);
+  });
+
+  it('does not invent a tablet permission from nothing', () => {
+    expect(effectiveDevicePolicy({ securityTier: 'normal' }).allowTablet).toBe(false);
   });
 });

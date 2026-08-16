@@ -204,6 +204,55 @@ export function deviceAllowed(deviceClass: DeviceClass, policy: DevicePolicy): b
 }
 
 /**
+ * Just enough of an assessment to answer the device question.
+ *
+ * Structural rather than `Pick<Assessment, …>` so this module stays a leaf:
+ * submissionService imports it, and reaching back into assessmentService for a
+ * type would put a cycle between the three.
+ */
+export type DevicePolicySource = {
+  securityTier?: 'mock' | 'normal' | 'high_stake';
+  allowMobile?: boolean;
+  allowTablet?: boolean;
+  securityLockedAt?: string;
+};
+
+/**
+ * The device policy as startExam derives it.
+ *
+ * This duplicates rules the server owns, which is a cost worth naming — but
+ * the alternative is worse in a specific way. A surface reading the STORED
+ * `allowMobile` would wave a phone through on a 'normal' exam published before
+ * phones were locked off, and the server would then refuse it: the card, the
+ * briefing and the gate would disagree, which is precisely the class of defect
+ * the split was meant to remove. So the grandfather clause is reproduced,
+ * exactly, and the three surfaces read this one function.
+ *
+ * Any change to the tier's device rules touches three places: here,
+ * applyTierDefaults (authoring), and startExam (enforcement).
+ */
+export function effectiveDevicePolicy(a: DevicePolicySource): DevicePolicy {
+  const tier = a.securityTier;
+  // Legacy documents predate the whole device gate; nothing was ever refused
+  // on them, and startExam's own isLegacy branch says the same.
+  if (tier === undefined) return { allowMobile: true, allowTablet: true };
+  if (tier === 'mock') {
+    return { allowMobile: a.allowMobile ?? true, allowTablet: a.allowTablet ?? true };
+  }
+  if (tier === 'high_stake') return { allowMobile: false, allowTablet: false };
+  return {
+    // 'normal' — phones locked off, except on a document already published
+    // with them explicitly on. See applyTierDefaults for why the lock does not
+    // reach back through a publish.
+    allowMobile: a.allowMobile === true && !!a.securityLockedAt,
+    // A pre-split document has no allowTablet. It does have the old combined
+    // flag, and a 'normal' exam that admitted phones certainly admitted
+    // tablets, so that is what an absent field inherits.
+    allowTablet: a.allowTablet ?? a.allowMobile ?? false,
+  };
+}
+
+/**
  * What to tell a student whose device is refused.
  *
  * Two fields, because the two do different jobs: `title` is the sentence they

@@ -63,7 +63,7 @@ import {
   DuplicateModal, DeleteModal, PreviewModal, SourcePickerModal,
 } from '../components/assignments/list/AssessmentModals';
 import {
-  Field, SectionLabel, inputStyle, selectStyle, DurationIndicator, PresetChip,
+  Field, SectionLabel, inputStyle, selectStyle, PresetChip,
   SegmentedToggle, StartScheduleControl, EndScheduleControl, LockedFieldWrapper,
   DifficultyRow, SettingsToggle,
 } from '../components/assignments/builder/controls';

@@ -16,7 +16,7 @@ import { getAllSubjects, loadTaxonomyNameMaps, type Subject, type TaxonomyNameMa
 import { AllocationPanelCore } from '../allocation/AllocationPanelCore';
 import { emptyAllocationDraft, getAllocation, type AllocationDraft, type AllocationNodeType } from '../../../../lib/allocationService';
 import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, computeAutoOverallLimit, sumSectionsAndBreaksMinutes, draftIsLive, draftQuestionCount, DEFAULT_OVERALL_GRACE_SECONDS, type SectionDraft } from './shared';
-import { Field, SectionLabel, selectStyle, DurationIndicator, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle, PenaltyInput } from './controls';
+import { Field, SectionLabel, selectStyle, ScheduleWindow, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle, PenaltyInput } from './controls';
 import { StageHeading, LockedNotice } from './StageHeading';
 import { CapabilityChoice } from './CapabilityChoice';
 import type { BuilderStage } from './stages';
@@ -827,9 +827,14 @@ export function DetailsStep({
                 </LockedFieldWrapper>
               )}
 
-              {startDate && endDate && (
-                <DurationIndicator startDate={startDate} endDate={endDate} totalSectionTime={totalSectionTime} />
-              )}
+              {/* No `startDate && endDate` guard any more — that guard was the
+                  defect. It meant the default state of a new assessment (start
+                  immediately, no deadline) rendered nothing at all, so the one
+                  place the window is stated as a window only appeared once the
+                  author had set both ends by hand. ScheduleWindow resolves both
+                  ends itself and decides for itself when it has nothing to
+                  say. */}
+              <ScheduleWindow startDate={startDate} endDate={endDate} totalSectionTime={totalSectionTime} />
             </div>
             )}
 

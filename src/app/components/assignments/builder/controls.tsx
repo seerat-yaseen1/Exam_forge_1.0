@@ -10,6 +10,7 @@ import { Clock, Calendar, AlertTriangle, CheckCircle2, AlertCircle, Lock, Zap, I
 import { type Subject } from '../../../../lib/subjectService';
 import { Difficulty, RuleDraft, DIFF_LABEL, DIFF_COLORS, dateToInputLocal } from './shared';
 import { type GradingPolicy, type PenaltyType } from '../../../../lib/assessmentService';
+import { formatDateTime } from '../../../../lib/dateFormat';
 
 export function Field({ label, hint, required, children }: {
   label: string; hint?: string; required?: boolean; children: React.ReactNode;
@@ -45,41 +46,136 @@ export const inputStyle: React.CSSProperties = {
 
 export const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' };
 
-export function DurationIndicator({ startDate, endDate, totalSectionTime = 0 }: {
+/**
+ * The exam window, always resolved to something an author can read.
+ *
+ * ── WHAT WAS WRONG ────────────────────────────────────────────────
+ * This returned `null` unless BOTH dates were set. So the default state of a
+ * new assessment — start immediately, no deadline — showed nothing at all, and
+ * the only description of when the paper ran was two segmented buttons plus a
+ * sentence of prose under each. An author could not see the window; they had
+ * to assemble it from two controls and remember which was which.
+ *
+ * Worse, "Start immediately" read as an ABSENCE. The field was empty, no date
+ * appeared anywhere, and the natural reading of a form with no date in it is
+ * that the date has not been set yet — which is exactly the state an author is
+ * trying to avoid before publishing.
+ *
+ * Both ends now resolve to a value: immediate shows the date and time it would
+ * actually open, and no-deadline says so in the same line rather than leaving
+ * a blank where the reader expects a date.
+ *
+ * ── WHY THE CLOCK TICKS ───────────────────────────────────────────
+ * `now` is state, refreshed once a minute, not a value read at render. An
+ * author who opens the builder and spends twenty minutes on sections would
+ * otherwise be looking at a start time twenty minutes stale — a number that is
+ * wrong in the one direction that matters, since it is displayed precisely to
+ * answer "when does this open".
+ */
+export function ScheduleWindow({ startDate, endDate, totalSectionTime = 0 }: {
   startDate: string; endDate: string; totalSectionTime?: number;
 }) {
-  const s = new Date(startDate), e = new Date(endDate);
-  if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return null;
-  const diffMins = Math.floor((e.getTime() - s.getTime()) / 60000);
-  const h = Math.floor(diffMins / 60), m = diffMins % 60;
-  const label = h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
-  const required = totalSectionTime + 1; // window must be at least 1 min more than total section time
-  const tooShort = totalSectionTime > 0 && diffMins < required;
+  const immediate = !startDate;
+  const noDeadline = !endDate;
 
-  if (tooShort) {
-    const shortBy = required - diffMins;
-    const shortLabel = shortBy >= 60
-      ? `${Math.floor(shortBy / 60)}h${shortBy % 60 > 0 ? ` ${shortBy % 60}m` : ''}`
-      : `${shortBy}m`;
+  const s = immediate ? now : new Date(startDate);
+  const e = noDeadline ? null : new Date(endDate);
+  const startValid = !isNaN(s.getTime());
+  const endValid = e !== null && !isNaN(e.getTime());
+
+  // A half-typed datetime-local value. Say nothing rather than render
+  // "Invalid Date" at someone mid-keystroke.
+  if (!startValid || (!noDeadline && !endValid)) return null;
+
+  const startLabel = formatDateTime(s.toISOString());
+  const endLabel = noDeadline ? 'No deadline' : formatDateTime(e!.toISOString());
+
+  const diffMins = endValid ? Math.floor((e!.getTime() - s.getTime()) / 60000) : null;
+
+  // ── The window is inverted ──
+  if (diffMins !== null && diffMins <= 0) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2"
-        style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
-        <AlertTriangle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
-        <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>
-          Window <strong>{label}</strong> is too short — extend by at least <strong>{shortLabel}</strong> to cover all section time limits ({totalSectionTime}m total) plus a 1m buffer.
-        </span>
-      </div>
+      <WindowBox tone="danger" icon={<AlertTriangle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />}>
+        <WindowRange start={startLabel} end={endLabel} tone="danger" />
+        <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)', lineHeight: 1.5 }}>
+          The deadline is before the start — students would never be able to begin.
+        </p>
+      </WindowBox>
+    );
+  }
+
+  // ── The window cannot fit the paper ──
+  // Unchanged rule: the window must exceed the total section time by at least
+  // a minute. Only checkable when there IS a deadline; an open-ended window is
+  // long enough by construction.
+  const required = totalSectionTime + 1;
+  if (diffMins !== null && totalSectionTime > 0 && diffMins < required) {
+    const shortBy = required - diffMins;
+    return (
+      <WindowBox tone="danger" icon={<AlertTriangle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />}>
+        <WindowRange start={startLabel} end={endLabel} tone="danger" />
+        <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)', lineHeight: 1.5 }}>
+          That window is <strong>{durationLabel(diffMins)}</strong> — too short. Extend it by at least{' '}
+          <strong>{durationLabel(shortBy)}</strong> to cover every section's time limit ({totalSectionTime}m) plus a minute's buffer.
+        </p>
+      </WindowBox>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2"
-      style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
-      <Clock size={11} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />
-      <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>Window duration: <strong>{label}</strong></span>
+    <WindowBox tone="ok" icon={<Clock size={11} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />}>
+      <WindowRange start={startLabel} end={endLabel} tone="ok" />
+      <p className="text-xs mt-1" style={{ color: 'var(--ef-success-strong)', opacity: 0.85, lineHeight: 1.5 }}>
+        {immediate && noDeadline
+          ? 'Opens the moment you publish and stays open until you close it.'
+          : immediate
+            ? `Opens the moment you publish · ${durationLabel(diffMins!)} window`
+            : noDeadline
+              ? 'Stays open until you close it.'
+              : `${durationLabel(diffMins!)} window`}
+      </p>
+    </WindowBox>
+  );
+}
+
+/** `start —— end`, the shape the author asked to see the schedule in. */
+function WindowRange({ start, end, tone }: { start: string; end: string; tone: 'ok' | 'danger' }) {
+  const color = tone === 'ok' ? 'var(--ef-success-strong)' : 'var(--ef-danger)';
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs" style={{ color }}><strong>{start}</strong></span>
+      <span className="text-xs" style={{ color, opacity: 0.5 }}>——</span>
+      <span className="text-xs" style={{ color }}><strong>{end}</strong></span>
     </div>
   );
+}
+
+function WindowBox({ tone, icon, children }: {
+  tone: 'ok' | 'danger'; icon: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2 px-3 py-2.5"
+      style={{
+        background: tone === 'ok' ? 'var(--ef-success-bg)' : 'var(--ef-danger-bg)',
+        border: `1px solid ${tone === 'ok' ? 'var(--ef-success-border)' : 'var(--ef-danger-border)'}`,
+        borderRadius: 2,
+      }}>
+      <span style={{ marginTop: 2 }}>{icon}</span>
+      <div style={{ minWidth: 0 }}>{children}</div>
+    </div>
+  );
+}
+
+/** 95 → "1h 35m". */
+function durationLabel(mins: number): string {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
 }
 
 // ── Field mutability ──────────────────────────────────────────────
@@ -165,12 +261,12 @@ export function StartScheduleControl({
           onRight={switchToScheduled}
         />
 
-        {isImmediate ? (
-          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
-            <Zap size={10} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
-            Students can begin as soon as the assessment is published.
-          </p>
-        ) : (
+        {/* No prose under the immediate branch. It used to read "Students can
+            begin as soon as the assessment is published", which ScheduleWindow
+            now says a few pixels below — and says better, because it says it
+            beside the actual date. Two statements of one fact within one
+            screen is how an author learns to read neither. */}
+        {isImmediate ? null : (
           <>
             <div className="flex items-center gap-2 px-3 py-2"
               style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
@@ -225,12 +321,8 @@ export function EndScheduleControl({
           onRight={switchToDeadline}
         />
 
-        {!hasDeadline ? (
-          <p className="text-xs flex items-start gap-1.5 px-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
-            <InfinityIcon size={10} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
-            The assessment stays open until you close it manually.
-          </p>
-        ) : (
+        {/* Same as the start control: the window summary below states this. */}
+        {!hasDeadline ? null : (
           <>
             <div className="flex items-center gap-2 px-3 py-2"
               style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>

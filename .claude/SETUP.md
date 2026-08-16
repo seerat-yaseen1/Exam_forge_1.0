@@ -52,6 +52,43 @@ Combined always-on context cost is roughly **4k tokens** per session
 (~1.2k example-skills, ~1.1k ui-ux-pro-max, ~1.0k document-skills, ~0.7k
 superpowers). Trim with `claude plugin disable <plugin>` if that matters.
 
+### Security review command
+
+`/security-review` — a senior-security-engineer pass over the diff on the
+current branch, tuned for high-confidence findings (it reports only >80%
+confidence, and hard-excludes DoS, rate limiting, dependency CVEs, and
+documentation findings to keep the signal clean).
+
+```
+/security-review
+```
+
+Vendored to `.claude/commands/security-review.md` from
+[anthropics/claude-code-security-review][ccsr] (MIT). That repo is a GitHub
+Action, **not** a plugin marketplace, so it cannot be added with
+`/plugin marketplace add` — the slash command is the part that ships as a file.
+
+Refresh it against upstream with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/anthropics/claude-code-security-review/main/.claude/commands/security-review.md \
+  -o .claude/commands/security-review.md
+```
+
+The same repo also publishes a CI action that reviews every PR and comments
+findings inline. It is **not** wired up here because it needs an
+`ANTHROPIC_API_KEY` repository secret, and a workflow referencing a missing
+secret fails on every PR. To enable it, add the secret and a workflow step:
+
+```yaml
+- uses: anthropics/claude-code-security-review@main
+  with:
+    claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    comment-pr: true
+```
+
+[ccsr]: https://github.com/anthropics/claude-code-security-review
+
 ## Run locally once (not committed)
 
 ### claude-mem

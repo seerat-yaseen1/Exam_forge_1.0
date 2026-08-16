@@ -25,6 +25,8 @@ import {
   type Attempt,
   type AttemptStatus,
 } from '../../../lib/submissionService';
+import { buildResultRows, studentResultVisibility } from '../../../lib/studentResults';
+import { ResultsTab } from './ResultsTab';
 
 // ══════════════════════════════════════════════════════════════════
 // TYPES
@@ -64,10 +66,20 @@ function canStillOpen(
   return true;
 }
 
-type TabKey = 'available' | 'missed' | 'submitted';
+/**
+ * `results` is deliberately NOT part of the bucketing below.
+ *
+ * Available / Missed / Submitted partition the list — every assessment lands
+ * in exactly one of them. Results is a cross-cutting VIEW over the same data:
+ * an exam with a submitted attempt and a retake still open belongs in
+ * Available *and* in Results, and forcing it to choose would make a student
+ * with a reattempt left pick between seeing the mark they already have and
+ * seeing the button that lets them improve it. See ResultsTab.tsx.
+ */
+type TabKey = 'available' | 'missed' | 'submitted' | 'results';
 
 /**
- * Tab bucketing rule:
+ * Tab bucketing rule (the three partitioning tabs only):
  *  - available: student can still open the test now (or window not yet open)
  *  - submitted: has at least one finished attempt and can NOT still open
  *  - missed:    everything else (window closed/blocked, never submitted)
@@ -80,7 +92,7 @@ function classifyForTab(
   availability: AvailabilityState,
   allAttempts: Attempt[],
   studentId: string,
-): TabKey {
+): Exclude<TabKey, 'results'> {
   if (canStillOpen(a, availability, allAttempts, studentId)) return 'available';
   if (availability === 'upcoming') return 'available';
 
@@ -175,7 +187,13 @@ function AttemptStatusBadge({ status, autoTerminated }: { status: AttemptStatus;
 // ── Score display ─────────────────────────────────────────────────
 
 function ScoreDisplay({ attempt, assessment }: { attempt: Attempt; assessment: Assessment }) {
-  if (!assessment.showResults) {
+  // Through the audience helper rather than the legacy boolean. The two agree
+  // on every document the builder writes (it keeps `showResults` in sync with
+  // the students entry of `showResultsTo`), but the ARRAY is the authoritative
+  // field — and the Results tab reads it that way. A card and a tab disagreeing
+  // about whether a mark is released is the kind of split this codebase has
+  // paid for before.
+  if (studentResultVisibility(assessment) === 'withheld') {
     return (
       <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         Results not shown
@@ -311,10 +329,11 @@ function AssessmentCard({
     // Secondary: window closed / attempts exhausted — surface results when allowed.
     const done = attempt?.status === 'submitted' || attempt?.status === 'auto_submitted';
     if (done) {
-      if (a.showResults && a.allowReview) {
+      const visibility = studentResultVisibility(a);
+      if (visibility === 'review') {
         return { label: 'Review', icon: <Eye size={12} strokeWidth={1.5} />, variant: 'secondary' };
       }
-      if (a.showResults) {
+      if (visibility === 'score') {
         return { label: 'Results', icon: <BarChart2 size={12} strokeWidth={1.5} />, variant: 'secondary' };
       }
     }
@@ -830,6 +849,16 @@ export function StudentAssessmentsPage() {
     return { available, missed, submitted };
   }, [assessments, attemptMap, attemptsByAssessment, nowDate, session]);
 
+  // Results is built from the same two fetches, not a third one: every mark a
+  // student is allowed to see is already on the attempt documents this page
+  // loaded. Deliberately NOT dependent on `nowDate` — a result does not change
+  // on the 30-second clock tick, and rebuilding these rows twice a minute
+  // would remount every card in the tab.
+  const resultRows = useMemo(
+    () => buildResultRows(assessments, attemptsByAssessment),
+    [assessments, attemptsByAssessment],
+  );
+
   const total = assessments.length;
 
   if (!session) return null;
@@ -935,9 +964,17 @@ export function StudentAssessmentsPage() {
 
             {/* Tab strip */}
             <div className="flex items-center gap-1 mb-5" style={{ borderBottom: '1px solid var(--ef-border)' }}>
-              {(['available', 'missed', 'submitted'] as TabKey[]).map((key) => {
-                const count = key === 'available' ? available.length : key === 'missed' ? missed.length : submitted.length;
-                const label = key === 'available' ? 'Available' : key === 'missed' ? 'Missed' : 'Submitted';
+              {(['available', 'missed', 'submitted', 'results'] as TabKey[]).map((key) => {
+                const count =
+                  key === 'available' ? available.length
+                  : key === 'missed'    ? missed.length
+                  : key === 'submitted' ? submitted.length
+                  : resultRows.length;
+                const label =
+                  key === 'available' ? 'Available'
+                  : key === 'missed'    ? 'Missed'
+                  : key === 'submitted' ? 'Submitted'
+                  : 'Results';
                 const isActive = activeTab === key;
                 return (
                   <button
@@ -972,6 +1009,12 @@ export function StudentAssessmentsPage() {
 
             {/* Active list */}
             {(() => {
+              // Results is a different shape of answer, not a fourth list of
+              // the same card — it renders per SITTING, and carries its own
+              // empty state because "nothing here" means something different
+              // in it (nothing finished yet, rather than nothing assigned).
+              if (activeTab === 'results') return <ResultsTab rows={resultRows} />;
+
               const list = activeTab === 'available' ? available : activeTab === 'missed' ? missed : submitted;
               if (list.length === 0) return <EmptyState category={activeTab} />;
               return (

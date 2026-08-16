@@ -7,10 +7,19 @@
  *   allowReview   true  → Full answer review with correct/incorrect per question
  *
  * Also handles terminated attempts (integrity violation).
+ *
+ * WHICH SITTING IT SHOWS: the most recent one, unless the URL names another
+ * with `?attempt=<id>`. The page used to be able to show only the most recent,
+ * which was fine while it was reached from a card representing an assessment
+ * and became wrong the moment the Results tab started linking to a student's
+ * BEST sitting — every such link would have silently opened their latest marks
+ * instead. Nothing here decides who may read an attempt: firestore.rules
+ * grants a student their own attempts and nobody else's, so an id belonging to
+ * another candidate is denied at the source rather than filtered here.
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, Shield,
@@ -20,11 +29,17 @@ import {
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, type Assessment } from '../../../lib/assessmentService';
 import {
-  getAttemptByStudentAndAssessment,
+  getAllAttemptsByStudentAndAssessment,
   type Attempt,
   type AttemptAnswer,
   type GradedAnswer,
 } from '../../../lib/submissionService';
+import {
+  finishedAttempts,
+  pickBestAttempt,
+  studentResultVisibility,
+  visibleAttempts,
+} from '../../../lib/studentResults';
 import { getExamQuestionsForStudent, type Question, type ExamQuestionGroup } from '../../../lib/questionBankService';
 import {
   CODE_STATE_STUDENT_NOTE,
@@ -443,11 +458,13 @@ export function ExamResultsPage() {
   // the attempt, and re-showing it later would be misleading.
   const saveWarning = (useLocation().state as { saveWarning?: string } | null)?.saveWarning ?? null;
   const { session } = useStudentAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedAttemptId = searchParams.get('attempt');
 
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState('');
   const [assessment, setAssessment] = useState<Assessment | null>(null);
-  const [attempt, setAttempt]       = useState<Attempt | null>(null);
+  const [attempts, setAttempts]     = useState<Attempt[]>([]);
   const [questionMap, setQuestionMap] = useState<Map<string, Question>>(new Map());
   const [groupMap, setGroupMap] = useState<Map<string, ExamQuestionGroup>>(new Map());
   const [reports, setReports] = useState<QuestionReport[]>([]);
@@ -458,18 +475,22 @@ export function ExamResultsPage() {
 
     Promise.all([
       getAssessment(assessmentId),
-      getAttemptByStudentAndAssessment(session.studentId, assessmentId),
+      // Every sitting, not just the newest. It is the same single query the
+      // previous call made — it read them all and threw away everything but
+      // the most recent — so naming an older attempt costs no extra read.
+      getAllAttemptsByStudentAndAssessment(session.studentId, assessmentId),
     ])
-      .then(async ([a, att]) => {
+      .then(async ([a, list]) => {
         if (!a) { setError('Assessment not found.'); return; }
         setAssessment(a);
-        setAttempt(att);
+        setAttempts(list);
 
-        // Load questions for review (only if allowReview) — one server call;
-        // review mode also returns explanations (server re-verifies the
-        // allowReview + finished-attempt gate). Direct question reads are
-        // denied to students by the rules.
-        if (att && a.showResults && a.allowReview) {
+        // Load questions for review (only if review is released to students)
+        // — one server call; review mode also returns explanations (server
+        // re-verifies the gate). Direct question reads are denied to students
+        // by the rules. The paper is per ASSESSMENT, so it is fetched once and
+        // serves whichever sitting the student switches to.
+        if (list.length > 0 && studentResultVisibility(a) === 'review') {
           const allQIds = new Set([
             ...(a.sections ?? []).flatMap((s) => (s.questions ?? []).map((q) => q.questionId)),
             ...(a.questions ?? []).map((q) => q.questionId), // legacy flat shape
@@ -486,18 +507,75 @@ export function ExamResultsPage() {
           paper.groups.forEach((g) => gMap.set(g.id, g));
           setGroupMap(gMap);
         }
-
-        // Load any reports the student raised on this attempt
-        if (att) {
-          try {
-            const list = await listReportsByAttempt(att.id, session.studentId);
-            setReports(list);
-          } catch { /* non-blocking */ }
-        }
       })
       .catch((e) => setError(e.message || 'Failed to load results.'))
       .finally(() => setLoading(false));
   }, [assessmentId, session]);
+
+  // ── Which sitting ──────────────────────────────────────────────
+
+  /**
+   * Every sitting that exists as far as this student is concerned, oldest
+   * first. Soft-deleted attempts drop out so the numbering here says the same
+   * thing as the Results tab and the roster drawer; the `: attempts` fallback
+   * keeps a student whose attempts have ALL been removed looking at their
+   * marks rather than at an empty page — an attempt taken off a roster is
+   * still theirs.
+   */
+  const visible = useMemo(() => {
+    const v = visibleAttempts(attempts);
+    return v.length > 0 ? v : [...attempts];
+  }, [attempts]);
+
+  /**
+   * Attempt numbers, over ALL their sittings rather than only the ones this
+   * page can report on. The Results tab numbers them the same way, and a
+   * student who is told "Attempt 2" on one screen and "Attempt 1" on the next
+   * has been given two different accounts of their own record.
+   */
+  const ordinals = useMemo(
+    () => new Map(visible.map((a, i) => [a.id, i + 1])),
+    [visible],
+  );
+
+  /**
+   * The sittings this page can actually report on: the finished ones. A
+   * sitting still in progress has no marks to show, and defaulting to it —
+   * which is what happened before, because it is the most recent attempt —
+   * rendered a results page with nothing on it for a student who has a
+   * perfectly good finished sitting behind it.
+   */
+  const selectable = useMemo(() => {
+    const finished = finishedAttempts(visible);
+    return finished.length > 0 ? finished : visible;
+  }, [visible]);
+
+  const attempt = useMemo(() => {
+    if (requestedAttemptId) {
+      const found = selectable.find((a) => a.id === requestedAttemptId);
+      if (found) return found;
+    }
+    return selectable.at(-1) ?? null;
+  }, [selectable, requestedAttemptId]);
+
+  /** The link named a sitting this student does not have. Say so, don't 404. */
+  const requestedMissing =
+    requestedAttemptId !== null && attempt !== null && attempt.id !== requestedAttemptId;
+
+  const bestAttemptId = useMemo(() => pickBestAttempt(selectable)?.id ?? null, [selectable]);
+
+  // Reports are per ATTEMPT, so they reload when the student switches sitting
+  // — keyed on the id rather than the object so a refetch of the same list
+  // does not re-run this.
+  useEffect(() => {
+    if (!attempt || !session) { setReports([]); return; }
+    let live = true;
+    listReportsByAttempt(attempt.id, session.studentId)
+      .then((list) => { if (live) setReports(list); })
+      .catch(() => { /* non-blocking */ });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt?.id, session?.studentId]);
 
   // ── Derived ────────────────────────────────────────────────────
 
@@ -516,6 +594,19 @@ export function ExamResultsPage() {
       (sum, t) => sum + (t.timeUsedSeconds ?? 0), 0
     );
   }, [attempt]);
+
+  /**
+   * What this exam releases to students, asked ONCE for the whole page.
+   *
+   * Previously each block re-derived it from the legacy booleans
+   * (`showResults`, `showResults && allowReview`). Those stay in sync with the
+   * audience arrays for anything the builder writes, but the ARRAYS are the
+   * authoritative field and are what the server checks when this page asks for
+   * the paper in review mode — so reading them here is what keeps the client's
+   * three gates and the server's one gate answering the same question.
+   */
+  const visibility     = assessment ? studentResultVisibility(assessment) : 'withheld';
+  const resultsVisible = visibility !== 'withheld';
 
   if (!session) return null;
 
@@ -612,6 +703,31 @@ export function ExamResultsPage() {
           </motion.div>
         )}
 
+        {/* No sitting to report on. Reachable from a stale link or a bookmark
+            to an exam the student never actually took — the page rendered
+            blank below the breadcrumb before, which is indistinguishable from
+            a load that failed silently. */}
+        {!loading && !error && assessment && !attempt && (
+          <motion.div key="none" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="flex flex-col items-center py-16"
+              style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
+              <ClipboardList size={28} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
+              <p className="text-sm mt-4" style={{ color: 'var(--ef-ink)' }}>No results for this assessment</p>
+              <p className="text-xs mt-2 text-center" style={{ color: 'var(--ef-text-muted)', maxWidth: 320, lineHeight: 1.7 }}>
+                There is no recorded sitting of {assessment.title} on your account.
+              </p>
+              <button
+                onClick={() => navigate('/student/assessments')}
+                className="flex items-center gap-1.5 text-xs px-4 py-2 mt-5"
+                style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
+              >
+                <ArrowLeft size={11} strokeWidth={1.5} />
+                Back to assessments
+              </button>
+            </div>
+          </motion.div>
+        )}
+
         {!loading && !error && assessment && attempt && (
           <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
 
@@ -624,6 +740,61 @@ export function ExamResultsPage() {
                 Submitted {attempt.submittedAt ? formatDate(attempt.submittedAt) : ''}
               </p>
             </div>
+
+            {/* The link named a sitting that is not there. Not an error state:
+                the marks below are real and are theirs, they are just not the
+                ones the link asked for — and being told which is which is the
+                difference between a confusing page and an explained one. */}
+            {requestedMissing && (
+              <div className="flex items-start gap-2.5 px-4 py-3 mb-6"
+                style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                <AlertCircle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 1 }} />
+                <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                  That sitting is no longer available. Showing your most recent one instead.
+                </p>
+              </div>
+            )}
+
+            {/* Attempt switcher — only when there is more than one sitting to
+                switch between. It exists because this page can now be linked
+                per-attempt: without it a student who followed a "best" link
+                would have no way back to their latest marks except the browser
+                button. Percentages are printed on the chips only where the
+                exam releases marks to students at all. */}
+            {selectable.length > 1 && (
+              <div className="flex items-center gap-2 flex-wrap mb-6 pb-4"
+                style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
+                  YOUR SITTINGS
+                </span>
+                {selectable.map((s, i) => {
+                  const isActive = s.id === attempt.id;
+                  const isBest   = s.id === bestAttemptId;
+                  const isLatest = i === selectable.length - 1;
+                  const pct = resultsVisible && s.scores ? `${s.scores.percentage}%` : null;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setSearchParams({ attempt: s.id }, { replace: true })}
+                      className="flex items-center gap-1.5 text-xs px-2.5 py-1 transition-opacity hover:opacity-75"
+                      style={{
+                        background: isActive ? 'var(--ef-ink)' : 'var(--ef-surface)',
+                        color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
+                        border: `1px solid ${isActive ? 'var(--ef-ink)' : 'var(--ef-border)'}`,
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                      }}
+                      title={isBest ? 'Your highest-scoring sitting' : undefined}
+                    >
+                      Attempt {ordinals.get(s.id) ?? i + 1}
+                      {pct && <span style={{ opacity: 0.75 }}>· {pct}</span>}
+                      {isBest && <Award size={10} strokeWidth={1.5} />}
+                      {isLatest && !isBest && <span style={{ opacity: 0.6 }}>· latest</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* TERMINATED state */}
             {attempt.status === 'terminated' && (
@@ -640,7 +811,7 @@ export function ExamResultsPage() {
             )}
 
             {/* Results hidden */}
-            {!assessment.showResults && (
+            {!resultsVisible && (
               <div className="flex flex-col items-center py-16 mb-6"
                 style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
                 <CheckCircle2 size={32} strokeWidth={1} style={{ color: 'var(--ef-success-strong)' }} />
@@ -655,7 +826,7 @@ export function ExamResultsPage() {
             )}
 
             {/* Results shown */}
-            {assessment.showResults && attempt.scores && (
+            {resultsVisible && attempt.scores && (
               <>
                 {/* Score card */}
                 <div
@@ -856,7 +1027,7 @@ export function ExamResultsPage() {
             )}
 
             {/* Answer review */}
-            {assessment.showResults && assessment.allowReview && questionMap.size > 0 && (
+            {visibility === 'review' && questionMap.size > 0 && (
               <div className="mb-8">
                 <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
                   ANSWER REVIEW

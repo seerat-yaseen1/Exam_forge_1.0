@@ -373,7 +373,7 @@ export function RuleBuilderPanel({
           style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border-subtle)' }}>
           <Layers size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
           <p style={{ color: 'var(--ef-text-muted)', fontSize: 11, lineHeight: 1.5 }}>
-            No topics pre-assigned — showing full bank. Assign topics in Setup (Step 1) for a focused view.
+            No topics pre-assigned — showing the full bank. Assign topics on the Sections stage for a focused view.
           </p>
         </div>
       )}

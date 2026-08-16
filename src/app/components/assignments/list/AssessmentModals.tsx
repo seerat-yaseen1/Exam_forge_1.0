@@ -12,6 +12,93 @@ import { type Subject } from '../../../../lib/subjectService';
 import { Difficulty, DIFF_COLORS, formatDateTime, formatDateShort, truncate } from '../builder/shared';
 import { StatusBadgeChip, MetaItem } from './ListChrome';
 
+/**
+ * "Start from existing" — pick the exam to copy.
+ *
+ * Duplicating was already the fastest route to a new assessment: structure,
+ * selection rules, grading policy and security tier all come across, and the
+ * options in DuplicateModal decide what does not. It was reachable only from an
+ * unlabelled icon at the end of a row, so it was found by accident or not at
+ * all — and most exams are a variant of one that already exists.
+ *
+ * This is a chooser, nothing more. It hands the picked assessment straight to
+ * DuplicateModal, so there is one duplication path rather than two.
+ */
+export function SourcePickerModal({ assessments, onPick, onCancel }: {
+  assessments: Assessment[];
+  onPick: (a: Assessment) => void;
+  onCancel: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  // Most recent first — the exam an author wants to copy is nearly always one
+  // of the last few they touched.
+  const shown = assessments
+    .filter((a) => !q || a.title.toLowerCase().includes(q) || (a.subject ?? '').toLowerCase().includes(q))
+    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+    .slice(0, 50);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style={{ background: 'rgba(12,12,11,0.45)' }} onClick={onCancel}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full flex flex-col"
+        style={{ maxWidth: 560, maxHeight: '80vh', background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
+        <div className="px-6 py-5 flex-shrink-0" style={{ borderBottom: '1px solid var(--ef-border)' }}>
+          <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>START FROM EXISTING</p>
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+            Pick an assessment to copy. You choose what comes across next.
+          </p>
+          <input
+            type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by title or subject…" autoFocus
+            className="w-full outline-none mt-3"
+            style={{
+              border: '1px solid var(--ef-border)', borderRadius: 2,
+              padding: '8px 10px', fontSize: 13, color: 'var(--ef-ink)',
+              background: 'var(--ef-canvas-raised)',
+            }}
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {shown.length === 0 ? (
+            <p className="text-xs px-6 py-8 text-center" style={{ color: 'var(--ef-text-muted)' }}>
+              Nothing matches “{query}”.
+            </p>
+          ) : shown.map((a) => {
+            const qCount = a.sections?.reduce((n, sec) => n + sec.questions.length, 0) ?? 0;
+            return (
+              <button key={a.id} onClick={() => onPick(a)}
+                className="w-full flex items-center gap-3 px-6 py-3 text-left transition-colors"
+                style={{ borderBottom: '1px solid var(--ef-border-subtle)', cursor: 'pointer' }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas-raised)')}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>{a.title}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
+                    {[a.subject, `${a.sections?.length ?? 0} section${(a.sections?.length ?? 0) === 1 ? '' : 's'}`,
+                      qCount > 0 ? `${qCount} questions` : null].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                <StatusBadgeChip status={a.status} />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-end px-6 py-4 flex-shrink-0"
+          style={{ borderTop: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
+          <button onClick={onCancel} className="text-xs px-4 py-2 transition-opacity hover:opacity-70"
+            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DuplicateModal({ assessment, onConfirm, onCancel, duplicating }: {
   assessment: Assessment;
   onConfirm: (opts: DuplicateOptions, title: string) => void;

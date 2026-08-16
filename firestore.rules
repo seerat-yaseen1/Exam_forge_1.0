@@ -700,6 +700,18 @@ service cloud.firestore {
                                  && request.resource.data.deliveryMode == resource.data.deliveryMode
                                  && request.resource.data.requireCamera == resource.data.requireCamera
                                  && request.resource.data.allowMobile == resource.data.allowMobile
+                                 // allowTablet joined the frozen set when the
+                                 // device permission was split in two. Read via
+                                 // get() with a default on BOTH sides, unlike
+                                 // its neighbours: a document locked before the
+                                 // split has no such field, and a bare
+                                 // `resource.data.allowTablet` on a missing
+                                 // field is an error that fails the whole rule
+                                 // — which would freeze every already-published
+                                 // assessment out of the schedule and access
+                                 // edits the surrounding clause exists to allow.
+                                 && request.resource.data.get('allowTablet', false)
+                                    == resource.data.get('allowTablet', false)
                                  && request.resource.data.requireExtensionCheck == resource.data.requireExtensionCheck
                                  && request.resource.data.autoResume == resource.data.autoResume
                                  && request.resource.data.securityLockedAt == resource.data.securityLockedAt

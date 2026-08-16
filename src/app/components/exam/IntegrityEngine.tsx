@@ -23,6 +23,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { ViolationType } from '../../../lib/submissionService';
+import type { IntegrityProfile } from './integrityProfile';
 import { installPrintGuard } from './printGuard';
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -51,7 +52,31 @@ interface IntegrityEngineProps {
    * Default false: a caller that forgets this gets the strict behaviour.
    */
   allowCodeEditorPaste?: boolean;
+  /**
+   * Which detectors this sitting runs, resolved by the caller from the tier
+   * and the device — see integrityProfile.ts for why three of them cannot run
+   * on a touchscreen without inventing events.
+   *
+   * Threaded in as a prop rather than resolved here, for the same reason
+   * allowCodeEditorPaste is: this component owns detection, not policy, and a
+   * component that reads the tier itself would need the assessment, which it
+   * has deliberately never had.
+   *
+   * Omitted means "run everything", so a caller that forgets it gets today's
+   * behaviour rather than a silently disarmed engine.
+   */
+  profile?: Pick<
+    IntegrityProfile,
+    'viewportGeometry' | 'contextMenuViolation' | 'renderThrottle'
+  >;
 }
+
+/** What an omitted `profile` prop resolves to: every detector armed. */
+const ALL_DETECTORS_ON = {
+  viewportGeometry: true,
+  contextMenuViolation: true,
+  renderThrottle: true,
+} as const;
 
 /**
  * Marks the element a code editor owns, so the clipboard handlers can tell
@@ -345,10 +370,16 @@ export function IntegrityEngine({
   onViolation,
   onFullscreenChange,
   allowCodeEditorPaste = false,
+  profile = ALL_DETECTORS_ON,
 }: IntegrityEngineProps) {
   const activeRef = useRef(active);
   const allowCodePasteRef = useRef(allowCodeEditorPaste);
   allowCodePasteRef.current = allowCodeEditorPaste;
+  // Read through a ref for the same reason every other prop here is: the mount
+  // effect below runs once, with an empty dependency array, so a value it
+  // closes over directly would be frozen at whatever the first render saw.
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
   const onViolationRef = useRef(onViolation);
   const onFullscreenChangeRef = useRef(onFullscreenChange);
 
@@ -523,9 +554,18 @@ export function IntegrityEngine({
     };
 
     // ── 3. Right-click ──────────────────────────────────────────
+    //
+    // preventDefault runs on EVERY device; only the violation is conditional.
+    // The two halves do different jobs: suppressing the menu is a copy
+    // deterrent and is wanted everywhere, while `right_click` is an assertion
+    // about intent — and on a touchscreen this event is a long press, which is
+    // what a student does to read a word. Recording that as an integrity event
+    // puts something in the log an examiner will read as evidence and the
+    // student cannot argue with.
     const handleContextMenu = (e: MouseEvent) => {
       if (!activeRef.current) return;
       e.preventDefault();
+      if (!profileRef.current.contextMenuViolation) return;
       fire('right_click', 'Right-click blocked', 3000);
     };
 
@@ -597,6 +637,14 @@ export function IntegrityEngine({
 
     const geometryInterval = setInterval(() => {
       if (!activeRef.current) return;
+      // Off on touchscreens. Both thresholds are calibrated against desktop
+      // browser chrome, and on a phone they measure the operating system: the
+      // outer/inner gap on Android Chrome already exceeds DEVTOOLS_MIN_DELTA
+      // at rest, so initialViewportBaseline refuses to accept it as ordinary
+      // chrome, zeroes the axis, and this very first tick reports a docked
+      // DevTools panel. Then the on-screen keyboard reports another, and
+      // rotating the phone trips the horizontal half. See integrityProfile.ts.
+      if (!profileRef.current.viewportGeometry) return;
 
       const reading = readViewportGeometry(measureViewport(), baseline);
       if (reading.kind === 'rebaselined') {
@@ -690,6 +738,10 @@ export function IntegrityEngine({
       frames = 0;
       windowStart = now;
       if (!activeRef.current) { stallStreak = 0; return; }
+      // Off on touchscreens. iOS throttles requestAnimationFrame during scroll
+      // momentum while the page is unambiguously focused and visible, which is
+      // what reading a long comprehension passage looks like from in here.
+      if (!profileRef.current.renderThrottle) { stallStreak = 0; return; }
 
       const verdict = nextThrottleStreak(
         stallStreak,

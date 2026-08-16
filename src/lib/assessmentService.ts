@@ -999,7 +999,26 @@ export type Assessment = {
   // applyTierDefaults(). Effective values are re-derived server-side in
   // startExam — never trusted raw from the client.
   autoResume?: boolean;              // normal: auto-clear extension freeze when re-check passes
-  allowMobile?: boolean;             // normal only; high_stake is always desktop-only
+
+  // ── Device permissions — two axes, not one ────────────────────
+  //
+  // These were a single `allowMobile` covering phones AND tablets, which made
+  // one control answer two questions that have different answers. A 13-inch
+  // iPad with a keyboard is a defensible surface for a proctored exam in a way
+  // a 6-inch phone is not, and an authority that wanted the first had to
+  // permit the second.
+  //
+  // Split, with the tiers now reading:
+  //   mock        phones and tablets both welcome (both default true)
+  //   normal      phones LOCKED off; tablets the one opt-in (default off)
+  //   high_stake  both LOCKED off
+  //
+  // The lock on `allowMobile` at 'normal' is new. It was previously an
+  // author-tunable default-off, which meant "normal" did not actually mean
+  // anything about the device — see applyTierDefaults for why that changed and
+  // startExam for how already-published exams are grandfathered through it.
+  allowMobile?: boolean;             // phones. mock only; normal/high_stake locked off
+  allowTablet?: boolean;             // tablets. mock default on; normal opt-in; high_stake locked off
   requireCamera?: boolean;           // mock: off, normal: on, high_stake: locked on
   requireExtensionCheck?: boolean;   // normal/high_stake pre-exam hard block
 
@@ -1069,14 +1088,26 @@ export type AssessmentDraft = Omit<
 // ── Tier-aware security defaults (Phase 0) ────────────────────────
 // Call when the author picks/changes a tier in the builder, then merge the
 // returned fields onto the draft before createAssessment. High-stake LOCKS
-// camera/mobile/extension-check regardless of overrides (the tier sets a
-// floor; the authority may only tune above it). deliveryMode is chosen
+// camera/mobile/tablet/extension-check regardless of overrides (the tier sets
+// a floor; the authority may only tune above it). deliveryMode is chosen
 // separately and defaults to 'standard'.
+//
+// The device axes, read across the three tiers:
+//
+//                  phones            tablets
+//   mock           yes (default)     yes (default)
+//   normal         LOCKED off        opt-in, default off
+//   high_stake     LOCKED off        LOCKED off
+//
+// So "practice runs anywhere; anything that counts runs on a computer, unless
+// the authority deliberately admits tablets" — which is one sentence, and the
+// point of splitting the flag was to make it sayable in one.
 export function applyTierDefaults(
   tier: 'mock' | 'normal' | 'high_stake',
   overrides?: {
     requireCamera?: boolean;
     allowMobile?: boolean;
+    allowTablet?: boolean;
     autoResume?: boolean;
     requireExtensionCheck?: boolean;
     requireSEB?: boolean;
@@ -1085,6 +1116,7 @@ export function applyTierDefaults(
   securityTier: 'mock' | 'normal' | 'high_stake';
   requireCamera: boolean;
   allowMobile: boolean;
+  allowTablet: boolean;
   autoResume: boolean;
   requireExtensionCheck: boolean;
   requireSEB: boolean;
@@ -1094,6 +1126,7 @@ export function applyTierDefaults(
       securityTier: 'mock',
       requireCamera: overrides?.requireCamera ?? false,        // default OFF
       allowMobile: overrides?.allowMobile ?? true,             // phones welcome
+      allowTablet: overrides?.allowTablet ?? true,             // tablets too
       autoResume: overrides?.autoResume ?? true,
       requireExtensionCheck: overrides?.requireExtensionCheck ?? false,
       requireSEB: false,                                       // never for practice
@@ -1104,6 +1137,7 @@ export function applyTierDefaults(
       securityTier: 'high_stake',
       requireCamera: true,           // LOCKED on
       allowMobile: false,            // LOCKED desktop-only
+      allowTablet: false,            // LOCKED desktop-only
       autoResume: overrides?.autoResume ?? false,
       requireExtensionCheck: true,   // LOCKED on
       // Phase 3 / D-10: SEB is the only real lockdown for high-stake, and it
@@ -1124,7 +1158,30 @@ export function applyTierDefaults(
   return {
     securityTier: 'normal',
     requireCamera: overrides?.requireCamera ?? true,           // default ON
-    allowMobile: overrides?.allowMobile ?? false,              // default OFF (D-B)
+    // ── Phones: LOCKED off at this tier ─────────────────────────
+    //
+    // This was `overrides?.allowMobile ?? false` — a default, not a lock, so
+    // an author could tick phones back on and the tier's name stopped
+    // describing anything. Every other proctored control at 'normal' is a
+    // deterrent that at least fires on a phone; the device permission is
+    // different, because a phone defeats the deterrents rather than tripping
+    // them. The viewport detectors measure desktop browser chrome and read an
+    // on-screen keyboard as a docked DevTools panel; fullscreen does not exist
+    // on iOS Safari at all. Permitting phones here meant advertising
+    // proctoring that the device could not carry.
+    //
+    // 'mock' is the tier that means "sit this anywhere", and it stays exactly
+    // that. Tablets remain available here as an opt-in, which is the case this
+    // lock would otherwise have taken with it — see allowTablet below.
+    //
+    // Assessments ALREADY published with allowMobile:true are grandfathered
+    // server-side (see startExam). The lock binds at publish like every other
+    // frozen field; it does not reach back through one and start refusing
+    // candidates mid-window for a device they were told to bring.
+    allowMobile: false,
+    // ── Tablets: the one device opt-in at this tier ──────────────
+    // Off by default, so 'normal' out of the box means a laptop or desktop.
+    allowTablet: overrides?.allowTablet ?? false,
     autoResume: overrides?.autoResume ?? false,
     requireExtensionCheck: overrides?.requireExtensionCheck ?? true,
     requireSEB: overrides?.requireSEB ?? false,                // opt-in only
@@ -1247,7 +1304,7 @@ export async function getAssessmentsVisibleToInstitute(
  * SECURITY: previously the freeze happened when the FIRST STUDENT STARTED, so
  * between publishing and that first start there was a window where staff could
  * downgrade securityTier, deliveryMode, requireCamera, allowMobile,
- * requireExtensionCheck or autoResume — after students had already seen the
+ * allowTablet, requireExtensionCheck or autoResume — after students had seen the
  * briefing describing the requirements they'd face. Publishing is the honest
  * moment to lock: it is when the exam becomes real to students. Once live, the
  * security posture is what was advertised, and nobody can quietly soften it.
@@ -1392,7 +1449,15 @@ export async function duplicateAssessment(
         securityTier: src.securityTier,
         deliveryMode: src.deliveryMode,
         autoResume: src.autoResume,
-        allowMobile: src.allowMobile,
+        // The same argument as requireSEB below, for the same reason. A
+        // 'normal' source published before phones were locked off may carry
+        // allowMobile:true, and startExam grandfathers exactly that document.
+        // Copying the flag forward would make the exemption inheritable — a
+        // new exam, created today, admitting phones to a proctored sitting
+        // because its ancestor did. The grandfather is for sittings already
+        // promised, not a template.
+        allowMobile: src.securityTier === 'mock' ? src.allowMobile : false,
+        allowTablet: src.securityTier === 'high_stake' ? false : src.allowTablet,
         requireCamera: src.requireCamera,
         requireExtensionCheck: src.requireExtensionCheck,
         // Phase 3 — a duplicated high-stake exam must not silently lose its

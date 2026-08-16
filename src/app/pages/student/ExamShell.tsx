@@ -61,6 +61,8 @@ import {
   type ReportReason,
 } from '../../../lib/questionReportService';
 import { IntegrityEngine, codeEditorPasteAllowed } from '../../components/exam/IntegrityEngine';
+import { resolveIntegrityProfile } from '../../components/exam/integrityProfile';
+import { detectDeviceClass, deviceRefusalCopy, type DeviceClass } from '../../../lib/deviceClass';
 import { telemetryEnabled } from '../../../lib/codeTelemetry';
 import { observeTransition, type ExamState } from '../../../lib/examMachine';
 import { answerTypeForEngine } from '../../../lib/itemTypes';
@@ -123,7 +125,9 @@ type BreakState = {
 };
 
 type OverlayKind =
-  | { kind: 'warning'; violationType: ViolationType; warningNumber: 1 | 2 }
+  // Bounded 1-2 on a proctored sitting, where the third raises final_warning.
+  // Practice never reaches that overlay, so its count runs past three.
+  | { kind: 'warning'; violationType: ViolationType; warningNumber: number }
   | { kind: 'final_warning'; violationType: ViolationType }
   | { kind: 'fullscreen_required' }
   | { kind: 'extension_required'; found: string[] }
@@ -1420,6 +1424,26 @@ export function ExamShell() {
   // decision not to record a candidate is made once, here, and cannot be
   // undone further down.
   const telemetryOn = telemetryEnabled(assessment?.securityTier, assessment?.codeTelemetry);
+
+  // ── Which detectors this sitting runs ──────────────────────────
+  //
+  // Resolved from the tier and the DEVICE. Three of the twelve detectors
+  // measure desktop browser chrome and manufacture events on a touchscreen —
+  // see integrityProfile.ts, which explains each one. The tier half decides
+  // whether accumulated warnings end the sitting.
+  //
+  // The device is read once, at mount, rather than tracked: a browser does not
+  // become a phone mid-exam, and re-resolving on every resize would let the
+  // detectors arm and disarm as the on-screen keyboard opens.
+  const [deviceClass] = useState<DeviceClass>(() => detectDeviceClass());
+  const integrityProfile = useMemo(
+    () => resolveIntegrityProfile(assessment?.securityTier, deviceClass),
+    [assessment?.securityTier, deviceClass],
+  );
+  // handleViolation is a useCallback with a near-empty dependency list and
+  // reads this through a ref, like every other value it needs.
+  const integrityProfileRef = useRef(integrityProfile);
+  integrityProfileRef.current = integrityProfile;
 
   const handleCodeTelemetry = useCallback((
     questionId: string,
@@ -3345,6 +3369,32 @@ export function ExamShell() {
     //
     // So the skip now applies ONLY below the threshold, which is the case it
     // was actually written for.
+    //
+    // ── Practice does not terminate ───────────────────────────────
+    //
+    // 'mock' already skips the heartbeat and code telemetry on the grounds
+    // that rehearsal is not assessed. Termination is the same argument, and
+    // this was the one place it had not been applied: a student practising on
+    // a phone, whose on-screen keyboard blurs the window three times, had
+    // their practice paper auto-submitted and marked terminated.
+    //
+    // Everything above this line still runs. The violation fired, the server
+    // counted it, the warning overlay below still appears — so a student
+    // rehearsing under exam conditions still sees exactly what would have
+    // happened, and the faculty member who set the paper can still read the
+    // counters. Only the auto-submit is withheld.
+    if (thresholdReached && !integrityProfileRef.current.warningsTerminate) {
+      // Same overlay the first two warnings raise, which is the point: the
+      // student sees the incident and dismisses it, exactly as they would in a
+      // real exam, and the overlay's own copy tells them why this one did not
+      // end the sitting. fullscreen_exit is skipped here for the same reason as
+      // below — they are already looking at the fullscreen_required overlay.
+      if (type !== 'fullscreen_exit') {
+        setOverlay({ kind: 'warning', violationType: type, warningNumber: newWarningCount });
+      }
+      return;
+    }
+
     if (thresholdReached) {
       // Server-authoritative: finalize the attempt BEFORE the 30-second overlay
       // countdown so killing the tab can't dodge termination. This goes through
@@ -3886,6 +3936,10 @@ export function ExamShell() {
         // security tier: practice allows it, proctored and high-stake do not.
         // A missing tier is a legacy attempt and resolves to the strict side.
         allowCodeEditorPaste={codeEditorPasteAllowed(assessment?.securityTier)}
+        // Which detectors are armed. Resolved above from the tier AND the
+        // device — the three geometry/render detectors cannot run on a
+        // touchscreen without reporting events the device manufactured.
+        profile={integrityProfile}
       />
       <ExtensionWatchdog
         active={isIntegrityActive}
@@ -4257,6 +4311,9 @@ export function ExamShell() {
             key="warning"
             violationType={overlay.violationType}
             warningNumber={overlay.warningNumber}
+            // So the card does not tell a practice candidate their exam is
+            // about to be terminated, which it never was.
+            terminates={integrityProfile.warningsTerminate}
             onDismiss={handleDismissWarning}
           />
         )}

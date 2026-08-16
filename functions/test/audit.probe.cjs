@@ -112,7 +112,13 @@ function seedWorld(opts = {}) {
     sectionGraceSeconds: opts.sectionGraceSeconds,
     deliveryMode: opts.deliveryMode ?? 'standard',
     sectionStartOrder: opts.sectionStartOrder ?? 'sequential',
-    securityTier: 'mock',
+    // 'mock' by default as a CONVENIENCE — it is the tier that needs no
+    // camera, no extension scan and no SEB, so most probes can ignore the
+    // entry gates entirely. Overridable, because that convenience became
+    // load-bearing the moment practice stopped auto-terminating: a probe
+    // about the integrity threshold seeded here would be asserting proctored
+    // behaviour on a practice paper. See P-23 and P-24.
+    securityTier: opts.securityTier ?? 'mock',
     requireCamera: false, allowMobile: true, requireExtensionCheck: false, requireSEB: false,
     securityLockedAt: at(VNOW - min(120)),
     passingScore: 40,
@@ -979,7 +985,11 @@ async function P22() {
 // student's WORK must survive. A gate that refuses the submission would throw
 // away a real paper to punish a signal.
 async function P23() {
-  seedWorld({ maxAttempts: 5 });
+  // 'normal' explicitly, not the fixture's default 'mock'. This probe is about
+  // PROCTORED enforcement, and practice deliberately does not terminate — so
+  // seeded as mock it would assert the opposite of the intended behaviour and
+  // pass only for as long as the exemption did not exist. P-24 covers mock.
+  seedWorld({ maxAttempts: 5, securityTier: 'normal' });
   const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
   const id = started.attempt.id;
 
@@ -1024,7 +1034,7 @@ async function P23() {
     'and the answer written before the threshold was reached is marked');
 
   // ── The control: a student UNDER the threshold submits cleanly ──
-  seedWorld({ maxAttempts: 5 });
+  seedWorld({ maxAttempts: 5, securityTier: 'normal' });
   const clean = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
   const cid = clean.attempt.id;
   for (const type of ['tab_switch', 'focus_loss']) {
@@ -1042,7 +1052,7 @@ async function P23() {
   // A human finalising an attempt can see the integrity log and is deciding in
   // spite of it. Overriding them would flip a deliberately-accepted paper back
   // to terminated on every regrade.
-  seedWorld({ maxAttempts: 5 });
+  seedWorld({ maxAttempts: 5, securityTier: 'normal' });
   const staffCase = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
   const sid = staffCase.attempt.id;
   for (const type of ['tab_switch', 'focus_loss', 'fullscreen_exit']) {
@@ -1055,6 +1065,94 @@ async function P23() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════
+// P-24 · practice records the threshold and does not act on it
+//
+// The counterpart to P-23, and the reason P-23 had to name its tier.
+//
+// 'mock' already skips the heartbeat and code telemetry because rehearsal is
+// not assessed. Termination was the one place that argument had not been
+// applied, and the case it broke is the case mock exists for: a student
+// practising on a phone. An on-screen keyboard blurs the window every time it
+// opens, so three focus_loss events is an ordinary sitting rather than a
+// signal — and the paper came back marked `terminated`.
+//
+// Two halves, and the second is what stops this being "practice ignores
+// integrity": every violation is still counted and still stored. The student
+// (and whoever set the practice paper) can see exactly what would have
+// happened. Only the VERDICT is withheld.
+// ═══════════════════════════════════════════════════════════════════
+async function P24() {
+  seedWorld({ maxAttempts: 5, securityTier: 'mock' });
+  const started = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const id = started.attempt.id;
+
+  eq(A(id).securityConfig.tier, 'mock',
+    'the sitting is frozen as practice, which is what grading reads');
+
+  // Well past the threshold — five, not three, so this cannot pass by
+  // accident on an off-by-one.
+  // The clock is advanced between events because integrityLog.violations is
+  // an arrayUnion, and arrayUnion de-duplicates structurally: two focus_loss
+  // entries written at the same virtual instant carry the identical object and
+  // collapse into one. That is real behaviour and harmless in production,
+  // where no two violations share a millisecond — but under a frozen virtual
+  // clock it would make this probe assert three events where five were sent.
+  const verdicts = [];
+  for (const type of ['tab_switch', 'focus_loss', 'fullscreen_exit', 'focus_loss', 'tab_switch']) {
+    verdicts.push(await call(fns.logViolation, { attemptId: id, type }, STUDENT()));
+    advance(sec(5));
+  }
+
+  // ── Half one: it is all still recorded ───────────────────────
+  const log = A(id).integrityLog;
+  eq((log.tabSwitches ?? 0) + (log.focusLosses ?? 0) + (log.fullscreenExits ?? 0), 5,
+    'every warning is counted, exactly as on a proctored sitting');
+  eq(log.violations.length, 5,
+    'and every event is stored with its detail');
+  eq(verdicts[verdicts.length - 1].warnings, 5,
+    'the callable reports the true count back to the client');
+
+  // ── Half two: nothing acts on it ─────────────────────────────
+  check(verdicts.every((v) => v.thresholdReached === false),
+    'but the server never tells a practice sitting it has hit the threshold',
+    `thresholdReached=${JSON.stringify(verdicts.map((v) => v.thresholdReached))}`);
+
+  const att = A(id);
+  att.answers.q1 = { type: 'mcq', value: ['alpha'], sectionId: 'SA', answeredAt: at(VNOW) };
+  DB.seed('attempts', id, att);
+  advance(min(1));
+  await call(fns.gradeAttempt, { attemptId: id, reason: 'manual' }, STUDENT());
+
+  const done = A(id);
+  eq(done.status, 'submitted',
+    'and a practice paper over the threshold submits normally');
+  check(done.integrityLog.autoTerminated !== true,
+    'it is not flagged as auto-terminated');
+  check(done.integrityLog.thresholdEnforcedServerSide === undefined,
+    'and not flagged as server-enforced either');
+  check(done.scores && typeof done.scores.total === 'number',
+    'the practice paper is still marked, so the rehearsal is worth something',
+    `scores=${JSON.stringify(done.scores)}`);
+
+  // ── The control: the SAME five violations on a proctored tier ──
+  //
+  // Same events, same order, same everything but the tier. If this half ever
+  // goes green alongside the half above, the exemption has leaked out of mock.
+  seedWorld({ maxAttempts: 5, securityTier: 'normal' });
+  const proctored = await call(fns.startExam, { assessmentId: 'asmt_1' }, STUDENT());
+  const pid = proctored.attempt.id;
+  for (const type of ['tab_switch', 'focus_loss', 'fullscreen_exit', 'focus_loss', 'tab_switch']) {
+    await call(fns.logViolation, { attemptId: pid, type }, STUDENT());
+    advance(sec(5));
+  }
+  advance(min(1));
+  await call(fns.gradeAttempt, { attemptId: pid, reason: 'manual' }, STUDENT());
+  eq(A(pid).status, 'terminated',
+    'the identical sitting at "normal" is still terminated — the exemption is the tier, nothing else');
+}
+
 const SCENARIOS = [
   ['P-01', 'a recorded penalty survives the next section advance', P01],
   ['P-02', 'submitSection cannot re-arm the answer-write lock', P02],
@@ -1079,6 +1177,7 @@ const SCENARIOS = [
   ['P-21', 'the paper sat is the paper marked', P21],
   ['P-22', 'live timing edits do not reach a sitting student', P22],
   ['P-23', 'the integrity threshold is enforced server-side', P23],
+  ['P-24', 'practice records the threshold and does not act on it', P24],
 ];
 
 (async () => {

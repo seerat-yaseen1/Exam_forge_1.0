@@ -5021,10 +5021,27 @@ export const gradeAttempt = onCall<GradeAttemptData>(
     // a reviewed, deliberately-accepted paper flip back to terminated on every
     // regrade, and would take a judgement call away from the only party
     // qualified to make it.
+    //
+    // ── WHY PRACTICE IS EXEMPT ────────────────────────────────────
+    //
+    // 'mock' already skips the heartbeat and code telemetry because rehearsal
+    // is not assessed. Termination is the same argument. A student practising
+    // on a phone — which mock exists to permit — blurs the window every time
+    // the on-screen keyboard opens, and three of those finalised their
+    // practice paper as `terminated`.
+    //
+    // The counters still fill and the violations are still stored, so the
+    // rehearsal still shows the student (and the faculty member who set it)
+    // exactly what would have happened. Only the verdict is withheld. Read
+    // from the attempt's FROZEN securityConfig, like every other decision at
+    // grade time, so re-tiering the assessment afterwards cannot retroactively
+    // terminate a paper that was sat as practice.
+    const isPractice = (attempt.securityConfig as { tier?: string } | undefined)?.tier === 'mock';
     const integrityWarnings = countIntegrityWarnings(attempt.integrityLog);
     const overIntegrityThreshold =
       isStudentOwner
       && !isGrader
+      && !isPractice
       && reason !== 'terminated'
       && integrityWarnings >= MAX_INTEGRITY_WARNINGS_S;
 
@@ -6245,6 +6262,16 @@ interface StudentAssessmentSummary {
   sections?: unknown;
   blockedStudents: string[];
   attemptOverrides: Record<string, number>;
+  // ── What device may sit this, and how seriously ────────────────
+  // Added so the assessment CARD can say "needs a computer" and disable its
+  // own Start button. Without these the list could not know, and a student on
+  // a phone learned the answer three screens later — after the briefing, after
+  // granting camera, from a raw server error. None of it is sensitive: the
+  // briefing reads the same fields straight off the assessment document, and
+  // the tier is printed on the briefing page in words.
+  securityTier?: unknown;
+  allowMobile?: unknown;
+  allowTablet?: unknown;
 }
 
 /**
@@ -6297,7 +6324,45 @@ function sanitizeAssessmentForStudent(
     sections: a.sections ?? [],
     blockedStudents: blocked.includes(studentId) ? [studentId] : [],
     attemptOverrides: own === undefined ? {} : { [studentId]: own },
+    // The EFFECTIVE device policy, resolved here rather than shipped raw, so
+    // the card and startExam answer the same question. A card reading the
+    // stored allowMobile would tell a student on a phone to go ahead with a
+    // 'normal' exam that stores true from before the lock — and then the
+    // server would refuse them, which is the disagreement this whole change
+    // is about. Only the grandfather clause makes that document's true
+    // survive, and it is reproduced exactly.
+    securityTier: a.securityTier,
+    allowMobile: effectiveAllowMobileForCard(a),
+    allowTablet: effectiveAllowTabletForCard(a),
   };
+}
+
+/**
+ * The device policy as startExam will derive it — the read-only half of the
+ * rules in the gate, kept next to the projection that needs them.
+ *
+ * These duplicate logic that startExam owns, which is a cost worth naming: two
+ * places computing one fact is exactly the failure mode DEPLOY.md §5 warns
+ * about. They are separate because startExam's version also throws, freezes a
+ * config and reads request headers, none of which a list projection may do.
+ * Any change to the tier's device rules must touch both, and the frontend's
+ * applyTierDefaults as well.
+ */
+function effectiveAllowMobileForCard(a: Record<string, unknown>): boolean {
+  const tier = a.securityTier as string | undefined;
+  if (tier === undefined) return true;               // legacy: nothing was ever gated
+  if (tier === 'mock') return (a.allowMobile as boolean | undefined) ?? true;
+  if (tier === 'high_stake') return false;
+  // 'normal' — locked off, but for a document published before the lock.
+  return a.allowMobile === true && !!a.securityLockedAt;
+}
+
+function effectiveAllowTabletForCard(a: Record<string, unknown>): boolean {
+  const tier = a.securityTier as string | undefined;
+  if (tier === undefined) return true;
+  if (tier === 'mock') return (a.allowTablet as boolean | undefined) ?? true;
+  if (tier === 'high_stake') return false;
+  return (a.allowTablet as boolean | undefined) ?? (a.allowMobile as boolean | undefined) ?? false;
 }
 
 export const getStudentAssessments = onCall(
@@ -8109,6 +8174,81 @@ export const registerSession = onCall<RegisterSessionData>(
   },
 );
 
+// ══════════════════════════════════════════════════════════════════
+// DEVICE CLASS — the server's own reading
+// ══════════════════════════════════════════════════════════════════
+//
+// Server twin of src/lib/deviceClass.ts, and deliberately NOT a port of it.
+// The client classifies from things only a running page can see —
+// maxTouchPoints, matchMedia, screen geometry — and none of those reach a
+// Cloud Function. What does reach it is the User-Agent header, which the
+// page's own JavaScript did not author. That is the entire value here: it is
+// a second, independent opinion, not a better one.
+//
+// It is weaker than the client's in the ordinary case (it cannot see an iPad
+// reporting a Macintosh UA, because the header IS the Macintosh UA) and
+// stronger in the one that matters (a student who edits the callable payload
+// does not thereby edit the header their browser sent). The two are combined
+// by taking the stricter answer, so each covers the other's blind spot.
+
+type DeviceClassS = 'desktop' | 'mobile' | 'tablet';
+
+const DEVICE_CLASSES_S: readonly string[] = ['desktop', 'mobile', 'tablet'];
+
+/** Accept a client-supplied device class, or nothing. Never throws. */
+function normaliseDeviceClass(v: unknown): DeviceClassS | null {
+  return typeof v === 'string' && DEVICE_CLASSES_S.includes(v) ? (v as DeviceClassS) : null;
+}
+
+/**
+ * Classify from the User-Agent header alone.
+ *
+ * Returns null when the header names nothing recognisable — absence of
+ * evidence, which must not be read as evidence of a desktop. A null here
+ * leaves the client's claim standing rather than overriding it, because a
+ * header this function cannot parse is a browser it has never seen, not a
+ * candidate doing something.
+ */
+function deviceClassFromUserAgent(ua: string): DeviceClassS | null {
+  if (!ua) return null;
+  // Tablet first: an Android tablet UA contains "Android" but not "Mobile",
+  // and iPadOS <13 says "iPad" outright. Order matters because the mobile
+  // patterns below would otherwise claim some of these.
+  if (/iPad|Tablet|PlayBook|Silk/i.test(ua)) return 'tablet';
+  if (/Android/i.test(ua) && !/Mobile/i.test(ua)) return 'tablet';
+  if (/Mobi|Android|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) return 'mobile';
+  if (/Macintosh|Windows|X11|CrOS|Linux/i.test(ua)) return 'desktop';
+  return null;
+}
+
+/**
+ * Combine the two readings by taking the one that permits least.
+ *
+ * A desktop claim contradicted by a phone header becomes a phone; a phone
+ * claim "contradicted" by a desktop header stays a phone. Both directions are
+ * the same rule — the client can always make its own sitting stricter, and
+ * can never make it looser.
+ */
+function strictestDeviceClass(
+  claimed: DeviceClassS,
+  observed: DeviceClassS | null,
+): DeviceClassS {
+  if (observed === null) return claimed;
+  const rank: Record<DeviceClassS, number> = { desktop: 0, tablet: 1, mobile: 2 };
+  return rank[observed] > rank[claimed] ? observed : claimed;
+}
+
+/** The device policy, in one place, so the gate and the freeze cannot drift. */
+function deviceClassAllowed(
+  cls: DeviceClassS,
+  allowMobile: boolean,
+  allowTablet: boolean,
+): boolean {
+  if (cls === 'mobile') return allowMobile;
+  if (cls === 'tablet') return allowTablet;
+  return true;
+}
+
 /** Counter field per violation type. Server twin of VIOLATION_COUNTER in
  *  src/lib/submissionService.ts — KEEP IN SYNC. */
 const VIOLATION_COUNTER_S: Record<string, string> = {
@@ -8296,6 +8436,9 @@ export const logViolation = onCall<LogViolationData>(
       // student was actually served — see sanitiseViolationContext.
       questionOrder?: Record<string, string[]>;
       sectionIds?: string[];
+      // The frozen contract, read only for its tier: practice never reports a
+      // threshold as reached. See the return value below.
+      securityConfig?: { tier?: string };
     };
     if (att.studentId !== studentId) {
       throw new HttpsError('permission-denied', 'Not your attempt.');
@@ -8343,7 +8486,13 @@ export const logViolation = onCall<LogViolationData>(
     return {
       ok: true,
       warnings,
-      thresholdReached: warnings >= MAX_INTEGRITY_WARNINGS_S,
+      // Practice records warnings and terminates on none of them, so the
+      // server never tells a mock sitting that it has reached the threshold.
+      // The shell checks its own resolved profile too — this is the half that
+      // matters, because the shell treats a `thresholdReached: true` from here
+      // as authoritative over its own count and would terminate on it.
+      thresholdReached:
+        att.securityConfig?.tier !== 'mock' && warnings >= MAX_INTEGRITY_WARNINGS_S,
     };
   },
 );
@@ -9445,6 +9594,7 @@ export const startExam = onCall<StartExamData>(
       deliveryMode?: 'standard' | 'linear' | 'adaptive';
       requireCamera?: boolean;
       allowMobile?: boolean;
+      allowTablet?: boolean;
       autoResume?: boolean;
       requireExtensionCheck?: boolean;
       requireSEB?: boolean;
@@ -9478,11 +9628,48 @@ export const startExam = onCall<StartExamData>(
       : tier === 'high_stake'
         ? true
         : (a.requireCamera ?? (tier === 'mock' ? false : true));
+    // ── Device policy, re-derived server-side ─────────────────────
+    //
+    // Two axes now, where there was one. `allowMobile` used to cover phones
+    // AND tablets, so an authority that wanted to admit a 13-inch iPad had to
+    // admit a 6-inch phone with it.
+    //
+    // Phones are LOCKED off at 'normal' as well as 'high_stake'. Previously
+    // 'normal' merely defaulted them off and an author could tick them back
+    // on, which meant the tier's name said nothing about the device — while
+    // the tier's proctoring, which is the thing the name is promising, does
+    // not survive a phone. Fullscreen does not exist on iOS Safari; the
+    // viewport detectors measure desktop browser chrome and read an on-screen
+    // keyboard as a docked DevTools panel. 'mock' is the tier that means "sit
+    // this anywhere", and it still does.
+    //
+    // GRANDFATHERED, on the same terms as requireSEB below: an assessment
+    // whose security config was already frozen (securityLockedAt) and which
+    // explicitly stored allowMobile:true keeps admitting phones. Tightening
+    // those would start refusing candidates mid-window over a device their
+    // institution told them to bring — the exact failure the SEB grandfather
+    // was written to avoid, and the lock binds at publish like every other
+    // frozen field rather than reaching back through one.
+    const mobileGrandfathered =
+      tier === 'normal' && a.allowMobile === true && !!a.securityLockedAt;
     const allowMobile = isLegacy
       ? true
       : tier === 'high_stake'
         ? false
-        : (a.allowMobile ?? false);
+        : tier === 'mock'
+          ? (a.allowMobile ?? true)
+          : mobileGrandfathered;   // 'normal' — locked off but for a pre-lock opt-in
+    const allowTablet = isLegacy
+      ? true
+      : tier === 'high_stake'
+        ? false
+        : tier === 'mock'
+          ? (a.allowTablet ?? true)
+          // 'normal' — the one device permission an authority still holds.
+          // A pre-split document has no allowTablet field; it does have the
+          // old combined allowMobile, and a 'normal' exam that admitted
+          // phones certainly admitted tablets, so that is what it inherits.
+          : (a.allowTablet ?? a.allowMobile ?? false);
     const requireExtensionCheck = isLegacy
       ? false
       : tier === 'high_stake'
@@ -9531,14 +9718,45 @@ export const startExam = onCall<StartExamData>(
     }
 
     // ── Device policy gate (Phase 0) ──────────────────────────────
+    //
     // Runs before the idempotency check, so a resuming student re-passes it
-    // (safe: same device on resume). allowMobile is re-derived server-side;
-    // high-stake and any allowMobile=false exam refuses non-desktop.
-    const deviceClass = request.data?.deviceClass ?? 'desktop';
-    if (!allowMobile && deviceClass !== 'desktop') {
+    // (safe: same device on resume).
+    //
+    // The device class used to be read straight off `request.data`, which made
+    // the whole gate a client assertion: one line in a browser console set it
+    // to 'desktop' and a high-stake exam opened on a phone. The claim is still
+    // accepted — the client sees things the header cannot, and the honest path
+    // should stay the fast one — but it is now CORROBORATED against the
+    // request's own User-Agent, which the page's JavaScript does not author.
+    // Where the two disagree, the stricter reading wins and the disagreement
+    // is recorded on the attempt for a human to weigh.
+    //
+    // This is not spoof-proof either: a proxy or a rebuilt client can set any
+    // header it likes. It closes the gap between "trivially bypassable from
+    // the address bar" and "requires tooling", which is where every other
+    // deterrent in this product already sits. Real device assurance for
+    // high-stake exams is SEB's config-key check, not this.
+    const claimedDeviceClass = normaliseDeviceClass(request.data?.deviceClass) ?? 'desktop';
+    const headerDeviceClass = deviceClassFromUserAgent(
+      String(request.rawRequest?.headers?.['user-agent'] ?? ''),
+    );
+    const deviceClass = strictestDeviceClass(claimedDeviceClass, headerDeviceClass);
+    const deviceClaimMismatch =
+      headerDeviceClass !== null && headerDeviceClass !== claimedDeviceClass
+        ? { claimed: claimedDeviceClass, observed: headerDeviceClass }
+        : null;
+
+    if (!deviceClassAllowed(deviceClass, allowMobile, allowTablet)) {
+      // The suffix names WHICH device was refused, so the client can say
+      // "phones are not permitted, use a tablet or a computer" instead of a
+      // single sentence that is wrong half the time. Kept machine-readable in
+      // the same shape as SEB_* and ATTEMPT_LIMIT_EXCEEDED, which the shell
+      // already knows how to translate.
       throw new HttpsError(
         'failed-precondition',
-        'DEVICE_NOT_ALLOWED: this exam must be taken on a desktop or laptop.',
+        `DEVICE_NOT_ALLOWED:${deviceClass}: this exam must be taken on a ${
+          allowTablet ? 'computer or tablet' : 'computer'
+        }.`,
       );
     }
     // ── Camera-required gate (Phase 0) ────────────────────────────
@@ -9855,7 +10073,13 @@ export const startExam = onCall<StartExamData>(
         totalViolations: 0, violations: [], autoTerminated: false,
       },
       cameraDeclined: cameraDeclined ?? false,
+      // The SERVER's conclusion, not the client's claim — see the gate above.
       deviceClass,
+      // Written only when the claim and the header disagreed, so its presence
+      // is the whole signal. Recorded rather than acted on: iOS "Request
+      // Desktop Website" produces exactly this and is a normal accessibility
+      // choice, so it is a thing for an invigilator to weigh, not a refusal.
+      ...(deviceClaimMismatch ? { deviceClaimMismatch } : {}),
       // The machine baseline. Written at creation and never rewritten — every
       // later heartbeat is compared against THIS, server-side.
       ...(sanitiseFingerprint(request.data?.fingerprint)
@@ -9873,6 +10097,7 @@ export const startExam = onCall<StartExamData>(
         requireCamera,
         requireExtensionCheck,
         allowMobile,
+        allowTablet,
         autoResume: effectiveAutoResume,
         // Phase 3 — frozen with the rest of the contract, so toggling the
         // assessment mid-exam cannot change what this attempt must satisfy.

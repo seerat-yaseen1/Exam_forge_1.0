@@ -21,6 +21,7 @@ describe('applyTierDefaults — high_stake locks', () => {
   const asked = {
     requireCamera: false,
     allowMobile: true,
+    allowTablet: true,
     requireExtensionCheck: false,
     requireSEB: false,
   };
@@ -29,6 +30,7 @@ describe('applyTierDefaults — high_stake locks', () => {
     expect(applyTierDefaults('high_stake', asked)).toMatchObject({
       requireCamera: true,
       allowMobile: false,
+      allowTablet: false,
       requireExtensionCheck: true,
       requireSEB: true,
     });
@@ -64,7 +66,6 @@ describe('applyTierDefaults — the other tiers stay tunable', () => {
       requireCamera: true, allowMobile: false, requireExtensionCheck: true,
     });
     expect(applyTierDefaults('normal', { requireCamera: false }).requireCamera).toBe(false);
-    expect(applyTierDefaults('normal', { allowMobile: true }).allowMobile).toBe(true);
   });
 
   it('mock refuses SEB even when asked for it', () => {
@@ -78,6 +79,71 @@ describe('applyTierDefaults — the other tiers stay tunable', () => {
     expect(applyTierDefaults('mock')).toMatchObject({
       requireCamera: false, allowMobile: true, requireExtensionCheck: false,
     });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// THE DEVICE AXES
+// ══════════════════════════════════════════════════════════════════
+//
+// `allowMobile` used to cover phones AND tablets, and at 'normal' it was a
+// default rather than a lock. Both halves of that changed together, because
+// each one is what made the other tolerable: phones can be locked off at
+// 'normal' precisely because tablets survived as a separate opt-in, and
+// tablets can be opt-in precisely because they are no longer the same switch
+// as a phone.
+
+describe('applyTierDefaults — phones', () => {
+  it('locks phones off at normal, whatever the author asks for', () => {
+    // The lock is the change. It was `?? false` — an author could tick phones
+    // back on, and then "normal" said nothing about the device at all. The
+    // deterrents this tier advertises do not survive a phone: fullscreen does
+    // not exist on iOS Safari, and the viewport detectors read an on-screen
+    // keyboard as a docked DevTools panel.
+    expect(applyTierDefaults('normal').allowMobile).toBe(false);
+    expect(applyTierDefaults('normal', { allowMobile: true }).allowMobile).toBe(false);
+    expect(applyTierDefaults('normal', { allowMobile: false }).allowMobile).toBe(false);
+  });
+
+  it('locks phones off at high_stake', () => {
+    expect(applyTierDefaults('high_stake', { allowMobile: true }).allowMobile).toBe(false);
+  });
+
+  it('leaves phones welcome at mock, in both directions', () => {
+    // Practice is the tier that means "sit this anywhere", and it has to keep
+    // meaning that or the phone-locking above just removes a capability.
+    expect(applyTierDefaults('mock').allowMobile).toBe(true);
+    expect(applyTierDefaults('mock', { allowMobile: false }).allowMobile).toBe(false);
+  });
+});
+
+describe('applyTierDefaults — tablets', () => {
+  it('is normal\'s one device opt-in, off by default', () => {
+    // Off by default so 'normal' out of the box still means a computer;
+    // available so an authority that has thought about a 13-inch iPad with a
+    // keyboard is not forced to permit a 6-inch phone to get it.
+    expect(applyTierDefaults('normal').allowTablet).toBe(false);
+    expect(applyTierDefaults('normal', { allowTablet: true }).allowTablet).toBe(true);
+    expect(applyTierDefaults('normal', { allowTablet: false }).allowTablet).toBe(false);
+  });
+
+  it('locks tablets off at high_stake', () => {
+    expect(applyTierDefaults('high_stake', { allowTablet: true }).allowTablet).toBe(false);
+  });
+
+  it('leaves tablets welcome at mock', () => {
+    expect(applyTierDefaults('mock').allowTablet).toBe(true);
+    expect(applyTierDefaults('mock', { allowTablet: false }).allowTablet).toBe(false);
+  });
+
+  it('never permits a tablet where it refuses a phone at the same tier', () => {
+    // Not a rule the code states anywhere, so it is asserted here: a tablet is
+    // the more permissive device of the two, and a tier that allowed phones
+    // while refusing tablets would be incoherent rather than strict.
+    for (const tier of ['mock', 'normal', 'high_stake'] as const) {
+      const d = applyTierDefaults(tier);
+      if (d.allowMobile) expect(d.allowTablet).toBe(true);
+    }
   });
 });
 

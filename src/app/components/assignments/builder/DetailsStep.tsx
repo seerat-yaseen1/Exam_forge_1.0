@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
-import { X, Loader2, ClipboardList, Clock, Calendar, AlertTriangle, CheckCircle2, FileText, Timer, Award, ChevronRight, AlertCircle, Shuffle, BarChart2, BookOpen, Shield, Upload } from 'lucide-react';
+import { X, Loader2, ClipboardList, Clock, Calendar, AlertTriangle, CheckCircle2, FileText, Timer, Award, ChevronRight, AlertCircle, Shuffle, BarChart2, BookOpen, Shield, Upload, Smartphone, Tablet } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
 import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection, type AssessmentGradingConfig, type GradingPolicy, type PenaltyType, type QuestionSelectionRule } from '../../../../lib/assessmentService';
 import { deriveShowResultsTo, deriveAllowReviewTo, DEFAULT_SHOW_RESULTS_TO, DEFAULT_ALLOW_REVIEW_TO, type VisibilityAudience } from '../../../../lib/visibility';
@@ -221,6 +221,10 @@ export function DetailsStep({
   const [securityTier, setSecurityTier] = useState<'mock' | 'normal' | 'high_stake'>(
     assessment?.securityTier ?? 'normal',
   );
+  // Tablets — the only device permission an author can move, and only at
+  // 'normal'. Seeded from the saved assessment so an edit-save does not
+  // silently revoke a deliberate opt-in, exactly as requireSEB is below.
+  const [allowTablet, setAllowTablet] = useState<boolean>(assessment?.allowTablet ?? false);
   // ── Phase 3 (Stage 4): SEB authority toggle + config file link ───
   // requireSEB was "default ON for high_stake, disable-able". D-10 makes it
   // LOCKED at high_stake, so the toggle is only an authority decision on
@@ -588,12 +592,14 @@ export function DetailsStep({
         allowReviewTo,
         // ── Security tier + delivery mode (Phase 0 wiring) ──────────
         // applyTierDefaults enforces the per-tier floor (high-stake locks
-        // camera on / mobile off / extension on). deliveryMode is chosen
-        // independently. These flow through createAssessment's ...draft spread.
+        // camera on / phones off / tablets off / extension on; normal locks
+        // phones off). deliveryMode is chosen independently. These flow
+        // through createAssessment's ...draft spread.
         // Phase 3 (Stage 4): requireSEB now carries the builder's toggle
         // instead of being reset to the tier default on every save; mock
-        // still forces it false inside applyTierDefaults.
-        ...applyTierDefaults(securityTier, { requireSEB }),
+        // still forces it false inside applyTierDefaults. allowTablet rides
+        // the same path — passed as an override, refused at high_stake.
+        ...applyTierDefaults(securityTier, { requireSEB, allowTablet }),
         sebConfigFileUrl: sebConfigFileUrl.trim(),
         deliveryMode,
         status: targetStatus,
@@ -1088,12 +1094,47 @@ export function DetailsStep({
                 </div>
                 <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   {securityTier === 'mock'
-                    ? 'Practice mode — no proctoring. Camera off, phones allowed.'
+                    ? 'Practice mode — no proctoring. Camera off, phones and tablets allowed.'
                     : securityTier === 'high_stake'
-                      ? 'Maximum security — camera, desktop-only and Safe Exam Browser all required.'
-                      : 'Deterrent proctoring — camera on by default, extension check, desktop by default.'}
+                      ? 'Maximum security — camera, computer-only and Safe Exam Browser all required.'
+                      : 'Deterrent proctoring — camera on by default, extension check, computer-only. Tablets can be allowed below.'}
                 </p>
               </div>
+
+              {/* ── Device permissions ────────────────────────────────────
+                  Phones are LOCKED off at both proctored tiers, so the only
+                  device control an author has here is tablets. It is shown at
+                  'normal' alone: at 'mock' both are already permitted and at
+                  'high_stake' both are locked, so rendering a toggle that
+                  cannot move would be a control in name only.
+
+                  The row above it states the phone rule rather than offering
+                  it, because an author reading "Tablets" with nothing said
+                  about phones will reasonably assume phones are covered too. */}
+              {securityTier !== 'mock' && (
+                <div className="space-y-2">
+                  <SettingsToggle
+                    icon={<Smartphone size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
+                    label="Allow phones"
+                    hint="Phones cannot carry this tier's proctoring — there is no fullscreen on iOS Safari, and an on-screen keyboard looks identical to a docked developer panel. Choose Mock for an exam students may sit on a phone."
+                    value={false}
+                    onChange={() => {}}
+                    locked
+                    lockReason={securityTier === 'high_stake' ? 'Never at high-stake' : 'Never at normal'}
+                  />
+                  <SettingsToggle
+                    icon={<Tablet size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
+                    label="Allow tablets"
+                    hint={securityTier === 'high_stake'
+                      ? 'Tablets are refused at high-stake along with phones. Choose Normal to admit them.'
+                      : 'Permits iPads and Android tablets. They carry more of the proctoring than a phone does, but still no fullscreen on iPadOS Safari.'}
+                    value={securityTier === 'high_stake' ? false : allowTablet}
+                    onChange={setAllowTablet}
+                    locked={securityTier === 'high_stake'}
+                    lockReason={securityTier === 'high_stake' ? 'Never at high-stake' : undefined}
+                  />
+                </div>
+              )}
 
               {/* ── Phase 3 (Stage 4): Safe Exam Browser ──────────────────
                   D-10: LOCKED ON at high-stake, joining camera / desktop-only /

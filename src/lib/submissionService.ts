@@ -22,6 +22,7 @@ import type { TelemetryEvent } from './codeTelemetry';
 import type { CodeVerdictDoc } from './codeVerdictView';
 import type { AnswerDiscriminant } from './itemTypes';
 import { getDeviceFingerprint, type DeviceFingerprint } from './deviceFingerprint';
+import { readDevice, type DeviceClass } from './deviceClass';
 import type { CorrectPair, Question } from './questionBankService';
 import { ensureSebToken, forceRefreshSebToken } from './assessmentService';
 
@@ -92,27 +93,13 @@ function now(): string {
 // Honest-majority signal only — NOT spoof-proof. Real high-stake device
 // assurance comes from Safe Exam Browser's header check in Phase 3. Used by
 // startAttempt to report the client's device class; the server enforces the
-// device policy against it.
-function detectDeviceClass(): 'desktop' | 'mobile' | 'tablet' {
-  if (typeof navigator === 'undefined') return 'desktop';
-  const ua = navigator.userAgent || '';
-  const touch =
-    typeof window !== 'undefined' &&
-    ('ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0);
-  const minSide =
-    typeof window !== 'undefined' && window.screen
-      ? Math.min(window.screen.width ?? 0, window.screen.height ?? 0)
-      : 0;
-  const isTablet =
-    /iPad|Tablet|PlayBook|Silk/i.test(ua) ||
-    (touch && minSide >= 600 && /Android/i.test(ua) && !/Mobile/i.test(ua));
-  const isMobile =
-    /Mobi|Android.*Mobile|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) ||
-    (touch && minSide > 0 && minSide < 600);
-  if (isTablet) return 'tablet';
-  if (isMobile) return 'mobile';
-  return 'desktop';
-}
+// device policy against it and corroborates the claim against the request's
+// own User-Agent header, so this being client-side is not the whole story.
+//
+// The detector itself lives in src/lib/deviceClass.ts. It used to be a private
+// function here, called once, at startAttempt — which meant the answer did not
+// exist until after the student had finished the briefing and pressed Enter.
+// The assessment card and the briefing gate both need it earlier.
 
 function removeUndefined<T extends Record<string, any>>(obj: T): T {
   const out: any = {};
@@ -527,9 +514,21 @@ export type Attempt = {
   sessionConflictAt?: string;  // ISO; when a second device attempted to join
 
   // ── Device class (Phase 0) ────────────────────────────────────
-  // Reported by the client at start, validated server-side in startExam.
-  // High-stake (and any exam with allowMobile=false) refuses non-desktop.
-  deviceClass?: 'desktop' | 'mobile' | 'tablet';
+  // Reported by the client at start and RE-DERIVED server-side in startExam
+  // from the request's own User-Agent header. What is stored here is the
+  // server's conclusion, not the client's claim — a browser console setting
+  // deviceClass:'desktop' no longer decides anything.
+  deviceClass?: DeviceClass;
+  /**
+   * The client claimed one device and the request header said another.
+   *
+   * Written only when the two disagree, so its presence is the whole signal.
+   * The honest case for this is narrow — iOS "Request Desktop Website" makes a
+   * browser lie about itself for reasons that have nothing to do with an exam
+   * — which is exactly why it is recorded for a human to weigh rather than
+   * acted on. Nothing in the product refuses an attempt because of it.
+   */
+  deviceClaimMismatch?: { claimed: DeviceClass; observed: DeviceClass } | null;
 
   // ── Frozen security snapshot (Phase 0) ────────────────────────
   // The effective security config copied from the assessment AT START, so
@@ -811,7 +810,15 @@ export async function startAttempt(params: {
       shuffleQuestions: boolean;
       sectionStartOrder?: 'sequential' | 'random' | 'student_choice';
       cameraDeclined?: boolean;
-      deviceClass?: 'desktop' | 'mobile' | 'tablet';
+      deviceClass?: DeviceClass;
+      /**
+       * Set when the browser claimed a desktop OS and something unforgeable
+       * disagreed — an iPad reporting a Macintosh user-agent, say. The server
+       * reaches the same conclusion independently from the request header;
+       * this is the client's own account of it, kept so the two can be
+       * compared rather than so either can be trusted.
+       */
+      deviceClaimContradicted?: boolean;
       fingerprint?: DeviceFingerprint;
       sebToken?: string;
       sessionId?: string;
@@ -866,7 +873,13 @@ export async function startAttempt(params: {
         shuffleQuestions: params.shuffleQuestions,
         sectionStartOrder: params.sectionStartOrder,
         cameraDeclined: params.cameraDeclined,
-        deviceClass: detectDeviceClass(),
+        ...(() => {
+          const d = readDevice();
+          return {
+            deviceClass: d.deviceClass,
+            deviceClaimContradicted: d.signals.desktopClaimContradicted,
+          };
+        })(),
         // The baseline machine. Sent once, at the only moment it can be
         // established — every later report is compared against what the server
         // stored here, not against anything the client keeps.
@@ -1413,6 +1426,16 @@ export const MAX_INTEGRITY_WARNINGS = 3;
  */
 export async function enforceIntegrityThreshold(attempt: Attempt): Promise<boolean> {
   if (attempt.status !== 'in_progress') return false;
+  // Practice does not terminate, so it must not terminate HERE either.
+  //
+  // Without this, the relaxation in ExamShell would have been cosmetic: a mock
+  // attempt would sail past three warnings during the sitting and then be
+  // finalised as 'terminated' the moment the student reopened it. Read from
+  // the attempt's own frozen securityConfig rather than the live assessment —
+  // the contract the student actually sat under is the one that decides, and
+  // it is the only copy available to a resume that has not loaded the
+  // assessment yet.
+  if (attempt.securityConfig?.tier === 'mock') return false;
   const log = attempt.integrityLog;
   if (!log) return false;
   const warningCount =

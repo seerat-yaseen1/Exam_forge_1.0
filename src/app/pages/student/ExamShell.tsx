@@ -18,7 +18,7 @@ import { useParams, useNavigate, useLocation } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Loader2, ChevronLeft, ChevronRight, AlertTriangle,
-  CheckCircle2, Shield, Send, Layers, Flag, MonitorSmartphone, Clock,
+  CheckCircle2, Shield, Send, Layers, Flag, MonitorSmartphone, Clock, LayoutGrid,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, getSEBPublicInfo, type Assessment, type AssessmentSection, type SectionBreak, getSebToken, setSebRequired } from '../../../lib/assessmentService';
@@ -61,6 +61,10 @@ import {
   type ReportReason,
 } from '../../../lib/questionReportService';
 import { IntegrityEngine, codeEditorPasteAllowed } from '../../components/exam/IntegrityEngine';
+import { resolveIntegrityProfile } from '../../components/exam/integrityProfile';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { Sheet, SheetContent, SheetTitle } from '../../components/ui/sheet';
+import { detectDeviceClass, deviceRefusalCopy, type DeviceClass } from '../../../lib/deviceClass';
 import { telemetryEnabled } from '../../../lib/codeTelemetry';
 import { observeTransition, type ExamState } from '../../../lib/examMachine';
 import { answerTypeForEngine } from '../../../lib/itemTypes';
@@ -123,7 +127,9 @@ type BreakState = {
 };
 
 type OverlayKind =
-  | { kind: 'warning'; violationType: ViolationType; warningNumber: 1 | 2 }
+  // Bounded 1-2 on a proctored sitting, where the third raises final_warning.
+  // Practice never reaches that overlay, so its count runs past three.
+  | { kind: 'warning'; violationType: ViolationType; warningNumber: number }
   | { kind: 'final_warning'; violationType: ViolationType }
   | { kind: 'fullscreen_required' }
   | { kind: 'extension_required'; found: string[] }
@@ -170,6 +176,34 @@ function sebFriendlyMessage(raw: string): string | null {
   }
   if (raw.includes('SEB_REQUIRED')) {
     return 'This exam must be taken in Safe Exam Browser. Open the exam from the .seb configuration file provided by your institute, then resume — your progress is saved.';
+  }
+  return null;
+}
+
+// ── Device / camera error translation ─────────────────────────────
+//
+// Same job sebFriendlyMessage does, for the two other machine-readable
+// refusals startExam can throw. Both used to fall through to the generic
+// branch, so a student on a phone reached the end of the briefing and was
+// shown the literal string
+//
+//   DEVICE_NOT_ALLOWED:mobile: this exam must be taken on a computer.
+//
+// — server vocabulary, colons and all. The briefing now refuses the device
+// before an attempt is ever requested, so this is the fallback for the paths
+// that skip it: a direct link to /shell, and a resume from a different device
+// than the one the sitting began on.
+function startExamFriendlyMessage(raw: string): string | null {
+  if (raw.startsWith('DEVICE_NOT_ALLOWED')) {
+    // The server names which device it refused, so the advice can name the
+    // one that would work instead of guessing.
+    const cls: DeviceClass = raw.includes(':tablet') ? 'tablet' : 'mobile';
+    const allowsTablet = /tablet/i.test(raw.split(':').slice(2).join(':'));
+    const copy = deviceRefusalCopy(cls, { allowMobile: false, allowTablet: allowsTablet });
+    return `${copy.title}. ${copy.detail}`;
+  }
+  if (raw.startsWith('CAMERA_REQUIRED')) {
+    return 'This exam requires your camera. Allow camera access for this site in your browser settings, then reload this page and try again.';
   }
   return null;
 }
@@ -821,14 +855,26 @@ function SubmitConfirmModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(12,12,11,0.5)' }}
     >
       <motion.div
         initial={{ scale: 0.96, opacity: 0, y: 10 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.96, opacity: 0 }}
-        style={{ width: 400, background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
+        // `width: 400` was a hard width, not a maximum: on a 390px phone the
+        // card ran off both edges and took the confirm button with it. The
+        // vertical bound matters for the same reason — this dialog grows with
+        // the unanswered/unseen warnings, and the longest version of it is
+        // taller than a phone in landscape.
+        className="w-full overflow-y-auto"
+        style={{
+          maxWidth: 400,
+          maxHeight: 'calc(100dvh - 32px)',
+          background: 'var(--ef-surface)',
+          border: '1px solid var(--ef-border)',
+          borderRadius: 3,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
@@ -1421,6 +1467,41 @@ export function ExamShell() {
   // undone further down.
   const telemetryOn = telemetryEnabled(assessment?.securityTier, assessment?.codeTelemetry);
 
+  // ── Which detectors this sitting runs ──────────────────────────
+  //
+  // Resolved from the tier and the DEVICE. Three of the twelve detectors
+  // measure desktop browser chrome and manufacture events on a touchscreen —
+  // see integrityProfile.ts, which explains each one. The tier half decides
+  // whether accumulated warnings end the sitting.
+  //
+  // The device is read once, at mount, rather than tracked: a browser does not
+  // become a phone mid-exam, and re-resolving on every resize would let the
+  // detectors arm and disarm as the on-screen keyboard opens.
+  const [deviceClass] = useState<DeviceClass>(() => detectDeviceClass());
+  /**
+   * Layout only — deliberately NOT the same question as `deviceClass`.
+   *
+   * deviceClass decides who may sit the exam and which detectors are honest;
+   * it is read once and never changes. This tracks the VIEWPORT, which changes
+   * when a phone rotates or a tablet is put in a split-screen pane, and only
+   * decides where things are drawn. Conflating them would either re-arm the
+   * detectors on rotation or lay out a narrow window as though it were wide.
+   */
+  const isMobile = useIsMobile();
+  /** Whether the phone status strip has a save state worth showing. */
+  const saveIndicatorVisible = !saveWarning
+    && Object.values(localAnswers).some((a) => !isAnswerEmpty(a));
+  /** Question navigator, as a bottom sheet. Phones only. */
+  const [navSheetOpen, setNavSheetOpen] = useState(false);
+  const integrityProfile = useMemo(
+    () => resolveIntegrityProfile(assessment?.securityTier, deviceClass),
+    [assessment?.securityTier, deviceClass],
+  );
+  // handleViolation is a useCallback with a near-empty dependency list and
+  // reads this through a ref, like every other value it needs.
+  const integrityProfileRef = useRef(integrityProfile);
+  integrityProfileRef.current = integrityProfile;
+
   const handleCodeTelemetry = useCallback((
     questionId: string,
     events: unknown[],
@@ -1891,6 +1972,10 @@ export function ExamShell() {
         } else if (msg.startsWith('ATTEMPT_LIMIT_EXCEEDED')) {
           const [, used, max] = msg.split(':');
           setErrorMsg(`Attempt limit reached — you have used ${used} of ${max} allowed attempts for this assessment.`);
+        } else if (startExamFriendlyMessage(msg)) {
+          // Device and camera refusals. Fail-closed must never mean
+          // fail-cryptic — see the note on the helper.
+          setErrorMsg(startExamFriendlyMessage(msg)!);
         } else {
           setErrorMsg(msg || 'Failed to start exam.');
         }
@@ -3345,6 +3430,32 @@ export function ExamShell() {
     //
     // So the skip now applies ONLY below the threshold, which is the case it
     // was actually written for.
+    //
+    // ── Practice does not terminate ───────────────────────────────
+    //
+    // 'mock' already skips the heartbeat and code telemetry on the grounds
+    // that rehearsal is not assessed. Termination is the same argument, and
+    // this was the one place it had not been applied: a student practising on
+    // a phone, whose on-screen keyboard blurs the window three times, had
+    // their practice paper auto-submitted and marked terminated.
+    //
+    // Everything above this line still runs. The violation fired, the server
+    // counted it, the warning overlay below still appears — so a student
+    // rehearsing under exam conditions still sees exactly what would have
+    // happened, and the faculty member who set the paper can still read the
+    // counters. Only the auto-submit is withheld.
+    if (thresholdReached && !integrityProfileRef.current.warningsTerminate) {
+      // Same overlay the first two warnings raise, which is the point: the
+      // student sees the incident and dismisses it, exactly as they would in a
+      // real exam, and the overlay's own copy tells them why this one did not
+      // end the sitting. fullscreen_exit is skipped here for the same reason as
+      // below — they are already looking at the fullscreen_required overlay.
+      if (type !== 'fullscreen_exit') {
+        setOverlay({ kind: 'warning', violationType: type, warningNumber: newWarningCount });
+      }
+      return;
+    }
+
     if (thresholdReached) {
       // Server-authoritative: finalize the attempt BEFORE the 30-second overlay
       // countdown so killing the tab can't dodge termination. This goes through
@@ -3886,36 +3997,58 @@ export function ExamShell() {
         // security tier: practice allows it, proctored and high-stake do not.
         // A missing tier is a legacy attempt and resolves to the strict side.
         allowCodeEditorPaste={codeEditorPasteAllowed(assessment?.securityTier)}
+        // Which detectors are armed. Resolved above from the tier AND the
+        // device — the three geometry/render detectors cannot run on a
+        // touchscreen without reporting events the device manufactured.
+        profile={integrityProfile}
       />
       <ExtensionWatchdog
         active={isIntegrityActive}
         onViolation={(type, detail) => handleViolation(type, detail)}
       />
 
-      {/* ── TOP BAR ── */}
+      {/* ── TOP BAR ──
+          Seven things competed for one 52px row: section name, progress dots,
+          save state, two clocks, a multi-device badge, the violation counter
+          and Submit. On a 390px phone that is roughly 55px each, so everything
+          either wrapped into an unreadable pile or was pushed off the edge.
+
+          On a phone the bar keeps only what a candidate glances up to check —
+          where they are and how long is left — and everything else moves: the
+          save indicator and violation counter to a slim status strip below,
+          Submit down into the thumb-reachable action bar. Nothing is dropped.
+          Desktop is unchanged. */}
       <div
-        className="flex items-center gap-4 px-5 py-2.5 flex-shrink-0"
+        className="flex items-center gap-2 md:gap-4 px-3 md:px-5 py-2.5 flex-shrink-0"
         style={{
           background: 'var(--ef-surface)',
           borderBottom: '1px solid var(--ef-border)',
           height: 52,
+          // Clears the notch when the phone is held in landscape, which is how
+          // a student reads a wide table or a code snippet.
+          paddingLeft: 'max(12px, env(safe-area-inset-left))',
+          paddingRight: 'max(12px, env(safe-area-inset-right))',
         }}
       >
         {/* Section name + progress */}
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <Layers size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-            <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Layers size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
+            {/* truncate, not wrap: a long section title must not push the
+                clock off the row — the clock is the thing they came to read. */}
+            <span className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>
               {currentSection.name}
             </span>
             {totalSections > 1 && (
-              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+              <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }}>
                 ({currentSectionIdx + 1}/{totalSections})
               </span>
             )}
           </div>
-          {/* Section progress dots */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Section progress dots. Hidden on phones: the "(2/4)" beside the
+              section name says the same thing in less space, and the dots were
+              the first casualty when the row overflowed anyway. */}
+          <div className="hidden md:flex items-center gap-1 flex-shrink-0">
             {effectiveSections.map((_, idx) => (
               <div
                 key={idx}
@@ -3955,19 +4088,24 @@ export function ExamShell() {
           then cannot recall what it said has lost the only notice they were
           given, and this is the one message an invigilator needs to see.
         */}
+        {/* Stays in the top bar on EVERY device, unlike the ordinary save
+            indicator below. This one says answers may be lost, which outranks
+            the clock — the status strip is for things a student can glance at
+            and ignore, and this is not one of them. */}
         {saveWarning && (
           <div
             className="flex items-center gap-1.5 flex-shrink-0 px-2 py-1"
             style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}
           >
             <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
-            <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>Some answers unsent</span>
+            <span className="text-xs hidden sm:inline" style={{ color: 'var(--ef-danger)' }}>Some answers unsent</span>
+            <span className="text-xs sm:hidden" style={{ color: 'var(--ef-danger)' }}>Unsent</span>
           </div>
         )}
 
         {!saveWarning && Object.values(localAnswers).some((a) => !isAnswerEmpty(a)) && (
           <div
-            className="flex items-center gap-1.5 flex-shrink-0"
+            className="hidden md:flex items-center gap-1.5 flex-shrink-0"
             title={unsavedCount > 0
               ? 'Still sending some answers to the server. You can keep working — this usually clears within a few seconds.'
               : 'Every answer you have given is stored on the server.'}
@@ -4014,18 +4152,22 @@ export function ExamShell() {
             />
           </TimerChip>
         )}
-        {/* Session conflict badge */}
+        {/* Session conflict badge. The label is dropped on the narrowest
+            screens but the icon stays: a second device on this attempt raises
+            a full overlay anyway, so this is a reminder, not the notice. */}
         {hasConflict && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5"
+          <div className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 flex-shrink-0"
             style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
             <MonitorSmartphone size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
-            <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>Multi-device</span>
+            <span className="text-xs hidden sm:inline" style={{ color: 'var(--ef-danger)' }}>Multi-device</span>
           </div>
         )}
 
-        {/* Violation indicator */}
+        {/* Violation indicator. Moves to the status strip on phones — see the
+            note there. It reappears in the top bar the moment it turns amber,
+            because a count that is about to matter is worth the space. */}
         <div
-          className="flex items-center gap-1.5 px-3 py-1.5"
+          className={`${warningCount >= 1 ? 'flex' : 'hidden md:flex'} items-center gap-1.5 px-2 md:px-3 py-1.5 flex-shrink-0`}
           style={{
             background: warningCount >= 2 ? 'var(--ef-danger-bg)' : warningCount >= 1 ? '#FEF9EC' : 'var(--ef-canvas)',
             border: `1px solid ${warningCount >= 2 ? 'var(--ef-danger-border)' : warningCount >= 1 ? 'var(--ef-warning-border)' : 'var(--ef-border)'}`,
@@ -4051,11 +4193,18 @@ export function ExamShell() {
             commits the current answer, so showing both offered the student two
             visually identical buttons for one intent and no way to tell which
             was safe. One control, in the place they are already looking. */}
+        {/*
+            Hidden on phones, where it lives in the bottom action bar instead.
+            Two reasons, and the second is the one that matters: the top-right
+            corner of a phone is the hardest place on the screen to reach
+            one-handed, and it is directly beside the browser's own controls —
+            a mis-tap there closes the tab rather than opening a dialog.
+        */}
         {!(isLinear && isLastQuestion) && (
         <button
           onClick={() => setShowSubmitModal(true)}
           disabled={shellStatus !== 'ready'}
-          className="flex items-center gap-1.5 text-xs px-4 py-2"
+          className="hidden md:flex items-center gap-1.5 text-xs px-4 py-2 flex-shrink-0"
           style={{
             background: 'var(--ef-ink)', color: 'var(--ef-surface)',
             borderRadius: 2, cursor: 'pointer',
@@ -4067,11 +4216,55 @@ export function ExamShell() {
         )}
       </div>
 
+      {/* ── STATUS STRIP (phones only) ──
+          Catches what the top bar shed. A slim, quiet row rather than a second
+          full bar: these are things a student checks once in a while and
+          ignores the rest of the time, which is exactly what they were in the
+          desktop top bar too. Rendering nothing when there is nothing to say
+          keeps a phone's scarce vertical space for the question. */}
+      {isMobile && (saveIndicatorVisible || warningCount === 0) && (
+        <div
+          className="flex items-center justify-between gap-3 px-3 py-1 flex-shrink-0"
+          style={{
+            background: 'var(--ef-canvas)',
+            borderBottom: '1px solid var(--ef-border-subtle)',
+          }}
+        >
+          {saveIndicatorVisible ? (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div style={{
+                width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                background: unsavedCount > 0 ? '#B7791F' : 'var(--ef-success-strong)',
+              }} />
+              <span
+                className="text-xs truncate"
+                style={{ color: unsavedCount > 0 ? '#B7791F' : 'var(--ef-text-muted)' }}
+              >
+                {unsavedCount > 0 ? `${unsavedCount} unsaved` : 'All answers saved'}
+              </span>
+            </div>
+          ) : <span />}
+          {warningCount === 0 && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Shield size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
+                {warningCount}/{MAX_WARNINGS}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── BODY ── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── LEFT SIDEBAR ── */}
-        <div className="flex flex-col" style={{ width: 200, flexShrink: 0 }}>
+        {/* ── LEFT SIDEBAR ──
+            Hidden below md. 200px of a 390px viewport is half the screen given
+            to navigation, leaving the question itself in a column narrower
+            than the navigator. On a phone the navigator moves into a bottom
+            sheet opened from the action bar — see QuestionSheet below — and
+            the webcam becomes a floating thumbnail. */}
+        <div className="hidden md:flex flex-col" style={{ width: 200, flexShrink: 0 }}>
           {/* Question navigator */}
           <div className="flex-1 overflow-hidden">
             {!isLinear && (
@@ -4089,8 +4282,45 @@ export function ExamShell() {
             )}
           </div>
 
-          {/* Webcam PiP */}
-          <div className="flex-shrink-0 p-3" style={{ borderTop: '1px solid var(--ef-border)' }}>
+          {/* Webcam PiP.
+              Gated on !isMobile in JS, not by the parent's `hidden md:flex`.
+              CSS would keep this instance MOUNTED on a phone, and the floating
+              copy below would then be a SECOND FaceMonitor — two getUserMedia
+              streams, two face-detection loops, and two independent violation
+              reporters double-counting every absence. Exactly one instance
+              must exist; which one depends on the viewport. */}
+          {!isMobile && (
+            <div className="flex-shrink-0 p-3" style={{ borderTop: '1px solid var(--ef-border)' }}>
+              <FaceMonitor
+                enabled={cameraGranted}
+                active={isIntegrityActive}
+                onViolation={handleViolation}
+                onStateChange={setFaceDetectionState}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ── WEBCAM, on a phone ──
+            Floating, small, above the action bar. It has to stay MOUNTED, not
+            just visible — FaceMonitor owns the getUserMedia stream and the
+            face-detection loop, so unmounting it on a narrow screen would
+            silently switch off proctoring for anyone whose institution
+            admitted a tablet. Positioned bottom-left, opposite the thumb. */}
+        {isMobile && cameraGranted && (
+          <div
+            className="fixed z-30"
+            style={{
+              left: 10,
+              bottom: 'calc(72px + env(safe-area-inset-bottom))',
+              width: 84,
+              borderRadius: 3,
+              overflow: 'hidden',
+              border: '1px solid var(--ef-border)',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.12)',
+              background: 'var(--ef-surface)',
+            }}
+          >
             <FaceMonitor
               enabled={cameraGranted}
               active={isIntegrityActive}
@@ -4098,10 +4328,10 @@ export function ExamShell() {
               onStateChange={setFaceDetectionState}
             />
           </div>
-        </div>
+        )}
 
         {/* ── MAIN QUESTION AREA ── */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--ef-surface)' }}>
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--ef-surface)' }}>
 
           {currentQuestion ? (
             <>
@@ -4124,30 +4354,56 @@ export function ExamShell() {
                 />
               </div>
 
-              {/* Bottom navigation bar */}
+              {/* ── Bottom navigation bar ──
+                  The thumb zone, and on a phone it carries more than it does
+                  on a desktop: the question navigator opens from here, and
+                  Submit lives here instead of the top-right corner.
+
+                  env(safe-area-inset-bottom) is what keeps it clear of the
+                  iPhone home indicator — without it the last few pixels of
+                  these buttons are not tappable, and the one that suffers is
+                  whichever sits lowest, which is all of them. It needs
+                  viewport-fit=cover in index.html to resolve to anything. */}
               <div
-                className="flex items-center justify-between px-8 py-4 flex-shrink-0"
-                style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
+                className="flex items-center justify-between gap-2 px-3 md:px-8 py-3 md:py-4 flex-shrink-0"
+                style={{
+                  borderTop: '1px solid var(--ef-border-subtle)',
+                  background: 'var(--ef-surface)',
+                  paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+                  paddingLeft: 'max(12px, env(safe-area-inset-left))',
+                  paddingRight: 'max(12px, env(safe-area-inset-right))',
+                }}
               >
                 {isLinear ? (
-                  <span className="flex items-center gap-1.5 text-xs px-1 py-2"
+                  <span className="flex items-center gap-1.5 text-xs px-1 py-2 min-w-0"
                     style={{ color: 'var(--ef-text-muted)' }}>
-                    <Shield size={12} strokeWidth={1.5} />
-                    Answers are final — you cannot return to a question
+                    <Shield size={12} strokeWidth={1.5} className="flex-shrink-0" />
+                    <span className="hidden sm:inline">Answers are final — you cannot return to a question</span>
+                    <span className="sm:hidden">Answers are final</span>
                   </span>
                 ) : (
                 <button
                   onClick={() => setCurrentQIdx((i) => Math.max(0, i - 1))}
                   disabled={currentQIdx === 0}
-                  className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity"
+                  className="flex items-center justify-center gap-1.5 text-xs px-3 md:px-4 transition-opacity flex-shrink-0"
                   style={{
                     border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2,
                     opacity: currentQIdx === 0 ? 0.3 : 1,
                     cursor: currentQIdx === 0 ? 'not-allowed' : 'pointer',
+                    // 44px is the smallest reliable touch target; the old
+                    // py-2 gave about 30. Applied at every width because a
+                    // taller button costs a desktop nothing.
+                    minHeight: 44,
+                    // Kills the ~300ms tap delay mobile browsers hold in case
+                    // the tap turns into a double-tap zoom. On a timed exam
+                    // that delay reads as the button not having worked, and
+                    // the student taps again — which is how a candidate skips
+                    // two questions instead of one.
+                    touchAction: 'manipulation',
                   }}
                 >
                   <ChevronLeft size={13} strokeWidth={1.5} />
-                  Previous
+                  <span className="hidden sm:inline">Previous</span>
                 </button>
                 )}
 
@@ -4177,6 +4433,39 @@ export function ExamShell() {
                         <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>{linearError}</span>
                       )}
                     </>
+                  ) : isMobile ? (
+                    /* ── The navigator, on a phone ──
+                       The desktop's 200px chip grid does not fit, but what it
+                       does is not optional: it is the only way to jump to a
+                       question, and the only place a student can see which
+                       ones they have left. So it becomes a bottom sheet, and
+                       this is the handle — placed centre-bottom, the easiest
+                       point on a phone to reach with either thumb.
+
+                       The label carries the same two facts the grid did at a
+                       glance: where you are, and how much is left. */
+                    <button
+                      onClick={() => setNavSheetOpen(true)}
+                      className="flex items-center justify-center gap-1.5 text-xs px-3"
+                      style={{
+                        minHeight: 44,
+                        border: '1px solid var(--ef-border)',
+                        background: 'var(--ef-canvas)',
+                        color: 'var(--ef-text-subtle)',
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                        touchAction: 'manipulation',
+                      }}
+                      aria-label="Open question list"
+                    >
+                      <LayoutGrid size={13} strokeWidth={1.5} />
+                      <span>
+                        {currentQIdx + 1}/{currentSectionQIds.length}
+                      </span>
+                      <span style={{ color: 'var(--ef-text-muted)' }}>
+                        · {unansweredInSection} left
+                      </span>
+                    </button>
                   ) : (
                     <>
                       <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
@@ -4205,15 +4494,27 @@ export function ExamShell() {
                       }
                       setShowSubmitModal(true);
                     }}
-                    className="flex items-center gap-1.5 text-xs px-4 py-2"
-                    style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}
+                    className="flex items-center justify-center gap-1.5 text-xs px-3 md:px-4 flex-shrink-0"
+                    style={{
+                      background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2,
+                      cursor: 'pointer', minHeight: 44, touchAction: 'manipulation',
+                    }}
                   >
                     <Send size={11} strokeWidth={1.5} />
-                    {isLinear && linearAdvancing
-                      ? 'Saving…'
-                      : isLinear && !linearSectionComplete
-                        ? (isLastSection ? 'Save & submit exam' : 'Save & submit section')
-                        : (isLastSection ? 'Submit exam' : `Submit ${currentSection.name}`)}
+                    {/* The section name is dropped on a phone, not the verb.
+                        "Submit Reading Comprehension II" does not fit beside
+                        two other controls on a 390px row, and the word that
+                        carries the meaning is the first one. */}
+                    <span className="hidden md:inline">
+                      {isLinear && linearAdvancing
+                        ? 'Saving…'
+                        : isLinear && !linearSectionComplete
+                          ? (isLastSection ? 'Save & submit exam' : 'Save & submit section')
+                          : (isLastSection ? 'Submit exam' : `Submit ${currentSection.name}`)}
+                    </span>
+                    <span className="md:hidden">
+                      {isLinear && linearAdvancing ? 'Saving…' : 'Submit'}
+                    </span>
                   </button>
                 ) : (
                   <button
@@ -4221,7 +4522,7 @@ export function ExamShell() {
                       ? handleLinearNext
                       : () => setCurrentQIdx((i) => Math.min(currentSectionQIds.length - 1, i + 1))}
                     disabled={isLinear && linearAdvancing}
-                    className="flex items-center gap-1.5 text-xs px-4 py-2"
+                    className="flex items-center justify-center gap-1.5 text-xs px-3 md:px-4 flex-shrink-0"
                     style={{
                       border: '1px solid var(--ef-border)',
                       color: isLinear ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
@@ -4229,6 +4530,8 @@ export function ExamShell() {
                       borderRadius: 2,
                       opacity: isLinear && linearAdvancing ? 0.5 : 1,
                       cursor: isLinear && linearAdvancing ? 'default' : 'pointer',
+                      minHeight: 44,
+                      touchAction: 'manipulation',
                     }}
                   >
                     {isLinear
@@ -4250,6 +4553,55 @@ export function ExamShell() {
         </div>
       </div>
 
+      {/* ── QUESTION NAVIGATOR, as a bottom sheet (phones only) ──
+          The desktop sidebar's chip grid, reachable from the action bar. A
+          sheet from the BOTTOM rather than the side because that is where the
+          hand already is, and because a side sheet on a 390px screen is a
+          full-screen takeover with extra steps.
+
+          Rendered only when open, and only on a phone: the sidebar copy is
+          still mounted (CSS-hidden) at wider widths, and two live navigators
+          would double the work every answer change causes.
+
+          Selecting a question closes the sheet. Leaving it open over the
+          question they just chose would hide the thing they asked to see. */}
+      {isMobile && !isLinear && (
+        <Sheet open={navSheetOpen} onOpenChange={setNavSheetOpen}>
+          <SheetContent
+            side="bottom"
+            className="p-0"
+            style={{
+              maxHeight: '70vh',
+              paddingBottom: 'env(safe-area-inset-bottom)',
+              background: 'var(--ef-surface)',
+            }}
+          >
+            {/* Radix requires a title on every dialog and warns without one.
+                Visually hidden rather than rendered: the navigator's own
+                header already names the section on screen, so a second
+                heading would be duplication for sighted users and its absence
+                would leave a screen reader announcing an unnamed dialog. */}
+            <SheetTitle className="sr-only">Questions in this section</SheetTitle>
+            <div className="overflow-y-auto" style={{ maxHeight: '70vh' }}>
+              <QuestionNavigator
+                questionIds={currentSectionQIds}
+                answers={localAnswers}
+                currentQIdx={currentQIdx}
+                onSelectQ={(idx) => { setCurrentQIdx(idx); setNavSheetOpen(false); }}
+                sectionName={currentSection.name}
+                totalSections={totalSections}
+                currentSectionNumber={currentSectionIdx + 1}
+                groupIdByQuestion={groupIdByQuestion}
+                groupKindById={groupKindById}
+                // Fills the sheet instead of holding the sidebar's 200px, and
+                // widens the chip grid to suit — see the prop's own note.
+                layout="sheet"
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+
       {/* ── VIOLATION OVERLAYS ── */}
       <AnimatePresence>
         {overlay?.kind === 'warning' && (
@@ -4257,6 +4609,9 @@ export function ExamShell() {
             key="warning"
             violationType={overlay.violationType}
             warningNumber={overlay.warningNumber}
+            // So the card does not tell a practice candidate their exam is
+            // about to be terminated, which it never was.
+            terminates={integrityProfile.warningsTerminate}
             onDismiss={handleDismissWarning}
           />
         )}

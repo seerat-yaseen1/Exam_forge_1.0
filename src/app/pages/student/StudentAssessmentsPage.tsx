@@ -6,9 +6,15 @@ import {
   Clock, Calendar, CheckCircle2, XCircle, PlayCircle,
   Timer, Layers, BookOpen, Award,
   ChevronRight, RotateCcw, Eye, ArrowRight, BarChart2,
-  Shield,
+  Shield, Laptop, GraduationCap,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
+import {
+  detectDeviceClass,
+  deviceAllowed,
+  effectiveDevicePolicy,
+  type DeviceClass,
+} from '../../../lib/deviceClass';
 import { formatDate, formatDayMonthTime as formatDateTime } from '../../../lib/dateFormat';
 import {
   getAssessmentsForStudent,
@@ -217,11 +223,18 @@ function AssessmentCard({
   nowDate,
   index,
   studentId,
+  deviceClass,
 }: {
   data: AssessmentWithMeta;
   nowDate: Date;
   index: number;
   studentId: string;
+  /**
+   * Resolved once by the page and passed down, not detected per card. Reading
+   * the browser in every row would do the same work N times for one answer
+   * that cannot differ between them.
+   */
+  deviceClass: DeviceClass;
 }) {
   const { assessment: a, attempt, allAttempts, availability } = data;
   const [hovered, setHovered] = useState(false);
@@ -251,6 +264,19 @@ function AssessmentCard({
     return { used: finished, total: effMax };
   }, [a, availability, allAttempts, studentId]);
 
+  // ── Can this device sit this exam? ─────────────────────────────
+  //
+  // Asked HERE, on the card, and not only at the briefing. A student scanning
+  // their list on a phone should be able to see at a glance which of these
+  // they can start now and which need them to go and find a computer —
+  // planning information, before they have committed to anything. Learning it
+  // one exam at a time, after opening each briefing, is the same fact
+  // delivered too late to be useful.
+  const deviceOk = useMemo(
+    () => deviceAllowed(deviceClass, effectiveDevicePolicy(a)),
+    [deviceClass, a],
+  );
+
   // ── Action button ──────────────────────────────────────────────
   const action = useMemo((): { label: string; icon: React.ReactNode; variant: 'primary' | 'secondary' } | null => {
     if (availability === 'upcoming') return null;
@@ -258,6 +284,19 @@ function AssessmentCard({
     // Primary: if the student can still open the test, that takes priority over
     // any "view results" action — even after a successful submission with slots left.
     if (canStillOpen(a, availability, allAttempts, studentId)) {
+      // The wrong device does not remove the action, it changes it. A dead
+      // greyed-out button would be the honest thing to show and the least
+      // useful: the student still needs the exam's address to open it on a
+      // computer, and the briefing is where they can copy it. So the card
+      // sends them somewhere that helps rather than stopping them at a
+      // control that does nothing.
+      if (!deviceOk) {
+        return {
+          label: 'Needs a computer',
+          icon: <Laptop size={12} strokeWidth={1.5} />,
+          variant: 'secondary',
+        };
+      }
       const hasInProgress = allAttempts.some((at) => at.status === 'in_progress');
       if (hasInProgress) {
         return { label: 'Resume', icon: <RotateCcw size={12} strokeWidth={1.5} />, variant: 'primary' };
@@ -281,7 +320,7 @@ function AssessmentCard({
     }
 
     return null;
-  }, [a, attempt, allAttempts, availability, studentId]);
+  }, [a, attempt, allAttempts, availability, studentId, deviceOk]);
 
   // ── Why the student can't act (only when there's no primary action) ──
   // Surfaces an explicit reason next to the status badge so the absence of a
@@ -348,7 +387,64 @@ function AssessmentCard({
           <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.5, flex: 1 }}>
             {a.title || <em style={{ color: 'var(--ef-text-muted)' }}>Untitled Assessment</em>}
           </p>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+            {/* ── What kind of exam this is ────────────────────────────
+                The security tier reached the student nowhere at all before
+                this: not on the card, not as a word on the briefing. A
+                practice paper and a high-stake one looked identical in the
+                list, which matters most for the practice one — a student who
+                does not know it is practice treats a rehearsal as the real
+                thing, which is the opposite of what it is for.
+
+                'normal' gets no chip on purpose. It is the ordinary case, and
+                a badge on every row is a badge that says nothing. */}
+            {a.securityTier === 'mock' && (
+              <span
+                className="text-xs px-2 py-0.5 flex items-center gap-1"
+                style={{
+                  background: 'var(--ef-canvas)',
+                  color: 'var(--ef-text-muted)',
+                  border: '1px solid var(--ef-border)',
+                  borderRadius: 2,
+                }}
+                title="A practice exam. Not proctored, and the result does not count."
+              >
+                <GraduationCap size={9} strokeWidth={1.5} />
+                Practice
+              </span>
+            )}
+            {a.securityTier === 'high_stake' && (
+              <span
+                className="text-xs px-2 py-0.5 flex items-center gap-1"
+                style={{
+                  background: 'var(--ef-canvas)',
+                  color: 'var(--ef-text-subtle)',
+                  border: '1px solid var(--ef-border-muted)',
+                  borderRadius: 2,
+                }}
+                title="A high-stake exam. Camera, a clean browser, Safe Exam Browser and a computer are all required."
+              >
+                <Shield size={9} strokeWidth={1.5} />
+                High-stake
+              </span>
+            )}
+            {/* Only where it changes what the student can do — a laptop needs
+                no badge telling it that it is a laptop. */}
+            {!deviceOk && (
+              <span
+                className="text-xs px-2 py-0.5 flex items-center gap-1"
+                style={{
+                  background: '#FEF9EC',
+                  color: 'var(--ef-warning)',
+                  border: '1px solid var(--ef-warning-border)',
+                  borderRadius: 2,
+                }}
+                title="This exam cannot be taken on this device. Open it on a laptop or desktop computer."
+              >
+                <Laptop size={9} strokeWidth={1.5} />
+                Computer only
+              </span>
+            )}
             {/* Reattempt badge — only when prior submission exists + chances left */}
             {attemptInfo && (
               <span
@@ -522,7 +618,11 @@ function AssessmentCard({
           {action && (
             <button
               onClick={() => {
-                if (action.variant === 'primary') {
+                // The wrong-device action is styled secondary but belongs at
+                // the briefing, not at results — that page carries the refusal
+                // explanation and the copyable link. Keyed off deviceOk rather
+                // than the variant so the two cannot drift.
+                if (action.variant === 'primary' || !deviceOk) {
                   navigate(`/student/exam/${a.id}/briefing`);
                 } else {
                   navigate(`/student/exam/${a.id}/results`);
@@ -607,6 +707,10 @@ export function StudentAssessmentsPage() {
   const [syncAge, setSyncAge]             = useState('');
 
   const [activeTab, setActiveTab] = useState<TabKey>('available');
+
+  // Resolved once for the whole list. A browser does not change device class
+  // while the page is open, so this is a constant for the session.
+  const [deviceClass] = useState<DeviceClass>(() => detectDeviceClass());
 
   // Live clock — updates every 30s (good enough for the listing page)
   const [nowDate, setNowDate] = useState(() => new Date());
@@ -873,7 +977,7 @@ export function StudentAssessmentsPage() {
               return (
                 <div className="space-y-3">
                   {list.map((d, i) => (
-                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} />
+                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} deviceClass={deviceClass} />
                   ))}
                 </div>
               );

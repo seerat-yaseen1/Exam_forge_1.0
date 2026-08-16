@@ -25,7 +25,7 @@ function Backdrop({ dim = true, children }: { dim?: boolean; children: React.Rea
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
       style={{ background: dim ? 'rgba(12,12,11,0.72)' : 'rgba(12,12,11,0.92)' }}
     >
       {children}
@@ -100,8 +100,15 @@ function OverlayCard({
       animate={{ scale: 1, opacity: 1, y: 0 }}
       exit={{ scale: 0.95, opacity: 0, y: 12 }}
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+      // `width: 420` was a hard width. Every overlay in this file is built on
+      // this card, so on a 390px phone the whole violation system — including
+      // the terminated screen and the 30-second final warning, neither of
+      // which the student can dismiss — rendered wider than the viewport with
+      // its buttons off the right edge.
+      className="w-full overflow-y-auto"
       style={{
-        width: 420,
+        maxWidth: 420,
+        maxHeight: 'calc(100dvh - 32px)',
         background: 'var(--ef-surface)',
         border: '1px solid var(--ef-border)',
         borderTop: `3px solid ${accent}`,
@@ -110,7 +117,7 @@ function OverlayCard({
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="px-6 py-5">
+      <div className="px-4 sm:px-6 py-5">
         <p className="text-xs mb-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
           {title}
         </p>
@@ -134,12 +141,34 @@ function OverlayCard({
 
 interface WarningProps {
   violationType: ViolationType;
-  warningNumber: 1 | 2;
+  /**
+   * Bounded 1-2 on a proctored sitting, where 3 raises FinalWarningOverlay
+   * instead. Unbounded on practice, which never reaches that overlay and can
+   * therefore keep counting past three.
+   */
+  warningNumber: number;
+  /**
+   * Will accumulated warnings end this sitting?
+   *
+   * Practice ('mock') records violations and terminates on none of them, so
+   * the countdown sentence below is simply false there — and it is the most
+   * alarming sentence on the screen. Told to a student rehearsing on a phone
+   * whose keyboard blurred the window, it teaches them to fear a thing that
+   * will not happen, and teaches them to discount the warning when it appears
+   * in a real exam. Defaults true: a caller that forgets it gets the strict
+   * copy, which is wrong in the harmless direction.
+   */
+  terminates?: boolean;
   onDismiss: () => void;
 }
 
-export function WarningOverlay({ violationType, warningNumber, onDismiss }: WarningProps) {
-  const remaining = 3 - warningNumber;
+export function WarningOverlay({
+  violationType,
+  warningNumber,
+  terminates = true,
+  onDismiss,
+}: WarningProps) {
+  const remaining = Math.max(0, 3 - warningNumber);
   return (
     <Backdrop>
       <OverlayCard
@@ -174,9 +203,19 @@ export function WarningOverlay({ violationType, warningNumber, onDismiss }: Warn
               {VIOLATION_LABELS[violationType]}
             </p>
             <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-              Warning <strong>{warningNumber} of 3</strong>. You have{' '}
-              <strong>{remaining} warning{remaining !== 1 ? 's' : ''}</strong> remaining before
-              your exam is automatically terminated.
+              {terminates ? (
+                <>
+                  Warning <strong>{warningNumber} of 3</strong>. You have{' '}
+                  <strong>{remaining} warning{remaining !== 1 ? 's' : ''}</strong> remaining before
+                  your exam is automatically terminated.
+                </>
+              ) : (
+                <>
+                  This is a <strong>practice exam</strong>, so nothing here ends your attempt.
+                  In a real exam this would have been warning{' '}
+                  <strong>{warningNumber}</strong>, and three ends the sitting.
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -185,8 +224,9 @@ export function WarningOverlay({ violationType, warningNumber, onDismiss }: Warn
           style={{ background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}
         >
           <p className="text-xs" style={{ color: 'var(--ef-warning)', lineHeight: 1.6 }}>
-            This incident has been recorded and will be visible to your examiner. Please
-            stay focused on the exam window.
+            {terminates
+              ? 'This incident has been recorded and will be visible to your examiner. Please stay focused on the exam window.'
+              : 'This is recorded on your practice attempt so you can see it afterwards. Worth knowing before it counts.'}
           </p>
         </div>
       </OverlayCard>

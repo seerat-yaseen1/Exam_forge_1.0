@@ -20,10 +20,21 @@ import {
   Loader2, AlertTriangle, ClipboardList, Timer, Layers,
   Award, Calendar, ArrowRight, Camera, Maximize,
   CheckCircle2, Shield, Info, ChevronRight, Clock, Ban, Download,
+  Laptop, Copy,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { getAssessment, getSebToken, getSEBPublicInfo, type Assessment } from '../../../lib/assessmentService';
 import { scanForExtensionsWithSettle, extensionGateBlocks } from '../../components/exam/extensionScan';
+import {
+  detectDeviceClass,
+  deviceAllowed,
+  deviceRefusalCopy,
+  effectiveDevicePolicy,
+  type DeviceClass,
+  type DevicePolicy,
+  type DevicePolicySource,
+} from '../../../lib/deviceClass';
+import { resolveIntegrityProfile } from '../../components/exam/integrityProfile';
 import { formatDateTime } from '../../../lib/dateFormat';
 import {
   getAllAttemptsByStudentAndAssessment,
@@ -72,6 +83,158 @@ export function fullscreenSupported(): boolean {
  */
 export function fullscreenOk(isFullscreen: boolean): boolean {
   return !fullscreenSupported() || isFullscreen;
+}
+
+/**
+ * The entry gate's device condition.
+ *
+ * The device policy was previously enforced in exactly one place: startExam,
+ * server-side, after the attempt request was made. A student on a phone read
+ * the rules, granted camera, passed the extension scan, pressed "Enter Exam",
+ * and was then refused — with the raw string `DEVICE_NOT_ALLOWED: …`, because
+ * nothing on the client translated it.
+ *
+ * That is the same failure the fullscreen gate above was written to fix, in
+ * its own words: "a requirement enforced after the point of no return is a
+ * worse experience for the honest student and no additional obstacle to
+ * anyone else". A phone cannot become a laptop by trying again, so this is the
+ * requirement where arriving late costs the most — the student has to find a
+ * different machine, and every second spent on the briefing was wasted.
+ *
+ * The server still decides. This is the same question asked early enough to be
+ * useful, and it is deliberately asked of the EFFECTIVE policy the server will
+ * re-derive rather than the assessment's raw fields, so the two cannot
+ * disagree about who gets in.
+ */
+export function deviceGateOk(
+  deviceClass: DeviceClass,
+  assessment: DevicePolicySource | null,
+): boolean {
+  if (!assessment) return true;   // nothing loaded yet; the gate has no opinion
+  return deviceAllowed(deviceClass, effectiveDevicePolicy(assessment));
+}
+
+// ── Wrong-device refusal ──────────────────────────────────────────
+
+/**
+ * The whole page, when the device cannot sit this exam.
+ *
+ * Deliberately not a checklist row. A refusal a student can do nothing about
+ * from this device is not a step in a sequence — presenting it as one, greyed
+ * out beneath four green ticks, invites them to keep trying the other four and
+ * hope. It is the answer, and it is the only thing on screen.
+ *
+ * The exam URL is shown and copyable because "open this on a laptop" is advice
+ * a student cannot follow without the address, and retyping a UUID off a phone
+ * screen is how a student ends up in the wrong exam or gives up.
+ */
+function DeviceRefusalPanel({
+  deviceClass,
+  policy,
+  examUrl,
+  onBack,
+}: {
+  deviceClass: DeviceClass;
+  policy: DevicePolicy;
+  examUrl: string;
+  onBack: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = deviceRefusalCopy(deviceClass, policy);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(examUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard permission denied, or an insecure context. The link is
+      // rendered in full below either way, so there is nothing to recover —
+      // the student selects it by hand, which is what they would have done
+      // without a button at all.
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-5 py-16 sm:py-24 px-1">
+      <div
+        className="flex items-center justify-center"
+        style={{
+          width: 52, height: 52, borderRadius: '50%',
+          background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)',
+        }}
+      >
+        <Laptop size={22} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
+      </div>
+
+      <div className="text-center" style={{ maxWidth: 420 }}>
+        <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
+          WRONG DEVICE
+        </p>
+        <p className="text-sm mb-2" style={{ color: 'var(--ef-ink)', lineHeight: 1.7 }}>
+          {copy.title}
+        </p>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+          {copy.detail}
+        </p>
+      </div>
+
+      {/* The link, in full. `break-all` rather than truncation: a shortened
+          URL is unreadable and uncopyable, which defeats the point. */}
+      {examUrl && (
+        <div
+          className="w-full flex flex-col gap-2 px-4 py-3"
+          style={{
+            maxWidth: 420,
+            background: 'var(--ef-canvas-raised)',
+            border: '1px solid var(--ef-border)',
+            borderRadius: 2,
+          }}
+        >
+          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
+            OPEN THIS ADDRESS ON YOUR COMPUTER
+          </p>
+          <p
+            className="text-xs break-all"
+            style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.6, fontFamily: 'ui-monospace, monospace' }}
+          >
+            {examUrl}
+          </p>
+          <button
+            onClick={handleCopy}
+            className="flex items-center justify-center gap-1.5 text-xs w-full"
+            style={{
+              minHeight: 40,
+              border: '1px solid var(--ef-border)',
+              background: 'var(--ef-surface)',
+              color: 'var(--ef-text-subtle)',
+              borderRadius: 2,
+              cursor: 'pointer',
+            }}
+          >
+            {copied
+              ? <><CheckCircle2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} /> Copied</>
+              : <><Copy size={12} strokeWidth={1.5} /> Copy link</>}
+          </button>
+        </div>
+      )}
+
+      <button
+        onClick={onBack}
+        className="text-xs px-4"
+        style={{
+          minHeight: 40,
+          border: '1px solid var(--ef-border)',
+          color: 'var(--ef-text-subtle)',
+          borderRadius: 2,
+          background: 'var(--ef-surface)',
+          cursor: 'pointer',
+        }}
+      >
+        ← Back to assessments
+      </button>
+    </div>
+  );
 }
 
 // ── Camera permission step ────────────────────────────────────────
@@ -181,6 +344,14 @@ export function ExamBriefingPage() {
   const [effectiveMax, setEffectiveMax] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Read once, at mount. A browser does not become a laptop while the student
+  // reads the rules, and re-resolving on resize would let the gate flicker as
+  // an on-screen keyboard opens.
+  const [deviceClass] = useState<DeviceClass>(() => detectDeviceClass());
+  // What this sitting will actually enforce, so the rules panel below can
+  // describe it rather than recite a fixed list. Same resolver the shell uses.
+  const integrityProfile = resolveIntegrityProfile(assessment?.securityTier, deviceClass);
 
   const [cameraState, setCameraState] = useState<CameraState>('idle');
   const [cameraDeclined, setCameraDeclined] = useState(false);
@@ -323,8 +494,15 @@ export function ExamBriefingPage() {
     // known-good state, and the browser's fullscreen request is driven by the
     // student's own click on the button below — a real user gesture, which is
     // the only kind Chrome and Safari honour.
-    setReadyToEnter(cameraOk && extensionOk && sebOk && fullscreenOk(isFullscreen));
-  }, [cameraState, cameraDeclined, isFullscreen, extScanState, sebGate]);
+    // The device gate is in the AND for completeness, but a refused device
+    // never gets this far — the render short-circuits to a full-page refusal
+    // below, because a disabled button among five green checkmarks does not
+    // tell a student to go and find a different computer.
+    setReadyToEnter(
+      cameraOk && extensionOk && sebOk && fullscreenOk(isFullscreen)
+      && deviceGateOk(deviceClass, assessment),
+    );
+  }, [cameraState, cameraDeclined, isFullscreen, extScanState, sebGate, deviceClass, assessment]);
 
   // Load assessment + existing attempt
   useEffect(() => {
@@ -624,7 +802,34 @@ export function ExamBriefingPage() {
               </motion.div>
             )}
 
-            {!loading && !error && assessment && (
+            {/* ── Wrong device ──────────────────────────────────────────
+                Ahead of the briefing, not inside it. A student whose phone
+                cannot sit this exam has nothing to gain from reading the rules,
+                granting camera access or waiting out an extension scan — none
+                of it changes the answer, and every step spent on it is time
+                they could have used to find a computer. So the page says the
+                one thing that matters and gets out of the way.
+
+                It is also a place they can act from: the link is on screen and
+                copyable, because "open this on a laptop" is only useful advice
+                if the student can get the address onto the laptop. */}
+            {!loading && !error && assessment && !deviceGateOk(deviceClass, assessment) && (
+              <motion.div
+                key="device"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <DeviceRefusalPanel
+                  deviceClass={deviceClass}
+                  policy={effectiveDevicePolicy(assessment)}
+                  examUrl={typeof window === 'undefined' ? '' : window.location.href}
+                  onBack={() => navigate('/student/assessments')}
+                />
+              </motion.div>
+            )}
+
+            {!loading && !error && assessment && deviceGateOk(deviceClass, assessment) && (
               <motion.div
                 key="content"
                 initial={{ opacity: 0, y: 8 }}
@@ -765,17 +970,45 @@ export function ExamBriefingPage() {
                   <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
                     <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>EXAM RULES</p>
                   </div>
+                  {/* ── Rules that describe THIS exam ───────────────────────
+                      This block was static text shown to every candidate at
+                      every tier, which made three of its six sentences false on
+                      a practice paper: that the sitting is monitored and
+                      reviewed by an examiner, that the webcam is watching, and
+                      that three violations terminate the attempt. None of those
+                      happen at 'mock' — it skips the heartbeat, the camera is
+                      off by default, and warnings no longer end the sitting.
+
+                      Telling a student a rule that will not be enforced is not
+                      a harmless over-warning. It teaches them the briefing is
+                      boilerplate, and the sentence they then skim is the one on
+                      the exam that counts. */}
                   <div className="px-4">
-                    <RuleItem icon={<Shield size={12} strokeWidth={1.5} />}
-                      text="This exam is monitored for academic integrity. Any suspicious activity is logged and reviewed by your examiner." />
-                    <RuleItem icon={<Maximize size={12} strokeWidth={1.5} />}
-                      text="The exam must be taken in fullscreen mode. Exiting fullscreen will be recorded as a violation." />
+                    {integrityProfile.summary.monitored ? (
+                      <RuleItem icon={<Shield size={12} strokeWidth={1.5} />}
+                        text="This exam is monitored for academic integrity. Any suspicious activity is logged and reviewed by your examiner." />
+                    ) : (
+                      <RuleItem icon={<Shield size={12} strokeWidth={1.5} />}
+                        text="This is a practice exam. It is not proctored and the result does not count — sit it to rehearse the format and the clock." />
+                    )}
+                    {/* Fullscreen is stated only where it can be required. On
+                        iOS Safari the API does not exist, so fullscreenOk waives
+                        the gate; promising the rule anyway would describe an
+                        enforcement the student's device cannot perform. */}
+                    {fullscreenSupported() && (
+                      <RuleItem icon={<Maximize size={12} strokeWidth={1.5} />}
+                        text="The exam must be taken in fullscreen mode. Exiting fullscreen will be recorded as a violation." />
+                    )}
                     <RuleItem icon={<Clock size={12} strokeWidth={1.5} />}
                       text="Each section has an independent time limit. When time expires, your answers for that section are automatically saved and you advance to the next section." />
-                    <RuleItem icon={<Camera size={12} strokeWidth={1.5} />}
-                      text="Your webcam is used for face verification only. Your video is not recorded. Multiple faces or absence of face for more than 10 seconds will be flagged." />
+                    {assessment.requireCamera === true && (
+                      <RuleItem icon={<Camera size={12} strokeWidth={1.5} />}
+                        text="Your webcam is used for face verification only. Your video is not recorded. Multiple faces or absence of face for more than 10 seconds will be flagged." />
+                    )}
                     <RuleItem icon={<AlertTriangle size={12} strokeWidth={1.5} />}
-                      text="Switching tabs, losing window focus, or opening DevTools will count as violations. After 3 violations, your exam will be automatically terminated." />
+                      text={integrityProfile.summary.terminates
+                        ? 'Switching tabs, losing window focus, or opening DevTools will count as violations. After 3 violations, your exam will be automatically terminated.'
+                        : 'Switching tabs or losing window focus is still recorded, so you can see afterwards what would have counted. On a practice exam it does not end your attempt.'} />
                     <RuleItem icon={<ClipboardList size={12} strokeWidth={1.5} />}
                       text="Copying, pasting, printing, and right-clicking are disabled during the exam. All keyboard shortcuts are restricted." />
                     {/* Stated up front because it is now a HARD gate. A student

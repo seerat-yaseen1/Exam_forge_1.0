@@ -1,40 +1,28 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Loader2, Mail } from 'lucide-react';
+import { ArrowLeft, Mail } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
-
-const inputStyle: React.CSSProperties = {
-  background: 'var(--ef-canvas-raised)',
-  border: '1px solid var(--ef-border)',
-  color: 'var(--ef-ink)',
-  borderRadius: 2,
-  width: '100%',
-  outline: 'none',
-  fontSize: 13,
-  padding: '10px 14px',
-};
-const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--ef-ink)';
-  e.target.style.background = 'var(--ef-surface)';
-};
-const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--ef-border)';
-  e.target.style.background = 'var(--ef-canvas-raised)';
-};
+import { AuthShell, Field } from '../../components/student/fields';
+import { Button } from '../../components/student/ui';
 
 type Stage = 'input' | 'sent';
 
 export function StudentForgotPasswordPage() {
   const { requestPasswordReset } = useStudentAuth();
+  // This page's wordmark was the literal string "Platform Name" — a
+  // placeholder that shipped. It is the configured product name now, as on
+  // every other student screen.
+  const { platformSettings } = usePlatformSettings();
 
-  const [stage, setStage]           = useState<Stage>('input');
+  const [stage, setStage]                 = useState<Stage>('input');
   const [instituteCode, setInstituteCode] = useState('');
-  const [email, setEmail]           = useState('');
-  const [error, setError]           = useState('');
-  const [loading, setLoading]       = useState(false);
-  const [emailSent, setEmailSent]   = useState(false);
+  const [email, setEmail]                 = useState('');
+  const [error, setError]                 = useState('');
+  const [loading, setLoading]             = useState(false);
+  const [emailSent, setEmailSent]         = useState(false);
 
   const canSubmit = instituteCode.trim().length > 0 && email.trim().length > 0 && !loading;
 
@@ -51,123 +39,107 @@ export function StudentForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: 'var(--ef-canvas)' }}>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[380px]"
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <AuthShell
+        mark={
+          platformSettings.logoUrl
+            ? <img src={platformSettings.logoUrl} alt={platformSettings.name}
+                style={{ width: 34, height: 34, objectFit: 'contain' }} />
+            : <LogoMark px={34} />
+        }
+        wordmark={platformSettings.name}
       >
-        {/* Platform identity */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
-            <LogoMark px={36} />
-          </div>
-          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}>
-            Platform Name
-          </span>
-          <div className="mt-5 w-8" style={{ height: 1, background: 'var(--ef-border-muted)' }} />
-        </div>
+        <AnimatePresence mode="wait">
+          {stage === 'input' ? (
+            <motion.div key="input" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <p className="ef-eyebrow mb-1.5">Password recovery</p>
+              <p className="mb-6" style={{ fontSize: 12.5, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                Give your Institute Code and email. A password-reset link goes to your inbox.
+              </p>
 
-        <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
-          style={{ border: '1px solid var(--ef-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <AnimatePresence mode="wait">
-            {stage === 'input' ? (
-              <motion.div key="input" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-                  PASSWORD RECOVERY
+              <form onSubmit={handleSubmit} noValidate className="flex flex-col" style={{ gap: 16 }}>
+                <Field
+                  label="Institute Code"
+                  autoFocus
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  value={instituteCode}
+                  onChange={(e) => { setInstituteCode(e.target.value.toUpperCase()); setError(''); }}
+                  disabled={loading}
+                  placeholder="e.g. A3B7C2"
+                  style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.16em' }}
+                />
+
+                <Field
+                  label="Email address"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                  disabled={loading}
+                  placeholder="you@institute.edu"
+                />
+
+                {error && (
+                  <motion.p
+                    role="alert"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    style={{ fontSize: 12, color: 'var(--ef-danger)' }}
+                  >
+                    {error}
+                  </motion.p>
+                )}
+
+                <Button type="submit" variant="primary" size="lg" block disabled={!canSubmit} loading={loading}>
+                  {loading ? 'Sending…' : 'Send reset link'}
+                </Button>
+              </form>
+            </motion.div>
+          ) : (
+            <motion.div key="sent" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
+              <p className="ef-eyebrow mb-3">Check your inbox</p>
+
+              <div
+                className="flex items-start gap-2.5 px-3.5 py-3 mb-5"
+                style={{
+                  background: emailSent ? 'var(--ef-success-bg)' : 'var(--ef-canvas-raised)',
+                  border: `1px solid ${emailSent ? 'var(--ef-success-border)' : 'var(--ef-border)'}`,
+                  borderRadius: 'var(--ef-radius-sm)',
+                }}
+              >
+                <Mail
+                  size={13}
+                  strokeWidth={1.6}
+                  style={{ color: emailSent ? 'var(--ef-success)' : 'var(--ef-text-muted)', marginTop: 2, flexShrink: 0 }}
+                />
+                <p style={{ fontSize: 12, color: emailSent ? 'var(--ef-success)' : 'var(--ef-text-muted)', lineHeight: 1.65 }}>
+                  {emailSent
+                    ? `If an account matches ${email}, a password-reset link has been sent. Open it from your inbox to set a new password. The link expires in 1 hour and can be used once.`
+                    : "If you don't receive an email shortly, check your spam folder or contact your administrator."}
                 </p>
-                <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-                  Provide your Institute Code and email. A password-reset link will be sent to your inbox.
-                </p>
+              </div>
 
-                <form onSubmit={handleSubmit} noValidate>
-                  <div className="mb-4">
-                    <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                      Institute Code
-                    </label>
-                    <input type="text" autoFocus autoComplete="off" autoCapitalize="characters"
-                      value={instituteCode}
-                      onChange={(e) => { setInstituteCode(e.target.value.toUpperCase()); setError(''); }}
-                      disabled={loading} placeholder="e.g. A3B7C2"
-                      style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '0.16em' }}
-                      onFocus={onFocus} onBlur={onBlur} />
-                  </div>
+              <Link to="/student/login" style={{ textDecoration: 'none' }}>
+                <Button variant="primary" size="lg" block>Back to sign in</Button>
+              </Link>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-                  <div className="mb-5">
-                    <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                      Email address
-                    </label>
-                    <input type="email" autoComplete="email"
-                      value={email}
-                      onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                      disabled={loading} placeholder="you@institute.edu"
-                      style={inputStyle}
-                      onFocus={onFocus} onBlur={onBlur} />
-                  </div>
-
-                  {error && (
-                    <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      className="text-xs mb-4 -mt-1" style={{ color: 'var(--ef-danger)' }}>
-                      {error}
-                    </motion.p>
-                  )}
-
-                  <button type="submit" disabled={!canSubmit}
-                    className="w-full py-2.5 text-sm flex items-center justify-center gap-2 mb-3"
-                    style={{
-                      background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
-                      color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em',
-                      cursor: canSubmit ? 'pointer' : 'not-allowed',
-                    }}>
-                    {loading
-                      ? <><Loader2 size={14} className="animate-spin" /><span>Sending…</span></>
-                      : 'Send reset code'}
-                  </button>
-                </form>
-              </motion.div>
-            ) : (
-              <motion.div key="sent" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                transition={{ duration: 0.25 }}>
-                <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-                  RESET CODE DISPATCHED
-                </p>
-
-                {/* Email delivery status */}
-                <div className="flex items-start gap-2.5 px-3 py-3 mb-5"
-                  style={{
-                    background: emailSent ? 'var(--ef-success-bg-alt)' : 'var(--ef-canvas)',
-                    border: `1px solid ${emailSent ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
-                    borderRadius: 2,
-                  }}>
-                  <Mail size={12} strokeWidth={1.5} style={{ color: emailSent ? 'var(--ef-success)' : 'var(--ef-text-muted)', marginTop: 1, flexShrink: 0 }} />
-                  <p className="text-xs" style={{ color: emailSent ? 'var(--ef-success)' : 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-                    {emailSent
-                      ? `If an account matches ${email}, a password-reset link has been sent. Open it from your inbox to set a new password. The link expires in 1 hour and can be used once.`
-                      : `If you don't receive an email shortly, check your spam folder or contact your administrator.`}
-                  </p>
-                </div>
-
-                <Link to="/student/login"
-                  className="block w-full py-2.5 text-sm mb-3 text-center"
-                  style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', textDecoration: 'none' }}>
-                  Back to sign in
-                </Link>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <Link to="/student/login"
-            className="flex items-center gap-1.5 text-xs transition-colors"
-            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-            <ArrowLeft size={12} strokeWidth={1.5} />Back to sign in
-          </Link>
-        </div>
-      </motion.div>
-    </div>
+        <Link
+          to="/student/login"
+          className="flex items-center gap-1.5 mt-5"
+          style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+        >
+          <ArrowLeft size={12} strokeWidth={1.6} />
+          Back to sign in
+        </Link>
+      </AuthShell>
+    </motion.div>
   );
 }

@@ -129,7 +129,8 @@ export function TrendChart({
               <g key={t}>
                 <line
                   x1={0} x2={innerW} y1={yAt(t)} y2={yAt(t)}
-                  stroke="var(--ef-border-subtle)" strokeWidth={1} shapeRendering="crispEdges"
+                  strokeWidth={1} shapeRendering="crispEdges"
+                  style={{ stroke: 'var(--ef-border-subtle)' }}
                 />
                 <text
                   x={-8} y={yAt(t)} dy="0.32em" textAnchor="end"
@@ -148,7 +149,8 @@ export function TrendChart({
               <>
                 <line
                   x1={0} x2={innerW} y1={yAt(passMark)} y2={yAt(passMark)}
-                  stroke="var(--ef-warning-border)" strokeWidth={1}
+                  strokeWidth={1}
+                  style={{ stroke: 'var(--ef-warning-border)' }}
                 />
                 <text
                   x={innerW} y={yAt(passMark) - 5} textAnchor="end"
@@ -159,14 +161,14 @@ export function TrendChart({
               </>
             )}
 
-            <path d={areaPath} fill="var(--ef-accent)" opacity={0.1} />
+            <path d={areaPath} opacity={0.1} style={{ fill: 'var(--ef-accent)' }} />
             <path
               d={path}
               fill="none"
-              stroke="var(--ef-accent)"
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
+              style={{ stroke: 'var(--ef-accent)' }}
             />
 
             {points.map((p, i) => {
@@ -191,15 +193,21 @@ export function TrendChart({
                     style={{ outline: 'none', cursor: 'default' }}
                   />
                   {isActive && (
-                    <line x1={cx} x2={cx} y1={0} y2={innerH} stroke="var(--ef-border-muted)" strokeWidth={1} />
+                    <line
+                      x1={cx} x2={cx} y1={0} y2={innerH} strokeWidth={1}
+                      style={{ stroke: 'var(--ef-border-muted)' }}
+                    />
                   )}
                   <circle
                     cx={cx} cy={cy}
                     r={isActive ? 5.5 : 4}
-                    fill="var(--ef-accent)"
-                    stroke="var(--ef-surface)"
                     strokeWidth={2}
-                    style={{ pointerEvents: 'none' }}
+                    // Colour goes through `style`, not the presentation
+                    // attributes: var() is reliably resolved in a CSS
+                    // declaration and is not in every browser's parsing of
+                    // fill="" / stroke="". The 2px ring is the surface colour
+                    // so a marker stays legible where it crosses the line.
+                    style={{ fill: 'var(--ef-accent)', stroke: 'var(--ef-surface)', pointerEvents: 'none' }}
                   />
                 </g>
               );

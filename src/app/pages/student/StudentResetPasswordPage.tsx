@@ -1,69 +1,32 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Eye, EyeOff, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
-
-const inputStyle: React.CSSProperties = {
-  background: 'var(--ef-canvas-raised)',
-  border: '1px solid var(--ef-border)',
-  color: 'var(--ef-ink)',
-  borderRadius: 2,
-  width: '100%',
-  outline: 'none',
-  fontSize: 13,
-  padding: '10px 14px',
-};
-const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--ef-ink)';
-  e.target.style.background = 'var(--ef-surface)';
-};
-const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--ef-border)';
-  e.target.style.background = 'var(--ef-canvas-raised)';
-};
-
-function StrengthBar({ password }: { password: string }) {
-  const score = [
-    password.length >= 8,
-    /[A-Z]/.test(password),
-    /[0-9]/.test(password),
-    /[^A-Za-z0-9]/.test(password),
-    password.length >= 12,
-  ].filter(Boolean).length;
-  const colors = ['var(--ef-border)', '#D97A5A', '#D9A85A', '#7AB87A', 'var(--ef-success)'];
-  const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
-  if (!password) return null;
-  return (
-    <div className="mt-2">
-      <div className="flex gap-1 mb-1">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex-1 h-0.5 rounded-full transition-all"
-            style={{ background: i <= score ? colors[score] : 'var(--ef-border)' }} />
-        ))}
-      </div>
-      {score > 0 && <p className="text-xs" style={{ color: colors[score] }}>{labels[score]}</p>}
-    </div>
-  );
-}
+import {
+  AuthShell, Field, MatchNote, PasswordField, StrengthBar,
+} from '../../components/student/fields';
+import { Button } from '../../components/student/ui';
 
 type Stage = 'form' | 'success';
 
 export function StudentResetPasswordPage() {
-  const navigate  = useNavigate();
+  const navigate = useNavigate();
   const { resetPassword } = useStudentAuth();
+  // Was the literal placeholder "Platform Name", as on the recovery page.
+  const { platformSettings } = usePlatformSettings();
 
   const [code, setCode]                       = useState('');
   const [newPassword, setNewPassword]         = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showNew, setShowNew]                 = useState(false);
-  const [showConfirm, setShowConfirm]         = useState(false);
   const [error, setError]                     = useState('');
   const [loading, setLoading]                 = useState(false);
   const [stage, setStage]                     = useState<Stage>('form');
 
-  const canSubmit = code.trim().length === 16 && newPassword.length >= 8 && confirmPassword.length > 0 && !loading;
+  const canSubmit =
+    code.trim().length === 16 && newPassword.length >= 8 && confirmPassword.length > 0 && !loading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,154 +41,119 @@ export function StudentResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: 'var(--ef-canvas)' }}>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[380px]"
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <AuthShell
+        mark={
+          platformSettings.logoUrl
+            ? <img src={platformSettings.logoUrl} alt={platformSettings.name}
+                style={{ width: 34, height: 34, objectFit: 'contain' }} />
+            : <LogoMark px={34} />
+        }
+        wordmark={platformSettings.name}
       >
-        {/* Platform identity */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
-            <LogoMark px={36} />
-          </div>
-          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}>
-            Platform Name
-          </span>
-          <div className="mt-5 w-8" style={{ height: 1, background: 'var(--ef-border-muted)' }} />
-        </div>
-
-        <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
-          style={{ border: '1px solid var(--ef-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-
-          {stage === 'success' ? (
-            <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="flex flex-col items-center py-6">
-                <CheckCircle2 size={32} strokeWidth={1} style={{ color: 'var(--ef-success)' }} />
-                <p className="text-sm mt-4" style={{ color: 'var(--ef-ink)' }}>Password updated</p>
-                <p className="text-xs mt-2 text-center" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-                  Your password has been set. You may now sign in with your new credentials.
-                </p>
-                <button onClick={() => navigate('/student/login', { replace: true })}
-                  className="mt-6 w-full py-2.5 text-sm"
-                  style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em' }}>
+        {stage === 'success' ? (
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="flex flex-col items-center py-5 text-center">
+              <CheckCircle2 size={30} strokeWidth={1.2} style={{ color: 'var(--ef-success)' }} />
+              <p className="ef-display mt-4" style={{ fontSize: 17, color: 'var(--ef-ink)' }}>
+                Password updated
+              </p>
+              <p className="mt-2" style={{ fontSize: 12.5, color: 'var(--ef-text-muted)', lineHeight: 1.65 }}>
+                Your password has been set. You can sign in with it now.
+              </p>
+              <div className="mt-6 w-full">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  block
+                  onClick={() => navigate('/student/login', { replace: true })}
+                >
                   Sign in
-                </button>
+                </Button>
               </div>
-            </motion.div>
-          ) : (
-            <>
-              <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-                RESET PASSWORD
-              </p>
-              <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-                Enter the 16-character code from your email, then choose a new password.
-              </p>
+            </div>
+          </motion.div>
+        ) : (
+          <>
+            <p className="ef-eyebrow mb-1.5">Reset password</p>
+            <p className="mb-6" style={{ fontSize: 12.5, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+              Enter the 16-character code from your email, then choose a new password.
+            </p>
 
-              <form onSubmit={handleSubmit} noValidate>
-                {/* Reset code */}
-                <div className="mb-5">
-                  <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                    Reset code
-                  </label>
-                  <input type="text" autoFocus autoComplete="off" autoCapitalize="characters"
-                    value={code}
-                    onChange={(e) => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16)); setError(''); }}
-                    disabled={loading} placeholder="16 characters"
-                    style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '0.14em', fontSize: 12 }}
-                    onFocus={onFocus} onBlur={onBlur} />
-                  {code && code.length === 16 && (
-                    <p className="text-xs mt-1.5" style={{ color: 'var(--ef-success)' }}>Code format valid</p>
-                  )}
-                </div>
+            <form onSubmit={handleSubmit} noValidate className="flex flex-col" style={{ gap: 16 }}>
+              <Field
+                label="Reset code"
+                autoFocus
+                autoComplete="off"
+                autoCapitalize="characters"
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16));
+                  setError('');
+                }}
+                disabled={loading}
+                placeholder="16 characters"
+                style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.14em', fontSize: 12.5 }}
+                hint={
+                  code.length === 16 ? (
+                    <span style={{ color: 'var(--ef-success)' }}>Code format valid</span>
+                  ) : code.length > 0 ? (
+                    `${code.length} of 16`
+                  ) : undefined
+                }
+              />
 
-                {/* New password */}
-                <div className="mb-4">
-                  <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                    New password
-                  </label>
-                  <div className="relative">
-                    <input type={showNew ? 'text' : 'password'} autoComplete="new-password"
-                      value={newPassword}
-                      onChange={(e) => { setNewPassword(e.target.value); setError(''); }}
-                      disabled={loading} placeholder="Min. 8 characters"
-                      style={{ ...inputStyle, paddingRight: 40 }}
-                      onFocus={onFocus} onBlur={onBlur} />
-                    <button type="button" tabIndex={-1} onClick={() => setShowNew((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                      style={{ color: 'var(--ef-text-muted)' }}
-                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-                      {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
-                    </button>
-                  </div>
-                  <StrengthBar password={newPassword} />
-                </div>
+              <PasswordField
+                label="New password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => { setNewPassword(e.target.value); setError(''); }}
+                disabled={loading}
+                placeholder="Min. 8 characters"
+                footer={<StrengthBar password={newPassword} />}
+              />
 
-                {/* Confirm password */}
-                <div className="mb-6">
-                  <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                    Confirm new password
-                  </label>
-                  <div className="relative">
-                    <input type={showConfirm ? 'text' : 'password'} autoComplete="new-password"
-                      value={confirmPassword}
-                      onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
-                      disabled={loading} placeholder="Repeat password"
-                      style={{ ...inputStyle, paddingRight: 40 }}
-                      onFocus={onFocus} onBlur={onBlur} />
-                    <button type="button" tabIndex={-1} onClick={() => setShowConfirm((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                      style={{ color: 'var(--ef-text-muted)' }}
-                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-                      {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
-                    </button>
-                  </div>
-                  {confirmPassword && newPassword && (
-                    <p className="text-xs mt-1.5" style={{
-                      color: confirmPassword === newPassword ? 'var(--ef-success)' : 'var(--ef-danger)',
-                    }}>
-                      {confirmPassword === newPassword ? 'Passwords match' : 'Passwords do not match'}
-                    </p>
-                  )}
-                </div>
+              <PasswordField
+                label="Confirm new password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                disabled={loading}
+                placeholder="Repeat password"
+                footer={<MatchNote password={newPassword} confirm={confirmPassword} />}
+              />
 
-                {error && (
-                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    className="text-xs mb-4 -mt-2" style={{ color: 'var(--ef-danger)' }}>
-                    {error}
-                  </motion.p>
-                )}
+              {error && (
+                <motion.p
+                  role="alert"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{ fontSize: 12, color: 'var(--ef-danger)' }}
+                >
+                  {error}
+                </motion.p>
+              )}
 
-                <button type="submit" disabled={!canSubmit}
-                  className="w-full py-2.5 text-sm flex items-center justify-center gap-2 mb-3"
-                  style={{
-                    background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
-                    color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em',
-                    cursor: canSubmit ? 'pointer' : 'not-allowed',
-                  }}>
-                  {loading
-                    ? <><Loader2 size={14} className="animate-spin" /><span>Resetting…</span></>
-                    : 'Reset password'}
-                </button>
-              </form>
-            </>
-          )}
+              <Button type="submit" variant="primary" size="lg" block disabled={!canSubmit} loading={loading}>
+                {loading ? 'Resetting…' : 'Reset password'}
+              </Button>
+            </form>
 
-          {stage !== 'success' && (
-            <Link to="/student/login"
-              className="flex items-center gap-1.5 text-xs transition-colors"
-              style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-              <ArrowLeft size={12} strokeWidth={1.5} />Back to sign in
+            <Link
+              to="/student/login"
+              className="flex items-center gap-1.5 mt-5"
+              style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+            >
+              <ArrowLeft size={12} strokeWidth={1.6} />
+              Back to sign in
             </Link>
-          )}
-        </div>
-      </motion.div>
-    </div>
+          </>
+        )}
+      </AuthShell>
+    </motion.div>
   );
 }

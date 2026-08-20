@@ -55,7 +55,7 @@ function Chip({
   const palette = {
     pass:    { bg: 'var(--ef-success-bg)', fg: 'var(--ef-success-strong)', bd: 'var(--ef-success-border)' },
     fail:    { bg: 'var(--ef-danger-bg)',  fg: 'var(--ef-danger)',         bd: 'var(--ef-danger-border)' },
-    pending: { bg: '#FDF8EC',              fg: 'var(--ef-warning)',        bd: '#EBD9A8' },
+    pending: { bg: 'var(--ef-warning-bg)',              fg: 'var(--ef-warning)',        bd: 'var(--ef-warning-border)' },
     muted:   { bg: 'var(--ef-canvas)',     fg: 'var(--ef-text-muted)',     bd: 'var(--ef-border-muted)' },
   }[tone];
 

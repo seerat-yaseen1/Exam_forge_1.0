@@ -8,6 +8,7 @@ import { createBrowserRouter, Navigate } from 'react-router';
 // page chunk) on every first navigation. They are small; the pages are not.
 import { InstituteRoot } from './pages/institute/InstituteRoot';
 import { Root } from './Root';
+import { WebOwnerRoot } from './pages/WebOwnerRoot';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { InstituteDashboardLayout } from './layouts/InstituteDashboardLayout';
 import { FacultyDashboardLayout } from './layouts/FacultyDashboardLayout';
@@ -70,7 +71,7 @@ const StudentForgotPasswordPage = lazy(() => import('./pages/student/StudentForg
 const StudentLandingPage = lazy(() => import('./pages/student/StudentLandingPage').then((m) => ({ default: m.StudentLandingPage })));
 const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage').then((m) => ({ default: m.StudentProfilePage })));
 const StudentSecurityPage = lazy(() => import('./pages/student/StudentSecurityPage').then((m) => ({ default: m.StudentSecurityPage })));
-const StudentAppearancePage = lazy(() => import('./pages/student/StudentAppearancePage').then((m) => ({ default: m.StudentAppearancePage })));
+const AppearancePage = lazy(() => import('./pages/AppearancePage').then((m) => ({ default: m.AppearancePage })));
 const StudentProgressPage = lazy(() => import('./pages/student/StudentProgressPage').then((m) => ({ default: m.StudentProgressPage })));
 const StudentAssessmentsPage = lazy(() => import('./pages/student/StudentAssessmentsPage').then((m) => ({ default: m.StudentAssessmentsPage })));
 const ExamBriefingPage = lazy(() => import('./pages/student/ExamBriefingPage').then((m) => ({ default: m.ExamBriefingPage })));
@@ -82,28 +83,35 @@ export const router = createBrowserRouter([
   {
     element: <Root />,
     children: [
-      // ── Web Owner auth ────────────────────────────────────────────
-      { index: true, element: <Navigate to="/login" replace /> },
-      { path: '/login',           element: <LoginPage /> },
-      { path: '/forgot-password', element: <ForgotPasswordPage /> },
-      { path: '/reset-password',  element: <ResetPasswordActionPage role="web_owner" /> },
-
-      // ── Web Owner dashboard ───────────────────────────────────────
+      // ── Web Owner ─────────────────────────────────────────────────
+      // Pathless, so it changes nothing about the URLs below it. It exists to
+      // give the web owner's screens an appearance provider of their own — see
+      // WebOwnerRoot for why that cannot live in the app Root.
       {
-        path: '/dashboard',
-        element: <DashboardLayout />,
+        element: <WebOwnerRoot />,
         children: [
-          { index: true,                                     element: <LandingPage /> },
-          { path: 'profile',                                 element: <ProfilePage /> },
-          { path: 'security',                                element: <SecurityPage /> },
-          { path: 'user-management',                         element: <UserManagementPage /> },
-          { path: 'user-management/:id',                     element: <InstituteDetailPage /> },
-          { path: 'questions',                               element: <QuestionsPage /> },
-          { path: 'subjects',                                element: <SubjectsPage /> },
-          { path: 'assignments',                             element: <AssignmentsPage /> },
-          { path: 'assignments/:assessmentId/roster',        element: <AssessmentRosterPage /> },
-          { path: 'reports',                                 element: <ReportsInboxPage /> },
-          { path: 'seb',                                     element: <SEBSettingsPage /> },
+          { index: true, element: <Navigate to="/login" replace /> },
+          { path: '/login',           element: <LoginPage /> },
+          { path: '/forgot-password', element: <ForgotPasswordPage /> },
+          { path: '/reset-password',  element: <ResetPasswordActionPage role="web_owner" /> },
+          {
+            path: '/dashboard',
+            element: <DashboardLayout />,
+            children: [
+              { index: true,                                 element: <LandingPage /> },
+              { path: 'profile',                             element: <ProfilePage /> },
+              { path: 'security',                            element: <SecurityPage /> },
+              { path: 'appearance',                          element: <AppearancePage role="web_owner" /> },
+              { path: 'user-management',                     element: <UserManagementPage /> },
+              { path: 'user-management/:id',                 element: <InstituteDetailPage /> },
+              { path: 'questions',                           element: <QuestionsPage /> },
+              { path: 'subjects',                            element: <SubjectsPage /> },
+              { path: 'assignments',                         element: <AssignmentsPage /> },
+              { path: 'assignments/:assessmentId/roster',    element: <AssessmentRosterPage /> },
+              { path: 'reports',                             element: <ReportsInboxPage /> },
+              { path: 'seb',                                 element: <SEBSettingsPage /> },
+            ],
+          },
         ],
       },
 
@@ -123,6 +131,7 @@ export const router = createBrowserRouter([
               { path: 'dashboard',                           element: <InstituteLandingPage /> },
               { path: 'profile',                             element: <InstituteProfilePage /> },
               { path: 'security',                            element: <InstituteSecurityPage /> },
+              { path: 'appearance',                          element: <AppearancePage role="institute" /> },
               { path: 'questions',                           element: <InstituteQuestionsPage /> },
               { path: 'assignments',                         element: <InstituteAssignmentsPage /> },
               { path: 'assignments/:assessmentId/roster',   element: <InstituteAssessmentRosterPage /> },
@@ -148,6 +157,7 @@ export const router = createBrowserRouter([
               { path: 'dashboard',                              element: <FacultyLandingPage /> },
               { path: 'profile',                               element: <FacultyProfilePage /> },
               { path: 'security',                              element: <FacultySecurityPage /> },
+              { path: 'appearance',                            element: <AppearancePage role="faculty" /> },
               { path: 'questions',                             element: <FacultyQuestionsPage /> },
               { path: 'assignments',                           element: <FacultyAssignmentsPage /> },
               { path: 'assignments/:assessmentId/roster',      element: <FacultyAssessmentRosterPage /> },
@@ -223,7 +233,7 @@ export const router = createBrowserRouter([
               { path: 'progress',                       element: <StudentProgressPage /> },
               { path: 'exam/:assessmentId/results',     element: <ExamResultsPage /> },
               { path: 'profile',                        element: <StudentProfilePage /> },
-              { path: 'appearance',                     element: <StudentAppearancePage /> },
+              { path: 'appearance',                     element: <AppearancePage role="student" /> },
               { path: 'security',                       element: <StudentSecurityPage /> },
             ],
           },

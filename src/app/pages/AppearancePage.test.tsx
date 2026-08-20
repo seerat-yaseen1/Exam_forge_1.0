@@ -20,18 +20,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
-import { THEMES } from '../../../lib/themes';
-import { DEFAULT_PREFERENCES, type StudentPreferences } from '../../../lib/studentPreferences';
+import { THEMES } from '../../lib/themes';
+import { DEFAULT_PREFERENCES, type AppearancePreferences } from '../../lib/appearancePreferences';
 
 // ── Doubles ───────────────────────────────────────────────────────
 
 const savePreferences = vi.fn(async () => true);
 // Typed by its return so a test can hand back a stored preference set; the
 // bare `async () => null` vitest infers otherwise pins it to `null` forever.
-const loadPreferences = vi.fn<() => Promise<StudentPreferences | null>>(async () => null);
+const loadPreferences = vi.fn<() => Promise<AppearancePreferences | null>>(async () => null);
 
-vi.mock('../../../lib/studentPreferences', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../lib/studentPreferences')>();
+vi.mock('../../lib/appearancePreferences', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/appearancePreferences')>();
   return {
     ...actual,
     loadPreferences: (...args: unknown[]) => loadPreferences(...(args as [])),
@@ -39,17 +39,8 @@ vi.mock('../../../lib/studentPreferences', async (importOriginal) => {
   };
 });
 
-// The auth context reaches Firebase on import. The provider only ever reads
-// `session.studentId`, so a stub is the whole dependency.
-vi.mock('../../context/StudentAuthContext', () => ({
-  useStudentAuth: () => ({
-    session: { studentId: 'stu_1', name: 'Priya M', email: 'p@x.edu' },
-    loading: false,
-  }),
-}));
-
-const { AppearanceProvider } = await import('../../context/AppearanceContext');
-const { StudentAppearancePage } = await import('./StudentAppearancePage');
+const { AppearanceProvider } = await import('../context/AppearanceContext');
+const { AppearancePage } = await import('./AppearancePage');
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -99,8 +90,8 @@ function render() {
   act(() => {
     root!.render(
       <MemoryRouter>
-        <AppearanceProvider>
-          <StudentAppearancePage />
+        <AppearanceProvider accountId="stu_1">
+          <AppearancePage role="student" />
         </AppearanceProvider>
       </MemoryRouter>,
     );
@@ -133,7 +124,7 @@ function tileFor(el: HTMLElement, label: string): HTMLButtonElement {
 
 // ══════════════════════════════════════════════════════════════════
 
-describe('StudentAppearancePage', () => {
+describe('AppearancePage', () => {
   it('offers every shipped theme, plus following the system', async () => {
     const el = await mount();
     const tiles = el.querySelectorAll('button.ef-theme-tile');

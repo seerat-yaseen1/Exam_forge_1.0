@@ -5,7 +5,7 @@ import { useStudentAuth } from '../../context/StudentAuthContext';
 import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
 import { AuthShell, Field, PasswordField } from '../../components/student/fields';
-import { Button } from '../../components/student/ui';
+import { Button } from '../../components/console/ui';
 
 export function StudentLoginPage() {
   const navigate = useNavigate();

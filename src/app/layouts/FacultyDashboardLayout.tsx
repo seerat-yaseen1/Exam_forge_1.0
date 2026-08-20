@@ -1,10 +1,11 @@
 import { useRef, useState, useEffect } from 'react';
 import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Lock, LogOut, Building2, LayoutDashboard, BookOpen, ClipboardList, Flag } from 'lucide-react';
+import { User, Lock, LogOut, Building2, LayoutDashboard, BookOpen, ClipboardList, Flag, Palette } from 'lucide-react';
 import { useFacultyAuth } from '../context/FacultyAuthContext';
 import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
+import { ThemeButton } from '../components/console/ThemeMenu';
 import { RouteFallback } from '../components/RouteFallback';
 
 // ── Institute logo mark ───────────────────────────────────────────
@@ -106,6 +107,13 @@ function FacultyProfileDropdown({ onClose }: { onClose: () => void }) {
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}>
           <User size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           Profile
+        </button>
+        <button onClick={() => handleNav('/faculty/appearance')} className={menuItem}
+          style={{ color: 'var(--ef-text-subtle)' }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}>
+          <Palette size={13} strokeWidth={1.5} />
+          Appearance
         </button>
         <button onClick={() => handleNav('/faculty/security')} className={menuItem}
           style={{ color: '#2C2C2A' }}
@@ -223,6 +231,11 @@ export function FacultyDashboardLayout() {
             </span>
             <InstituteMark logo={instituteLogo} name={session.instituteName} size={26} />
           </div>
+
+          {/* In the chrome rather than three clicks deep in a settings page:
+              the point of letting someone choose is that changing their mind
+              is cheap. */}
+          <ThemeButton onOpen={() => setMenuOpen(false)} />
 
           <div className="relative">
             <button

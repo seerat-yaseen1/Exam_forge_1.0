@@ -1,5 +1,12 @@
 /**
- * Appearance — where a student chooses how their account looks.
+ * Appearance — where anyone signed in chooses how the app looks.
+ *
+ * ── ONE PAGE, FOUR CONSOLES ───────────────────────────────────────
+ * Web owner, institute admin, faculty and student all land here. The palettes,
+ * the preview and the comfort controls are identical for all of them, because
+ * the thing being chosen is identical; what differs is one paragraph of
+ * context, which is what `role` selects. A second copy of this page per role
+ * would be four places to forget a palette.
  *
  * ── THE PAGE IS THE PREVIEW ───────────────────────────────────────
  * Picking a theme applies it immediately to everything, including this page.
@@ -14,10 +21,10 @@
  * page around it would only show them one at a time.
  *
  * ── WHAT IT DOES NOT OFFER ────────────────────────────────────────
- * A custom colour picker. A fixed catalog whose every palette was checked for
+ * A custom colour picker. A fixed catalog whose every entry was checked for
  * contrast (themes.test.ts asserts each one clears WCAG AA on body text,
- * secondary text, accents and status tints) beats an infinite space in which a
- * student can, in about four seconds, make their own exam results unreadable.
+ * secondary text, accents and status tints) beats an infinite space in which
+ * someone can, in about four seconds, make their own exam results unreadable.
  */
 
 import { useState } from 'react';
@@ -25,7 +32,7 @@ import {
   Check, Info, Monitor, Moon, RotateCcw, Sun, Zap, Rows3, AlertTriangle,
   Sparkles, Cloud, CloudOff,
 } from 'lucide-react';
-import { useAppearance } from '../../context/AppearanceContext';
+import { useAppearance } from '../context/AppearanceContext';
 import {
   GROUP_LABELS,
   SYSTEM_CHOICE,
@@ -33,10 +40,10 @@ import {
   themesInGroup,
   type Theme,
   type ThemeGroup,
-} from '../../../lib/themes';
+} from '../../lib/themes';
 import {
   Button, Card, Chip, Meter, PageHeader, PageShell, SectionHeading, ThemeSwatch,
-} from '../../components/student/ui';
+} from '../components/console/ui';
 
 // ── Segmented control ─────────────────────────────────────────────
 
@@ -239,16 +246,68 @@ function Specimen() {
 
 const GROUPS: ThemeGroup[] = ['base', 'light', 'dark'];
 
-export function StudentAppearancePage() {
+export type AppearanceRole = 'web_owner' | 'institute' | 'faculty' | 'student';
+
+/**
+ * The one paragraph that differs per console.
+ *
+ * Each says the same two things — the choice is yours alone, and here is the
+ * thing it does NOT change — because those are the two questions someone has
+ * on a page that repaints their whole workspace. What that second thing IS
+ * differs: a student's exams are pinned, and staff need to know that what they
+ * see is not what their candidates see.
+ */
+const ROLE_NOTE: Record<AppearanceRole, { scope: string; exemption: React.ReactNode }> = {
+  web_owner: {
+    scope: 'your Web Owner console',
+    exemption: (
+      <>
+        It changes nothing for anyone else. Institutes, faculty and students each choose their own,
+        and the exam interface candidates sit in is fixed for everybody — see below.
+      </>
+    ),
+  },
+  institute: {
+    scope: 'your institute admin console',
+    exemption: (
+      <>
+        It is yours, not your institute's: another admin signing in sees their own choice, and your
+        faculty and students are unaffected. The exam interface candidates sit in is fixed for
+        everybody — see below.
+      </>
+    ),
+  },
+  faculty: {
+    scope: 'your faculty console',
+    exemption: (
+      <>
+        It is yours alone — your colleagues and your students are unaffected. The exam interface
+        candidates sit in is fixed for everybody — see below.
+      </>
+    ),
+  },
+  student: {
+    scope: 'your student console',
+    exemption: (
+      <>
+        Nobody else can change it — not your institute, not your examiner. See below for the one
+        screen it deliberately does not touch.
+      </>
+    ),
+  },
+};
+
+export function AppearancePage({ role }: { role: AppearanceRole }) {
   const {
     choice, theme, motion, density, syncing,
     setTheme, setMotion, setDensity, reset, preview,
   } = useAppearance();
 
-  // Purely informational: it says whether the choice made here will follow the
-  // student to another device, which is the one thing about a preference page
-  // people are actually unsure of.
+  // Purely informational: it says whether the choice made here will follow you
+  // to another device, which is the one thing about a preference page people
+  // are actually unsure of.
   const [showSyncNote, setShowSyncNote] = useState(false);
+  const note = ROLE_NOTE[role];
 
   const isDefault = choice === SYSTEM_CHOICE && motion === 'system' && density === 'comfortable';
 
@@ -264,8 +323,8 @@ export function StudentAppearancePage() {
         title="Make it yours."
         subtitle={
           <>
-            {THEME_LIST.length} palettes, applied the moment you pick one. Your choice is saved to
-            your account, so it follows you to any device you sign in on.
+            {THEME_LIST.length} palettes for {note.scope}, applied the moment you pick one. Your
+            choice is saved to your account, so it follows you to any device you sign in on.
           </>
         }
         actions={
@@ -304,14 +363,16 @@ export function StudentAppearancePage() {
             <p style={{ fontSize: 12, color: 'var(--ef-text-muted)', lineHeight: 1.65 }}>
               Your choice is stored on this device and against your account. Signing in somewhere
               else brings it with you; the local copy is what makes the theme correct on the very
-              first frame after a refresh, before the account has finished loading. Nobody else can
-              change it — not your institute, not your examiner.
+              first frame after a refresh, before the account has finished loading.
+              {' '}
+              {note.exemption}
               {' '}
               <strong style={{ color: 'var(--ef-text-subtle)', fontWeight: 500 }}>
-                Exams are the one exception:
+                The exam shell is exempt:
               </strong>{' '}
-              the exam shell always renders in the platform's standard palette, so that what an
-              invigilator sees over your shoulder is what they expect to see.
+              a candidate sitting a paper always sees the platform's standard palette, whatever
+              theme their account carries, so that what an invigilator sees over a shoulder is what
+              they expect to see.
             </p>
           </div>
         )}

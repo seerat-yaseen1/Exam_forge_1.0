@@ -8,7 +8,7 @@ import { LogoMark } from '../../components/PlatformLogo';
 import {
   AuthShell, Field, MatchNote, PasswordField, StrengthBar,
 } from '../../components/student/fields';
-import { Button } from '../../components/student/ui';
+import { Button } from '../../components/console/ui';
 
 type Stage = 'form' | 'success';
 

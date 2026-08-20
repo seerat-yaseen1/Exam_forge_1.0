@@ -1,7 +1,7 @@
 /**
  * The student console's shared components.
  *
- * Thin wrappers over the classes in styles/student.css — thin on purpose. The
+ * Thin wrappers over the classes in styles/console.css — thin on purpose. The
  * value is not abstraction, it is that "a card", "a chip", "the page header"
  * mean one thing across seven screens, and that adding a theme token to any of
  * them is one edit rather than seven.

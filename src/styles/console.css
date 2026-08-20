@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════
-   STUDENT CONSOLE — the shared surface language
+   THE CONSOLE — the shared surface language
    ══════════════════════════════════════════════════════════════════
 
    ── WHY THIS FILE EXISTS ──────────────────────────────────────────
@@ -18,8 +18,13 @@
         A class is written once.
 
    So: the primitives live here, keyed to the --ef-* tokens, and the pages
-   compose them. Everything is prefixed `ef-` and nothing here matches an
-   existing class name, so the other three role consoles are untouched.
+   compose them. Everything is prefixed `ef-`, and nothing here matches a class
+   name that already existed, so adopting a primitive is always opt-in: a page
+   that has not been touched renders exactly as it did.
+
+   Written for the student console first, and now shared by all four — which is
+   why it is `console.css` rather than `student.css`, and why nothing in it
+   knows what a student is.
 
    ── WHAT IS DELIBERATELY NOT HERE ─────────────────────────────────
    Layout. Tailwind already does that well and the pages read better with the

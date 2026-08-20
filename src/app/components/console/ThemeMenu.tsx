@@ -12,10 +12,10 @@
  *     nothing and commits nothing.
  */
 
-import { useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
-import { Check, Monitor, Moon, Sliders, Sun } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Check, Monitor, Moon, Palette, Sliders, Sun } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
 import { useAppearance } from '../../context/AppearanceContext';
 import {
   GROUP_LABELS,
@@ -24,12 +24,33 @@ import {
   themesInGroup,
   type ThemeGroup,
 } from '../../../lib/themes';
-import { ThemeSwatch } from './ui';
+import { ThemeSwatch } from '../console/ui';
 
 const GROUPS: ThemeGroup[] = ['base', 'light', 'dark'];
 
+/**
+ * Where "Appearance settings" goes, from wherever the menu is open.
+ *
+ * Derived from the path rather than passed in as a prop, because it IS a
+ * function of the path: the four consoles live at four prefixes and each has
+ * its own appearance route. A prop would be a fifth place to state the same
+ * fact, and the failure mode of getting it wrong — a faculty member sent to
+ * the student console, where their session does not exist — is a redirect to a
+ * login page they are not supposed to see.
+ *
+ * The web owner's console is the fallback because it is the one that does not
+ * live under a prefix of its own: its routes hang off `/dashboard`.
+ */
+export function appearancePathFor(pathname: string): string {
+  if (pathname.startsWith('/student')) return '/student/appearance';
+  if (pathname.startsWith('/institute')) return '/institute/appearance';
+  if (pathname.startsWith('/faculty')) return '/faculty/appearance';
+  return '/dashboard/appearance';
+}
+
 export function ThemeMenu({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { choice, theme, setTheme, preview } = useAppearance();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -132,7 +153,7 @@ export function ThemeMenu({ onClose }: { onClose: () => void }) {
         style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
         onClick={() => {
           onClose();
-          navigate('/student/appearance');
+          navigate(appearancePathFor(pathname));
         }}
       >
         <Sliders size={14} strokeWidth={1.5} />
@@ -186,5 +207,53 @@ function ThemeRow({
       </span>
       {selected && <Check size={14} strokeWidth={2} style={{ color: 'var(--ef-accent)', flexShrink: 0 }} />}
     </button>
+  );
+}
+
+
+/**
+ * The header control: the button, its menu, and the open/closed state between
+ * them.
+ *
+ * Every console's layout wants exactly this and nothing more, so it is one
+ * component rather than four copies of a `useState`, an `aria-expanded`, an
+ * `AnimatePresence` and a palette icon. `onOpen` exists because the layouts
+ * each have a second popover — a profile menu — and two open popovers is a
+ * mistake in every one of them.
+ */
+export function ThemeButton({
+  onOpen,
+  className = '',
+}: {
+  /** Called when this menu opens, so the layout can close its own popovers. */
+  onOpen?: () => void;
+  className?: string;
+}) {
+  const { theme } = useAppearance();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={`relative ${className}`}>
+      <button
+        type="button"
+        className="ef-icon-btn"
+        data-active={open}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Theme: ${theme.label}`}
+        title={`Theme: ${theme.label}`}
+        onClick={() => {
+          setOpen((v) => {
+            if (!v) onOpen?.();
+            return !v;
+          });
+        }}
+      >
+        <Palette size={16} strokeWidth={1.6} />
+      </button>
+      <AnimatePresence>
+        {open && <ThemeMenu onClose={() => setOpen(false)} />}
+      </AnimatePresence>
+    </div>
   );
 }

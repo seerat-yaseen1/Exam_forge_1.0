@@ -47,7 +47,7 @@ import {
 import {
   Button, Card, Chip, EmptyState, ErrorBanner, LiveDot, LoadingBlock,
   PageHeader, PageShell, SectionHeading, StatRow, StatTile,
-} from '../../components/student/ui';
+} from '../../components/console/ui';
 
 // ── Helpers ────────────────────────────────────────────────────────
 

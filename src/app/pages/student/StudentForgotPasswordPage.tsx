@@ -6,7 +6,7 @@ import { useStudentAuth } from '../../context/StudentAuthContext';
 import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
 import { AuthShell, Field } from '../../components/student/fields';
-import { Button } from '../../components/student/ui';
+import { Button } from '../../components/console/ui';
 
 type Stage = 'input' | 'sent';
 

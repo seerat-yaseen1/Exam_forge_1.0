@@ -29,7 +29,7 @@ import { SubjectBars, TrendChart } from '../../components/student/Charts';
 import {
   Button, Card, Chip, EmptyState, ErrorBanner, LoadingBlock,
   PageHeader, PageShell, SectionHeading, StatRow, StatTile,
-} from '../../components/student/ui';
+} from '../../components/console/ui';
 
 export function StudentProgressPage() {
   const { session } = useStudentAuth();

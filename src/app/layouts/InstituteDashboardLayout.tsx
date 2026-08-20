@@ -1,10 +1,11 @@
 import { useRef, useState, useEffect } from 'react';
 import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Upload, LogOut, Building2, Loader2, LayoutDashboard, BookOpen, ClipboardList, Flag } from 'lucide-react';
+import { User, Upload, LogOut, Building2, Loader2, LayoutDashboard, BookOpen, ClipboardList, Flag, Palette } from 'lucide-react';
 import { useInstituteAuth } from '../context/InstituteAuthContext';
 import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
+import { ThemeButton } from '../components/console/ThemeMenu';
 import { RouteFallback } from '../components/RouteFallback';
 
 // ── Institute logo / avatar ───────────────────────────────────────────────────
@@ -133,6 +134,17 @@ function InstituteProfileDropdown({
         >
           <User size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           Profile
+        </button>
+
+        <button
+          onClick={() => handleNav('/institute/appearance')}
+          className={menuItem}
+          style={menuItemStyle}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
+        >
+          <Palette size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+          Appearance
         </button>
 
         <button
@@ -275,8 +287,14 @@ export function InstituteDashboardLayout() {
           </div>
         </Link>
 
-        {/* Right: Institute logo + name + profile menu */}
-        <div className="relative flex items-center">
+        {/* Right: theme control, then institute logo + name + profile menu */}
+        <div className="flex items-center gap-2">
+          {/* In the chrome rather than three clicks deep in a settings page:
+              the point of letting someone choose is that changing their mind
+              is cheap. */}
+          <ThemeButton onOpen={() => setMenuOpen(false)} />
+
+          <div className="relative flex items-center">
           <button
             onClick={() => setMenuOpen((v) => !v)}
             className="flex items-center gap-2.5 transition-opacity select-none"
@@ -310,6 +328,7 @@ export function InstituteDashboardLayout() {
               />
             )}
           </AnimatePresence>
+          </div>
         </div>
       </header>
 

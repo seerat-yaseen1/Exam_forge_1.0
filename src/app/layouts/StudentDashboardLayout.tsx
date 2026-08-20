@@ -10,7 +10,7 @@ import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { useAppearance } from '../context/AppearanceContext';
 import { LogoMark } from '../components/PlatformLogo';
 import { RouteFallback } from '../components/RouteFallback';
-import { ThemeMenu } from '../components/student/ThemeMenu';
+import { ThemeButton } from '../components/console/ThemeMenu';
 
 // ── Institute logo mark ───────────────────────────────────────────
 
@@ -151,11 +151,9 @@ const NAV_ITEMS = [
 export function StudentDashboardLayout() {
   const { session, instituteLogo, logoLoading, loading } = useStudentAuth();
   const { platformSettings } = usePlatformSettings();
-  const { theme } = useAppearance();
   const navigate = useNavigate();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [themeOpen, setThemeOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Any navigation closes the mobile sheet. Without this, tapping a link
@@ -243,28 +241,12 @@ export function StudentDashboardLayout() {
             {/* Theme. A first-class control in the chrome rather than a
                 setting buried three clicks deep — the whole point of letting
                 someone choose is that changing their mind is cheap. */}
-            <div className="relative">
-              <button
-                type="button"
-                className="ef-icon-btn"
-                data-active={themeOpen}
-                aria-haspopup="menu"
-                aria-expanded={themeOpen}
-                aria-label={`Theme: ${theme.label}`}
-                title={`Theme: ${theme.label}`}
-                onClick={() => { setThemeOpen((v) => !v); setProfileOpen(false); }}
-              >
-                <Palette size={16} strokeWidth={1.6} />
-              </button>
-              <AnimatePresence>
-                {themeOpen && <ThemeMenu onClose={() => setThemeOpen(false)} />}
-              </AnimatePresence>
-            </div>
+            <ThemeButton onOpen={() => setProfileOpen(false)} />
 
             <div className="relative">
               <button
                 type="button"
-                onClick={() => { setProfileOpen((v) => !v); setThemeOpen(false); }}
+                onClick={() => setProfileOpen((v) => !v)}
                 className="ef-icon-btn"
                 data-active={profileOpen}
                 aria-haspopup="menu"

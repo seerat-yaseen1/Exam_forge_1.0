@@ -40,7 +40,7 @@ import { ResultsTab } from './ResultsTab';
 import {
   Button, Card, Chip, EmptyState as EmptyPanel, ErrorBanner, LiveDot,
   LoadingBlock, PageHeader, PageShell,
-} from '../../components/student/ui';
+} from '../../components/console/ui';
 
 // ══════════════════════════════════════════════════════════════════
 // TYPES

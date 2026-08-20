@@ -12,7 +12,7 @@ import {
 import { formatDate } from '../../../lib/dateFormat';
 import {
   Button, Card, Chip, PageHeader, PageShell, SectionHeading,
-} from '../../components/student/ui';
+} from '../../components/console/ui';
 
 // ── A labelled fact ───────────────────────────────────────────────
 

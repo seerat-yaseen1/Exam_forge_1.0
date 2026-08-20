@@ -8,7 +8,7 @@
  * be missed, and the hand-rolled focus handling meant `:focus-visible` never
  * applied to any of them.
  *
- * The styling now lives in `.ef-input` (styles/student.css). These components
+ * The styling now lives in `.ef-input` (styles/console.css). These components
  * are what is left once it does: a label, a field, and the one piece of real
  * logic — the strength score.
  */

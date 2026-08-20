@@ -112,6 +112,7 @@ function ThemeTile({
     <button
       type="button"
       className="ef-theme-tile"
+      style={{ alignItems: 'flex-start' }}
       aria-pressed={selected}
       onClick={onSelect}
       onMouseEnter={() => onPreview(theme.id)}
@@ -129,7 +130,18 @@ function ThemeTile({
             ? <Moon size={10} strokeWidth={1.8} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
             : <Sun size={10} strokeWidth={1.8} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />}
         </span>
-        <span className="block truncate mt-0.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+        <span
+          className="block mt-0.5"
+          style={{
+            fontSize: 11.5,
+            color: 'var(--ef-text-muted)',
+            lineHeight: 1.4,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
           {theme.blurb}
         </span>
       </span>
@@ -328,6 +340,7 @@ export function StudentAppearancePage() {
                   <button
                     type="button"
                     className="ef-theme-tile"
+                    style={{ alignItems: 'flex-start' }}
                     aria-pressed={choice === SYSTEM_CHOICE}
                     onClick={() => setTheme(SYSTEM_CHOICE)}
                   >
@@ -341,7 +354,7 @@ export function StudentAppearancePage() {
                       <span className="block truncate" style={{ fontSize: 13, color: 'var(--ef-ink)', fontWeight: 500 }}>
                         Match system
                       </span>
-                      <span className="block truncate mt-0.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+                      <span className="block mt-0.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.4 }}>
                         Follows your device, light or dark.
                       </span>
                     </span>

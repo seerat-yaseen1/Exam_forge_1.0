@@ -1,286 +1,191 @@
-import { useState, useRef } from 'react';
-import { motion } from 'motion/react';
-import { Upload, X, Check, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Check, ImageOff, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePlatformSettings } from '../context/PlatformSettingsContext';
+import { LogoMark } from '../components/PlatformLogo';
+import { AccountProfile } from '../components/console/account';
+import { Button, Card, SectionHeading } from '../components/console/ui';
+import { Field } from '../components/student/fields';
+
+/**
+ * The Web Owner's profile — and the platform's own identity.
+ *
+ * ── WHY THE TWO ARE ON ONE PAGE ───────────────────────────────────
+ * They were already, and it is right: this is the only account that can
+ * change the product's name and mark, so the person and the platform are the
+ * same settings screen for exactly one user. Splitting them would create a
+ * second page that only ever holds two fields.
+ *
+ * They are separated visibly instead. The account block is read-only facts;
+ * branding is a form that changes what every other user sees. A change with
+ * that reach should not look like the same kind of thing as your own email
+ * address sitting there being unchangeable.
+ */
 
 export function ProfilePage() {
   const { user } = useAuth();
   const { platformSettings, updatePlatformSettings } = usePlatformSettings();
 
-  const [platformName, setPlatformName] = useState(platformSettings.name);
+  const [name, setName] = useState(platformSettings.name);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [logoPreview, setLogoPreview] = useState<string | null>(platformSettings.logoUrl);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const dirty = name.trim() !== platformSettings.name && name.trim().length > 0;
 
+  const onPickLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const url = ev.target?.result as string;
-      setLogoPreview(url);
-      // Immediate reflection across all screens — no refresh, no delay
-      updatePlatformSettings({ logoUrl: url });
+      // Applied immediately rather than on a Save: the header updates as you
+      // watch, which is the only honest preview of a logo — it is a 22px mark
+      // in a bar, not the 200px file you selected.
+      updatePlatformSettings({ logoUrl: ev.target?.result as string });
     };
     reader.readAsDataURL(file);
-    // Reset input so same file can be re-selected
-    e.target.value = '';
   };
 
-  const handleRemoveLogo = () => {
-    setLogoPreview(null);
-    updatePlatformSettings({ logoUrl: null });
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!platformName.trim()) return;
-
+    if (!dirty) return;
     setSaving(true);
-    // Simulate save — in production this would persist to backend
-    await new Promise((r) => setTimeout(r, 600));
-    updatePlatformSettings({ name: platformName.trim() });
+    await new Promise((r) => setTimeout(r, 400));
+    updatePlatformSettings({ name: name.trim() });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
+  if (!user) return null;
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="max-w-[520px] mx-auto px-6 py-12"
+    <AccountProfile
+      name={user.name}
+      role="Web owner"
+      subtitle="You administer the platform itself."
+      fields={[
+        { label: 'Full name', value: user.name },
+        { label: 'Email', value: user.email, mono: true },
+        { label: 'Scope', value: 'Every institute on the platform' },
+      ]}
+      managedBy={
+        <>
+          Your name and email are fixed on this account. Everything below is the product's own
+          identity, and changing it changes what every institute, faculty member and student sees.
+        </>
+      }
     >
-      {/* Section header */}
-      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
-        <p
-          className="text-xs mb-1"
-          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}
-        >
-          WEB OWNER
-        </p>
-        <h1 className="text-base" style={{ color: 'var(--ef-ink)' }}>
-          Profile & Platform
-        </h1>
-      </div>
-
-      {/* Account info */}
-      <div className="mb-8">
-        <p
-          className="text-xs mb-4"
-          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}
-        >
-          ACCOUNT
-        </p>
-        <div className="grid gap-4">
-          <div>
-            <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>Name</p>
-            <div
-              className="px-3.5 py-2.5 text-sm"
-              style={{
-                background: 'var(--ef-canvas)',
-                border: '1px solid var(--ef-border)',
-                color: 'var(--ef-text-muted)',
-                borderRadius: 2,
-              }}
-            >
-              {user?.name}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>Email</p>
-            <div
-              className="px-3.5 py-2.5 text-sm"
-              style={{
-                background: 'var(--ef-canvas)',
-                border: '1px solid var(--ef-border)',
-                color: 'var(--ef-text-muted)',
-                borderRadius: 2,
-              }}
-            >
-              {user?.email}
-            </div>
-            <p className="mt-1.5 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-              Email address cannot be changed.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div style={{ borderTop: '1px solid var(--ef-border)', marginBottom: 28 }} />
-
-      {/* Platform settings */}
-      <form onSubmit={handleSave}>
-        <p
-          className="text-xs mb-4"
-          style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}
-        >
-          PLATFORM IDENTITY
-        </p>
-
-        {/* Logo */}
-        <div className="mb-6">
-          <p className="text-xs mb-3" style={{ color: 'var(--ef-text-subtle)' }}>
-            Platform logo
-          </p>
-
-          <div className="flex items-start gap-4">
-            {/* Preview */}
-            <div
-              className="flex items-center justify-center flex-shrink-0"
-              style={{
-                width: 64,
-                height: 64,
-                border: '1px solid var(--ef-border)',
-                borderRadius: 3,
-                background: 'var(--ef-canvas-raised)',
-              }}
-            >
-              {logoPreview ? (
-                <img
-                  src={logoPreview}
-                  alt="Platform logo"
-                  style={{ width: 40, height: 40, objectFit: 'contain' }}
-                />
-              ) : (
-                <div style={{ color: 'var(--ef-border-muted)' }}>
-                  {/* Default mark placeholder */}
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <rect x="1" y="1" width="10" height="10" fill="currentColor" />
-                    <rect x="13" y="1" width="10" height="10" fill="currentColor" fillOpacity="0.38" />
-                    <rect x="1" y="13" width="10" height="10" fill="currentColor" fillOpacity="0.18" />
-                    <rect x="13" y="13" width="10" height="10" fill="currentColor" fillOpacity="0.65" />
-                  </svg>
-                </div>
-              )}
-            </div>
-
-            {/* Controls */}
-            <div className="flex flex-col gap-2 pt-1">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleLogoUpload}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
+      <section>
+        <SectionHeading
+          label="Platform identity"
+          hint="Seen by everyone, everywhere in the product."
+        />
+        <Card>
+          <form onSubmit={save} className="flex flex-col" style={{ gap: 22 }}>
+            {/* ── The mark ── */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <span
+                className="flex items-center justify-center flex-shrink-0"
                 style={{
+                  width: 62,
+                  height: 62,
+                  borderRadius: 'var(--ef-radius)',
+                  background: 'var(--ef-canvas-raised)',
                   border: '1px solid var(--ef-border)',
                   color: 'var(--ef-ink)',
-                  background: 'var(--ef-surface)',
-                  borderRadius: 2,
-                  cursor: 'pointer',
+                  overflow: 'hidden',
                 }}
-                onMouseEnter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')
-                }
-                onMouseLeave={(e) =>
-                  ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')
-                }
               >
-                <Upload size={11} strokeWidth={1.5} />
-                Upload logo
-              </button>
-              {logoPreview && (
-                <button
-                  type="button"
-                  onClick={handleRemoveLogo}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
-                  style={{
-                    border: '1px solid var(--ef-border)',
-                    color: 'var(--ef-danger)',
-                    background: 'var(--ef-surface)',
-                    borderRadius: 2,
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = 'var(--ef-danger-bg)')
-                  }
-                  onMouseLeave={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = 'var(--ef-surface)')
-                  }
-                >
-                  <X size={11} strokeWidth={1.5} />
-                  Remove
-                </button>
-              )}
-              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                PNG, SVG, or JPG. Reflects immediately.
-              </p>
+                {platformSettings.logoUrl ? (
+                  <img
+                    src={platformSettings.logoUrl}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 8 }}
+                  />
+                ) : (
+                  <LogoMark px={26} />
+                )}
+              </span>
+
+              <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                <p className="ef-t-sm ef-ink" style={{ fontWeight: 500 }}>
+                  Logo
+                </p>
+                <p className="ef-t-xs ef-muted" style={{ marginTop: 4, lineHeight: 'var(--ef-leading-relaxed)' }}>
+                  Square, on a transparent background. It renders at 22px in the header, so anything
+                  with fine detail will disappear.
+                </p>
+                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                  <Button size="sm" onClick={() => fileInputRef.current?.click()}>
+                    <Upload size={12} strokeWidth={1.7} />
+                    {platformSettings.logoUrl ? 'Replace' : 'Upload'}
+                  </Button>
+                  {platformSettings.logoUrl && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => updatePlatformSettings({ logoUrl: null })}
+                    >
+                      <ImageOff size={12} strokeWidth={1.7} />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={onPickLogo}
+                />
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Platform name */}
-        <div className="mb-6">
-          <label
-            htmlFor="platform-name"
-            className="block text-xs mb-2"
-            style={{ color: 'var(--ef-text-subtle)' }}
-          >
-            Platform name
-          </label>
-          <input
-            id="platform-name"
-            type="text"
-            value={platformName}
-            onChange={(e) => setPlatformName(e.target.value)}
-            placeholder="e.g. STRATUM"
-            maxLength={32}
-            className="w-full px-3.5 py-2.5 text-sm outline-none"
-            style={{
-              background: 'var(--ef-canvas-raised)',
-              border: '1px solid var(--ef-border)',
-              color: 'var(--ef-ink)',
-              borderRadius: 2,
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = 'var(--ef-ink)';
-              e.target.style.background = 'var(--ef-surface)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = 'var(--ef-border)';
-              e.target.style.background = 'var(--ef-canvas-raised)';
-            }}
-          />
-        </div>
+            <div style={{ borderTop: '1px solid var(--ef-border-subtle)' }} />
 
-        <button
-          type="submit"
-          disabled={saving || !platformName.trim()}
-          className="flex items-center gap-2 px-5 py-2.5 text-xs transition-colors"
-          style={{
-            background: saving || !platformName.trim() ? 'var(--ef-track)' : 'var(--ef-ink)',
-            color: 'var(--ef-surface)',
-            borderRadius: 2,
-            letterSpacing: '0.04em',
-            cursor: saving || !platformName.trim() ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {saving ? (
-            <>
-              <Loader2 size={12} className="animate-spin" />
-              Saving…
-            </>
-          ) : saved ? (
-            <>
-              <Check size={12} />
-              Saved
-            </>
-          ) : (
-            'Save changes'
-          )}
-        </button>
-      </form>
-    </motion.div>
+            {/* ── The name ── */}
+            <div style={{ maxWidth: 380 }}>
+              <Field
+                label="Product name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={saving}
+                placeholder="e.g. Stratum"
+                hint="Appears in the header of every console and on every sign-in screen."
+              />
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button type="submit" variant="primary" disabled={!dirty || saving} loading={saving}>
+                {saving ? 'Saving…' : 'Save name'}
+              </Button>
+
+              <AnimatePresence>
+                {saved && (
+                  <motion.span
+                    role="status"
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="ef-t-sm flex items-center gap-1.5"
+                    style={{ color: 'var(--ef-success)' }}
+                  >
+                    <Check size={14} strokeWidth={2.2} />
+                    Saved
+                  </motion.span>
+                )}
+              </AnimatePresence>
+
+              {dirty && !saving && !saved && (
+                <span className="ef-t-xs ef-muted">Unsaved change</span>
+              )}
+            </div>
+          </form>
+        </Card>
+      </section>
+    </AccountProfile>
   );
 }

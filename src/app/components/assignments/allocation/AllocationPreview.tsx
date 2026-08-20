@@ -136,7 +136,7 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
             </p>
           ))}
           {result.warnings.map((w, i) => (
-            <p key={`w${i}`} className="flex items-start gap-1.5 text-xs" style={{ color: '#B0742A' }}>
+            <p key={`w${i}`} className="flex items-start gap-1.5 text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
               <AlertTriangle size={11} strokeWidth={1.5} className="mt-0.5 flex-shrink-0" /> {w}
             </p>
           ))}
@@ -147,7 +147,7 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
         {result.byNode.map((n) => (
           <div key={n.nodeId} className="flex items-baseline justify-between gap-3 text-xs">
             <span className="min-w-0 truncate" style={{ color: INK }}>{nameFor(n.nodeId)}</span>
-            <span className="flex-shrink-0" style={{ color: n.count === 0 ? '#B0742A' : MUTED }}>
+            <span className="flex-shrink-0" style={{ color: n.count === 0 ? 'var(--ef-warning-strong)' : MUTED }}>
               {n.count === 0 ? '0 students mapped' : n.count.toLocaleString()}
             </span>
           </div>
@@ -156,7 +156,7 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
 
       {(result.deltaCounts.added > 0 || result.deltaCounts.removed > 0) && (
         <div className="px-5 py-2 text-xs" style={{ borderBottom: `1px solid ${LINE}`, color: MUTED }}>
-          Change since last save: <span style={{ color: '#2E7D32' }}>+{result.deltaCounts.added}</span>
+          Change since last save: <span style={{ color: 'var(--ef-success-strong)' }}>+{result.deltaCounts.added}</span>
           {result.deltaCounts.removed > 0 && <> · <span style={{ color: 'var(--ef-danger)' }}>−{result.deltaCounts.removed}</span></>}
         </div>
       )}
@@ -189,7 +189,7 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
               <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                 {filtered.map((s) => (
                   <div key={s.key} className="flex items-baseline justify-between gap-3 px-5 py-1.5 text-xs"
-                    style={{ borderBottom: '1px solid #F1F0EC' }}>
+                    style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
                     <span className="min-w-0 truncate" style={{ color: INK }}>
                       {s.name} <span style={{ color: FAINT }}>· {s.email}</span>
                     </span>
@@ -241,7 +241,7 @@ export function AllocationPreview({ loading, result, nodeTypeLabel, nodeNameOf, 
               <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                 {sampleRows.map((s) => (
                   <div key={s.key} className="flex items-baseline justify-between gap-3 px-5 py-1.5 text-xs"
-                    style={{ borderBottom: '1px solid #F1F0EC' }}>
+                    style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
                     <span className="min-w-0 truncate" style={{ color: INK }}>
                       {s.name} <span style={{ color: FAINT }}>· {s.email}</span>
                     </span>

@@ -195,7 +195,7 @@ function SubjectCard({
                   removing={removingAlias === a}
                 />
               ) : (
-                <span key={a} className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-border-subtle)', color: '#6B6A64', borderRadius: 2 }}>
+                <span key={a} className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 2 }}>
                   {a}
                 </span>
               )
@@ -413,7 +413,7 @@ function MergeModal({
 
           {phase === 'done' && result && (
             <div className="flex flex-col items-center py-8">
-              <div className="flex items-center justify-center mb-4" style={{ width: 44, height: 44, borderRadius: '50%', background: '#F0FBF4', border: '1px solid #C3E8CE' }}>
+              <div className="flex items-center justify-center mb-4" style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)' }}>
                 <CheckCircle2 size={20} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
               </div>
               <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>Merge complete</p>

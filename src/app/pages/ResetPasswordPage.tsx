@@ -128,7 +128,7 @@ export function ResetPasswordPage() {
           >
             SET NEW PASSWORD
           </p>
-          <p className="text-xs mb-6" style={{ color: '#6B6B65' }}>
+          <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)' }}>
             Enter your 10-character reset code and choose a new password.
           </p>
 

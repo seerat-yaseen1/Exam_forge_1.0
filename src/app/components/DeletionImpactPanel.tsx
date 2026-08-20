@@ -81,7 +81,7 @@ export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props)
     return (
       <div
         className="flex items-start gap-2 text-xs px-2.5 py-2"
-        style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2, color: '#7A5B12' }}
+        style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2, color: 'var(--ef-warning-strong)' }}
       >
         <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
@@ -110,7 +110,7 @@ export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props)
       {destructive.length > 0 && (
         <div
           className="px-2.5 py-2"
-          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2 }}
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}
         >
           <p className="text-xs mb-1.5" style={{ color: 'var(--ef-danger)', fontWeight: 500 }}>
             This will affect:
@@ -118,10 +118,10 @@ export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props)
           <div className="flex flex-col gap-0.5">
             {destructive.map((r) => (
               <div key={r.key} className="flex items-center justify-between text-xs">
-                <span style={{ color: '#6B6862' }}>{r.label}</span>
+                <span style={{ color: 'var(--ef-text-muted)' }}>{r.label}</span>
                 <span
                   style={{
-                    color: r.count === null ? '#7A5B12' : '#3A3833',
+                    color: r.count === null ? 'var(--ef-warning-strong)' : 'var(--ef-ink)',
                     fontWeight: 500,
                     fontVariantNumeric: 'tabular-nums',
                   }}
@@ -136,9 +136,9 @@ export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props)
 
       {preserved.length > 0 && (
         <div className="flex items-start gap-2 px-2.5 py-2"
-          style={{ background: '#F2F6F2', border: '1px solid #D3E0D3', borderRadius: 2 }}>
-          <ShieldCheck size={12} style={{ marginTop: 1, flexShrink: 0, color: '#3F6B3F' }} />
-          <div className="text-xs" style={{ color: '#3F6B3F' }}>
+          style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
+          <ShieldCheck size={12} style={{ marginTop: 1, flexShrink: 0, color: 'var(--ef-success-strong)' }} />
+          <div className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>
             <span style={{ fontWeight: 500 }}>Kept as academic records: </span>
             {preserved.map((r, i) => (
               <span key={r.key}>
@@ -153,7 +153,7 @@ export function DeletionImpactPanel({ entityType, entityId, onResolved }: Props)
 
       {recommendArchive && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2"
-          style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2, color: '#7A5B12' }}>
+          style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2, color: 'var(--ef-warning-strong)' }}>
           <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
             This account has dependent records. Disabling it instead blocks access

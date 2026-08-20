@@ -16,33 +16,33 @@ function truncateStem(s: string, n = 120) {
 const ENGINE_META: Record<QuestionEngine, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
   mcq: {
     label: 'MCQ',
-    color: '#2563A8',
-    bg: '#EFF5FD',
+    color: 'var(--ef-info)',
+    bg: 'var(--ef-info-bg)',
     icon: <Check size={9} strokeWidth={2} />,
   },
   text: {
     label: 'TEXT',
-    color: '#7C4D00',
-    bg: '#FDF4E7',
+    color: 'var(--ef-warning-strong)',
+    bg: 'var(--ef-warning-bg)',
     icon: <AlignLeft size={9} strokeWidth={2} />,
   },
   match: {
     label: 'MATCH',
-    color: '#4A1D96',
-    bg: '#F5F0FF',
+    color: 'var(--ef-accent)',
+    bg: 'var(--ef-accent-soft)',
     icon: <Shuffle size={9} strokeWidth={2} />,
   },
   code: {
     label: 'CODE',
-    color: '#0F5132',
-    bg: '#EAF6EF',
+    color: 'var(--ef-success-strong)',
+    bg: 'var(--ef-success-bg)',
     icon: <Code2 size={9} strokeWidth={2} />,
   },
 };
 
 const DIFFICULTY_META: Record<Difficulty, { label: string; color: string }> = {
   easy: { label: 'Easy', color: 'var(--ef-success-strong)' },
-  medium: { label: 'Medium', color: '#8B5A00' },
+  medium: { label: 'Medium', color: 'var(--ef-warning-strong)' },
   hard: { label: 'Hard', color: 'var(--ef-danger)' },
 };
 
@@ -89,7 +89,7 @@ function QuestionRow({
       className="flex items-start gap-3 px-4 py-3 transition-colors"
       style={{
         borderBottom: '1px solid var(--ef-border-subtle)',
-        background: selected ? 'var(--ef-canvas-raised)' : hovered ? '#FDFCFB' : 'var(--ef-surface)',
+        background: selected ? 'var(--ef-canvas-raised)' : hovered ? 'var(--ef-surface-hover)' : 'var(--ef-surface)',
         cursor: 'pointer',
       }}
       onMouseEnter={() => setHovered(true)}

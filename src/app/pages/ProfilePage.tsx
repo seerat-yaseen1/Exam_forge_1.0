@@ -84,7 +84,7 @@ export function ProfilePage() {
               style={{
                 background: 'var(--ef-canvas)',
                 border: '1px solid var(--ef-border)',
-                color: '#6B6B65',
+                color: 'var(--ef-text-muted)',
                 borderRadius: 2,
               }}
             >
@@ -98,7 +98,7 @@ export function ProfilePage() {
               style={{
                 background: 'var(--ef-canvas)',
                 border: '1px solid var(--ef-border)',
-                color: '#6B6B65',
+                color: 'var(--ef-text-muted)',
                 borderRadius: 2,
               }}
             >
@@ -148,7 +148,7 @@ export function ProfilePage() {
                   style={{ width: 40, height: 40, objectFit: 'contain' }}
                 />
               ) : (
-                <div style={{ color: '#D0CEC8' }}>
+                <div style={{ color: 'var(--ef-border-muted)' }}>
                   {/* Default mark placeholder */}
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                     <rect x="1" y="1" width="10" height="10" fill="currentColor" />
@@ -175,7 +175,7 @@ export function ProfilePage() {
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
                 style={{
                   border: '1px solid var(--ef-border)',
-                  color: '#2C2C2A',
+                  color: 'var(--ef-ink)',
                   background: 'var(--ef-surface)',
                   borderRadius: 2,
                   cursor: 'pointer',

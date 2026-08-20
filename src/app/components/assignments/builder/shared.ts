@@ -101,7 +101,7 @@ export const DIFF_LABEL: Record<Difficulty, string> = {
 
 export const DIFF_COLORS: Record<Difficulty, { bg: string; text: string; border: string }> = {
   easy:   { bg: 'var(--ef-success-bg)', text: 'var(--ef-success-strong)', border: 'var(--ef-success-border)' },
-  medium: { bg: '#FEF9EC', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)' },
+  medium: { bg: 'var(--ef-warning-bg)', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)' },
   hard:   { bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)' },
 };
 

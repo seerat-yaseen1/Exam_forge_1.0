@@ -108,14 +108,14 @@ export function AssessmentRow({ assessment, onPreview, onPatched, onOpenLegacyEd
           {assessment.subject && (
             <span
               className="text-xs px-2 py-0.5"
-              style={{ background: 'var(--ef-canvas)', color: 'var(--ef-text-muted)', border: '1px solid #EEECEA', borderRadius: 2 }}
+              style={{ background: 'var(--ef-canvas)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border-subtle)', borderRadius: 2 }}
             >
               {assessment.subject}
             </span>
           )}
           <span
             className="text-xs px-2 py-0.5"
-            style={{ background: 'var(--ef-canvas)', color: 'var(--ef-text-muted)', border: '1px solid #EEECEA', borderRadius: 2 }}
+            style={{ background: 'var(--ef-canvas)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border-subtle)', borderRadius: 2 }}
           >
             {describeAssignment(assessment)}
           </span>

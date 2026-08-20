@@ -101,9 +101,9 @@ function MCQPreview({
             key={opt.id}
             className="px-3 py-2.5"
             style={{
-              border: `1px solid ${isCorrect ? '#C3E8CE' : 'var(--ef-border)'}`,
+              border: `1px solid ${isCorrect ? 'var(--ef-success-border)' : 'var(--ef-border)'}`,
               borderRadius: 2,
-              background: isCorrect ? '#F0FBF4' : 'var(--ef-canvas-raised)',
+              background: isCorrect ? 'var(--ef-success-bg)' : 'var(--ef-canvas-raised)',
             }}
           >
             <div className="flex items-start gap-2.5">
@@ -227,7 +227,7 @@ function MatchPreview({
               <div
                 className="px-3 py-2"
                 style={showAnswers
-                  ? { background: '#F0FBF4', border: '1px solid #C3E8CE', borderRadius: 2 }
+                  ? { background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }
                   : { background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }
                 }
               >
@@ -242,7 +242,7 @@ function MatchPreview({
                           <RichText text={matchedRight.rightText || ''} className="text-xs" style={{ color: 'var(--ef-success)' }} />
                           {matchedRight.rightImage && (
                             <img src={matchedRight.rightImage} alt="" className="mt-1.5 max-h-20 max-w-full object-contain cursor-zoom-in"
-                              style={{ border: '1px solid #C3E8CE', borderRadius: 2 }} onClick={() => onImageClick(matchedRight.rightImage!)} />
+                              style={{ border: '1px solid var(--ef-success-border)', borderRadius: 2 }} onClick={() => onImageClick(matchedRight.rightImage!)} />
                           )}
                         </>
                       ) : <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>—</span>
@@ -480,7 +480,7 @@ export function QuestionPreview({
 
       {/* ── Explanation ── */}
       {effectiveShowExplanation && showAnswers && explanation && (
-        <div className="mt-3 px-4 py-3" style={{ background: '#FFFBF0', border: '1px solid #F0DFA0', borderRadius: 2 }}>
+        <div className="mt-3 px-4 py-3" style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
           <p className="text-xs mb-1" style={{ color: 'var(--ef-warning-strong)', letterSpacing: '0.08em' }}>EXPLANATION</p>
           <RichText text={explanation} className="text-xs" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.7, display: 'block' }} />
         </div>

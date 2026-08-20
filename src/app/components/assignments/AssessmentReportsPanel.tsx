@@ -50,10 +50,10 @@ const STATUS_LABEL: Record<ReportStatus, string> = {
 };
 
 const STATUS_COLOR: Record<ReportStatus, { bg: string; border: string; text: string }> = {
-  open:      { bg: '#FEF9EC', border: 'var(--ef-warning-border)', text: 'var(--ef-warning)' },
+  open:      { bg: 'var(--ef-warning-bg)', border: 'var(--ef-warning-border)', text: 'var(--ef-warning)' },
   reviewed:  { bg: 'var(--ef-canvas)', border: 'var(--ef-border)', text: 'var(--ef-text-subtle)' },
   dismissed: { bg: 'var(--ef-canvas)', border: 'var(--ef-border)', text: 'var(--ef-text-muted)' },
-  fixed:     { bg: '#EAF6EE', border: '#B5D9C0', text: 'var(--ef-success-strong)' },
+  fixed:     { bg: 'var(--ef-success-bg)', border: 'var(--ef-success-border)', text: 'var(--ef-success-strong)' },
 };
 
 type Grouped = {

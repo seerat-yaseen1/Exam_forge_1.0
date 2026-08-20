@@ -285,11 +285,11 @@ export function AssignmentsPage() {
         {duplicateNotice && (
           <div className="flex items-start gap-2 px-3 py-2.5 mb-5"
             style={{
-              background: duplicateNotice.tone === 'warn' ? '#FFFBEB' : 'var(--ef-canvas)',
-              border: `1px solid ${duplicateNotice.tone === 'warn' ? '#FDE68A' : 'var(--ef-border)'}`,
+              background: duplicateNotice.tone === 'warn' ? 'var(--ef-warning-bg)' : 'var(--ef-canvas)',
+              border: `1px solid ${duplicateNotice.tone === 'warn' ? 'var(--ef-warning-border)' : 'var(--ef-border)'}`,
               borderRadius: 2,
             }}>
-            <p className="text-xs flex-1" style={{ color: duplicateNotice.tone === 'warn' ? '#92400E' : 'var(--ef-text-subtle)', lineHeight: 1.6 }}>
+            <p className="text-xs flex-1" style={{ color: duplicateNotice.tone === 'warn' ? 'var(--ef-warning-strong)' : 'var(--ef-text-subtle)', lineHeight: 1.6 }}>
               {duplicateNotice.text}
             </p>
             <button onClick={() => setDuplicateNotice(null)}

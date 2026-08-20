@@ -75,7 +75,7 @@ export function SuccessorPicker({
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="flex items-center gap-1.5 text-xs" style={{ color: '#6B6862' }}>
+      <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
         <ArrowRight size={10} strokeWidth={1.5} />
         Their questions and assessments go to
       </label>

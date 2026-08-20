@@ -67,7 +67,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 self-start"
           style={{
             border: '1px solid var(--ef-border)', borderRadius: 2,
-            background: 'var(--ef-surface)', color: '#6B6862',
+            background: 'var(--ef-surface)', color: 'var(--ef-text-muted)',
             cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
@@ -76,7 +76,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
         </button>
         {error && (
           <div className="flex items-start gap-2 text-xs px-2.5 py-2"
-            style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: 'var(--ef-danger)' }}>
+            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, color: 'var(--ef-danger)' }}>
             <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
             <span>{error}</span>
           </div>
@@ -91,7 +91,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs" style={{ color: '#6B6862' }}>
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           {totalRecords(data).toLocaleString()} record
           {totalRecords(data) === 1 ? '' : 's'} across {sections.length} area
           {sections.length === 1 ? '' : 's'}
@@ -100,7 +100,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
         <button
           onClick={download}
           className="flex items-center gap-1.5 text-xs px-2.5 py-1 flex-shrink-0"
-          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: '#6B6862' }}
+          style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-text-muted)' }}
         >
           <Download size={11} strokeWidth={1.5} /> Export JSON
         </button>
@@ -110,7 +110,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
           answer they believe is complete is the failure this guards against. */}
       {partial && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2"
-          style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2, color: '#7A5B12' }}>
+          style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2, color: 'var(--ef-warning-strong)' }}>
           <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
             This record is incomplete — {data.unreadable.join(', ')} could not be
@@ -124,7 +124,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
           const open = expanded === s.collection;
           const unreadable = s.records === null;
           return (
-            <div key={s.collection} style={{ borderTop: '1px solid #F0EEE9' }}>
+            <div key={s.collection} style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
               <button
                 onClick={() => setExpanded(open ? null : s.collection)}
                 className="flex items-center justify-between gap-3 w-full px-2.5 py-2 text-left"
@@ -134,7 +134,7 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
                   {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                   {collectionLabel(s.collection)}
                 </span>
-                <span className="text-xs" style={{ color: unreadable ? '#7A5B12' : 'var(--ef-text-muted)' }}>
+                <span className="text-xs" style={{ color: unreadable ? 'var(--ef-warning-strong)' : 'var(--ef-text-muted)' }}>
                   {unreadable ? 'unreadable' : `${s.records!.length}`}
                 </span>
               </button>
@@ -144,15 +144,15 @@ export function SubjectDataPanel({ role, uid, displayName }: Props) {
                     <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)' }}>{s.note}</p>
                   )}
                   {unreadable ? (
-                    <p className="text-xs" style={{ color: '#7A5B12' }}>
+                    <p className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
                       This area could not be read, so its contents are unknown.
                     </p>
                   ) : (
                     <pre className="text-xs overflow-x-auto"
                       style={{
-                        background: 'var(--ef-canvas)', border: '1px solid #EDEBE5',
+                        background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)',
                         borderRadius: 2, padding: 8, maxHeight: 240,
-                        color: '#3A3833', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        color: 'var(--ef-ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                       }}>
                       {JSON.stringify(s.records, null, 2)}
                     </pre>

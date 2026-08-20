@@ -65,7 +65,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
         <button
           onClick={() => handleNav('/dashboard/profile')}
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
-          style={{ color: '#2C2C2A' }}
+          style={{ color: 'var(--ef-ink)' }}
           onMouseEnter={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
@@ -93,7 +93,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
         <button
           onClick={() => handleNav('/dashboard/security')}
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
-          style={{ color: '#2C2C2A' }}
+          style={{ color: 'var(--ef-ink)' }}
           onMouseEnter={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
@@ -111,7 +111,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
-          style={{ color: '#2C2C2A' }}
+          style={{ color: 'var(--ef-ink)' }}
           onMouseEnter={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
@@ -154,7 +154,7 @@ function SidebarNavItem({ to, icon, label, isActive }: NavItemProps) {
         }}
         onMouseEnter={(e) => {
           if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color = '#2C2C2A';
+            (e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)';
             (e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)';
           }
         }}

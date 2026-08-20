@@ -146,7 +146,7 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
             onChange={(e) => setPassing(e.target.value)}
             className="w-full text-xs px-3 py-2"
             style={{
-              border: `1px solid ${passingValid ? 'var(--ef-border)' : '#D97757'}`,
+              border: `1px solid ${passingValid ? 'var(--ef-border)' : 'var(--ef-danger)'}`,
               borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
             }}
           />
@@ -189,7 +189,7 @@ export function BehaviourPanel({ assessment, open, onOpenChange, onSaved }: Prop
             style={{
               border: '1px solid var(--ef-border)', borderRadius: 2,
               background: overallAuto ? 'var(--ef-canvas)' : 'var(--ef-surface)',
-              color: overallAuto ? '#6B6A65' : 'var(--ef-ink)',
+              color: overallAuto ? 'var(--ef-text-muted)' : 'var(--ef-ink)',
             }}
           />
           {overallAuto && (

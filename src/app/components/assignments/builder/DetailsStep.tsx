@@ -878,7 +878,7 @@ export function DetailsStep({
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs" style={{ color: '#6B6A65' }}>Overall time limit</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Overall time limit</span>
                     <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>(whole exam, optional)</span>
                   </div>
                   {/* Auto toggle — when on, the value is computed from the
@@ -921,7 +921,7 @@ export function DetailsStep({
                     className="flex-1 outline-none"
                     style={{
                       background: 'transparent',
-                      color: overallAuto ? '#6B6A65' : 'var(--ef-ink)',
+                      color: overallAuto ? 'var(--ef-text-muted)' : 'var(--ef-ink)',
                       fontSize: 12, border: 'none',
                     }}
                   />
@@ -980,7 +980,7 @@ export function DetailsStep({
                   >
                     <div className="flex items-center gap-2">
                       <AlertCircle size={13} strokeWidth={1.5} style={{ color: negMarkingOn ? 'var(--ef-danger)' : 'var(--ef-text-muted)' }} />
-                      <span className="text-xs" style={{ color: negMarkingOn ? 'var(--ef-danger)' : '#6B6A65' }}>
+                      <span className="text-xs" style={{ color: negMarkingOn ? 'var(--ef-danger)' : 'var(--ef-text-muted)' }}>
                         Deduct marks for wrong answers
                       </span>
                     </div>
@@ -1369,7 +1369,7 @@ export function DetailsStep({
                 ]}
               />
               {deliveryMode === 'adaptive' && (
-                <p className="text-xs" style={{ color: '#B4643C', lineHeight: 1.6 }}>
+                <p className="text-xs" style={{ color: 'var(--ef-warning-strong)', lineHeight: 1.6 }}>
                   Negative marking is not applied in Adaptive delivery — any penalty
                   settings on the Grading stage are discarded when you save. Choose
                   Linear if you need one-at-a-time delivery with negative marking.
@@ -1646,7 +1646,7 @@ export function DetailsStep({
             style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3, maxWidth: 520, width: '100%' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--ef-border)' }}>
               <div className="flex items-center gap-2">
-                <AlertTriangle size={14} strokeWidth={1.5} style={{ color: '#B5651D' }} />
+                <AlertTriangle size={14} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)' }} />
                 <span className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   Confirm publish
                 </span>
@@ -1658,7 +1658,7 @@ export function DetailsStep({
             <ul className="px-6 py-4 space-y-2.5">
               {pendingPublish.warnings.map((w, i) => (
                 <li key={i} className="flex items-start gap-2 text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.55 }}>
-                  <span style={{ color: '#B5651D', flexShrink: 0, marginTop: 1 }}>•</span>
+                  <span style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 1 }}>•</span>
                   <span>{w}</span>
                 </li>
               ))}

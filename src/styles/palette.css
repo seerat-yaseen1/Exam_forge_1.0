@@ -188,12 +188,33 @@ html[data-ef-theme] body {
   color: var(--ef-ink);
 }
 
-/* Tailwind's `bg-white` is a literal white and there are a handful left on
-   student surfaces. Inside a themed page it means "a card", which is what
-   --ef-surface is. Scoped to [data-ef-theme] so the other three consoles
-   keep the literal. */
+/* ── The last Tailwind colour utilities ─────────────────────────────
+   A literal grey is a literal grey: on a dark theme these read as a white
+   card on a black page, or as invisible text. There are ~20 left across the
+   whole app, all of them meaning one of three things, so they are bridged
+   here rather than chased through twenty files whose markup is otherwise
+   fine.
+
+   Every rule is gated on [data-ef-theme]. Before a theme is applied — which
+   is every screen this system has not been mounted on — the literal is what
+   renders, exactly as it did. */
 html[data-ef-theme] .bg-white {
+  /* On a themed page this always means "a card". */
   background-color: var(--ef-surface);
+}
+
+html[data-ef-theme] .bg-gray-50,
+html[data-ef-theme] .bg-gray-100,
+html[data-ef-theme] .hover\:bg-gray-50:hover,
+html[data-ef-theme] .hover\:bg-gray-100:hover {
+  /* Row hovers and image placeholders: one step off the surface they sit on. */
+  background-color: var(--ef-surface-hover);
+}
+
+html[data-ef-theme] .text-white {
+  /* Only ever used as the label on a filled button, where the readable colour
+     is whatever that fill demands rather than white. */
+  color: var(--ef-ink-text);
 }
 
 /* Scrollbars. `color-scheme` already flips the native ones on most platforms;

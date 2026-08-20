@@ -103,14 +103,14 @@ export function SubjectTopicSelect({ subjectId, topicId, onChange, subjectError,
   return (
     <div className="grid grid-cols-2 gap-x-4">
       <div>
-        <label className="text-xs" style={{ color: '#83827C', letterSpacing: '0.04em' }}>SUBJECT *</label>
+        <label className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.04em' }}>SUBJECT *</label>
         <select
           value={subjectId ?? ''}
           onChange={(e) => handleSubjectChange(e.target.value)}
           style={{
             ...sel,
             marginTop: 4,
-            borderColor: subjectError ? '#B91C1C' : 'var(--ef-border)',
+            borderColor: subjectError ? 'var(--ef-danger)' : 'var(--ef-border)',
           }}
           disabled={loadingSubjects}
         >
@@ -119,19 +119,19 @@ export function SubjectTopicSelect({ subjectId, topicId, onChange, subjectError,
             <option key={s.id} value={s.id}>{s.id} · {s.name}</option>
           ))}
         </select>
-        {subjectError && <div style={{ fontSize: 11, color: '#B91C1C', marginTop: 4 }}>{subjectError}</div>}
+        {subjectError && <div style={{ fontSize: 11, color: 'var(--ef-danger)', marginTop: 4 }}>{subjectError}</div>}
       </div>
 
       <div>
-        <label className="text-xs" style={{ color: '#83827C', letterSpacing: '0.04em' }}>TOPIC *</label>
+        <label className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.04em' }}>TOPIC *</label>
         <select
           value={topicId ?? ''}
           onChange={(e) => handleTopicChange(e.target.value)}
           style={{
             ...sel,
             marginTop: 4,
-            borderColor: topicError ? '#B91C1C' : 'var(--ef-border)',
-            color: subjectId ? 'var(--ef-ink)' : '#A8A7A1',
+            borderColor: topicError ? 'var(--ef-danger)' : 'var(--ef-border)',
+            color: subjectId ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
           }}
           disabled={!subjectId || loadingTopics}
         >
@@ -148,9 +148,9 @@ export function SubjectTopicSelect({ subjectId, topicId, onChange, subjectError,
             <option key={t.id} value={t.id}>{t.id} · {t.name}</option>
           ))}
         </select>
-        {topicError && <div style={{ fontSize: 11, color: '#B91C1C', marginTop: 4 }}>{topicError}</div>}
+        {topicError && <div style={{ fontSize: 11, color: 'var(--ef-danger)', marginTop: 4 }}>{topicError}</div>}
         {loadingTopics && (
-          <div style={{ fontSize: 11, color: '#83827C', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ fontSize: 11, color: 'var(--ef-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Loader2 size={11} className="animate-spin" /> loading topics…
           </div>
         )}

@@ -251,7 +251,7 @@ const RISK_FACTOR_LABEL: Record<string, string> = {
 
 const QUIET_TONE: Record<QuietState['tone'], { bg: string; border: string; text: string }> = {
   notice:  { bg: 'var(--ef-canvas)',    border: 'var(--ef-border)',          text: 'var(--ef-text-muted)' },
-  concern: { bg: '#FEF9EC',             border: 'var(--ef-warning-border)',  text: 'var(--ef-warning)' },
+  concern: { bg: 'var(--ef-warning-bg)',             border: 'var(--ef-warning-border)',  text: 'var(--ef-warning)' },
   alarm:   { bg: 'var(--ef-danger-bg)', border: 'var(--ef-danger-border)',   text: 'var(--ef-danger)' },
 };
 
@@ -290,9 +290,9 @@ function totalQuestions(attempt: Attempt): number {
 const STATUS_CONFIG: Record<RosterStatus, { label: string; bg: string; text: string; border: string; dot: string }> = {
   not_started:   { label: 'Not started',     bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border)', dot: 'var(--ef-text-muted)' },
   in_progress:   { label: 'Live',            bg: 'var(--ef-success-bg)', text: 'var(--ef-success-strong)', border: 'var(--ef-success-border)', dot: 'var(--ef-success-strong)' },
-  frozen:        { label: 'Flagged',         bg: '#FFFBF0', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: '#D4A017' },
+  frozen:        { label: 'Flagged',         bg: 'var(--ef-warning-bg)', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: 'var(--ef-warning)' },
   submitted:     { label: 'Submitted',       bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border-muted)', dot: 'var(--ef-text-muted)' },
-  auto_submitted:{ label: 'Auto-submitted',  bg: '#FEF9EC', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: 'var(--ef-warning)' },
+  auto_submitted:{ label: 'Auto-submitted',  bg: 'var(--ef-warning-bg)', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: 'var(--ef-warning)' },
   terminated:    { label: 'Terminated',      bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)', dot: 'var(--ef-danger)' },
 };
 
@@ -344,7 +344,7 @@ function FreezeConfirmModal({
         <div className="flex items-center justify-between px-5 py-4"
           style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-center gap-2">
-            <PauseCircle size={13} strokeWidth={1.5} style={{ color: '#1D4ED8' }} />
+            <PauseCircle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-info)' }} />
             <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>FREEZE SESSION</p>
           </div>
           <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
@@ -355,9 +355,9 @@ function FreezeConfirmModal({
         {/* Body */}
         <div className="px-5 py-5 space-y-4">
           <div className="px-3 py-3 flex items-start gap-2.5"
-            style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 2 }}>
-            <PauseCircle size={12} strokeWidth={1.5} style={{ color: '#1D4ED8', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#1D4ED8', lineHeight: 1.6 }}>
+            style={{ background: 'var(--ef-info-bg)', border: '1px solid var(--ef-info-border)', borderRadius: 2 }}>
+            <PauseCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-info)', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: 'var(--ef-info)', lineHeight: 1.6 }}>
               Freezing will pause <strong>{studentName}</strong>'s exam timer and lock their
               interface until you unfreeze the session. Their progress is preserved.
             </p>
@@ -390,7 +390,7 @@ function FreezeConfirmModal({
             disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
-              background: loading ? '#93C5FD' : '#1D4ED8',
+              background: loading ? 'var(--ef-info-border)' : 'var(--ef-info)',
               color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer',
               opacity: loading ? 0.7 : 1,
@@ -613,7 +613,7 @@ function UnfreezeConfirmModal({
           */}
           <div className="px-3 py-3 flex items-start gap-2.5"
             style={{
-              background: givingLess ? '#FFFBF0' : 'var(--ef-success-bg)',
+              background: givingLess ? 'var(--ef-warning-bg)' : 'var(--ef-success-bg)',
               border: `1px solid ${givingLess ? 'var(--ef-warning-border)' : 'var(--ef-success-border)'}`,
               borderRadius: 2,
             }}>
@@ -641,7 +641,7 @@ function UnfreezeConfirmModal({
             <div className="px-3 py-3"
               style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
               <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)' }}>This freeze</p>
-              <p className="text-xs" style={{ color: '#1D4ED8' }}>{thisFreeze}</p>
+              <p className="text-xs" style={{ color: 'var(--ef-info)' }}>{thisFreeze}</p>
             </div>
             <div className="px-3 py-3"
               style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
@@ -672,7 +672,7 @@ function UnfreezeConfirmModal({
                 onChange={(e) => setGrantSecs(e.target.value)}
                 disabled={loading}
                 className="text-xs px-2 py-1.5 w-24"
-                style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: 'var(--ef-ink)' }}
+                style={{ border: '1px solid var(--ef-border-muted)', borderRadius: 2, color: 'var(--ef-ink)' }}
               />
               <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 seconds of {thisFreeze}
@@ -681,7 +681,7 @@ function UnfreezeConfirmModal({
                 <button
                   onClick={() => setGrantSecs(String(frozenSecs))}
                   className="text-xs px-2 py-1"
-                  style={{ color: '#1D4ED8', cursor: 'pointer', background: 'transparent' }}
+                  style={{ color: 'var(--ef-info)', cursor: 'pointer', background: 'transparent' }}
                 >
                   give all
                 </button>
@@ -696,7 +696,7 @@ function UnfreezeConfirmModal({
               type="text" value={note} onChange={(e) => setNote(e.target.value)}
               disabled={loading} placeholder="Note (optional) — recorded in the audit trail"
               className="text-xs px-2 py-1.5 w-full mt-2"
-              style={{ border: '1px solid #D8D6CF', borderRadius: 2, color: 'var(--ef-ink)' }}
+              style={{ border: '1px solid var(--ef-border-muted)', borderRadius: 2, color: 'var(--ef-ink)' }}
             />
           </div>
 
@@ -739,7 +739,7 @@ function UnfreezeConfirmModal({
                       disabled={loading || cap === 0}
                       className="text-xs px-2 py-1 w-20"
                       style={{
-                        border: '1px solid #D8D6CF', borderRadius: 2,
+                        border: '1px solid var(--ef-border-muted)', borderRadius: 2,
                         color: cap === 0 ? 'var(--ef-text-muted)' : 'var(--ef-ink)',
                         background: cap === 0 ? 'var(--ef-border-subtle)' : 'var(--ef-surface)',
                       }}
@@ -773,7 +773,7 @@ function UnfreezeConfirmModal({
           */}
           {willEnd.length > 0 && (
             <div className="flex items-start gap-2.5 px-3 py-3"
-              style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+              style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
               <AlertCircle size={12} strokeWidth={1.5}
                 style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
               <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
@@ -795,7 +795,7 @@ function UnfreezeConfirmModal({
             disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
-              background: loading ? '#86EFAC' : 'var(--ef-success-strong)',
+              background: loading ? 'var(--ef-success-border)' : 'var(--ef-success-strong)',
               color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer',
               opacity: loading ? 0.7 : 1,
@@ -845,7 +845,7 @@ function BlockConfirmModal({
       >
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-center gap-2">
-            <Ban size={13} strokeWidth={1.5} style={{ color: '#9A3412' }} />
+            <Ban size={13} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)' }} />
             <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>BLOCK STUDENT</p>
           </div>
           <button onClick={onCancel} className="p-1 hover:opacity-60 transition-opacity" style={{ color: 'var(--ef-text-muted)' }}>
@@ -854,9 +854,9 @@ function BlockConfirmModal({
         </div>
         <div className="px-5 py-5 space-y-4">
           <div className="px-3 py-3 flex items-start gap-2.5"
-            style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 2 }}>
-            <Ban size={12} strokeWidth={1.5} style={{ color: '#9A3412', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs" style={{ color: '#9A3412', lineHeight: 1.6 }}>
+            style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+            <Ban size={12} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 1 }} />
+            <p className="text-xs" style={{ color: 'var(--ef-warning-strong)', lineHeight: 1.6 }}>
               Blocking will prevent <strong>{studentName}</strong> from entering or
               re-entering this exam. Any attempt already in progress is unaffected —
               they can still complete and submit their current session.
@@ -870,7 +870,7 @@ function BlockConfirmModal({
           <button
             onClick={onConfirm} disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
-            style={{ background: loading ? '#FDBA74' : '#9A3412', color: 'var(--ef-surface)', borderRadius: 2,
+            style={{ background: loading ? 'var(--ef-warning-border)' : 'var(--ef-warning-strong)', color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
           >
             {loading ? <><Loader2 size={10} className="animate-spin" /> Blocking…</> : <><Ban size={10} strokeWidth={1.5} /> Block student</>}
@@ -932,7 +932,7 @@ function UnblockConfirmModal({
           <button
             onClick={onConfirm} disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
-            style={{ background: loading ? '#86EFAC' : 'var(--ef-success-strong)', color: 'var(--ef-surface)', borderRadius: 2,
+            style={{ background: loading ? 'var(--ef-success-border)' : 'var(--ef-success-strong)', color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
           >
             {loading ? <><Loader2 size={10} className="animate-spin" /> Unblocking…</> : <><CircleSlash size={10} strokeWidth={1.5} /> Unblock student</>}
@@ -1068,14 +1068,14 @@ const CATEGORY_CONFIG: Record<AnswerCategory, {
 }> = {
   correct:     { label: 'Correct',     bg: 'var(--ef-success-bg)', text: 'var(--ef-success-strong)', border: 'var(--ef-success-border)', dot: 'var(--ef-success-strong)',  icon: <CheckCircle2 size={11} strokeWidth={1.5} /> },
   wrong:       { label: 'Wrong',       bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)', dot: 'var(--ef-danger)',  icon: <XCircle size={11} strokeWidth={1.5} /> },
-  penalized:   { label: 'Penalized',   bg: '#FBEFEF', text: '#7F1D1D', border: '#E9B8B8', dot: '#7F1D1D',  icon: <XCircle size={11} strokeWidth={1.5} /> },
-  partial:     { label: 'Partial',     bg: '#FFFBF0', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: '#D4A017',  icon: <AlertCircle size={11} strokeWidth={1.5} /> },
+  penalized:   { label: 'Penalized',   bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger-strong)', border: 'var(--ef-danger-border)', dot: 'var(--ef-danger-strong)',  icon: <XCircle size={11} strokeWidth={1.5} /> },
+  partial:     { label: 'Partial',     bg: 'var(--ef-warning-bg)', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)', dot: 'var(--ef-warning)',  icon: <AlertCircle size={11} strokeWidth={1.5} /> },
   unattempted: { label: 'Unattempted', bg: 'var(--ef-canvas)', text: 'var(--ef-text-muted)', border: 'var(--ef-border)', dot: 'var(--ef-text-muted)',  icon: <Minus size={11} strokeWidth={1.5} /> },
-  text:        { label: 'Text',        bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8',  icon: <FileText size={11} strokeWidth={1.5} /> },
+  text:        { label: 'Text',        bg: 'var(--ef-info-bg)', text: 'var(--ef-info)', border: 'var(--ef-info-border)', dot: 'var(--ef-info)',  icon: <FileText size={11} strokeWidth={1.5} /> },
   // Deliberately the same blue family as Text: both are "no mark yet, awaiting
   // something", and a reviewer triaging a cohort should read them as one kind
   // of outstanding work rather than as a fault.
-  code:        { label: 'Code',        bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', dot: '#1D4ED8',  icon: <Code2 size={11} strokeWidth={1.5} /> },
+  code:        { label: 'Code',        bg: 'var(--ef-info-bg)', text: 'var(--ef-info)', border: 'var(--ef-info-border)', dot: 'var(--ef-info)',  icon: <Code2 size={11} strokeWidth={1.5} /> },
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -1165,9 +1165,9 @@ function MarkingPanel({
 
   return (
     <div className="flex flex-col gap-2.5 px-3 py-3"
-      style={{ background: '#F7FAFF', border: '1px solid #BFDBFE', borderRadius: 2 }}>
+      style={{ background: 'var(--ef-info-bg)', border: '1px solid var(--ef-info-border)', borderRadius: 2 }}>
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs" style={{ color: '#1D4ED8', letterSpacing: '0.08em' }}>MARKING</p>
+        <p className="text-xs" style={{ color: 'var(--ef-info)', letterSpacing: '0.08em' }}>MARKING</p>
         {mark && (
           <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
             {mark.gradedByRole === 'webOwner' ? 'Web Owner' : mark.gradedByRole} · {formatRelative(mark.gradedAt)}
@@ -1218,9 +1218,9 @@ function MarkingPanel({
           disabled={busy !== null || parsed === null || !dirty}
           className="flex items-center gap-1.5 text-xs px-2.5 py-1"
           style={{
-            border: '1px solid #1D4ED8', borderRadius: 2,
-            background: parsed === null || !dirty ? 'var(--ef-surface)' : '#1D4ED8',
-            color: parsed === null || !dirty ? 'var(--ef-text-muted)' : '#FFFFFF',
+            border: '1px solid var(--ef-info)', borderRadius: 2,
+            background: parsed === null || !dirty ? 'var(--ef-surface)' : 'var(--ef-info)',
+            color: parsed === null || !dirty ? 'var(--ef-text-muted)' : 'var(--ef-ink-text)',
             cursor: busy !== null || parsed === null || !dirty ? 'default' : 'pointer',
             opacity: busy !== null ? 0.6 : 1,
           }}>
@@ -1878,9 +1878,9 @@ function ResponseViewer({
                   {/* Awaiting a human, and this viewer is not one. */}
                   {item.category === 'text' && !canMarkThis && (
                     <div className="flex items-start gap-2 px-2.5 py-2"
-                      style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 2 }}>
-                      <FileText size={11} strokeWidth={1.5} style={{ color: '#1D4ED8', flexShrink: 0, marginTop: 1 }} />
-                      <p className="text-xs" style={{ color: '#1D4ED8', lineHeight: 1.5 }}>
+                      style={{ background: 'var(--ef-info-bg)', border: '1px solid var(--ef-info-border)', borderRadius: 2 }}>
+                      <FileText size={11} strokeWidth={1.5} style={{ color: 'var(--ef-info)', flexShrink: 0, marginTop: 1 }} />
+                      <p className="text-xs" style={{ color: 'var(--ef-info)', lineHeight: 1.5 }}>
                         This answer is waiting to be marked by an examiner.
                       </p>
                     </div>
@@ -1950,7 +1950,7 @@ function SoftDeleteConfirmModal({
             onClick={onConfirm} disabled={loading}
             className="flex items-center gap-1.5 text-xs px-4 py-2.5 transition-opacity"
             style={{
-              background: loading ? '#FCA5A5' : 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2,
+              background: loading ? 'var(--ef-danger-border)' : 'var(--ef-danger)', color: 'var(--ef-surface)', borderRadius: 2,
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
             }}
           >
@@ -2107,9 +2107,9 @@ function AttemptsPanel({
         </p>
         {override !== undefined && (
           <div className="flex items-center gap-1 px-2 py-0.5"
-            style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 2 }}>
-            <Hash size={9} strokeWidth={1.5} style={{ color: '#1D4ED8' }} />
-            <span className="text-xs" style={{ color: '#1D4ED8' }}>Override active: {override}</span>
+            style={{ background: 'var(--ef-info-bg)', border: '1px solid var(--ef-info-border)', borderRadius: 2 }}>
+            <Hash size={9} strokeWidth={1.5} style={{ color: 'var(--ef-info)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-info)' }}>Override active: {override}</span>
           </div>
         )}
       </div>
@@ -2234,8 +2234,8 @@ function AttemptsPanel({
                         title={`Anomaly score ${a.timingAnalysis.anomalyScore}/100`}
                         className="flex items-center gap-1 text-xs px-1.5 py-0.5"
                         style={{
-                          background: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#FBF3F3' : '#FEF9EC',
-                          border: `1px solid ${(a.timingAnalysis.anomalyScore ?? 0) >= 70 ? '#E3C9C9' : 'var(--ef-warning-border)'}`,
+                          background: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? 'var(--ef-danger-bg)' : 'var(--ef-warning-bg)',
+                          border: `1px solid ${(a.timingAnalysis.anomalyScore ?? 0) >= 70 ? 'var(--ef-danger-border)' : 'var(--ef-warning-border)'}`,
                           borderRadius: 2,
                           color: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? 'var(--ef-danger)' : 'var(--ef-warning)',
                           fontSize: 9,
@@ -2394,9 +2394,9 @@ function AttemptDrawer({
             <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{student.name}</p>
             {isBlocked && (
               <div className="flex items-center gap-1 px-1.5 py-0.5"
-                style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 2 }}>
-                <Ban size={9} strokeWidth={1.5} style={{ color: '#9A3412' }} />
-                <span style={{ color: '#9A3412', fontSize: 10 }}>Blocked</span>
+                style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+                <Ban size={9} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)' }} />
+                <span style={{ color: 'var(--ef-warning-strong)', fontSize: 10 }}>Blocked</span>
               </div>
             )}
           </div>
@@ -2417,7 +2417,7 @@ function AttemptDrawer({
               disabled={freezeLoading}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity"
               style={{
-                background: '#FFFBF0', border: '1px solid var(--ef-warning-border)',
+                background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)',
                 color: 'var(--ef-warning)', borderRadius: 2,
                 cursor: freezeLoading ? 'not-allowed' : 'pointer',
                 opacity: freezeLoading ? 0.5 : 1,
@@ -2505,7 +2505,7 @@ function AttemptDrawer({
 
         {rosterStatus === 'frozen' && attempt?.frozenAt && (
           <div className="flex items-start gap-2 mt-3 px-3 py-2.5"
-            style={{ background: '#FFFBF0', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+            style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
             <PauseCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0, marginTop: 1 }} />
             <div>
               <p className="text-xs" style={{ color: 'var(--ef-warning)' }}>Flagged {formatRelative(attempt.frozenAt)}</p>
@@ -2555,8 +2555,8 @@ function AttemptDrawer({
               disabled={blockLoading}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity"
               style={{
-                background: '#FFF7ED', border: '1px solid #FED7AA',
-                color: '#9A3412', borderRadius: 2,
+                background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)',
+                color: 'var(--ef-warning-strong)', borderRadius: 2,
                 cursor: blockLoading ? 'not-allowed' : 'pointer',
                 opacity: blockLoading ? 0.5 : 1,
               }}
@@ -2567,7 +2567,7 @@ function AttemptDrawer({
           )}
         </div>
         {isBlocked && (
-          <p className="text-xs" style={{ color: '#9A3412', lineHeight: 1.5 }}>
+          <p className="text-xs" style={{ color: 'var(--ef-warning-strong)', lineHeight: 1.5 }}>
             Blocked from entering or re-entering this exam. Any in-progress attempt continues unaffected.
           </p>
         )}
@@ -2661,9 +2661,9 @@ function AttemptDrawer({
                             className="text-xs px-2 py-0.5"
                             style={{
                               borderRadius: 2, cursor: 'pointer',
-                              background: active ? '#F0EFEA' : 'transparent',
+                              background: active ? 'var(--ef-canvas-raised)' : 'transparent',
                               color: active ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
-                              border: `1px solid ${active ? '#D8D6CF' : 'transparent'}`,
+                              border: `1px solid ${active ? 'var(--ef-border-muted)' : 'transparent'}`,
                               fontVariantNumeric: 'tabular-nums',
                             }}>
                             {rv === 'latest' ? 'Latest' : 'Best'}
@@ -2723,8 +2723,8 @@ function AttemptDrawer({
                 const a = attempt.timingAnalysis;
                 const score = a.anomalyScore ?? 0;
                 const band =
-                  score >= 70 ? { bg: '#FBF3F3', bd: '#E3C9C9', fg: 'var(--ef-danger)', label: 'High anomaly' }
-                  : score >= 40 ? { bg: '#FEF9EC', bd: 'var(--ef-warning-border)', fg: 'var(--ef-warning)', label: 'Some anomaly' }
+                  score >= 70 ? { bg: 'var(--ef-danger-bg)', bd: 'var(--ef-danger-border)', fg: 'var(--ef-danger)', label: 'High anomaly' }
+                  : score >= 40 ? { bg: 'var(--ef-warning-bg)', bd: 'var(--ef-warning-border)', fg: 'var(--ef-warning)', label: 'Some anomaly' }
                   : { bg: 'var(--ef-success-bg)', bd: 'var(--ef-success-border)', fg: 'var(--ef-success-strong)', label: 'Low anomaly' };
                 return (
                   <div className="mb-2.5">
@@ -2788,7 +2788,7 @@ function AttemptDrawer({
               {/* Finalized-while-frozen flag (Phase 1c) */}
               {(attempt.integrityLog as { finalizedWhileFrozen?: boolean }).finalizedWhileFrozen && (
                 <div className="flex items-center gap-2 px-3 py-2 mb-2.5"
-                  style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+                  style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
                   <Flag size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
                   <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>
                     Submitted while frozen (unresolved extension freeze)
@@ -2807,7 +2807,7 @@ function AttemptDrawer({
                   { label: 'Extension events', value: attempt.integrityLog.extensionEvents },
                 ].map((item) => item.value > 0 ? (
                   <div key={item.label} className="flex items-center justify-between px-3 py-2"
-                    style={{ background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+                    style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
                     <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>{item.label}</span>
                     <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>{item.value}</span>
                   </div>
@@ -2889,7 +2889,7 @@ function AttemptDrawer({
                       return (
                         <div key={f.id} className="px-3 py-2"
                           style={{
-                            background: open ? '#FEF9EC' : 'var(--ef-canvas-raised)',
+                            background: open ? 'var(--ef-warning-bg)' : 'var(--ef-canvas-raised)',
                             border: `1px solid ${open ? 'var(--ef-warning-border)' : 'var(--ef-border)'}`,
                             borderRadius: 2,
                           }}>
@@ -3008,7 +3008,7 @@ function RosterTableRow({
       className="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-3 gap-y-2 sm:gap-4 px-4 sm:px-5 py-3 sm:py-3.5 cursor-pointer transition-colors"
       style={{ borderBottom: '1px solid var(--ef-canvas)' }}
       onClick={onSelect}
-      onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFAF9')}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ef-surface-hover)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <div className="w-full sm:w-[200px] sm:flex-shrink-0 min-w-0">
@@ -3022,8 +3022,8 @@ function RosterTableRow({
               className="text-xs px-1.5 flex-shrink-0"
               title={`${attemptCount} attempts — showing the most recent. Open to see all.`}
               style={{
-                background: '#F0EFEA', border: '1px solid var(--ef-border)', borderRadius: 2,
-                color: '#6B6A64', fontVariantNumeric: 'tabular-nums', lineHeight: '16px',
+                background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2,
+                color: 'var(--ef-text-muted)', fontVariantNumeric: 'tabular-nums', lineHeight: '16px',
               }}
             >
               ×{attemptCount}
@@ -3036,8 +3036,8 @@ function RosterTableRow({
       <div className="sm:w-[130px] sm:flex-shrink-0">
         {breakInfo ? (
           <div className="flex items-center gap-1.5 px-2 py-0.5"
-            style={{ background: '#FEF9EC', border: '1px dashed var(--ef-warning-border)', borderRadius: 2 }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#D4A017' }} />
+            style={{ background: 'var(--ef-warning-bg)', border: '1px dashed var(--ef-warning-border)', borderRadius: 2 }}>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ef-warning)' }} />
             <span className="text-xs" style={{ color: 'var(--ef-warning)', fontVariantNumeric: 'tabular-nums' }}>
               {breakInfo.expired
                 ? 'Break ended'
@@ -3065,7 +3065,7 @@ function RosterTableRow({
           </div>
         )}
         {attempt && isFrozen && (
-          <p className="text-xs" style={{ color: '#1D4ED8' }}>Paused {formatRelative(attempt.frozenAt!)}</p>
+          <p className="text-xs" style={{ color: 'var(--ef-info)' }}>Paused {formatRelative(attempt.frozenAt!)}</p>
         )}
         {attempt && isDone && attempt.scores && (
           showBothScores ? (
@@ -3119,18 +3119,18 @@ function RosterTableRow({
         {/* Override badge */}
         {attemptOverrides?.[student.id] !== undefined && (
           <div className="flex items-center gap-1 px-2 py-1"
-            style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 2 }}>
-            <Hash size={9} strokeWidth={1.5} style={{ color: '#1D4ED8' }} />
-            <span className="text-xs" style={{ color: '#1D4ED8' }}>
+            style={{ background: 'var(--ef-info-bg)', border: '1px solid var(--ef-info-border)', borderRadius: 2 }}>
+            <Hash size={9} strokeWidth={1.5} style={{ color: 'var(--ef-info)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-info)' }}>
               {attemptOverrides[student.id]}
             </span>
           </div>
         )}
         {isBlocked && (
           <div className="flex items-center gap-1 px-2 py-1"
-            style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 2 }}>
-            <Ban size={10} strokeWidth={1.5} style={{ color: '#9A3412' }} />
-            <span className="text-xs" style={{ color: '#9A3412' }}>Blocked</span>
+            style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+            <Ban size={10} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)' }} />
+            <span className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>Blocked</span>
           </div>
         )}
         {hasConflict && (
@@ -3143,7 +3143,7 @@ function RosterTableRow({
         {violations > 0 && (
           <div className="flex items-center gap-1 px-2 py-1"
             style={{
-              background: violations >= 3 ? 'var(--ef-danger-bg)' : '#FEF9EC',
+              background: violations >= 3 ? 'var(--ef-danger-bg)' : 'var(--ef-warning-bg)',
               border: `1px solid ${violations >= 3 ? 'var(--ef-danger-border)' : 'var(--ef-warning-border)'}`, borderRadius: 2,
             }}>
             <Shield size={10} strokeWidth={1.5} style={{ color: violations >= 3 ? 'var(--ef-danger)' : 'var(--ef-warning)' }} />
@@ -3160,7 +3160,7 @@ function RosterTableRow({
             disabled={freezeLoading}
             className="flex items-center gap-1 text-xs px-3 py-1.5 transition-opacity"
             style={{
-              border: '1px solid var(--ef-warning-border)', color: 'var(--ef-warning)', background: '#FFFBF0', borderRadius: 2,
+              border: '1px solid var(--ef-warning-border)', color: 'var(--ef-warning)', background: 'var(--ef-warning-bg)', borderRadius: 2,
               cursor: freezeLoading ? 'not-allowed' : 'pointer',
               opacity: freezeLoading ? 0.5 : 1,
             }}
@@ -3205,7 +3205,7 @@ function RosterTableRow({
             disabled={blockLoading}
             className="flex items-center gap-1 text-xs px-3 py-1.5 transition-opacity"
             style={{
-              border: '1px solid #FED7AA', color: '#9A3412', background: '#FFF7ED', borderRadius: 2,
+              border: '1px solid var(--ef-warning-border)', color: 'var(--ef-warning-strong)', background: 'var(--ef-warning-bg)', borderRadius: 2,
               cursor: blockLoading ? 'not-allowed' : 'pointer',
               opacity: blockLoading ? 0.5 : 1,
             }}
@@ -3656,7 +3656,7 @@ export function AssessmentRosterCore({
               { label: 'Total allocated', value: stats.total,      icon: <Users size={11} strokeWidth={1.5} /> },
               { label: 'Live now',        value: stats.live,       icon: <Activity size={11} strokeWidth={1.5} />,      color: stats.live > 0 ? 'var(--ef-success-strong)' : undefined },
               { label: 'Flagged',         value: stats.frozen,     icon: <PauseCircle size={11} strokeWidth={1.5} />,   color: stats.frozen > 0 ? 'var(--ef-warning)' : undefined },
-              { label: 'Blocked',         value: stats.blocked,    icon: <Ban size={11} strokeWidth={1.5} />,           color: stats.blocked > 0 ? '#9A3412' : undefined },
+              { label: 'Blocked',         value: stats.blocked,    icon: <Ban size={11} strokeWidth={1.5} />,           color: stats.blocked > 0 ? 'var(--ef-warning-strong)' : undefined },
               { label: 'Submitted',       value: stats.submitted,  icon: <CheckCircle2 size={11} strokeWidth={1.5} /> },
               { label: 'Not started',     value: stats.notStarted, icon: <Clock size={11} strokeWidth={1.5} /> },
               ...(stats.conflicts > 0 ? [{ label: 'Conflicts',  value: stats.conflicts,  icon: <MonitorSmartphone size={11} strokeWidth={1.5} />, color: 'var(--ef-danger)' }] : []),
@@ -3706,9 +3706,9 @@ export function AssessmentRosterCore({
                   className="text-xs px-2.5 py-1"
                   style={{
                     borderRadius: 2, cursor: 'pointer',
-                    background: scoreView === sv ? '#F0EFEA' : 'transparent',
+                    background: scoreView === sv ? 'var(--ef-canvas-raised)' : 'transparent',
                     color: scoreView === sv ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
-                    border: `1px solid ${scoreView === sv ? '#D8D6CF' : 'transparent'}`,
+                    border: `1px solid ${scoreView === sv ? 'var(--ef-border-muted)' : 'transparent'}`,
                   }}>
                   {sv === 'latest' ? 'Latest' : 'Best'}
                 </button>
@@ -3853,7 +3853,7 @@ export function AssessmentRosterCore({
       */}
       {freezeError && (
         <div className="flex items-start gap-2.5 px-4 py-3 mx-1 mb-3"
-          style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
           <AlertCircle size={13} strokeWidth={1.5}
             style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
           <p className="text-xs flex-1" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>

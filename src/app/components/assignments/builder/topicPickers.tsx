@@ -353,7 +353,7 @@ export function RuleBuilderPanel({
       {/* ── Instruction or lock banner ── */}
       {locked ? (
         <div className="px-5 py-2.5 flex-shrink-0 flex items-center gap-2"
-          style={{ background: '#FEF9EC', borderBottom: '1px solid var(--ef-warning-border)' }}>
+          style={{ background: 'var(--ef-warning-bg)', borderBottom: '1px solid var(--ef-warning-border)' }}>
           <Lock size={11} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0 }} />
           <p style={{ color: 'var(--ef-warning)', fontSize: 11, lineHeight: 1.5 }}>
             Question rules are locked — the question set was resolved when this test went live and cannot be changed.
@@ -489,7 +489,7 @@ export function RuleBuilderPanel({
 
                                 {/* Cross-section "also in Sec X" badge */}
                                 {otherSectionIdxs.length > 0 && (
-                                  <span style={{ fontSize: 10, color: 'var(--ef-warning)', background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
+                                  <span style={{ fontSize: 10, color: 'var(--ef-warning)', background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
                                     also in {otherSectionIdxs.map((si) => sections[si]?.name ?? `Sec ${si + 1}`).join(', ')}
                                   </span>
                                 )}
@@ -561,7 +561,7 @@ export function RuleBuilderPanel({
         const secOverrides = !!secPol && (secPol.penaltyValue !== undefined || secPol.negativeMarking === false);
         return (
           <div className="flex-shrink-0 flex items-center gap-2 px-5 py-2"
-            style={{ borderTop: '1px solid var(--ef-border-subtle)', background: '#FDFBF7' }}>
+            style={{ borderTop: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}>
             <AlertCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
             <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Penalty for this section</span>
             {secOverrides ? (
@@ -734,7 +734,7 @@ export function SectionTopicPicker({
                           {topic}
                         </span>
                         {otherSecs.length > 0 && (
-                          <span style={{ fontSize: 10, color: 'var(--ef-warning)', background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, color: 'var(--ef-warning)', background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2, padding: '1px 6px', flexShrink: 0 }}>
                             also in {otherSecs.map((si) => sections[si]?.name ?? `Sec ${si + 1}`).join(', ')}
                           </span>
                         )}

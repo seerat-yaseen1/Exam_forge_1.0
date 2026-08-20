@@ -66,7 +66,7 @@ export function LogSubjectRequestButton({ subjectRole, subjectId, onLogged }: Pr
       <button
         onClick={() => setOpenForm(true)}
         className="flex items-center gap-1.5 text-xs px-2.5 py-1 self-start"
-        style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: '#6B6862' }}
+        style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-text-muted)' }}
       >
         <FilePlus2 size={11} strokeWidth={1.5} /> Log a data request
       </button>

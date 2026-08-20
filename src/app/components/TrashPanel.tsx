@@ -112,7 +112,7 @@ export function TrashPanel({ instituteId, canPurge = false, roles }: Props) {
     <div>
       {error && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2 mb-3"
-          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: 'var(--ef-danger)' }}>
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, color: 'var(--ef-danger)' }}>
           <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>{error}</span>
         </div>
@@ -172,7 +172,7 @@ export function TrashPanel({ instituteId, canPurge = false, roles }: Props) {
 
               {confirming && (
                 <div className="mt-2 px-2.5 py-2"
-                  style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2 }}>
+                  style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
                   <p className="text-xs mb-2" style={{ color: 'var(--ef-danger)' }}>
                     {rec.role === 'institute'
                       ? 'This destroys the institute and everything belonging to it — faculty, students, content and attempts. It cannot be undone.'
@@ -201,7 +201,7 @@ export function TrashPanel({ instituteId, canPurge = false, roles }: Props) {
                       onClick={() => { setConfirmPurgeId(null); setPurgeSelection([]); }}
                       disabled={busy}
                       className="text-xs px-3 py-1"
-                      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)' }}
+                      style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)' }}
                     >
                       Cancel
                     </button>

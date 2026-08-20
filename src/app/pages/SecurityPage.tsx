@@ -430,7 +430,7 @@ function TwoFactorSection() {
         <div className="mt-4">
           <div className="flex items-start gap-2 mb-3">
             <Smartphone size={14} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', marginTop: 2 }} />
-            <p className="text-xs" style={{ color: '#6B6B65', lineHeight: 1.6 }}>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
               Scan this QR code with your authenticator app, then enter the 6-digit code it shows.
             </p>
           </div>

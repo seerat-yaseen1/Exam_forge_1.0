@@ -139,7 +139,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
     <div>
       {error && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2 mb-3"
-          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: 'var(--ef-danger)' }}>
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, color: 'var(--ef-danger)' }}>
           <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>{error}</span>
         </div>
@@ -172,7 +172,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
               <button
                 onClick={() => { setOpenId(expanded ? null : r.id); setReason(''); setError(''); }}
                 className="text-xs px-2 py-1 flex-shrink-0"
-                style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)' }}
+                style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)' }}
               >
                 {expanded ? 'Close' : 'Review'}
               </button>
@@ -216,7 +216,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                     onClick={() => decide(r, 'refused')}
                     disabled={busy}
                     className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)', cursor: busy ? 'not-allowed' : 'pointer' }}
+                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)', cursor: busy ? 'not-allowed' : 'pointer' }}
                   >
                     <X size={10} strokeWidth={2} /> Refuse with reason
                   </button>
@@ -224,7 +224,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
 
                 {r.type === 'erasure' && canErase && (
                   <div className="flex flex-col gap-2 px-2.5 py-2"
-                    style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2 }}>
+                    style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
                     <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.5 }}>
                       Erasure is permanent and bypasses the retention window —
                       there is no restore. Type the person&apos;s name to confirm.
@@ -235,10 +235,10 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
                       placeholder={r.subjectLabel ?? 'Full name'}
                       disabled={busy}
                       className="text-xs px-2 py-1.5 w-full"
-                      style={{ border: '1px solid #E8CFCF', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
+                      style={{ border: '1px solid var(--ef-danger-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
                     />
                     {retentionBlock && (
-                      <label className="flex items-start gap-1.5 text-xs" style={{ color: '#7A5B12' }}>
+                      <label className="flex items-start gap-1.5 text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
                         <input
                           type="checkbox"
                           checked={override}
@@ -287,13 +287,13 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
           </p>
           {closed.map((r) => (
             <div key={r.id} className="px-3 py-2 mb-1.5"
-              style={{ background: '#F4F3F0', border: '1px solid #EDEBE5', borderRadius: 2 }}>
+              style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border-subtle)', borderRadius: 2 }}>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs" style={{ color: '#7A7873' }}>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                   {typeLabel(r.type)} — {r.subjectLabel ?? r.subjectId}
                 </span>
                 <span className="text-xs flex-shrink-0"
-                  style={{ color: r.status === 'refused' ? '#7A5B12' : '#3F6B3F' }}>
+                  style={{ color: r.status === 'refused' ? 'var(--ef-warning-strong)' : 'var(--ef-success-strong)' }}>
                   {statusLabel(r.status)}
                 </span>
               </div>

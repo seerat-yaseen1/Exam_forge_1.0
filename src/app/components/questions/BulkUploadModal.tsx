@@ -133,7 +133,7 @@ function Step1({ onNext }: { onNext: () => void }) {
       </div>
 
       {/* Image URL note */}
-      <div className="flex items-start gap-2.5 px-3 py-3 mb-6" style={{ background: '#FFFBF0', border: '1px solid #F0DFA0', borderRadius: 2 }}>
+      <div className="flex items-start gap-2.5 px-3 py-3 mb-6" style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
         <Info size={13} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 1 }} />
         <p className="text-xs" style={{ color: 'var(--ef-warning-strong)', lineHeight: 1.7 }}>
           Images cannot be embedded in the spreadsheet. Use the <code style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.05)', padding: '1px 4px', borderRadius: 2 }}>_image_url</code> columns to attach pre-hosted image links (must start with https://). Questions without images can have image URLs added later via the single-question editor.
@@ -213,7 +213,7 @@ function Step2({
         onDrop={(e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files[0]) process(e.dataTransfer.files[0]); }}
         className="flex flex-col items-center justify-center py-14 cursor-pointer transition-all mb-4"
         style={{
-          border: `2px dashed ${dragOver ? 'var(--ef-ink)' : '#D1CFCA'}`,
+          border: `2px dashed ${dragOver ? 'var(--ef-ink)' : 'var(--ef-border-muted)'}`,
           borderRadius: 3,
           background: dragOver ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)',
           outline: 'none',
@@ -276,8 +276,8 @@ function RowCard({
   const hasDup = duplicateScore && duplicateScore.matchedReason !== 'none';
 
   const statusColor = status === 'valid' ? 'var(--ef-success)' : status === 'warning' ? 'var(--ef-warning-strong)' : 'var(--ef-danger)';
-  const statusBg    = status === 'valid' ? '#F0FBF4' : status === 'warning' ? '#FFFBF0' : 'var(--ef-danger-bg)';
-  const statusBorder = status === 'valid' ? '#C3E8CE' : status === 'warning' ? '#F0DFA0' : 'var(--ef-danger-border)';
+  const statusBg    = status === 'valid' ? 'var(--ef-success-bg)' : status === 'warning' ? 'var(--ef-warning-bg)' : 'var(--ef-danger-bg)';
+  const statusBorder = status === 'valid' ? 'var(--ef-success-border)' : status === 'warning' ? 'var(--ef-warning-border)' : 'var(--ef-danger-border)';
 
   return (
     <div style={{ border: `1px solid ${statusBorder}`, borderRadius: 2, background: statusBg, marginBottom: 6 }}>
@@ -324,8 +324,8 @@ function RowCard({
           <span
             className="flex items-center gap-1 text-xs flex-shrink-0 px-1.5 py-0.5"
             style={{
-              background: status === 'error' ? 'var(--ef-danger-bg)' : '#FFFBF0',
-              border: `1px solid ${status === 'error' ? 'var(--ef-danger-border)' : '#F0DFA0'}`,
+              background: status === 'error' ? 'var(--ef-danger-bg)' : 'var(--ef-warning-bg)',
+              border: `1px solid ${status === 'error' ? 'var(--ef-danger-border)' : 'var(--ef-warning-border)'}`,
               color: status === 'error' ? 'var(--ef-danger)' : 'var(--ef-warning-strong)',
               borderRadius: 2, fontSize: 10, letterSpacing: '0.04em',
             }}
@@ -375,7 +375,7 @@ function RowCard({
             className="text-xs px-2 py-1 transition-opacity hover:opacity-70"
             style={{
               border: `1px solid ${isIncluded ? 'var(--ef-success)' : 'var(--ef-border)'}`,
-              background: isIncluded ? '#F0FBF4' : 'var(--ef-surface)',
+              background: isIncluded ? 'var(--ef-success-bg)' : 'var(--ef-surface)',
               color: isIncluded ? 'var(--ef-success)' : 'var(--ef-text-subtle)',
               borderRadius: 2,
             }}
@@ -720,7 +720,7 @@ function Step4({
 
       {phase === 'done' && (
         <>
-          <div className="flex items-center justify-center mb-5" style={{ width: 48, height: 48, borderRadius: '50%', background: '#F0FBF4', border: '1px solid #C3E8CE' }}>
+          <div className="flex items-center justify-center mb-5" style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)' }}>
             <CheckCircle2 size={22} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
           </div>
           <p className="text-sm mb-2" style={{ color: 'var(--ef-ink)' }}>Done!</p>

@@ -65,7 +65,7 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
     >
       <div
         className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 30, height: 30, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}
+        style={{ width: 30, height: 30, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)' }}
       >
         {icon}
       </div>
@@ -82,13 +82,13 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
 function SkeletonRow() {
   return (
     <div className="flex items-center gap-4 px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-      <div className="h-4 w-10 rounded" style={{ background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div className="h-4 w-10 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
       <div className="flex-1 space-y-1.5">
-        <div className="h-3 rounded" style={{ width: '60%', background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />
-        <div className="h-2.5 rounded" style={{ width: '30%', background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div className="h-3 rounded" style={{ width: '60%', background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div className="h-2.5 rounded" style={{ width: '30%', background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
-      <div className="h-4 w-16 rounded" style={{ background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />
-      <div className="h-4 w-8 rounded" style={{ background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div className="h-4 w-16 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div className="h-4 w-8 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
     </div>
   );
 }
@@ -255,8 +255,8 @@ function QuestionRow({
             <span
               className="text-xs px-1.5 py-0.5"
               style={{
-                background: mine ? '#EEF2EE' : '#F3EFEA',
-                color:      mine ? '#4A6B4A' : '#8A6D3B',
+                background: mine ? 'var(--ef-success-bg)' : 'var(--ef-canvas-raised)',
+                color:      mine ? 'var(--ef-success-strong)' : 'var(--ef-warning-strong)',
                 borderRadius: 2, fontSize: 10, letterSpacing: '0.02em',
               }}
               title={mine ? 'Authored by you' : `Authored by ${authorLabel}`}

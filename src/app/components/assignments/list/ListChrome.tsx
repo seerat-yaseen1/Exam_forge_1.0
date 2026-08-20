@@ -27,7 +27,7 @@ export function StatPill({ icon, label, value }: { icon: React.ReactNode; label:
     <div className="flex items-center gap-2 md:gap-3 px-3 py-3 md:px-5 md:py-4"
       style={{ border: '1px solid var(--ef-border)', borderRadius: 3, background: 'var(--ef-surface)' }}>
       <div className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}>
+        style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)' }}>
         {icon}
       </div>
       <div className="min-w-0">
@@ -41,12 +41,12 @@ export function StatPill({ icon, label, value }: { icon: React.ReactNode; label:
 export function SkeletonRow() {
   return (
     <div className="flex items-center gap-4 px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-      <div className="h-4 w-10 rounded" style={{ background: '#EEECEA' }} />
+      <div className="h-4 w-10 rounded" style={{ background: 'var(--ef-border-subtle)' }} />
       <div className="flex-1 space-y-1.5">
-        <div className="h-3 rounded" style={{ width: '60%', background: '#EEECEA' }} />
-        <div className="h-2.5 rounded" style={{ width: '30%', background: '#F3F2EF' }} />
+        <div className="h-3 rounded" style={{ width: '60%', background: 'var(--ef-border-subtle)' }} />
+        <div className="h-2.5 rounded" style={{ width: '30%', background: 'var(--ef-border-subtle)' }} />
       </div>
-      <div className="h-4 w-28 rounded" style={{ background: '#F3F2EF' }} />
+      <div className="h-4 w-28 rounded" style={{ background: 'var(--ef-border-subtle)' }} />
     </div>
   );
 }

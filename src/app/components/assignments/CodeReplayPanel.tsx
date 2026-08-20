@@ -58,9 +58,9 @@ const SPEEDS = [1, 4, 16] as const;
 
 const MARK_COLOR: Record<MarkKind, string> = {
   paste: 'var(--ef-warning)',
-  run:   '#1D4ED8',
+  run:   'var(--ef-info)',
   blur:  'var(--ef-text-muted)',
-  lang:  '#4A1D96',
+  lang:  'var(--ef-accent)',
   idle:  'var(--ef-border)',
   // Muted, NOT the warning colour. A reset is the candidate using a control
   // the product offers them. It is worth being able to jump to — the document
@@ -273,7 +273,7 @@ export function CodeReplayPanel({
           watching. Saying so is the only honest option. */}
       {broken && (
         <div className="flex items-start gap-2 px-2 py-1.5"
-          style={{ background: 'var(--ef-warning-bg, #FFFBF0)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+          style={{ background: 'var(--ef-warning-bg, var(--ef-warning-bg))', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
           <AlertTriangle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0, marginTop: 2 }} />
           <p className="text-xs" style={{ color: 'var(--ef-warning)', lineHeight: 1.5 }}>
             {frame!.reliability.ok ? null : frame!.reliability.reason === 'no-keyframe'

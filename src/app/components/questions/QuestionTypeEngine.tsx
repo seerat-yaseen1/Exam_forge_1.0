@@ -1090,8 +1090,8 @@ function DuplicateBanner({
   const verdict = verdictFor(score);
   const isBlock = verdict === 'block';
   const palette = isBlock
-    ? { bg: 'var(--ef-danger-bg)', border: 'var(--ef-danger-border)', text: 'var(--ef-danger)', sub: '#A85050' }
-    : { bg: '#FFFBF0', border: '#F0DFA0', text: 'var(--ef-warning-strong)', sub: '#A07A3A' };
+    ? { bg: 'var(--ef-danger-bg)', border: 'var(--ef-danger-border)', text: 'var(--ef-danger)', sub: 'var(--ef-danger)' }
+    : { bg: 'var(--ef-warning-bg)', border: 'var(--ef-warning-border)', text: 'var(--ef-warning-strong)', sub: 'var(--ef-warning)' };
 
   return (
     <div

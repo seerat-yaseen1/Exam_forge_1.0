@@ -100,7 +100,7 @@ export function SubjectsPage() {
         <h1 style={{ margin: 0 }}>Subjects</h1>
       </div>
 
-      <div style={{ background: 'var(--ef-surface)', border: '1px solid #E8E7E1', borderRadius: 4, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 4, overflow: 'hidden' }}>
         {selectedSubject && selectedTopic ? (
           <TopicQuestionsView
             key={selectedTopic.id}
@@ -124,7 +124,7 @@ export function SubjectsPage() {
           />
         ) : (
           <>
-            <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ padding: 14, borderBottom: '1px solid var(--ef-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, letterSpacing: '0.04em', color: 'var(--ef-text-muted)' }}>
                 ALL SUBJECTS
                 {topics.length > 0 && <span style={{ color: 'var(--ef-text-muted)' }}> · {topics.length} topics</span>}
@@ -165,7 +165,7 @@ export function SubjectsPage() {
             )}
 
             {loadingSubjects ? (
-              <div style={{ padding: 24, textAlign: 'center', color: '#83827C' }}>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--ef-text-muted)' }}>
                 <Loader2 size={16} className="animate-spin" />
               </div>
             ) : subjects.length === 0 ? (
@@ -216,7 +216,7 @@ function SlugChip({ id }: { id: string }) {
 
 function EmptyHint({ text }: { text: string }) {
   return (
-    <div style={{ padding: 24, textAlign: 'center', color: '#83827C', fontSize: 13 }}>
+    <div style={{ padding: 24, textAlign: 'center', color: 'var(--ef-text-muted)', fontSize: 13 }}>
       {text}
     </div>
   );
@@ -245,7 +245,7 @@ function NewSubjectForm({ onCreated, onCancel }: { onCreated: () => void; onCanc
   };
 
   return (
-    <div style={{ padding: 14, borderBottom: '1px solid #E8E7E1', background: '#FAFAF7' }}>
+    <div style={{ padding: 14, borderBottom: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
       <div className="flex flex-col sm:flex-row" style={{ gap: 8, marginBottom: 8 }}>
         <Input
           placeholder="ID e.g. math-0001"
@@ -261,10 +261,10 @@ function NewSubjectForm({ onCreated, onCancel }: { onCreated: () => void; onCanc
           disabled={busy}
         />
       </div>
-      <div style={{ fontSize: 11, color: idValid || id === '' ? '#83827C' : '#B91C1C', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: idValid || id === '' ? 'var(--ef-text-muted)' : 'var(--ef-danger)', marginBottom: 8 }}>
         Format: {SLUG_ID_REGEX.toString().slice(1, -1)} — e.g. <code>math-0001</code>
       </div>
-      {err && <div style={{ fontSize: 12, color: '#B91C1C', marginBottom: 8 }}>{err}</div>}
+      {err && <div style={{ fontSize: 12, color: 'var(--ef-danger)', marginBottom: 8 }}>{err}</div>}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
         <Button size="sm" onClick={submit} disabled={busy || !idValid || !name.trim()}>
@@ -289,7 +289,7 @@ function SubjectCard({
       className="flex flex-col gap-3 p-4 text-left w-full cursor-pointer transition-colors hover:bg-[var(--ef-canvas-raised)]"
       style={{
         background: 'var(--ef-surface)',
-        border: '1px solid #E8E7E1',
+        border: '1px solid var(--ef-border)',
         borderRadius: 3,
         touchAction: 'manipulation',
       }}
@@ -306,7 +306,7 @@ function SubjectCard({
       </p>
 
       {/* Stats footer */}
-      <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid #F2F1EC' }}>
+      <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
         <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
           <BookOpen size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
           <span style={{ fontSize: 12 }}>{subject.questionCount}</span>
@@ -342,11 +342,11 @@ function SubjectDetail({
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-200">
       {/* Back bar */}
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid #E8E7E1' }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--ef-border)' }}>
         <button
           onClick={onBack}
           aria-label="Back to all subjects"
-          className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[#F2F1EC]"
+          className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[var(--ef-border-subtle)]"
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ef-text-muted)', fontSize: 12, touchAction: 'manipulation' }}
         >
           <ArrowLeft size={14} strokeWidth={1.5} /> All subjects
@@ -366,7 +366,7 @@ function SubjectDetail({
           onCancel={() => setEditing(false)}
         />
       ) : (
-        <div style={{ padding: 16, borderBottom: '1px solid #E8E7E1' }}>
+        <div style={{ padding: 16, borderBottom: '1px solid var(--ef-border)' }}>
           <div className="flex items-start justify-between gap-2" style={{ marginBottom: 10 }}>
             <SlugChip id={subject.id} />
             <div className="flex items-center gap-1 flex-shrink-0 -mt-2 -mr-2 sm:-mt-1 sm:-mr-1">
@@ -408,7 +408,7 @@ function SubjectDetail({
       )}
 
       {/* Topics list */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderBottom: '1px solid #F2F1EC' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--ef-border-subtle)' }}>
         <span style={{ fontSize: 12, letterSpacing: '0.04em', color: 'var(--ef-text-muted)' }}>TOPICS</span>
         <Button
           size="sm"
@@ -430,7 +430,7 @@ function SubjectDetail({
       )}
 
       {topicsLoading ? (
-        <div style={{ padding: 20, textAlign: 'center', color: '#83827C' }}>
+        <div style={{ padding: 20, textAlign: 'center', color: 'var(--ef-text-muted)' }}>
           <Loader2 size={14} className="animate-spin" />
         </div>
       ) : topics.length === 0 ? (
@@ -466,7 +466,7 @@ function TopicCard({
 
   if (editing) {
     return (
-      <div style={{ background: '#FAFAF7', border: '1px solid #E8E7E1', borderRadius: 3 }}>
+      <div style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
         <EditSlugForm
           initialId={topic.id}
           initialName={topic.name}
@@ -484,7 +484,7 @@ function TopicCard({
   return (
     <div
       className="flex flex-col"
-      style={{ background: 'var(--ef-surface)', border: '1px solid #E8E7E1', borderRadius: 3 }}
+      style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
     >
       {/* Clickable region → drill into this topic's questions */}
       <button
@@ -509,7 +509,7 @@ function TopicCard({
       {/* Action bar */}
       <div
         className="flex flex-wrap items-center gap-1 px-2 py-1.5"
-        style={{ borderTop: '1px solid #F2F1EC' }}
+        style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
       >
         <MergeTopicControl topic={topic} siblingTopics={siblingTopics} onMerged={onChanged} />
         <MoveTopicControl topic={topic} subjects={subjects} onMoved={onChanged} />
@@ -543,11 +543,11 @@ function TopicQuestionsView({
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-200">
       {/* Back bar */}
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid #E8E7E1' }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--ef-border)' }}>
         <button
           onClick={onBack}
           aria-label={`Back to ${subject.name} topics`}
-          className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[#F2F1EC]"
+          className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[var(--ef-border-subtle)]"
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ef-text-muted)', fontSize: 12, touchAction: 'manipulation' }}
         >
           <ArrowLeft size={14} strokeWidth={1.5} /> {subject.name} · topics
@@ -555,7 +555,7 @@ function TopicQuestionsView({
       </div>
 
       {/* Topic header */}
-      <div style={{ padding: 16, borderBottom: '1px solid #E8E7E1' }}>
+      <div style={{ padding: 16, borderBottom: '1px solid var(--ef-border)' }}>
         <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
           <SlugChip id={topic.id} />
           <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>in {subject.name}</span>
@@ -584,8 +584,8 @@ function IconBtn({
       aria-label={title}
       title={title}
       // Touch-friendly: ≥44px tap target on mobile (pointer: coarse), compact on desktop.
-      className="inline-flex items-center justify-center rounded-sm transition-colors min-h-[44px] min-w-[44px] sm:min-h-[30px] sm:min-w-[30px] hover:bg-[#F2F1EC] disabled:opacity-40 disabled:cursor-not-allowed"
-      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#83827C', touchAction: 'manipulation' }}
+      className="inline-flex items-center justify-center rounded-sm transition-colors min-h-[44px] min-w-[44px] sm:min-h-[30px] sm:min-w-[30px] hover:bg-[var(--ef-border-subtle)] disabled:opacity-40 disabled:cursor-not-allowed"
+      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ef-text-muted)', touchAction: 'manipulation' }}
     >
       {children}
     </button>
@@ -620,7 +620,7 @@ function EditSlugForm({
   };
 
   return (
-    <div style={{ padding: 12, borderBottom: '1px solid #E8E7E1', background: '#FAFAF7' }}>
+    <div style={{ padding: 12, borderBottom: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
       <div className="flex flex-col sm:flex-row" style={{ gap: 8, marginBottom: 8 }}>
         <Input
           value={id}
@@ -630,10 +630,10 @@ function EditSlugForm({
         />
         <Input value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
       </div>
-      <div style={{ fontSize: 11, color: idValid ? '#83827C' : '#B91C1C', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: idValid ? 'var(--ef-text-muted)' : 'var(--ef-danger)', marginBottom: 8 }}>
         Format: {SLUG_ID_REGEX.toString().slice(1, -1)}
       </div>
-      {err && <div style={{ fontSize: 12, color: '#B91C1C', marginBottom: 8 }}>{err}</div>}
+      {err && <div style={{ fontSize: 12, color: 'var(--ef-danger)', marginBottom: 8 }}>{err}</div>}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
         <Button size="sm" onClick={submit} disabled={busy || !idValid || !name.trim()}>
@@ -688,7 +688,7 @@ function MoveTopicControl({
         onChange={(e) => setTarget(e.target.value)}
         disabled={busy}
         className="min-w-0"
-        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid #E8E7E1', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
+        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
       >
         <option value="">→ move to subject…</option>
         {candidates.map((s) => (
@@ -755,7 +755,7 @@ function MergeTopicControl({
         onChange={(e) => setTarget(e.target.value)}
         disabled={busy}
         className="min-w-0"
-        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid #E8E7E1', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
+        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
       >
         <option value="">⤵ merge into topic…</option>
         {candidates.map((t) => (
@@ -804,12 +804,12 @@ function NewTopicForm({
   };
 
   return (
-    <div style={{ padding: 14, borderBottom: '1px solid #F2F1EC', background: '#FAFAF7' }}>
+    <div style={{ padding: 14, borderBottom: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}>
       {/* Subject selector — only when not scoped to a specific subject */}
       {!fixedSubjectId && (
         <div style={{ marginBottom: 8 }}>
           <label style={{ fontSize: 11, color: 'var(--ef-text-muted)', display: 'block', marginBottom: 4 }}>
-            Subject <span style={{ color: '#B91C1C' }}>*</span>
+            Subject <span style={{ color: 'var(--ef-danger)' }}>*</span>
           </label>
           <select
             value={subjectId}
@@ -843,10 +843,10 @@ function NewTopicForm({
           disabled={busy}
         />
       </div>
-      <div style={{ fontSize: 11, color: idValid || id === '' ? '#83827C' : '#B91C1C', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: idValid || id === '' ? 'var(--ef-text-muted)' : 'var(--ef-danger)', marginBottom: 8 }}>
         Format: {SLUG_ID_REGEX.toString().slice(1, -1)} — e.g. <code>prob-0001</code>
       </div>
-      {err && <div style={{ fontSize: 12, color: '#B91C1C', marginBottom: 8 }}>{err}</div>}
+      {err && <div style={{ fontSize: 12, color: 'var(--ef-danger)', marginBottom: 8 }}>{err}</div>}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
         <Button size="sm" onClick={submit} disabled={busy || !subjectId || !idValid || !name.trim()}>

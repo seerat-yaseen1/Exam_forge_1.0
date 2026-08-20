@@ -131,7 +131,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           type="button"
           onClick={this.reload}
           className="text-xs mt-6 px-4 py-2"
-          style={{ background: '#2F2F2B', color: 'var(--ef-surface)', borderRadius: 2 }}
+          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2 }}
         >
           {isExam ? 'Reload and continue exam' : 'Reload page'}
         </button>

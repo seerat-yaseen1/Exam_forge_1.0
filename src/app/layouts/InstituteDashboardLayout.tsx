@@ -92,7 +92,7 @@ function InstituteProfileDropdown({
 
   const menuItem =
     'w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-left transition-colors';
-  const menuItemStyle: React.CSSProperties = { color: '#2C2C2A' };
+  const menuItemStyle: React.CSSProperties = { color: 'var(--ef-ink)' };
 
   return (
     <motion.div
@@ -197,7 +197,7 @@ function SidebarNavItem({
         }}
         onMouseEnter={(e) => {
           if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color      = '#2C2C2A';
+            (e.currentTarget as HTMLElement).style.color      = 'var(--ef-ink)';
             (e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)';
           }
         }}

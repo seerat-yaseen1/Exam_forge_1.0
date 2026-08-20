@@ -147,11 +147,11 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
                   placeholder="e.g. Data Structures and Algorithms"
                   className="w-full px-3 py-2.5 text-sm outline-none transition-colors"
                   style={{
-                    border: `1px solid ${errors.name ? '#E5A5A5' : 'var(--ef-border)'}`,
+                    border: `1px solid ${errors.name ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
                     borderRadius: 2, background: 'var(--ef-canvas-raised)', color: 'var(--ef-ink)',
                   }}
-                  onFocus={(e) => (e.currentTarget.style.borderColor = errors.name ? '#E5A5A5' : 'var(--ef-ink)')}
-                  onBlur={(e) => (e.currentTarget.style.borderColor = errors.name ? '#E5A5A5' : 'var(--ef-border)')}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = errors.name ? 'var(--ef-danger-border)' : 'var(--ef-ink)')}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = errors.name ? 'var(--ef-danger-border)' : 'var(--ef-border)')}
                 />
                 {errors.name && <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)' }}>{errors.name}</p>}
               </div>
@@ -168,12 +168,12 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
                   placeholder="e.g. CS301"
                   className="w-full px-3 py-2.5 text-sm outline-none transition-colors"
                   style={{
-                    border: `1px solid ${errors.code ? '#E5A5A5' : 'var(--ef-border)'}`,
+                    border: `1px solid ${errors.code ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
                     borderRadius: 2, background: 'var(--ef-canvas-raised)', color: 'var(--ef-ink)',
                     fontFamily: 'monospace', letterSpacing: '0.06em',
                   }}
-                  onFocus={(e) => (e.currentTarget.style.borderColor = errors.code ? '#E5A5A5' : 'var(--ef-ink)')}
-                  onBlur={(e) => (e.currentTarget.style.borderColor = errors.code ? '#E5A5A5' : 'var(--ef-border)')}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = errors.code ? 'var(--ef-danger-border)' : 'var(--ef-ink)')}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = errors.code ? 'var(--ef-danger-border)' : 'var(--ef-border)')}
                 />
                 {errors.code && <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)' }}>{errors.code}</p>}
               </div>

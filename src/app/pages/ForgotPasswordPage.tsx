@@ -91,7 +91,7 @@ export function ForgotPasswordPage() {
                 >
                   PASSWORD RECOVERY
                 </p>
-                <p className="text-xs mb-6" style={{ color: '#6B6B65' }}>
+                <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)' }}>
                   Enter your account email. A secure reset code will be dispatched.
                 </p>
 
@@ -181,7 +181,7 @@ export function ForgotPasswordPage() {
                 >
                   CHECK YOUR INBOX
                 </p>
-                <p className="text-xs mb-6" style={{ color: '#6B6B65', lineHeight: 1.6 }}>
+                <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                   If an account exists for{' '}
                   <span style={{ color: 'var(--ef-ink)' }}>{email}</span>, a
                   password-reset link has been sent. Open it from your inbox to

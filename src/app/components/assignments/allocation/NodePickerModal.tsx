@@ -212,13 +212,13 @@ export function NodePickerModal({ open, nodeType, rows, initialSelected, onConfi
         {/* D10 nudge */}
         {nudge && (
           <div className="flex items-center gap-2 px-6 py-2 text-xs flex-shrink-0"
-            style={{ background: '#FBF7EC', borderBottom: `1px solid ${LINE}`, color: '#7A6420' }}>
+            style={{ background: 'var(--ef-warning-bg)', borderBottom: `1px solid ${LINE}`, color: 'var(--ef-warning-strong)' }}>
             <Info size={12} strokeWidth={1.5} />
             <span className="flex-1">
               You’ve selected every {typeLabel.toLowerCase()} under <strong>{nudge.parentName}</strong>.
               Targeting <strong>{nudge.parentName}</strong> itself would also include ones created later.
             </span>
-            <button onClick={() => setNudgeDismissed(true)} className="hover:opacity-60" style={{ color: '#7A6420' }}>
+            <button onClick={() => setNudgeDismissed(true)} className="hover:opacity-60" style={{ color: 'var(--ef-warning-strong)' }}>
               <X size={11} strokeWidth={1.5} />
             </button>
           </div>
@@ -305,7 +305,7 @@ function RowItem({ row, checked, onToggle, query }: {
   return (
     <button onClick={onToggle}
       className="w-full flex items-center gap-2.5 px-6 py-2.5 text-left transition-colors hover:bg-[var(--ef-canvas-raised)]"
-      style={{ borderBottom: '1px solid #F1F0EC' }}>
+      style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
       {checked
         ? <CheckSquare size={13} strokeWidth={1.5} style={{ color: INK, flexShrink: 0 }} />
         : <Square size={13} strokeWidth={1.5} style={{ color: FAINT, flexShrink: 0 }} />}
@@ -319,7 +319,7 @@ function RowItem({ row, checked, onToggle, query }: {
           </span>
         )}
       </span>
-      <span className="text-xs flex-shrink-0" style={{ color: row.studentCount === 0 ? '#B0742A' : MUTED }}>
+      <span className="text-xs flex-shrink-0" style={{ color: row.studentCount === 0 ? 'var(--ef-warning-strong)' : MUTED }}>
         {row.studentCount === 0 ? '0 students mapped' : `${row.studentCount}`}
       </span>
     </button>
@@ -336,7 +336,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((p, i) =>
         tokens.includes(p.toLowerCase())
-          ? <mark key={i} style={{ background: '#F3EAC8', color: 'inherit' }}>{p}</mark>
+          ? <mark key={i} style={{ background: 'var(--ef-warning-bg)', color: 'inherit' }}>{p}</mark>
           : <span key={i}>{p}</span>)}
     </>
   );

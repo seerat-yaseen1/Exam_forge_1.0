@@ -158,6 +158,53 @@
   --ef-pad-page:         40px;   /* vertical breathing room around a page */
   --ef-pad-card:         20px;
   --ef-gap:              16px;
+
+  /* ── Type scale ────────────────────────────────────────────────
+     WHY THIS EXISTS. Before it, this app had one text size: `text-xs`,
+     applied to headings, body copy, table cells, captions and buttons alike,
+     with a scattering of inline 11.5 / 12.5 / 13.5px overrides where somebody
+     needed a little more. A screen where everything is the same size has no
+     hierarchy, so the eye has to READ in order to find anything, and the
+     result feels dense and cheap however good the colours are. Hierarchy is
+     most of what "premium" means visually — it is the difference between a
+     page you scan and a page you parse.
+
+     A 1.2 minor third, anchored at 14px body rather than the 12px this app
+     had been using. Small enough for dense staff tooling, large enough to
+     read on a laptop at arm's length.
+
+     `clamp()` on the two display sizes only. Body text does not grow with the
+     viewport — a 16px paragraph on a phone and a 16px paragraph on a monitor
+     are both correct, and scaling it would make the phone the odd one out.
+     Headings do grow, because their job is proportional to the space. */
+  --ef-text-2xs:         11px;    /* legal lines, table superscripts */
+  --ef-text-xs:          12px;    /* eyebrows, chips, dense metadata */
+  --ef-text-sm:          13px;    /* secondary copy, table cells */
+  --ef-text-base:        14px;    /* body — the default for everything */
+  --ef-text-md:          15px;    /* lead paragraphs, card titles */
+  --ef-text-lg:          17px;    /* section headings */
+  --ef-text-xl:          clamp(19px, 1.4vw + 14px, 22px);   /* card headlines */
+  --ef-text-2xl:         clamp(23px, 2.2vw + 15px, 30px);   /* page titles */
+  --ef-text-3xl:         clamp(28px, 3.4vw + 16px, 40px);   /* the one hero number */
+
+  /* Line height tightens as size grows: long body copy needs the air, a
+     40px heading set at 1.6 falls apart into separate lines. */
+  --ef-leading-tight:    1.18;
+  --ef-leading-snug:     1.35;
+  --ef-leading-normal:   1.6;
+  --ef-leading-relaxed:  1.72;
+
+  /* Tracking opens up for small caps and closes for display sizes — the
+     optical correction that makes both look deliberate rather than default. */
+  --ef-tracking-eyebrow: 0.12em;
+  --ef-tracking-wide:    0.04em;
+  --ef-tracking-tight:   -0.011em;
+
+  /* ── Touch ─────────────────────────────────────────────────────
+     The minimum comfortable target on a finger-driven screen. Applied only
+     under `pointer: coarse`, so a mouse keeps the denser layout that suits
+     it — the same control, sized for the hand actually using it. */
+  --ef-touch:            44px;
 }
 
 /* ── Focus ring ───────────────────────────────────────────────────
@@ -215,6 +262,143 @@ html[data-ef-theme] .text-white {
   /* Only ever used as the label on a filled button, where the readable colour
      is whatever that fill demands rather than white. */
   color: var(--ef-ink-text);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ELEMENT DEFAULTS ON A THEMED PAGE
+
+   ── WHY THESE ARE ELEMENT SELECTORS ───────────────────────────────
+   There are ~42,000 lines of page markup in this app, most of it written
+   before any of these tokens existed: bare `<input>`s, `<table>`s with no
+   class, buttons styled by inline object. Adding a class to every one of them
+   is weeks of edits with a merge conflict on each, and the result would be no
+   better than styling the element itself.
+
+   So the elements carry a floor. Every rule here is:
+
+     • gated on [data-ef-theme], so nothing changes on a surface with no theme
+       mounted — including print and export views;
+     • a DEFAULT, not an override — no !important, single-element specificity,
+       so any class or inline style still wins;
+     • about the things a page cannot reasonably restate: the focus ring, the
+       hit area, whether text is legible on the surface behind it.
+
+   A page that has been redesigned to use .ef-input or .ef-table looks the
+   same as one that has not yet been touched. That is the point: the floor
+   comes up everywhere at once, and the redesign is then about layout and
+   hierarchy rather than about repainting borders.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Form controls ────────────────────────────────────────────────
+   The single biggest visual tell of an unfinished app is a form control that
+   still looks like the browser drew it. These get the same surface, border,
+   radius and focus treatment as .ef-input, so a bare <input> on a page nobody
+   has revisited is indistinguishable from a designed one. */
+html[data-ef-theme] input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+html[data-ef-theme] select,
+html[data-ef-theme] textarea {
+  background: var(--ef-canvas-raised);
+  border: 1px solid var(--ef-border);
+  border-radius: var(--ef-radius-sm);
+  color: var(--ef-ink);
+  font-family: inherit;
+  font-size: var(--ef-text-sm);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+html[data-ef-theme] input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):hover:not(:disabled),
+html[data-ef-theme] select:hover:not(:disabled),
+html[data-ef-theme] textarea:hover:not(:disabled) {
+  border-color: var(--ef-border-muted);
+}
+
+/* Focus as a RING rather than a border-colour change, so the field does not
+   shift by a pixel when it gains focus. */
+html[data-ef-theme] input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):focus,
+html[data-ef-theme] select:focus,
+html[data-ef-theme] textarea:focus {
+  outline: none;
+  background: var(--ef-surface);
+  border-color: var(--ef-accent);
+  box-shadow: 0 0 0 3px var(--ef-accent-soft);
+}
+
+html[data-ef-theme] input::placeholder,
+html[data-ef-theme] textarea::placeholder {
+  color: var(--ef-text-muted);
+  opacity: 0.75;   /* a placeholder that reads as strongly as a value is a bug */
+}
+
+html[data-ef-theme] input:disabled,
+html[data-ef-theme] select:disabled,
+html[data-ef-theme] textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────
+   Column headers become quiet small-caps and the row rule drops to the
+   subtle weight. Both make the DATA the loudest thing in the table, which is
+   the only thing anyone opened it for. */
+html[data-ef-theme] table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--ef-text-sm);
+}
+
+html[data-ef-theme] th {
+  font-size: var(--ef-text-2xs);
+  font-weight: 500;
+  letter-spacing: var(--ef-tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--ef-text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+html[data-ef-theme] td {
+  color: var(--ef-ink);
+}
+
+/* ── Selection and links ──────────────────────────────────────────
+   Selection in the theme's own accent is a detail nobody names and everybody
+   notices — the browser's default blue on a Bordeaux page is the moment a
+   themed app stops feeling themed. */
+html[data-ef-theme] ::selection {
+  background: var(--ef-accent);
+  color: var(--ef-accent-text);
+}
+
+/* ── Touch targets ────────────────────────────────────────────────
+   Interactive elements get a comfortable minimum on finger-driven screens,
+   and only there: a mouse is precise, and forcing 44px rows onto a desktop
+   table would waste half the viewport to solve a problem it does not have.
+
+   `min-height` rather than `height`, so a control that is already taller is
+   left alone. Applied to the elements that are hit rather than to a class,
+   for the same reason as everything else in this block. */
+@media (pointer: coarse) {
+  html[data-ef-theme] button,
+  html[data-ef-theme] [role='button'],
+  html[data-ef-theme] a[href],
+  html[data-ef-theme] summary,
+  html[data-ef-theme] select,
+  html[data-ef-theme] input:not([type='checkbox']):not([type='radio']):not([type='range']) {
+    min-height: var(--ef-touch);
+  }
+
+  /* A checkbox is 13px by default, which is unhittable. Scaling the box
+     itself keeps the native control — and therefore its accent, its
+     indeterminate state and its keyboard behaviour — rather than replacing
+     it with a div that has none of them. */
+  html[data-ef-theme] input[type='checkbox'],
+  html[data-ef-theme] input[type='radio'] {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 /* Native controls. `color-scheme` makes the browser draw checkboxes, radios

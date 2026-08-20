@@ -104,6 +104,71 @@
     border: 0;
   }
 
+  /* ── Typography ───────────────────────────────────────────────────
+     A class per step, so a page states its intent ("this is a section
+     heading") rather than a number that has to be kept in step with eleven
+     other numbers. Each pairs a size with the leading and tracking that size
+     wants — the three are one decision, and splitting them is how a codebase
+     ends up with 40px headings set at 1.6.
+
+     Colour is deliberately NOT here. A heading is not always ink and a
+     caption is not always muted; binding the two would mean a variant class
+     for every combination. Size is structure, colour is emphasis. */
+
+  .ef-t-2xs  { font-size: var(--ef-text-2xs);  line-height: var(--ef-leading-normal); }
+  .ef-t-xs   { font-size: var(--ef-text-xs);   line-height: var(--ef-leading-normal); }
+  .ef-t-sm   { font-size: var(--ef-text-sm);   line-height: var(--ef-leading-normal); }
+  .ef-t-base { font-size: var(--ef-text-base); line-height: var(--ef-leading-normal); }
+  .ef-t-md   { font-size: var(--ef-text-md);   line-height: var(--ef-leading-snug); }
+
+  .ef-t-lg {
+    font-size: var(--ef-text-lg);
+    line-height: var(--ef-leading-snug);
+    letter-spacing: var(--ef-tracking-tight);
+  }
+
+  .ef-t-xl {
+    font-size: var(--ef-text-xl);
+    line-height: var(--ef-leading-snug);
+    letter-spacing: var(--ef-tracking-tight);
+  }
+
+  .ef-t-2xl {
+    font-size: var(--ef-text-2xl);
+    line-height: var(--ef-leading-tight);
+    letter-spacing: var(--ef-tracking-tight);
+  }
+
+  .ef-t-3xl {
+    font-size: var(--ef-text-3xl);
+    line-height: var(--ef-leading-tight);
+    letter-spacing: var(--ef-tracking-tight);
+  }
+
+  /* Long-form copy. Two things: a measure, and a little more leading. Line
+     length is the most-ignored readability control and the cheapest — past
+     about 75 characters the eye loses the return sweep and re-reads lines. */
+  .ef-prose {
+    font-size: var(--ef-text-base);
+    line-height: var(--ef-leading-relaxed);
+    max-width: 68ch;
+    color: var(--ef-text-muted);
+  }
+
+  /* Numbers that sit in a column and must line up. Never on a display figure:
+     tabular digits give every glyph the width of a zero, which at 30px makes
+     `121` look like it has been pulled apart. */
+  .ef-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* Ink levels, as classes, so a page never has to remember which token is
+     which shade. Named for their job. */
+  .ef-ink       { color: var(--ef-ink); }
+  .ef-subtle    { color: var(--ef-text-subtle); }
+  .ef-muted     { color: var(--ef-text-muted); }
+
   /* ── Surfaces ─────────────────────────────────────────────────── */
 
   .ef-card {
@@ -565,4 +630,486 @@
     75%, 100% { transform: scale(2.1); opacity: 0; }
   }
 
+  /* ── Data tables ──────────────────────────────────────────────────
+     THE HARDEST THING TO MAKE PREMIUM ON A PHONE.
+
+     A seven-column roster is a genuinely two-dimensional object: columns are
+     a shared vocabulary that lets the eye compare down as well as across. On
+     a 390px screen there is no honest way to keep that. The three usual
+     answers and why they were rejected:
+
+       • Horizontal scroll. The columns survive; the comparison does not,
+         because you can never see the one you are comparing against. It also
+         hides data behind a gesture with no affordance.
+       • Shrink to fit. Six-point type and truncated everything.
+       • Hide columns below a breakpoint. Silent data loss — the reader has no
+         idea a column existed, which is worse than not showing the table.
+
+     So below the breakpoint each ROW becomes a card, and each cell keeps its
+     column name as a label beside it. The table stops being a grid and
+     becomes a list of records, which is what a small screen can actually
+     hold. Nothing is hidden and nothing is truncated; only the axis of
+     comparison changes, and it is the one a phone could not deliver anyway.
+
+     Implemented with a `data-label` attribute the DataTable component writes
+     from the column definitions, so a page states its columns once. */
+
+  .ef-table-wrap {
+    width: 100%;
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+    background: var(--ef-surface);
+    overflow: hidden;
+  }
+
+  .ef-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--ef-text-sm);
+  }
+
+  .ef-table thead th {
+    padding: 11px var(--ef-pad-card);
+    background: var(--ef-canvas-raised);
+    border-bottom: 1px solid var(--ef-border);
+    font-size: var(--ef-text-2xs);
+    font-weight: 500;
+    letter-spacing: var(--ef-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--ef-text-muted);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .ef-table tbody td {
+    padding: 13px var(--ef-pad-card);
+    border-bottom: 1px solid var(--ef-border-subtle);
+    color: var(--ef-ink);
+    vertical-align: middle;
+  }
+
+  .ef-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  /* The row hover is the cheapest legibility win a wide table has: it ties
+     a cell at the right edge back to the name at the left. */
+  .ef-table tbody tr {
+    transition: background-color 120ms ease;
+  }
+
+  .ef-table tbody tr:hover {
+    background: var(--ef-surface-hover);
+  }
+
+  .ef-table--clickable tbody tr {
+    cursor: pointer;
+  }
+
+  .ef-table [data-align='right'] {
+    text-align: right;
+  }
+
+  .ef-table [data-align='center'] {
+    text-align: center;
+  }
+
+  /* ── …and the same table as a list of cards ──────────────────── */
+  @media (max-width: 760px) {
+    .ef-table-wrap {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      overflow: visible;
+    }
+
+    .ef-table,
+    .ef-table tbody,
+    .ef-table tr,
+    .ef-table td {
+      display: block;
+      width: 100%;
+    }
+
+    /* The header row is dropped rather than hidden with `display: none`,
+       which some screen readers skip entirely — every cell carries its own
+       label below, so the information is not lost, just relocated. */
+    .ef-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .ef-table tbody tr {
+      background: var(--ef-surface);
+      border: 1px solid var(--ef-border);
+      border-radius: var(--ef-radius);
+      box-shadow: var(--ef-shadow-sm);
+      padding: 4px var(--ef-pad-card);
+      margin-bottom: var(--ef-gap);
+    }
+
+    .ef-table tbody tr:hover {
+      background: var(--ef-surface);
+    }
+
+    .ef-table tbody td {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--ef-border-subtle);
+      text-align: left;
+    }
+
+    .ef-table tbody td:last-child {
+      border-bottom: 0;
+    }
+
+    /* The column name, now a label on the row. */
+    .ef-table tbody td[data-label]::before {
+      content: attr(data-label);
+      flex-shrink: 0;
+      font-size: var(--ef-text-2xs);
+      letter-spacing: var(--ef-tracking-eyebrow);
+      text-transform: uppercase;
+      color: var(--ef-text-muted);
+    }
+
+    /* A cell marked as the record's identity leads the card instead of
+       sitting in the list, because a card needs a title. */
+    .ef-table tbody td[data-primary] {
+      display: block;
+      padding-top: 13px;
+      font-size: var(--ef-text-md);
+      border-bottom: 1px solid var(--ef-border);
+    }
+
+    .ef-table tbody td[data-primary]::before {
+      display: none;
+    }
+
+    .ef-table [data-align='right'],
+    .ef-table [data-align='center'] {
+      text-align: left;
+    }
+  }
+
+  /* ── Toolbar ──────────────────────────────────────────────────────
+     The row above a list: search, filters, then the primary action pinned to
+     the far end. On a phone it stacks and the action goes full-width and
+     FIRST, because the thumb reaches the bottom of a phone more easily than
+     the top and the action is why the screen was opened. */
+  .ef-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: var(--ef-gap);
+  }
+
+  .ef-toolbar__grow {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+
+  .ef-toolbar__end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  @media (max-width: 640px) {
+    .ef-toolbar__end {
+      margin-left: 0;
+      width: 100%;
+    }
+
+    .ef-toolbar__end > * {
+      flex: 1;
+    }
+  }
+
+  /* ── Tabs ─────────────────────────────────────────────────────────
+     Underline rather than pill, because a tab strip sitting on a card edge
+     should read as part of the card rather than as a control floating above
+     it. Scrolls horizontally on a phone with the scrollbar hidden — the
+     overflowing tab peeking at the edge is the affordance. */
+  .ef-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border-bottom: 1px solid var(--ef-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .ef-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ef-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 14px;
+    margin-bottom: -1px;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    font-size: var(--ef-text-sm);
+    color: var(--ef-text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 160ms ease;
+  }
+
+  .ef-tab:hover {
+    color: var(--ef-text-subtle);
+  }
+
+  .ef-tab[aria-selected='true'] {
+    color: var(--ef-ink);
+  }
+
+  .ef-tab[aria-selected='true']::after {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 0;
+    height: 2px;
+    background: var(--ef-accent);
+    border-radius: 2px 2px 0 0;
+  }
+
+  /* ── Sheets and modals ────────────────────────────────────────────
+     One component, two shapes. On a laptop a drawer slides in from the right,
+     where a detail panel belongs beside the list it came from. On a phone it
+     becomes a bottom sheet: a right-hand drawer on a 390px screen is just a
+     full-screen page that arrived sideways, and the bottom edge is the only
+     part of a phone the thumb reaches without regripping. */
+  .ef-scrim {
+    position: fixed;
+    inset: 0;
+    background: var(--ef-overlay);
+    backdrop-filter: blur(2px);
+    z-index: 60;
+  }
+
+  .ef-sheet {
+    position: fixed;
+    z-index: 61;
+    background: var(--ef-surface);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--ef-shadow-lg);
+  }
+
+  .ef-sheet--side {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(560px, 100vw);
+    border-left: 1px solid var(--ef-border);
+  }
+
+  .ef-sheet--centre {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, calc(100vw - 32px));
+    max-height: min(760px, calc(100vh - 64px));
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius-lg);
+  }
+
+  @media (max-width: 640px) {
+    .ef-sheet--side,
+    .ef-sheet--centre {
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      max-width: none;
+      transform: none;
+      max-height: 92vh;
+      border: 0;
+      border-top: 1px solid var(--ef-border);
+      border-radius: var(--ef-radius-lg) var(--ef-radius-lg) 0 0;
+      /* Clear of the home indicator on a modern phone. */
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+
+  .ef-sheet__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: var(--ef-pad-card);
+    border-bottom: 1px solid var(--ef-border-subtle);
+    flex-shrink: 0;
+  }
+
+  .ef-sheet__body {
+    padding: var(--ef-pad-card);
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .ef-sheet__foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: var(--ef-pad-card);
+    border-top: 1px solid var(--ef-border-subtle);
+    background: var(--ef-canvas-raised);
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 640px) {
+    /* Stacked and reversed: the confirming action sits on top, where the
+       thumb lands, and full-width so it cannot be half-missed. */
+    .ef-sheet__foot {
+      flex-direction: column-reverse;
+      align-items: stretch;
+    }
+  }
+
+  /* The grab handle. Purely an affordance — it says "this came from the
+     bottom edge and goes back there", which a phone user reads instantly and
+     a laptop user never needs. */
+  .ef-sheet__grip {
+    display: none;
+  }
+
+  @media (max-width: 640px) {
+    .ef-sheet__grip {
+      display: block;
+      width: 36px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--ef-border-muted);
+      margin: 10px auto 0;
+      flex-shrink: 0;
+    }
+  }
+
+  /* ── Avatar ───────────────────────────────────────────────────────
+     Initials on the accent. One shape for people across all four consoles. */
+  .ef-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--ef-accent);
+    color: var(--ef-accent-text);
+    font-weight: 500;
+    letter-spacing: var(--ef-tracking-wide);
+    user-select: none;
+  }
+
+  .ef-avatar--muted {
+    background: var(--ef-canvas-raised);
+    color: var(--ef-text-muted);
+    border: 1px solid var(--ef-border);
+  }
+
+  /* ── Skeleton ─────────────────────────────────────────────────────
+     A shimmer that suggests the SHAPE of what is coming, so the page does not
+     re-lay-out when it arrives. The animation is slow on purpose: a fast
+     pulse reads as an error state. */
+  .ef-skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--ef-border-subtle) 0%,
+      var(--ef-surface-hover) 50%,
+      var(--ef-border-subtle) 100%
+    );
+    background-size: 200% 100%;
+    border-radius: var(--ef-radius-sm);
+    animation: ef-shimmer 1.8s ease-in-out infinite;
+  }
+
+  @keyframes ef-shimmer {
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  /* ── Segmented control ────────────────────────────────────────────
+     Two or three mutually exclusive options, all visible. Beats a dropdown
+     below about four choices: the options are the label, so nothing has to be
+     opened to find out what the alternatives are. */
+  .ef-segmented {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    background: var(--ef-canvas-raised);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius-sm);
+  }
+
+  .ef-segmented__option {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 13px;
+    border: 0;
+    border-radius: calc(var(--ef-radius-sm) - 2px);
+    background: transparent;
+    font-family: inherit;
+    font-size: var(--ef-text-sm);
+    color: var(--ef-text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 160ms ease, color 160ms ease;
+  }
+
+  .ef-segmented__option:hover {
+    color: var(--ef-text-subtle);
+  }
+
+  .ef-segmented__option[aria-checked='true'],
+  .ef-segmented__option[aria-selected='true'] {
+    background: var(--ef-surface);
+    color: var(--ef-ink);
+    box-shadow: var(--ef-shadow-sm);
+  }
+
+  /* ── Definition rows ──────────────────────────────────────────────
+     Label and value, the shape most "detail" panels are. Side by side where
+     there is room, stacked where there is not — a label column on a phone
+     leaves ~40% of the width for the value, which is where truncation and
+     ellipsis creep in. */
+  .ef-facts {
+    display: grid;
+    gap: 14px 20px;
+    grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  }
+
+  .ef-fact__label {
+    font-size: var(--ef-text-2xs);
+    letter-spacing: var(--ef-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--ef-text-muted);
+  }
+
+  .ef-fact__value {
+    margin-top: 5px;
+    font-size: var(--ef-text-base);
+    color: var(--ef-ink);
+    overflow-wrap: anywhere;
+  }
 }

@@ -217,6 +217,26 @@ html[data-ef-theme] .text-white {
   color: var(--ef-ink-text);
 }
 
+/* Native controls. `color-scheme` makes the browser draw checkboxes, radios
+   and range thumbs for a dark page, but it draws them in ITS accent, not the
+   theme's — a stock blue tick on a Bordeaux page. One property fixes every one
+   of them, including the controls inside components this project does not own. */
+html[data-ef-theme] {
+  accent-color: var(--ef-accent);
+}
+
+/* …and the exam scope takes it back.
+   `accent-color` is an INHERITED property, and it was resolved against
+   <html>'s tokens at the point it was declared — so a subtree that
+   re-declares --ef-accent does not change the value it inherits. Without this
+   second declaration, a candidate's checkboxes and radios would be drawn in
+   their chosen theme's accent inside the one screen the whole exemption
+   exists to keep uniform. Declared here, it re-resolves against the pinned
+   palette above. */
+.ef-exam-scope {
+  accent-color: var(--ef-accent);
+}
+
 /* Scrollbars. `color-scheme` already flips the native ones on most platforms;
    this covers the WebKit overlay bar, which does not follow it. */
 html[data-ef-theme] ::-webkit-scrollbar {

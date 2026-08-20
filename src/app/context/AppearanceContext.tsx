@@ -258,6 +258,23 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     [studentId],
   );
 
+  /**
+   * STABLE IDENTITY, and not as an optimisation.
+   *
+   * ThemeMenu clears any preview on unmount with `useEffect(() => () =>
+   * preview(null), [preview])`, which is the only way to guarantee a hovered
+   * theme does not outlive the menu however it is dismissed. While this
+   * function was re-created inside the context memo, previewing a theme
+   * changed `theme`, which rebuilt the memo, which changed this identity,
+   * which re-ran that effect — and its cleanup immediately cancelled the
+   * preview that had just started. Hovering appeared to do nothing at all.
+   *
+   * Caught in a browser. The Appearance page's own tiles were unaffected
+   * (they have no such cleanup), which is exactly why its passing tests did
+   * not notice.
+   */
+  const preview = useCallback((choice: ThemeChoice | null) => setPreviewChoice(choice), []);
+
   const value = useMemo<AppearanceContextValue>(
     () => ({
       choice: prefs.theme,
@@ -269,9 +286,9 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       setMotion: (motion) => commit({ ...prefs, motion }),
       setDensity: (density) => commit({ ...prefs, density }),
       reset: () => commit({ ...DEFAULT_PREFERENCES }),
-      preview: (choice) => setPreviewChoice(choice),
+      preview,
     }),
-    [prefs, theme, syncing, commit],
+    [prefs, theme, syncing, commit, preview],
   );
 
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;

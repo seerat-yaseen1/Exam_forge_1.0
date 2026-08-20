@@ -42,7 +42,7 @@ git diff --stat $BASE..HEAD -- \
 
 | If this changed | Deploy | Notes |
 |---|---|---|
-| `firestore.rules` | `firebase deploy --only firestore:rules` | Instant, no rollout window. **Never skip** — rules are usually the security-relevant target |
+| `firestore.rules` | `firebase deploy --only firestore:rules` | Instant, no rollout window. **Never skip** — rules are usually the security-relevant target. Deploy them **before** frontend that writes a collection they newly allow: a client write to a path the live rules do not know about is denied, and a feature whose writes fail softly (a preference, a draft) will look like it works right up until the second device |
 | `firestore.indexes.json` | `firebase deploy --only firestore:indexes` | Index builds take minutes; deploy before the code that queries them |
 | `storage.rules` | `firebase deploy --only storage` | |
 | `functions/` | `firebase deploy --only functions` | See §5 — deploy all functions together, never cherry-pick |

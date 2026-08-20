@@ -1,313 +1,121 @@
-import { useRef, useState, useEffect } from 'react';
-import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
-import { motion, AnimatePresence } from 'motion/react';
-import { User, Lock, LogOut, Building2, LayoutDashboard, BookOpen, ClipboardList, Flag, Palette } from 'lucide-react';
+import { useNavigate, Navigate, Outlet } from 'react-router';
+import {
+  BookOpen, Building2, ClipboardList, Flag, LayoutDashboard, Lock, Palette, User,
+} from 'lucide-react';
 import { useFacultyAuth } from '../context/FacultyAuthContext';
 import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
-import { ThemeButton } from '../components/console/ThemeMenu';
 import { RouteFallback } from '../components/RouteFallback';
+import { ConsoleShell, type NavItem } from '../components/console/Shell';
 
-// ── Institute logo mark ───────────────────────────────────────────
+/**
+ * The faculty console's frame.
+ *
+ * Everything structural — app bar, sidebar, drawer, account menu, and the
+ * mobile behaviour all three staff consoles were missing — lives in
+ * ConsoleShell. What is left here is the two things that are actually about
+ * faculty: which sections this person may see, and what their account menu
+ * offers. That is the whole file, which is the point of the shell.
+ */
 
-function InstituteMark({ logo, name, size = 28 }: { logo: string | null; name: string; size?: number }) {
-  const initials = name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+function InstituteMark({ logo, name, size = 24 }: { logo: string | null; name: string; size?: number }) {
   if (logo) {
     return (
-      <img src={logo} alt={name}
-        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover',
-          border: '1px solid var(--ef-border)', flexShrink: 0 }} />
+      <img
+        src={logo}
+        alt=""
+        style={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          objectFit: 'cover',
+          border: '1px solid var(--ef-border)',
+          flexShrink: 0,
+        }}
+      />
     );
   }
   return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%', background: 'var(--ef-border-subtle)',
-      border: '1px solid var(--ef-border)', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', flexShrink: 0,
-    }}>
-      <Building2 size={size * 0.42} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-    </div>
-  );
-}
-
-// ── Faculty profile avatar ────────────────────────────────────────
-
-function FacultyAvatar({ name, size = 28 }: { name: string; size?: number }) {
-  const initials = name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: 'var(--ef-ink)', border: '1px solid var(--ef-ink)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    }}>
-      <span style={{ fontSize: size * 0.34, color: 'var(--ef-surface)', fontWeight: 500, letterSpacing: '0.04em' }}>
-        {initials}
-      </span>
-    </div>
-  );
-}
-
-// ── Profile dropdown ──────────────────────────────────────────────
-
-function FacultyProfileDropdown({ onClose }: { onClose: () => void }) {
-  const navigate = useNavigate();
-  const { session, instituteLogo, logout } = useFacultyAuth();
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
-  const handleNav = (path: string) => { onClose(); navigate(path); };
-  const handleLogout = () => {
-    onClose();
-    logout();
-    navigate('/faculty/login', { replace: true });
-  };
-
-  const menuItem = 'w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-left transition-colors';
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: -6, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -6, scale: 0.98 }}
-      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-      className="absolute right-0 top-full mt-2 z-50"
-      style={{
-        width: 240,
-        background: 'var(--ef-surface)',
-        border: '1px solid var(--ef-border)',
-        boxShadow: '0 6px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
-        borderRadius: 3,
-      }}
+    <span
+      className="ef-avatar ef-avatar--muted"
+      style={{ width: size, height: size }}
+      title={name}
+      aria-hidden="true"
     >
-      {/* Account info */}
-      <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-        <FacultyAvatar name={session?.name ?? ''} size={30} />
-        <div className="min-w-0">
-          <p className="text-xs font-medium truncate" style={{ color: 'var(--ef-ink)' }}>{session?.name}</p>
-          <p className="text-xs truncate mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{session?.instituteName}</p>
-          <p className="text-xs truncate mt-0.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
-            FACULTY
-          </p>
-        </div>
-      </div>
-
-      {/* Menu items */}
-      <div className="py-1">
-        <button onClick={() => handleNav('/faculty/profile')} className={menuItem}
-          style={{ color: 'var(--ef-ink)' }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}>
-          <User size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          Profile
-        </button>
-        <button onClick={() => handleNav('/faculty/appearance')} className={menuItem}
-          style={{ color: 'var(--ef-text-subtle)' }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}>
-          <Palette size={13} strokeWidth={1.5} />
-          Appearance
-        </button>
-        <button onClick={() => handleNav('/faculty/security')} className={menuItem}
-          style={{ color: 'var(--ef-ink)' }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}>
-          <Lock size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          Security
-        </button>
-      </div>
-
-      {/* Logout */}
-      <div style={{ borderTop: '1px solid var(--ef-border-subtle)' }} className="py-1">
-        <button onClick={handleLogout} className={menuItem}
-          style={{ color: 'var(--ef-ink)' }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}>
-          <LogOut size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          Sign out
-        </button>
-      </div>
-    </motion.div>
+      <Building2 size={size * 0.44} strokeWidth={1.6} />
+    </span>
   );
 }
-
-// ── Sidebar nav item ──────────────────────────────────────────────
-
-function SidebarNavItem({
-  to, icon, label, isActive,
-}: {
-  to: string; icon: React.ReactNode; label: string; isActive: boolean;
-}) {
-  return (
-    <Link to={to} style={{ textDecoration: 'none' }}>
-      <div
-        className="flex items-center gap-2.5 text-xs py-2 cursor-pointer transition-all select-none"
-        style={{
-          paddingLeft:  isActive ? 18 : 20,
-          paddingRight: 16,
-          color:      isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
-          background: isActive ? 'var(--ef-canvas)' : 'transparent',
-          borderLeft: isActive ? '2px solid var(--ef-ink)' : '2px solid transparent',
-          letterSpacing: '0.01em',
-        }}
-        onMouseEnter={(e) => {
-          if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color      = 'var(--ef-ink)';
-            (e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color      = 'var(--ef-text-muted)';
-            (e.currentTarget as HTMLElement).style.background = 'transparent';
-          }
-        }}
-      >
-        {icon}
-        {label}
-      </div>
-    </Link>
-  );
-}
-
-// ── Main layout ───────────────────────────────────────────────────
-
-const SIDEBAR_W = 180;
 
 export function FacultyDashboardLayout() {
-  const { session, instituteLogo, logoLoading, loading } = useFacultyAuth();
+  const { session, instituteLogo, logout, loading } = useFacultyAuth();
   const { platformSettings } = usePlatformSettings();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const location = useLocation();
+  const navigate = useNavigate();
 
   // Auth rehydration guard. Firebase restores the session from IndexedDB
   // ASYNCHRONOUSLY, so on a page refresh the first render always has
-  // {user/session: null, loading: true}. Redirecting on the null alone raced
-  // that restore and bounced the user to the login page on refresh —
-  // intermittently, because whether it happened depended on which resolved
-  // first. Wait for the answer before acting on it.
+  // {session: null, loading: true}. Redirecting on the null alone raced that
+  // restore and bounced the user to the login page on refresh — intermittently,
+  // because whether it happened depended on which resolved first. Wait for the
+  // answer before acting on it.
   if (loading) return <RouteFallback />;
   if (!session) return <Navigate to="/faculty/login" replace />;
   if (session.firstLoginRequired) return <Navigate to="/faculty/change-password" replace />;
 
-  const isDashboard   = location.pathname === '/faculty/dashboard';
-  const isQuestions   = location.pathname.startsWith('/faculty/questions');
-  const isAssignments = location.pathname.startsWith('/faculty/assignments');
-  const isReports = location.pathname.startsWith('/faculty/reports');
+  const nav: NavItem[] = [
+    { to: '/faculty/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={15} strokeWidth={1.6} /> },
+    { to: '/faculty/questions', label: 'Questions', icon: <BookOpen size={15} strokeWidth={1.6} /> },
+    ...(session.canManageExamRosters
+      ? [
+          { to: '/faculty/assignments', label: 'Assignments', icon: <ClipboardList size={15} strokeWidth={1.6} /> },
+          { to: '/faculty/reports', label: 'Reports', icon: <Flag size={15} strokeWidth={1.6} /> },
+        ]
+      : []),
+  ];
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--ef-canvas)' }}>
-      {/* ── Header ── */}
-      <header
-        className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6"
-        style={{ height: 56, background: 'var(--ef-surface)', borderBottom: '1px solid var(--ef-border)' }}
-      >
-        {/* Left: Platform logo + name */}
-        <Link to="/faculty/dashboard" style={{ textDecoration: 'none', color: 'var(--ef-ink)' }}>
-          <div className="flex items-center gap-2.5 select-none">
-            {platformSettings.logoUrl
-              ? <img src={platformSettings.logoUrl} alt={platformSettings.name}
-                  style={{ width: 20, height: 20, objectFit: 'contain' }} />
-              : <LogoMark px={20} />}
-            <span className="text-sm font-medium" style={{ letterSpacing: '0.145em' }}>
-              {platformSettings.name}
-            </span>
-          </div>
-        </Link>
-
-        {/* Right: Institute logo + faculty profile icon */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2"
-            style={{ borderRight: '1px solid var(--ef-border)', paddingRight: 12 }}>
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.04em' }}>
-              {session.instituteName}
-            </span>
-            <InstituteMark logo={instituteLogo} name={session.instituteName} size={26} />
-          </div>
-
-          {/* In the chrome rather than three clicks deep in a settings page:
-              the point of letting someone choose is that changing their mind
-              is cheap. */}
-          <ThemeButton onOpen={() => setMenuOpen(false)} />
-
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="flex items-center gap-2 transition-opacity select-none"
-              style={{ outline: 'none' }}
-              aria-label="Open faculty menu"
-              aria-expanded={menuOpen}
-            >
-              <FacultyAvatar name={session.name} size={28} />
-            </button>
-
-            <AnimatePresence>
-              {menuOpen && <FacultyProfileDropdown onClose={() => setMenuOpen(false)} />}
-            </AnimatePresence>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Sidebar ── */}
-      <nav
-        className="fixed z-30"
-        style={{
-          top: 56, left: 0, bottom: 0,
-          width: SIDEBAR_W,
-          background: 'var(--ef-surface)',
-          borderRight: '1px solid var(--ef-border)',
-        }}
-      >
-        <div className="pt-5 pb-2 px-5">
-          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em', marginBottom: 6 }}>
-            MODULES
-          </p>
-        </div>
-
-        <SidebarNavItem
-          to="/faculty/dashboard"
-          icon={<LayoutDashboard size={13} strokeWidth={1.5} />}
-          label="Dashboard"
-          isActive={isDashboard}
-        />
-
-        <SidebarNavItem
-          to="/faculty/questions"
-          icon={<BookOpen size={13} strokeWidth={1.5} />}
-          label="Questions"
-          isActive={isQuestions}
-        />
-
-        {session.canManageExamRosters && (
-          <SidebarNavItem
-            to="/faculty/assignments"
-            icon={<ClipboardList size={13} strokeWidth={1.5} />}
-            label="Assignments"
-            isActive={isAssignments}
-          />
-        )}
-
-        {session.canManageExamRosters && (
-          <SidebarNavItem
-            to="/faculty/reports"
-            icon={<Flag size={13} strokeWidth={1.5} />}
-            label="Reports"
-            isActive={isReports}
-          />
-        )}
-      </nav>
-
-      {/* ── Content ── */}
-      <main style={{ paddingTop: 56, paddingLeft: SIDEBAR_W }}>
-        <Outlet />
-      </main>
-    </div>
+    <ConsoleShell
+      brand={{
+        name: platformSettings.name,
+        logoUrl: platformSettings.logoUrl,
+        mark: <LogoMark px={22} />,
+        to: '/faculty/dashboard',
+      }}
+      nav={nav}
+      context={
+        // The institute this faculty member belongs to. Hidden on the
+        // narrowest screens: it is context rather than a control, and it never
+        // changes within a session, so it is the first thing to yield when the
+        // bar has to choose.
+        <span
+          className="hidden md:flex items-center gap-2.5 px-2.5 py-1.5"
+          style={{
+            background: 'var(--ef-canvas-raised)',
+            border: '1px solid var(--ef-border)',
+            borderRadius: 'var(--ef-radius-pill)',
+            maxWidth: 260,
+          }}
+        >
+          <InstituteMark logo={instituteLogo} name={session.instituteName} size={20} />
+          <span className="ef-t-xs ef-muted truncate">{session.instituteName}</span>
+        </span>
+      }
+      account={{
+        name: session.name,
+        subtitle: session.email,
+        role: 'Faculty',
+        actions: [
+          { label: 'Profile', icon: <User size={14} strokeWidth={1.6} />, to: '/faculty/profile' },
+          { label: 'Appearance', icon: <Palette size={14} strokeWidth={1.6} />, to: '/faculty/appearance' },
+          { label: 'Security', icon: <Lock size={14} strokeWidth={1.6} />, to: '/faculty/security' },
+        ],
+      }}
+      onSignOut={() => {
+        logout();
+        navigate('/faculty/login', { replace: true });
+      }}
+    >
+      <Outlet />
+    </ConsoleShell>
   );
 }

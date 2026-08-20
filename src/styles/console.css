@@ -659,7 +659,13 @@
     border: 1px solid var(--ef-border);
     border-radius: var(--ef-radius);
     background: var(--ef-surface);
-    overflow: hidden;
+    /* Scrolls ITSELF when the columns genuinely do not fit — a ten-column
+       table on a tablet is the case the card layout does not cover, since
+       that breakpoint is for phones. The scroll is confined here rather than
+       let loose on the page: a table that drags the whole document sideways
+       takes the header and the sidebar with it. */
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .ef-table {
@@ -1112,4 +1118,159 @@
     color: var(--ef-ink);
     overflow-wrap: anywhere;
   }
+
+  /* ── The console shell ────────────────────────────────────────────
+     Header, sidebar, content. Shared by all four consoles, which is why it is
+     here rather than in any one layout: three near-identical sidebars is
+     three places for a hover state to be forgotten, and this app had exactly
+     that — two of the three had no mobile behaviour at all, so their fixed
+     sidebar sat on top of the page on a phone. */
+
+  .ef-appbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    height: 58px;
+    padding: 0 18px;
+    background: var(--ef-surface);
+    border-bottom: 1px solid var(--ef-border);
+  }
+
+  @media (max-width: 640px) {
+    .ef-appbar {
+      height: 54px;
+      padding: 0 12px;
+    }
+  }
+
+  .ef-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    color: var(--ef-ink);
+    text-decoration: none;
+    border-radius: var(--ef-radius-sm);
+  }
+
+  .ef-brand__word {
+    font-size: var(--ef-text-sm);
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    white-space: nowrap;
+  }
+
+  /* ── Sidebar ──────────────────────────────────────────────────── */
+
+  .ef-shell {
+    display: flex;
+    min-height: calc(100vh - 58px);
+  }
+
+  .ef-sidebar {
+    flex-shrink: 0;
+    width: 208px;
+    padding: 18px 12px;
+    border-right: 1px solid var(--ef-border);
+    background: var(--ef-surface);
+    /* Sticks under the app bar rather than scrolling away with the page: a
+       nav you have to scroll back up to reach is a nav that gets used once. */
+    position: sticky;
+    top: 58px;
+    align-self: flex-start;
+    height: calc(100vh - 58px);
+    overflow-y: auto;
+  }
+
+  .ef-side-label {
+    padding: 0 10px;
+    margin-bottom: 10px;
+    font-size: var(--ef-text-2xs);
+    letter-spacing: var(--ef-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--ef-text-muted);
+  }
+
+  .ef-side-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 10px;
+    margin-bottom: 2px;
+    border: 0;
+    border-radius: var(--ef-radius-sm);
+    background: transparent;
+    font-family: inherit;
+    font-size: var(--ef-text-sm);
+    text-align: left;
+    color: var(--ef-text-muted);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .ef-side-link:hover {
+    background: var(--ef-surface-hover);
+    color: var(--ef-ink);
+  }
+
+  .ef-side-link[aria-current='page'] {
+    background: var(--ef-accent-soft);
+    color: var(--ef-ink);
+    font-weight: 500;
+  }
+
+  /* The accent rail. Reads as "you are here" at a glance, from the same edge
+     the eye already scans for the next item. */
+  .ef-side-link[aria-current='page']::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 2.5px;
+    border-radius: 0 2px 2px 0;
+    background: var(--ef-accent);
+  }
+
+  .ef-side-link__icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: currentColor;
+    opacity: 0.85;
+  }
+
+  /* ── …as a drawer on a small screen ───────────────────────────── */
+  @media (max-width: 1024px) {
+    .ef-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      height: 100dvh;
+      width: min(280px, 84vw);
+      padding-top: 14px;
+      z-index: 62;
+      box-shadow: var(--ef-shadow-lg);
+      /* Clear of the phone's own gesture bar. */
+      padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    }
+
+    .ef-side-link {
+      padding: 12px 12px;
+      font-size: var(--ef-text-base);
+    }
+  }
+
+  .ef-content {
+    flex: 1;
+    min-width: 0;   /* or a wide table stretches the flex parent instead of scrolling */
+  }
+
 }

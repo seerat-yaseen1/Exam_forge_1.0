@@ -233,6 +233,21 @@ html[data-ef-theme] {
 html[data-ef-theme] body {
   background: var(--ef-canvas);
   color: var(--ef-ink);
+  /* ── Why `clip` and not `hidden` ────────────────────────────────
+     Something wider than the viewport — an un-migrated table, a long
+     unbroken string — must not drag the whole document sideways. When it
+     does, the sticky app bar and the sidebar scroll out of alignment with
+     the content and the page visibly comes apart, which is exactly what a
+     phone showed here before this line.
+
+     `clip` prevents that scroll WITHOUT creating a scroll container, so
+     `position: sticky` inside the page keeps working. `hidden` would create
+     one and quietly break every sticky toolbar in the app.
+
+     It also pushes the problem where it belongs: an element that overflows
+     now has to handle it locally (`.ef-table-wrap` scrolls itself), rather
+     than externalising it onto the document. */
+  overflow-x: clip;
 }
 
 /* ── The last Tailwind colour utilities ─────────────────────────────

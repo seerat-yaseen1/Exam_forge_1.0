@@ -1,36 +1,48 @@
-import { useRef, useState, useEffect } from 'react';
-import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
-import { motion, AnimatePresence } from 'motion/react';
-import { User, Upload, LogOut, Building2, Loader2, LayoutDashboard, BookOpen, ClipboardList, Flag, Palette } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useNavigate, Navigate, Outlet } from 'react-router';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  BookOpen, Building2, ClipboardList, Flag, LayoutDashboard, Loader2, Palette, Upload, User,
+} from 'lucide-react';
 import { useInstituteAuth } from '../context/InstituteAuthContext';
 import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
-import { ThemeButton } from '../components/console/ThemeMenu';
 import { RouteFallback } from '../components/RouteFallback';
+import { ConsoleShell, type NavItem } from '../components/console/Shell';
 
-// ── Institute logo / avatar ───────────────────────────────────────────────────
+/**
+ * The institute admin console's frame.
+ *
+ * The structural half is ConsoleShell. What stays here is what is genuinely
+ * about an institute: the permission flags that decide which sections exist,
+ * and the logo upload — which lives in this layout rather than on a settings
+ * page because the logo is IN the chrome, and the shortest path between
+ * seeing it and changing it is the one people actually take.
+ */
 
 function InstituteMark({
   logo,
   name,
-  size = 32,
+  size = 28,
+  busy = false,
 }: {
   logo: string | null;
   name: string;
   size?: number;
+  busy?: boolean;
 }) {
-  const initials = name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
+  if (busy) {
+    return (
+      <span className="ef-avatar ef-avatar--muted" style={{ width: size, height: size }}>
+        <Loader2 size={size * 0.45} strokeWidth={1.6} className="animate-spin" />
+      </span>
+    );
+  }
   if (logo) {
     return (
       <img
         src={logo}
-        alt={name}
+        alt=""
         style={{
           width: size,
           height: size,
@@ -42,213 +54,31 @@ function InstituteMark({
       />
     );
   }
-
   return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: 'var(--ef-border-subtle)',
-        border: '1px solid var(--ef-border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-      }}
+    <span
+      className="ef-avatar ef-avatar--muted"
+      style={{ width: size, height: size }}
+      title={name}
+      aria-hidden="true"
     >
-      <Building2 size={size * 0.44} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-    </div>
+      <Building2 size={size * 0.44} strokeWidth={1.6} />
+    </span>
   );
 }
-
-// ── Profile dropdown ──────────────────────────────────────────────────────────
-
-function InstituteProfileDropdown({
-  onClose,
-  onUploadLogo,
-}: {
-  onClose: () => void;
-  onUploadLogo: () => void;
-}) {
-  const navigate = useNavigate();
-  const { session, logout, logo } = useInstituteAuth();
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
-  const handleNav = (path: string) => { onClose(); navigate(path); };
-  const handleLogout = () => {
-    onClose();
-    logout();
-    navigate('/institute/login', { replace: true });
-  };
-
-  const menuItem =
-    'w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-left transition-colors';
-  const menuItemStyle: React.CSSProperties = { color: 'var(--ef-ink)' };
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: -6, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -6, scale: 0.98 }}
-      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-      className="absolute right-0 top-full mt-2 z-50"
-      style={{
-        width: 220,
-        background: 'var(--ef-surface)',
-        border: '1px solid var(--ef-border)',
-        boxShadow: '0 6px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
-        borderRadius: 3,
-      }}
-    >
-      {/* Account info */}
-      <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-        <InstituteMark logo={logo} name={session?.instituteName ?? ''} size={28} />
-        <div className="min-w-0">
-          <p className="text-xs font-medium truncate" style={{ color: 'var(--ef-ink)' }}>
-            {session?.adminName}
-          </p>
-          <p className="text-xs truncate mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
-            {session?.instituteName}
-          </p>
-        </div>
-      </div>
-
-      {/* Menu items */}
-      <div className="py-1">
-        <button
-          onClick={() => handleNav('/institute/profile')}
-          className={menuItem}
-          style={menuItemStyle}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
-        >
-          <User size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          Profile
-        </button>
-
-        <button
-          onClick={() => handleNav('/institute/appearance')}
-          className={menuItem}
-          style={menuItemStyle}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
-        >
-          <Palette size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          Appearance
-        </button>
-
-        <button
-          onClick={() => { onClose(); onUploadLogo(); }}
-          className={menuItem}
-          style={menuItemStyle}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
-        >
-          <Upload size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          {logo ? 'Change institute logo' : 'Upload institute logo'}
-        </button>
-      </div>
-
-      {/* Logout */}
-      <div style={{ borderTop: '1px solid var(--ef-border-subtle)' }} className="py-1">
-        <button
-          onClick={handleLogout}
-          className={menuItem}
-          style={menuItemStyle}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
-        >
-          <LogOut size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          Sign out
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-// ── Sidebar nav item ──────────────────────────────────────────────────────────
-
-function SidebarNavItem({
-  to, icon, label, isActive,
-}: {
-  to: string; icon: React.ReactNode; label: string; isActive: boolean;
-}) {
-  return (
-    <Link to={to} style={{ textDecoration: 'none' }}>
-      <div
-        className="flex items-center gap-2.5 text-xs py-2 cursor-pointer transition-all select-none"
-        style={{
-          paddingLeft:  isActive ? 18 : 20,
-          paddingRight: 16,
-          color:      isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
-          background: isActive ? 'var(--ef-canvas)' : 'transparent',
-          borderLeft: isActive ? '2px solid var(--ef-ink)' : '2px solid transparent',
-          letterSpacing: '0.01em',
-        }}
-        onMouseEnter={(e) => {
-          if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color      = 'var(--ef-ink)';
-            (e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color      = 'var(--ef-text-muted)';
-            (e.currentTarget as HTMLElement).style.background = 'transparent';
-          }
-        }}
-      >
-        {icon}
-        {label}
-      </div>
-    </Link>
-  );
-}
-
-// ── Main layout ───────────────────────────────────────────────────────────────
-
-const SIDEBAR_W = 180;
 
 export function InstituteDashboardLayout() {
-  const { session, logo, logoLoading, uploadLogo, loading } = useInstituteAuth();
+  const { session, logo, logoLoading, uploadLogo, logout, loading } = useInstituteAuth();
   const { platformSettings } = usePlatformSettings();
-  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [menuOpen, setMenuOpen]       = useState(false);
-  const [uploading, setUploading]     = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const fileInputRef                  = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Guards
-  // Auth rehydration guard. Firebase restores the session from IndexedDB
-  // ASYNCHRONOUSLY, so on a page refresh the first render always has
-  // {user/session: null, loading: true}. Redirecting on the null alone raced
-  // that restore and bounced the user to the login page on refresh —
-  // intermittently, because whether it happened depended on which resolved
-  // first. Wait for the answer before acting on it.
+  // Auth rehydration guard — see FacultyDashboardLayout for the full note.
   if (loading) return <RouteFallback />;
   if (!session) return <Navigate to="/institute/login" replace />;
   if (session.firstLoginRequired) return <Navigate to="/institute/change-password" replace />;
-
-  const isDashboard  = location.pathname === '/institute/dashboard';
-  const isQuestions  = location.pathname.startsWith('/institute/questions');
-  const isAssignments = location.pathname.startsWith('/institute/assignments');
-  const isReports = location.pathname.startsWith('/institute/reports');
-
-  const triggerLogoUpload = () => {
-    setUploadError('');
-    fileInputRef.current?.click();
-  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -265,147 +95,119 @@ export function InstituteDashboardLayout() {
     if (!result.success) setUploadError(result.error ?? 'Upload failed.');
   };
 
+  const nav: NavItem[] = [
+    { to: '/institute/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={15} strokeWidth={1.6} /> },
+    ...(session.canAdminCreateQuestions
+      ? [{ to: '/institute/questions', label: 'Questions', icon: <BookOpen size={15} strokeWidth={1.6} /> }]
+      : []),
+    ...(session.canAdminManageExamRosters
+      ? [
+          { to: '/institute/assignments', label: 'Assignments', icon: <ClipboardList size={15} strokeWidth={1.6} /> },
+          { to: '/institute/reports', label: 'Reports', icon: <Flag size={15} strokeWidth={1.6} /> },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="min-h-screen" style={{ background: 'var(--ef-canvas)' }}>
-      {/* ── Header ── */}
-      <header
-        className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6"
-        style={{ height: 56, background: 'var(--ef-surface)', borderBottom: '1px solid var(--ef-border)' }}
-      >
-        {/* Left: Platform logo + name */}
-        <Link to="/institute/dashboard" style={{ textDecoration: 'none', color: 'var(--ef-ink)' }}>
-          <div className="flex items-center gap-2.5 select-none">
-            {platformSettings.logoUrl ? (
-              <img src={platformSettings.logoUrl} alt={platformSettings.name}
-                style={{ width: 20, height: 20, objectFit: 'contain' }} />
-            ) : (
-              <LogoMark px={20} />
-            )}
-            <span className="text-sm font-medium" style={{ letterSpacing: '0.145em' }}>
-              {platformSettings.name}
-            </span>
-          </div>
-        </Link>
-
-        {/* Right: theme control, then institute logo + name + profile menu */}
-        <div className="flex items-center gap-2">
-          {/* In the chrome rather than three clicks deep in a settings page:
-              the point of letting someone choose is that changing their mind
-              is cheap. */}
-          <ThemeButton onOpen={() => setMenuOpen(false)} />
-
-          <div className="relative flex items-center">
-          <button
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2.5 transition-opacity select-none"
-            style={{ outline: 'none' }}
-            aria-label="Open institute menu"
-            aria-expanded={menuOpen}
+    <>
+      <ConsoleShell
+        brand={{
+          name: platformSettings.name,
+          logoUrl: platformSettings.logoUrl,
+          mark: <LogoMark px={22} />,
+          to: '/institute/dashboard',
+        }}
+        nav={nav}
+        context={
+          <span
+            className="hidden md:flex items-center gap-2.5 px-2.5 py-1.5"
+            style={{
+              background: 'var(--ef-canvas-raised)',
+              border: '1px solid var(--ef-border)',
+              borderRadius: 'var(--ef-radius-pill)',
+              maxWidth: 280,
+            }}
           >
-            <span className="text-xs" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.02em' }}>
-              {session.instituteName}
-            </span>
-            <div className="relative">
-              {uploading || logoLoading ? (
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Loader2 size={14} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-                </div>
-              ) : (
-                <InstituteMark logo={logo} name={session.instituteName} size={32} />
-              )}
-            </div>
-          </button>
-
-          <AnimatePresence>
-            {menuOpen && (
-              <InstituteProfileDropdown
-                onClose={() => setMenuOpen(false)}
-                onUploadLogo={triggerLogoUpload}
-              />
-            )}
-          </AnimatePresence>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Sidebar ── */}
-      <nav
-        className="fixed z-30"
-        style={{
-          top: 56, left: 0, bottom: 0,
-          width: SIDEBAR_W,
-          background: 'var(--ef-surface)',
-          borderRight: '1px solid var(--ef-border)',
+            <InstituteMark
+              logo={logo}
+              name={session.instituteName}
+              size={20}
+              busy={uploading || logoLoading}
+            />
+            <span className="ef-t-xs ef-muted truncate">{session.instituteName}</span>
+          </span>
+        }
+        account={{
+          name: session.adminName,
+          subtitle: session.adminEmail,
+          role: 'Institute admin',
+          actions: [
+            { label: 'Profile', icon: <User size={14} strokeWidth={1.6} />, to: '/institute/profile' },
+            {
+              label: logo ? 'Change institute logo' : 'Upload institute logo',
+              icon: <Upload size={14} strokeWidth={1.6} />,
+              onSelect: () => {
+                setUploadError('');
+                fileInputRef.current?.click();
+              },
+            },
+            { label: 'Appearance', icon: <Palette size={14} strokeWidth={1.6} />, to: '/institute/appearance' },
+          ],
+        }}
+        onSignOut={() => {
+          logout();
+          navigate('/institute/login', { replace: true });
         }}
       >
-        <div className="pt-5 pb-2 px-5">
-          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em', marginBottom: 6 }}>
-            MODULES
-          </p>
-        </div>
+        <Outlet />
+      </ConsoleShell>
 
-        <SidebarNavItem
-          to="/institute/dashboard"
-          icon={<LayoutDashboard size={13} strokeWidth={1.5} />}
-          label="Dashboard"
-          isActive={isDashboard}
-        />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
-        {session.canAdminCreateQuestions && (
-          <SidebarNavItem
-            to="/institute/questions"
-            icon={<BookOpen size={13} strokeWidth={1.5} />}
-            label="Questions"
-            isActive={isQuestions}
-          />
-        )}
-
-        {session.canAdminManageExamRosters && (
-          <SidebarNavItem
-            to="/institute/assignments"
-            icon={<ClipboardList size={13} strokeWidth={1.5} />}
-            label="Assignments"
-            isActive={isAssignments}
-          />
-        )}
-
-        {session.canAdminManageExamRosters && (
-          <SidebarNavItem
-            to="/institute/reports"
-            icon={<Flag size={13} strokeWidth={1.5} />}
-            label="Reports"
-            isActive={isReports}
-          />
-        )}
-      </nav>
-
-      {/* Hidden file input */}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-
-      {/* Upload error toast */}
+      {/* An upload failure has to be seen wherever the admin happens to be —
+          the control that started it is in a menu that has since closed. */}
       <AnimatePresence>
         {uploadError && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            className="fixed top-16 right-4 z-50 px-4 py-2.5"
+            role="alert"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed z-50 flex items-start gap-3"
             style={{
-              background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)',
-              borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              left: 16,
+              right: 16,
+              bottom: 'calc(16px + env(safe-area-inset-bottom))',
+              maxWidth: 420,
+              marginInline: 'auto',
+              padding: '12px 14px',
+              background: 'var(--ef-danger-bg)',
+              border: '1px solid var(--ef-danger-border)',
+              borderRadius: 'var(--ef-radius)',
+              boxShadow: 'var(--ef-shadow-md)',
             }}
           >
-            <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{uploadError}</p>
+            <p className="ef-t-sm" style={{ color: 'var(--ef-danger)', flex: 1 }}>
+              {uploadError}
+            </p>
+            <button
+              type="button"
+              className="ef-t-xs"
+              onClick={() => setUploadError('')}
+              style={{ color: 'var(--ef-danger)', background: 'none', border: 0, cursor: 'pointer' }}
+            >
+              Dismiss
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* ── Content ── */}
-      <main style={{ paddingTop: 56, paddingLeft: SIDEBAR_W }}>
-        <Outlet />
-      </main>
-    </div>
+    </>
   );
 }

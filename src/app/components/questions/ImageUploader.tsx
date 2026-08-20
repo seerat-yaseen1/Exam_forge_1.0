@@ -183,7 +183,7 @@ export function ImageUploader({ value, onChange, label = 'Attach image' }: Image
         onDrop={handleDrop}
         className="flex items-center gap-2.5 px-3 py-2.5 transition-all cursor-pointer"
         style={{
-          border: `1px dashed ${dragOver ? 'var(--ef-ink)' : '#D1CFCA'}`,
+          border: `1px dashed ${dragOver ? 'var(--ef-ink)' : 'var(--ef-border-muted)'}`,
           borderRadius: 3,
           background: dragOver ? 'var(--ef-canvas)' : 'var(--ef-canvas-raised)',
           outline: 'none',

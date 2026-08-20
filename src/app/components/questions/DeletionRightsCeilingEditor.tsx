@@ -160,7 +160,7 @@ export function DeletionRightsCeilingEditor({
               >
                 <span style={{
                   display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-                  background: c.allowed ? 'var(--ef-success)' : '#D4D2CC',
+                  background: c.allowed ? 'var(--ef-success)' : 'var(--ef-track)',
                   alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
                   justifyContent: c.allowed ? 'flex-end' : 'flex-start',
                 }}>
@@ -218,7 +218,7 @@ export function DeletionRightsCeilingEditor({
                       </button>
                     );
                   })}
-                  <span className="text-xs" style={{ color: '#C4C2BC' }}>
+                  <span className="text-xs" style={{ color: 'var(--ef-border-muted)' }}>
                     (or neither — institute-only)
                   </span>
                 </div>
@@ -233,10 +233,10 @@ export function DeletionRightsCeilingEditor({
         <div
           key={r}
           className="px-3 py-2.5 md:px-4 mb-2 flex items-center justify-between gap-3"
-          style={{ background: '#F4F3F0', border: '1px dashed #DAD8D2', borderRadius: 2, opacity: 0.85 }}
+          style={{ background: 'var(--ef-canvas-raised)', border: '1px dashed var(--ef-border-muted)', borderRadius: 2, opacity: 0.85 }}
         >
           <div className="min-w-0">
-            <p className="text-xs" style={{ color: '#7A7873' }}>{resourceLabel(r)}</p>
+            <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{resourceLabel(r)}</p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{RESOURCE_HINT[r]}</p>
           </div>
           <span className="text-xs px-2.5 py-1 flex-shrink-0"
@@ -252,7 +252,7 @@ export function DeletionRightsCeilingEditor({
         style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-start gap-2">
-            <ArrowUpFromLine size={13} strokeWidth={1.5} style={{ color: '#7A7873', marginTop: 1, flexShrink: 0 }} />
+            <ArrowUpFromLine size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', marginTop: 1, flexShrink: 0 }} />
             <div>
               <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>Transfer content to Web Owner</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
@@ -270,7 +270,7 @@ export function DeletionRightsCeilingEditor({
           >
             <span style={{
               display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-              background: transfer.allowed ? 'var(--ef-success)' : '#D4D2CC',
+              background: transfer.allowed ? 'var(--ef-success)' : 'var(--ef-track)',
               alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
               justifyContent: transfer.allowed ? 'flex-end' : 'flex-start',
             }}>

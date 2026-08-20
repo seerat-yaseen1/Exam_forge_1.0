@@ -205,7 +205,7 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
                 <div className="flex items-center gap-2 px-3 py-2.5"
                   style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                   <span className="text-xs px-2 py-0.5"
-                    style={{ background: '#EEECEA', color: 'var(--ef-text-subtle)', borderRadius: 2, letterSpacing: '0.04em' }}>
+                    style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-subtle)', borderRadius: 2, letterSpacing: '0.04em' }}>
                     Faculty
                   </span>
                   <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>FIXED</span>

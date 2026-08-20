@@ -333,7 +333,7 @@ export function FacultyLandingPage() {
                   {canManage
                     ? <ShieldCheck size={9} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
                     : canView
-                      ? <AlertTriangle size={9} strokeWidth={1.5} style={{ color: '#B0A070' }} />
+                      ? <AlertTriangle size={9} strokeWidth={1.5} style={{ color: 'var(--ef-warning)' }} />
                       : <Lock size={9} strokeWidth={1.5} />}
                 </span>
               )}
@@ -376,7 +376,7 @@ export function FacultyLandingPage() {
               {!canView && !permLoading && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
                   className="flex items-start gap-2.5 px-4 py-3 mb-6"
-                  style={{ background: '#FFFBF0', border: '1px solid #F0D080', borderRadius: 2 }}>
+                  style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
                   <Lock size={12} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 1 }} />
                   <p className="text-xs" style={{ color: 'var(--ef-warning-strong)', lineHeight: 1.6 }}>
                     <strong>View only.</strong> Schools management has not been enabled for this institute.

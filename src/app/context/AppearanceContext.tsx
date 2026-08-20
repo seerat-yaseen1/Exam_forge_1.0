@@ -3,11 +3,18 @@
  *
  * ── WHERE THE THEME IS APPLIED, AND WHY THERE ─────────────────────
  * On `<html>`, as inline custom properties. Not on a wrapper div, because
- * three of the student's screens render OUTSIDE the dashboard layout (the auth
- * pages, the exam briefing, the results takeover) and a wrapper would leave
- * them unthemed. Not as a stylesheet class either — inline properties are what
- * let `themes.ts` stay the single source of truth without a generated CSS file
+ * several screens render OUTSIDE their dashboard layout (every auth page, the
+ * exam briefing, the results takeover) and a wrapper would leave them
+ * unthemed. Not as a stylesheet class either — inline properties are what let
+ * `themes.ts` stay the single source of truth without a generated CSS file
  * that can fall out of step with it.
+ *
+ * ── ONE PROVIDER, FOUR CONSOLES ───────────────────────────────────
+ * Web owner, institute admin, faculty and student each mount this in their own
+ * Root. It knows about none of them: it is handed an account id and asked to
+ * remember a preference against it. The identity comes from `useAuthUid`
+ * below, which watches Firebase auth rather than any role's context — the one
+ * fact all four have in common.
  *
  * ── WHAT IS DELIBERATELY EXEMPT ───────────────────────────────────
  * The exam shell. It re-declares the classic palette for its own subtree via
@@ -25,7 +32,7 @@
  *   3. The default.
  *
  * Step 1 exists to stop a flash. Firebase restores a session asynchronously,
- * so on every refresh the first paint happens before the student id is known;
+ * so on every refresh the first paint happens before the account id is known;
  * `readLocalPreferences()` falls back to a key written without an owner
  * precisely so that paint is already correct.
  */
@@ -40,19 +47,21 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useStudentAuth } from './StudentAuthContext';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 import {
   DEFAULT_PREFERENCES,
   isPreferenceKey,
+  loadLegacyStudentPreferences,
   loadPreferences,
   readLocalPreferences,
   samePreferences,
   savePreferences,
   writeLocalPreferences,
+  type AppearancePreferences,
   type DensityPreference,
   type MotionPreference,
-  type StudentPreferences,
-} from '../../lib/studentPreferences';
+} from '../../lib/appearancePreferences';
 import {
   resolveTheme,
   SYSTEM_CHOICE,
@@ -124,14 +133,58 @@ function clearTheme(): void {
   root.style.removeProperty('color-scheme');
 }
 
-export function AppearanceProvider({ children }: { children: React.ReactNode }) {
-  const { session } = useStudentAuth();
-  const studentId = session?.studentId ?? null;
+/**
+ * The Firebase uid of whoever is signed in, or null.
+ *
+ * Every console's Root calls this and hands the result to the provider. It
+ * watches Firebase auth rather than any of the four role contexts, because the
+ * uid is the only identifier all four principals share — see the note at the
+ * top of lib/appearancePreferences.ts for why the preference document is keyed
+ * by it.
+ *
+ * Starts from `auth.currentUser` rather than from null so a client-side
+ * navigation between consoles does not drop the id for a frame and re-run the
+ * provider's pull.
+ */
+export function useAuthUid(): string | null {
+  const [uid, setUid] = useState<string | null>(() => auth.currentUser?.uid ?? null);
 
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
+    return unsub;
+  }, []);
+
+  return uid;
+}
+
+export function AppearanceProvider({
+  accountId,
+  legacyStudentId,
+  children,
+}: {
+  /**
+   * The Firebase auth uid of whoever is signed in, or null while that is still
+   * resolving (and on the signed-out screens, which are themed from
+   * localStorage alone).
+   *
+   * Passed IN rather than read from a context here, because this provider sits
+   * under four different auth contexts — one per role — and importing any one
+   * of them would tie the whole theme system to that role. Each Root knows its
+   * own identity and hands it over.
+   */
+  accountId: string | null;
+  /**
+   * Students only, and only until the next release: the id their preferences
+   * were stored under before this feature reached every role. See
+   * `loadLegacyStudentPreferences`.
+   */
+  legacyStudentId?: string | null;
+  children: React.ReactNode;
+}) {
   // Synchronous first value: no flash, no effect needed to get the right
   // colours onto the first paint.
-  const [prefs, setPrefs] = useState<StudentPreferences>(
-    () => readLocalPreferences(studentId) ?? DEFAULT_PREFERENCES,
+  const [prefs, setPrefs] = useState<AppearancePreferences>(
+    () => readLocalPreferences(accountId) ?? DEFAULT_PREFERENCES,
   );
   const [previewChoice, setPreviewChoice] = useState<ThemeChoice | null>(null);
   const [systemDark, setSystemDark] = useState<boolean>(prefersDarkNow);
@@ -202,29 +255,40 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
 
   // ── Pull the account's stored preferences ───────────────────────
   useEffect(() => {
-    if (!studentId || pulledFor.current === studentId) return;
-    pulledFor.current = studentId;
+    if (!accountId || pulledFor.current === accountId) return;
+    pulledFor.current = accountId;
     let cancelled = false;
     setSyncing(true);
 
-    loadPreferences(studentId)
-      .then((remote) => {
+    const resolve = async (): Promise<AppearancePreferences> => {
+      const remote = await loadPreferences(accountId);
+      // The account's answer wins over this device's. That is the whole
+      // promise of storing it server-side, and the local copy is only ever a
+      // cache of it.
+      if (remote) return remote;
+
+      // Nothing under the current key. A student may still have one under the
+      // id this feature originally shipped with — read it once, and let the
+      // write below move it forward.
+      if (legacyStudentId) {
+        const legacy = await loadLegacyStudentPreferences(legacyStudentId);
+        if (legacy) return legacy;
+      }
+
+      // Genuinely new account, or the first run since this feature shipped:
+      // adopt whatever this device was already using so the choice is not
+      // silently lost on the next device.
+      return readLocalPreferences(accountId) ?? DEFAULT_PREFERENCES;
+    };
+
+    resolve()
+      .then((next) => {
         if (cancelled) return;
-        if (remote) {
-          // The account's answer wins over this device's. That is the whole
-          // promise of storing it server-side, and the local copy is only ever
-          // a cache of it.
-          setPrefs(remote);
-          writeLocalPreferences(studentId, remote);
-        } else {
-          // First sign-in on a fresh account, or the first run since this
-          // feature shipped: adopt whatever this device was already using so
-          // the choice is not silently lost on the next device.
-          const local = readLocalPreferences(studentId) ?? DEFAULT_PREFERENCES;
-          setPrefs(local);
-          writeLocalPreferences(studentId, local);
-          if (!samePreferences(local, DEFAULT_PREFERENCES)) void savePreferences(studentId, local);
-        }
+        setPrefs(next);
+        writeLocalPreferences(accountId, next);
+        // Only write back what is worth storing. Persisting the defaults would
+        // create a document for every account that never opened the picker.
+        if (!samePreferences(next, DEFAULT_PREFERENCES)) void savePreferences(accountId, next);
       })
       .finally(() => {
         if (!cancelled) setSyncing(false);
@@ -233,29 +297,29 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     return () => {
       cancelled = true;
     };
-  }, [studentId]);
+  }, [accountId, legacyStudentId]);
 
   // ── Cross-tab ───────────────────────────────────────────────────
   // Two tabs open on the same account should not disagree about the theme.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (!isPreferenceKey(e.key, studentId)) return;
-      const next = readLocalPreferences(studentId);
+      if (!isPreferenceKey(e.key, accountId)) return;
+      const next = readLocalPreferences(accountId);
       if (next) setPrefs((prev) => (samePreferences(prev, next) ? prev : next));
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [studentId]);
+  }, [accountId]);
 
   // ── Commit ──────────────────────────────────────────────────────
   const commit = useCallback(
-    (next: StudentPreferences) => {
+    (next: AppearancePreferences) => {
       setPrefs((prev) => (samePreferences(prev, next) ? prev : next));
       setPreviewChoice(null);
-      writeLocalPreferences(studentId, next);
-      if (studentId) void savePreferences(studentId, next);
+      writeLocalPreferences(accountId, next);
+      if (accountId) void savePreferences(accountId, next);
     },
-    [studentId],
+    [accountId],
   );
 
   /**

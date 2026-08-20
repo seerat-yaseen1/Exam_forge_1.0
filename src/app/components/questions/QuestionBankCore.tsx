@@ -72,13 +72,13 @@ function DiffChip({ difficulty }: { difficulty: Difficulty }) {
 function SkeletonRow() {
   return (
     <div className="flex items-center gap-4 px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-      <div className="h-4 w-10 rounded" style={{ background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div className="h-4 w-10 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
       <div className="flex-1 space-y-1.5">
-        <div className="h-3 rounded" style={{ width: '60%', background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />
-        <div className="h-2.5 rounded" style={{ width: '30%', background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div className="h-3 rounded" style={{ width: '60%', background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div className="h-2.5 rounded" style={{ width: '30%', background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
-      <div className="h-4 w-16 rounded" style={{ background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />
-      <div className="h-4 w-8 rounded" style={{ background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div className="h-4 w-16 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div className="h-4 w-8 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
     </div>
   );
 }

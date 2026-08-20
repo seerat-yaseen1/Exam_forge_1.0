@@ -93,7 +93,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
     <div>
       {error && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2 mb-3"
-          style={{ background: '#FBF3F3', border: '1px solid #E8CFCF', borderRadius: 2, color: 'var(--ef-danger)' }}>
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, color: 'var(--ef-danger)' }}>
           <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>{error}</span>
         </div>
@@ -130,7 +130,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
                   <button
                     onClick={() => { setExpandedId(open ? null : r.id); setNote(''); }}
                     className="text-xs px-2 py-1 flex-shrink-0"
-                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)' }}
+                    style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)' }}
                   >
                     {open ? 'Close' : 'Review'}
                   </button>
@@ -166,7 +166,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
                         onClick={() => act(r, 'reject')}
                         disabled={busy}
                         className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-                        style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: '#6B6862', background: 'var(--ef-surface)', cursor: busy ? 'not-allowed' : 'pointer' }}
+                        style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)', cursor: busy ? 'not-allowed' : 'pointer' }}
                       >
                         <X size={10} strokeWidth={2} /> Reject
                       </button>
@@ -186,8 +186,8 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
           </p>
           {mine.map((r) => (
             <div key={r.id} className="px-3 py-2.5 mb-2 flex items-center justify-between gap-3"
-              style={{ background: '#F4F3F0', border: '1px dashed #DAD8D2', borderRadius: 2 }}>
-              <p className="text-xs" style={{ color: '#7A7873' }}>
+              style={{ background: 'var(--ef-canvas-raised)', border: '1px dashed var(--ef-border-muted)', borderRadius: 2 }}>
+              <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                 Delete {entityTypeLabel(r.entityType).toLowerCase()}{' '}
                 <span style={{ color: 'var(--ef-text-muted)' }}>{r.entityLabel ?? r.entityId}</span>
               </p>

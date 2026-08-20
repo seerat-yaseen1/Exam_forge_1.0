@@ -24,14 +24,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { THEMES } from '../../../lib/themes';
 
-vi.mock('../../../lib/studentPreferences', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../lib/studentPreferences')>();
+vi.mock('../../../lib/appearancePreferences', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/appearancePreferences')>();
   return { ...actual, loadPreferences: async () => null, savePreferences: async () => true };
 });
-vi.mock('../../context/StudentAuthContext', () => ({
-  useStudentAuth: () => ({ session: { studentId: 'stu_1', name: 'Priya M' }, loading: false }),
-}));
-
 const { AppearanceProvider, useAppearance } = await import('../../context/AppearanceContext');
 const { ThemeMenu } = await import('./ThemeMenu');
 
@@ -76,7 +72,7 @@ async function mount(open = true) {
   act(() => {
     root!.render(
       <MemoryRouter>
-        <AppearanceProvider>
+        <AppearanceProvider accountId="stu_1">
           <Harness open={open} />
         </AppearanceProvider>
       </MemoryRouter>,
@@ -145,7 +141,7 @@ describe('ThemeMenu', () => {
     await act(async () => {
       root!.render(
         <MemoryRouter>
-          <AppearanceProvider>
+          <AppearanceProvider accountId="stu_1">
             <Harness open={false} />
           </AppearanceProvider>
         </MemoryRouter>,

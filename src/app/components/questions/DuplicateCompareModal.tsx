@@ -166,8 +166,8 @@ function toneFor(v: number): 'ok' | 'note' | 'warn' {
 
 function ScorePill({ label, value, tone }: { label: string; value: string; tone: 'ok' | 'note' | 'warn' }) {
   const palette = {
-    ok:   { bg: '#F0FBF4', border: '#C3E8CE', text: 'var(--ef-success)' },
-    note: { bg: '#FFFBF0', border: '#F0DFA0', text: 'var(--ef-warning-strong)' },
+    ok:   { bg: 'var(--ef-success-bg)', border: 'var(--ef-success-border)', text: 'var(--ef-success)' },
+    note: { bg: 'var(--ef-warning-bg)', border: 'var(--ef-warning-border)', text: 'var(--ef-warning-strong)' },
     warn: { bg: 'var(--ef-danger-bg)', border: 'var(--ef-danger-border)', text: 'var(--ef-danger)' },
   }[tone];
   return (
@@ -234,8 +234,8 @@ function Side({
                 key={i}
                 className="flex items-start gap-2 px-2.5 py-1.5"
                 style={{
-                  background: isCorrect ? '#F0FBF4' : 'var(--ef-canvas-raised)',
-                  border: `1px solid ${isCorrect ? '#C3E8CE' : 'var(--ef-border)'}`,
+                  background: isCorrect ? 'var(--ef-success-bg)' : 'var(--ef-canvas-raised)',
+                  border: `1px solid ${isCorrect ? 'var(--ef-success-border)' : 'var(--ef-border)'}`,
                   borderRadius: 2,
                 }}
               >

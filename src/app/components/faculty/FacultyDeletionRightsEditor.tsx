@@ -119,7 +119,7 @@ export function FacultyDeletionRightsEditor({
   const anyUnenforced = offerable.some((r) => !ENFORCED_NOW.includes(r));
 
   return (
-    <div className="mt-4 pt-3" style={{ borderTop: '1px solid #EDEBE5' }}>
+    <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
       <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.05em' }}>
         DELETION RIGHTS
       </p>

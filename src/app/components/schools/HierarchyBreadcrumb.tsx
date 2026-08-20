@@ -30,7 +30,7 @@ export function HierarchyBreadcrumb({ stack, onRoot, onCrumb }: Props) {
         const isLast = index === stack.length - 1;
         return (
           <span key={node.id} className="flex items-center gap-0.5">
-            <ChevronRight size={10} strokeWidth={1.5} style={{ color: '#D4D2CC' }} />
+            <ChevronRight size={10} strokeWidth={1.5} style={{ color: 'var(--ef-track)' }} />
             <button
               onClick={() => { if (!isLast) onCrumb(index); }}
               className="text-xs px-1 py-0.5 rounded transition-colors"

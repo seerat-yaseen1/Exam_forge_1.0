@@ -481,8 +481,8 @@ function SkeletonRow() {
     <tr style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
       {[36, 28, 16, 20, 0].map((w, i) => (
         <td key={i} className="px-5 py-4">
-          {w > 0 && <div className="h-3 rounded mb-1.5" style={{ width: `${w * 4}px`, background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />}
-          {i < 2 && <div className="h-2.5 w-24 rounded" style={{ background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />}
+          {w > 0 && <div className="h-3 rounded mb-1.5" style={{ width: `${w * 4}px`, background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />}
+          {i < 2 && <div className="h-2.5 w-24 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />}
         </td>
       ))}
     </tr>
@@ -769,7 +769,7 @@ export function UserManagementPage() {
                   {emailNotice.message ?? (emailNotice.ok ? `Email sent to ${emailNotice.to}` : `Email failed for ${emailNotice.to}`)}
                 </p>
                 {!emailNotice.ok && emailNotice.error && (
-                  <p className="text-xs mt-0.5" style={{ color: '#B06060' }}>{emailNotice.error}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ef-danger)' }}>{emailNotice.error}</p>
                 )}
               </div>
               <button onClick={() => setEmailNotice(null)} className="ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
@@ -928,7 +928,7 @@ export function UserManagementPage() {
 
                     {/* Administrator */}
                     <td className="px-5 py-3.5">
-                      <p className="text-xs" style={{ color: '#2C2C2A' }}>{institute.adminName}</p>
+                      <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{institute.adminName}</p>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{institute.adminEmail}</p>
                     </td>
 
@@ -937,7 +937,7 @@ export function UserManagementPage() {
                       <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                         style={institute.status === 'active'
                           ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
-                          : { background: '#F5F5F3', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                          : { background: 'var(--ef-canvas-raised)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                         <span style={{
                           width: 5, height: 5, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
                           background: institute.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
@@ -975,9 +975,9 @@ export function UserManagementPage() {
                               PERMANENT delete confirmation instead, because
                               that is the only place it takes effect. */}
                           <div className="flex items-start gap-2 mt-2 px-2.5 py-2"
-                            style={{ background: '#F2F6F2', border: '1px solid #D3E0D3', borderRadius: 2 }}>
-                            <RotateCcw size={12} strokeWidth={1.5} style={{ marginTop: 1, flexShrink: 0, color: '#3F6B3F' }} />
-                            <span className="text-xs" style={{ color: '#3F6B3F' }}>
+                            style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
+                            <RotateCcw size={12} strokeWidth={1.5} style={{ marginTop: 1, flexShrink: 0, color: 'var(--ef-success-strong)' }} />
+                            <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>
                               Recoverable for 180 days. Access is blocked immediately;
                               nothing is destroyed until you permanently delete it from
                               the trash below.

@@ -49,8 +49,8 @@ function SkeletonRow() {
       <td className="px-5 py-4" style={{ width: 36 }} />
       {[32, 48, 16, 20, 0].map((w, i) => (
         <td key={i} className="px-5 py-4">
-          {w > 0 && <div className="h-3 rounded mb-1" style={{ width: `${w * 4}px`, background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />}
-          {i < 2 && <div className="h-2.5 w-20 rounded mt-1" style={{ background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />}
+          {w > 0 && <div className="h-3 rounded mb-1" style={{ width: `${w * 4}px`, background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />}
+          {i < 2 && <div className="h-2.5 w-20 rounded mt-1" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />}
         </td>
       ))}
     </tr>
@@ -485,9 +485,9 @@ export function FacultyTab({
       {/* ── Fetch error ── */}
       {requestNotice && (
         <div className="flex items-center gap-2 px-4 py-3 mb-4"
-          style={{ background: '#F2F6F2', border: '1px solid #D3E0D3', borderRadius: 2 }}>
-          <Inbox size={12} strokeWidth={1.5} style={{ color: '#3F6B3F' }} />
-          <p className="text-xs" style={{ color: '#3F6B3F' }}>{requestNotice}</p>
+          style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
+          <Inbox size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
+          <p className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>{requestNotice}</p>
         </div>
       )}
 
@@ -640,7 +640,7 @@ export function FacultyTab({
                     <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                       style={faculty.status === 'active'
                         ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
-                        : { background: '#F5F5F3', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                        : { background: 'var(--ef-canvas-raised)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                       <span style={{
                         width: 5, height: 5, borderRadius: '50%',
                         background: faculty.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
@@ -781,9 +781,9 @@ export function FacultyTab({
                           </div>
                           {liveOwnedCount !== null && (
                             <div className="flex items-start gap-2 mt-2 px-2.5 py-2"
-                              style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2 }}>
-                              <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0, color: '#7A5B12' }} />
-                              <span className="text-xs" style={{ color: '#7A5B12' }}>
+                              style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+                              <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0, color: 'var(--ef-warning-strong)' }} />
+                              <span className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
                                 This member owns {liveOwnedCount} active assessment
                                 {liveOwnedCount === 1 ? '' : 's'}. Students may be
                                 mid-attempt. Confirm again to proceed — ownership
@@ -883,7 +883,7 @@ export function FacultyTab({
         return (
           <div
             className="mt-3 px-4 py-4"
-            style={{ background: '#FBFBF9', border: '1px solid var(--ef-border)', borderRadius: 3 }}
+            style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
           >
             <div className="flex items-center justify-between mb-1">
               <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>

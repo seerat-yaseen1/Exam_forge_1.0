@@ -4,8 +4,8 @@
 /* The palette app code actually uses (H3). After theme.css so the --ef-*
    tokens sit alongside shadcn's, and before a11y.css, which must stay last. */
 @import './palette.css';
-/* The student console's shared primitives — buttons, cards, chips, menus.
+/* The console's shared primitives — buttons, cards, chips, menus.
    After palette.css because every rule in it resolves an --ef-* token. */
-@import './student.css';
+@import './console.css';
 /* Last: the focus-visible floor must win over anything declared above it. */
 @import './a11y.css';

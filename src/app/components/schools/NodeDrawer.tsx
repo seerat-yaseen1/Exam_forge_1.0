@@ -122,13 +122,13 @@ export function NodeDrawer({ open, level, editing, ancestry, instituteId, onClos
                 placeholder={getPlaceholder(level)}
                 className="w-full px-3 py-2.5 text-sm outline-none transition-colors"
                 style={{
-                  border: `1px solid ${error ? '#E5A5A5' : 'var(--ef-border)'}`,
+                  border: `1px solid ${error ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
                   borderRadius: 2,
                   background: 'var(--ef-canvas-raised)',
                   color: 'var(--ef-ink)',
                 }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = error ? '#E5A5A5' : 'var(--ef-ink)')}
-                onBlur={(e) => (e.currentTarget.style.borderColor = error ? '#E5A5A5' : 'var(--ef-border)')}
+                onFocus={(e) => (e.currentTarget.style.borderColor = error ? 'var(--ef-danger-border)' : 'var(--ef-ink)')}
+                onBlur={(e) => (e.currentTarget.style.borderColor = error ? 'var(--ef-danger-border)' : 'var(--ef-border)')}
               />
               {error && (
                 <p className="text-xs mt-1.5" style={{ color: 'var(--ef-danger)' }}>{error}</p>

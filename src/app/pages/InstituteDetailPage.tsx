@@ -88,7 +88,7 @@ function PermToggle({
         {saving ? <Loader2 size={10} className="animate-spin" /> : (
           <span style={{
             display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-            background: enabled ? 'var(--ef-success)' : '#D4D2CC',
+            background: enabled ? 'var(--ef-success)' : 'var(--ef-track)',
             alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
           }}>
             <span style={{
@@ -290,7 +290,7 @@ export function InstituteDetailPage() {
             <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
               style={institute.status === 'active'
                 ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
-                : { background: '#F5F5F3', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                : { background: 'var(--ef-canvas-raised)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
               <span style={{
                 width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
                 background: institute.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
@@ -304,7 +304,7 @@ export function InstituteDetailPage() {
         {/* Admin info */}
         <div className="md:text-right">
           <p className="text-xs mb-0.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>ADMINISTRATOR</p>
-          <p className="text-xs" style={{ color: '#2C2C2A' }}>{institute.adminName}</p>
+          <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{institute.adminName}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{institute.adminEmail}</p>
         </div>
       </div>

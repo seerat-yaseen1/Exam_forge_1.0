@@ -92,7 +92,7 @@ export function ErasurePolicyPanel({ webOwnerUid }: { webOwnerUid: string }) {
     <div>
       {!configured && (
         <div className="flex items-start gap-2 text-xs px-2.5 py-2 mb-3"
-          style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2, color: '#7A5B12' }}>
+          style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2, color: 'var(--ef-warning-strong)' }}>
           <ShieldAlert size={12} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
             Erasure is not configured, so every erasure request will be refused.

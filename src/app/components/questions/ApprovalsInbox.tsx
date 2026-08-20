@@ -27,9 +27,9 @@ const FILTERS: { key: QuestionRequestStatus | 'all'; label: string }[] = [
 
 function StatusChip({ status }: { status: QuestionRequestStatus }) {
   const map = {
-    pending:  { bg: '#FBF6E9', fg: '#8A6D3B', icon: <Clock size={11} strokeWidth={1.5} />, label: 'Pending' },
-    approved: { bg: '#EEF4EE', fg: 'var(--ef-success)', icon: <Check size={11} strokeWidth={2} />,   label: 'Approved' },
-    rejected: { bg: '#FBEDED', fg: 'var(--ef-danger)', icon: <X size={11} strokeWidth={2} />,        label: 'Rejected' },
+    pending:  { bg: 'var(--ef-warning-bg)', fg: 'var(--ef-warning-strong)', icon: <Clock size={11} strokeWidth={1.5} />, label: 'Pending' },
+    approved: { bg: 'var(--ef-success-bg)', fg: 'var(--ef-success)', icon: <Check size={11} strokeWidth={2} />,   label: 'Approved' },
+    rejected: { bg: 'var(--ef-danger-bg)', fg: 'var(--ef-danger)', icon: <X size={11} strokeWidth={2} />,        label: 'Rejected' },
   }[status];
   return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5" style={{ background: map.bg, color: map.fg, borderRadius: 2, fontSize: 10 }}>

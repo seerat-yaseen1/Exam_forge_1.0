@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Check, KeyRound, ShieldCheck } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
 import { MatchNote, PasswordField, StrengthBar } from '../../components/student/fields';
-import { Button, Card, PageHeader, PageShell } from '../../components/student/ui';
+import { Button, Card, PageHeader, PageShell } from '../../components/console/ui';
 
 export function StudentSecurityPage() {
   const { session, changePassword } = useStudentAuth();

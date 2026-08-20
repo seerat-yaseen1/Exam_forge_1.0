@@ -21,7 +21,7 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
     >
       <div
         className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}
+        style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)' }}
       >
         {icon}
       </div>
@@ -73,7 +73,7 @@ function StubTab({ label, step, description }: { label: string; step: string; de
     <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--ef-text-muted)' }}>
       <div
         className="flex items-center justify-center text-xs mb-4 select-none"
-        style={{ width: 28, height: 28, borderRadius: 2, background: '#EEECEA', color: 'var(--ef-text-muted)', letterSpacing: '0.04em' }}
+        style={{ width: 28, height: 28, borderRadius: 2, background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', letterSpacing: '0.04em' }}
       >
         {step}
       </div>

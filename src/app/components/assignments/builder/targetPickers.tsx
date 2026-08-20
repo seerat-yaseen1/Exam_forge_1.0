@@ -179,7 +179,7 @@ export function InstitutePicker({
       {selectedIds.length === 0 && !loadingInst && institutes.length > 0 && (
         <div
           className="flex items-center gap-2 px-3 py-2"
-          style={{ borderTop: '1px solid var(--ef-border-subtle)', background: '#FEF9EC' }}
+          style={{ borderTop: '1px solid var(--ef-border-subtle)', background: 'var(--ef-warning-bg)' }}
         >
           <AlertTriangle size={10} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0 }} />
           <span style={{ color: 'var(--ef-warning)', fontSize: 10 }}>
@@ -448,7 +448,7 @@ export function StudentPicker({
       {selectedIds.length === 0 && !loadingStudents && students.length > 0 && (
         <div
           className="flex items-center gap-2 px-3 py-2"
-          style={{ borderTop: '1px solid var(--ef-border-subtle)', background: '#FEF9EC' }}
+          style={{ borderTop: '1px solid var(--ef-border-subtle)', background: 'var(--ef-warning-bg)' }}
         >
           <AlertTriangle size={10} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0 }} />
           <span style={{ color: 'var(--ef-warning)', fontSize: 10 }}>

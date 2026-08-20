@@ -401,7 +401,7 @@ export function PenaltyInput({
                 fontSize: compact ? 10 : 11,
                 padding: compact ? '2px 6px' : '4px 9px',
                 background: active ? 'var(--ef-danger)' : 'var(--ef-surface)',
-                color: active ? 'var(--ef-surface)' : '#6B6A65',
+                color: active ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
                 border: 'none',
                 cursor: 'pointer',
               }}
@@ -611,7 +611,7 @@ export function SettingsToggle({ icon, label, hint, value, onChange, locked, loc
     >
       {/* Icon */}
       <div className="flex items-center justify-center flex-shrink-0"
-        style={{ width: 28, height: 28, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA' }}>
+        style={{ width: 28, height: 28, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)' }}>
         {icon}
       </div>
 
@@ -634,7 +634,7 @@ export function SettingsToggle({ icon, label, hint, value, onChange, locked, loc
             width: 34,
             height: 18,
             borderRadius: 9,
-            background: value ? 'var(--ef-ink)' : '#D9D8D3',
+            background: value ? 'var(--ef-ink)' : 'var(--ef-track)',
             position: 'relative',
           }}
         >

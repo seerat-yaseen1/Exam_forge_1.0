@@ -84,7 +84,7 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
   if (failed) {
     return (
       <div className="flex items-start gap-2 text-xs px-2.5 py-2"
-        style={{ background: '#FDF6E7', border: '1px solid #E8D9B0', borderRadius: 2, color: '#7A5B12' }}>
+        style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2, color: 'var(--ef-warning-strong)' }}>
         <AlertTriangle size={12} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
           Could not check which platform exams this institute sat. Their attempt
@@ -100,8 +100,8 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
     <div className="px-2.5 py-2"
       style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
       <div className="flex items-start gap-1.5 mb-2">
-        <Database size={11} strokeWidth={1.5} style={{ marginTop: 2, flexShrink: 0, color: '#6B6862' }} />
-        <p className="text-xs" style={{ color: '#6B6862', lineHeight: 1.5 }}>
+        <Database size={11} strokeWidth={1.5} style={{ marginTop: 2, flexShrink: 0, color: 'var(--ef-text-muted)' }} />
+        <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
           This institute&apos;s students sat {rows.length} of your platform exam
           {rows.length === 1 ? '' : 's'}. Those exams are yours and will be kept.
           Choose whether their <em>results</em> go too.
@@ -113,7 +113,7 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
         return (
           <div key={r.assessmentId}
             className="flex items-start justify-between gap-3 py-1.5"
-            style={{ borderTop: '1px solid #EDEBE5' }}>
+            style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
             <div className="min-w-0">
               <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>
                 {r.title ?? r.assessmentId}
@@ -131,9 +131,9 @@ export function InstitutePurgePanel({ instituteId, selected, onChange }: Props) 
               onClick={() => toggle(r.assessmentId)}
               className="text-xs px-2 py-0.5 flex-shrink-0 select-none"
               style={{
-                border: `1px solid ${on ? '#E8CFCF' : 'var(--ef-border)'}`,
+                border: `1px solid ${on ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
                 borderRadius: 2,
-                background: on ? '#FBF3F3' : 'var(--ef-surface)',
+                background: on ? 'var(--ef-danger-bg)' : 'var(--ef-surface)',
                 color: on ? 'var(--ef-danger)' : 'var(--ef-text-muted)',
                 cursor: 'pointer',
               }}

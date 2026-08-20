@@ -324,7 +324,7 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
                                 className="flex-shrink-0 flex items-center justify-center"
                                 style={{
                                   width: 16, height: 16, borderRadius: 2,
-                                  border: `1px solid ${isSelected ? 'var(--ef-success)' : '#D4D2CC'}`,
+                                  border: `1px solid ${isSelected ? 'var(--ef-success)' : 'var(--ef-track)'}`,
                                   background: isSelected ? 'var(--ef-success)' : 'transparent',
                                   transition: 'all 0.12s',
                                 }}
@@ -343,7 +343,7 @@ export function StudentMappingDrawer({ open, nodeId, nodeType, nodeName, breadcr
                                   const shown = places.slice(0, 2).join(' · ');
                                   const extra = places.length > 2 ? ` +${places.length - 2}` : '';
                                   return (
-                                    <p className="text-xs truncate mt-0.5" style={{ color: '#B08A3E' }}
+                                    <p className="text-xs truncate mt-0.5" style={{ color: 'var(--ef-warning)' }}
                                       title={places.join(' · ')}>
                                       also in: {shown}{extra}
                                     </p>

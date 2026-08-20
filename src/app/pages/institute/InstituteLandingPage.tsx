@@ -188,7 +188,7 @@ function FacultyList({ instituteId }: { instituteId: string }) {
                 <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                   style={faculty.status === 'active'
                     ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
-                    : { background: '#F5F5F3', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                    : { background: 'var(--ef-canvas-raised)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                   <span style={{
                     width: 5, height: 5, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
                     background: faculty.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
@@ -347,7 +347,7 @@ function StudentList({ instituteId }: { instituteId: string }) {
                 <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                   style={student.status === 'active'
                     ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
-                    : { background: '#F5F5F3', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                    : { background: 'var(--ef-canvas-raised)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                   <span style={{
                     width: 5, height: 5, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
                     background: student.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
@@ -512,7 +512,7 @@ export function InstituteLandingPage() {
               {tab.key === 'approvals' && (pendingCount + pendingDeletionCount) > 0 && (
                 <span
                   className="ml-1 inline-flex items-center justify-center"
-                  style={{ minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: '#8A6D3B', color: 'var(--ef-surface)', fontSize: 10, lineHeight: 1 }}
+                  style={{ minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: 'var(--ef-warning-strong)', color: 'var(--ef-surface)', fontSize: 10, lineHeight: 1 }}
                 >
                   {pendingCount + pendingDeletionCount}
                 </span>
@@ -584,8 +584,8 @@ export function InstituteLandingPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="flex items-start gap-2.5 px-4 py-3 mb-6"
                   style={{
-                    background: '#FFFBF0',
-                    border: '1px solid #F0D080',
+                    background: 'var(--ef-warning-bg)',
+                    border: '1px solid var(--ef-warning-border)',
                     borderRadius: 2,
                   }}
                 >

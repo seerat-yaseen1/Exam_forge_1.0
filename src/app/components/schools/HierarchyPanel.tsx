@@ -46,10 +46,10 @@ function SkeletonRow() {
   return (
     <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
       <div className="flex items-center gap-3">
-        <div className="w-3 h-3 rounded" style={{ background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />
-        <div className="h-3 w-36 rounded" style={{ background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div className="w-3 h-3 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div className="h-3 w-36 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
-      <div className="h-2.5 w-16 rounded" style={{ background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div className="h-2.5 w-16 rounded" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />
     </div>
   );
 }
@@ -159,7 +159,7 @@ export function HierarchyPanel({
                 className={`flex items-center justify-between px-4 ${!readOnly ? 'group' : ''}`}
                 style={{
                   borderBottom: isLast ? 'none' : '1px solid var(--ef-border-subtle)',
-                  background: isArchiveConfirm ? '#FFFBF0' : 'transparent',
+                  background: isArchiveConfirm ? 'var(--ef-warning-bg)' : 'transparent',
                   minHeight: 44,
                   transition: 'background 0.15s',
                 }}
@@ -189,7 +189,7 @@ export function HierarchyPanel({
                   {readOnly ? (
                     /* Read-only: always-visible chevron to show the row is navigable */
                     !isLeaf && (
-                      <span className="p-2" style={{ color: '#D4D2CC' }}>
+                      <span className="p-2" style={{ color: 'var(--ef-track)' }}>
                         <ChevronRight size={12} strokeWidth={1.5} />
                       </span>
                     )

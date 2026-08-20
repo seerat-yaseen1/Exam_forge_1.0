@@ -403,7 +403,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
         <div className="flex-1 overflow-y-auto px-5 py-5">
           {done ? (
             <div className="flex flex-col items-center py-12">
-              <div className="flex items-center justify-center mb-4" style={{ width: 44, height: 44, borderRadius: '50%', background: '#F0FBF4', border: '1px solid #C3E8CE' }}>
+              <div className="flex items-center justify-center mb-4" style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)' }}>
                 <CheckCircle2 size={20} strokeWidth={1.5} style={{ color: 'var(--ef-success)' }} />
               </div>
               <p className="text-sm mb-1" style={{ color: 'var(--ef-ink)' }}>Export ready</p>

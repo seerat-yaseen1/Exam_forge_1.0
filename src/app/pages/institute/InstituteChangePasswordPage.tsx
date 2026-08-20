@@ -26,7 +26,7 @@ function StrengthBar({ password }: { password: string }) {
     password.length >= 12,
   ].filter(Boolean).length;
 
-  const colors = ['var(--ef-border)', '#D97A5A', '#D9A85A', '#7AB87A', 'var(--ef-success)'];
+  const colors = ['var(--ef-border)', 'var(--ef-danger)', 'var(--ef-warning)', 'var(--ef-success)', 'var(--ef-success)'];
   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
 
   if (!password) return null;

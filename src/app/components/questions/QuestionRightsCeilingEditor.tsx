@@ -106,7 +106,7 @@ export function QuestionRightsCeilingEditor({
               >
                 <span style={{
                   display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-                  background: c.allowed ? 'var(--ef-success)' : '#D4D2CC',
+                  background: c.allowed ? 'var(--ef-success)' : 'var(--ef-track)',
                   alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
                   justifyContent: c.allowed ? 'flex-end' : 'flex-start',
                 }}>

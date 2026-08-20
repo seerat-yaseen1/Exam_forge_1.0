@@ -205,7 +205,7 @@ export function NodeStudentRoster({
 
               {/* Inherited-remove notice */}
               {inheritedNotice && (
-                <div className="px-4 py-2 text-xs" style={{ background: '#FBF7EC', color: '#7A6420', borderBottom: '1px solid var(--ef-border-subtle)' }}>
+                <div className="px-4 py-2 text-xs" style={{ background: 'var(--ef-warning-bg)', color: 'var(--ef-warning-strong)', borderBottom: '1px solid var(--ef-border-subtle)' }}>
                   {inheritedNotice}
                 </div>
               )}
@@ -263,7 +263,7 @@ export function NodeStudentRoster({
                           {m.studentName}
                           {inherited && (
                             <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5"
-                              style={{ background: '#F4F3EF', color: 'var(--ef-text-muted)', borderRadius: 3 }}
+                              style={{ background: 'var(--ef-canvas-raised)', color: 'var(--ef-text-muted)', borderRadius: 3 }}
                               title={m.breadcrumb}>
                               <CornerDownRight size={9} strokeWidth={1.5} /> via {via}
                             </span>

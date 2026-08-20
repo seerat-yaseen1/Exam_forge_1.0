@@ -188,12 +188,53 @@ html[data-ef-theme] body {
   color: var(--ef-ink);
 }
 
-/* Tailwind's `bg-white` is a literal white and there are a handful left on
-   student surfaces. Inside a themed page it means "a card", which is what
-   --ef-surface is. Scoped to [data-ef-theme] so the other three consoles
-   keep the literal. */
+/* ── The last Tailwind colour utilities ─────────────────────────────
+   A literal grey is a literal grey: on a dark theme these read as a white
+   card on a black page, or as invisible text. There are ~20 left across the
+   whole app, all of them meaning one of three things, so they are bridged
+   here rather than chased through twenty files whose markup is otherwise
+   fine.
+
+   Every rule is gated on [data-ef-theme]. Before a theme is applied — which
+   is every screen this system has not been mounted on — the literal is what
+   renders, exactly as it did. */
 html[data-ef-theme] .bg-white {
+  /* On a themed page this always means "a card". */
   background-color: var(--ef-surface);
+}
+
+html[data-ef-theme] .bg-gray-50,
+html[data-ef-theme] .bg-gray-100,
+html[data-ef-theme] .hover\:bg-gray-50:hover,
+html[data-ef-theme] .hover\:bg-gray-100:hover {
+  /* Row hovers and image placeholders: one step off the surface they sit on. */
+  background-color: var(--ef-surface-hover);
+}
+
+html[data-ef-theme] .text-white {
+  /* Only ever used as the label on a filled button, where the readable colour
+     is whatever that fill demands rather than white. */
+  color: var(--ef-ink-text);
+}
+
+/* Native controls. `color-scheme` makes the browser draw checkboxes, radios
+   and range thumbs for a dark page, but it draws them in ITS accent, not the
+   theme's — a stock blue tick on a Bordeaux page. One property fixes every one
+   of them, including the controls inside components this project does not own. */
+html[data-ef-theme] {
+  accent-color: var(--ef-accent);
+}
+
+/* …and the exam scope takes it back.
+   `accent-color` is an INHERITED property, and it was resolved against
+   <html>'s tokens at the point it was declared — so a subtree that
+   re-declares --ef-accent does not change the value it inherits. Without this
+   second declaration, a candidate's checkboxes and radios would be drawn in
+   their chosen theme's accent inside the one screen the whole exemption
+   exists to keep uniform. Declared here, it re-resolves against the pinned
+   palette above. */
+.ef-exam-scope {
+  accent-color: var(--ef-accent);
 }
 
 /* Scrollbars. `color-scheme` already flips the native ones on most platforms;

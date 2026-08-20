@@ -385,7 +385,7 @@ export function SetupStep({
                           {/* Top row: index + name + time + topics toggle + remove */}
                           <div className="flex items-center" style={{ gap: 8, padding: '8px 10px', background: 'var(--ef-surface)' }}>
                             <div className="flex-shrink-0 flex items-center justify-center"
-                              style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid #EEECEA', fontSize: 10, color: 'var(--ef-text-muted)' }}>
+                              style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)', fontSize: 10, color: 'var(--ef-text-muted)' }}>
                               {(idx + 1).toString().padStart(2, '0')}
                             </div>
                             <input
@@ -632,7 +632,7 @@ export function SetupStep({
                   const totalAssigned = sections.reduce((s, sec) => s + sec.assignedTopics.length, 0);
                   return (
                     <div className="flex items-center gap-4 mt-4 px-4 py-3"
-                      style={{ background: 'var(--ef-canvas)', border: '1px solid #EEECEA', borderRadius: 2 }}>
+                      style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)', borderRadius: 2 }}>
                       <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                         {sections.length} section{sections.length !== 1 ? 's' : ''}
                       </span>

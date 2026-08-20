@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, useNavigate, Navigate, Link, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Shield, LogOut, Building2, BookOpen, ClipboardList, Flag, FolderTree, Menu, X } from 'lucide-react';
+import { User, Shield, LogOut, Building2, BookOpen, ClipboardList, Flag, FolderTree, Menu, X, Palette } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PlatformLogo } from '../components/PlatformLogo';
+import { ThemeButton } from '../components/console/ThemeMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { RouteFallback } from '../components/RouteFallback';
 
@@ -64,7 +65,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
         <button
           onClick={() => handleNav('/dashboard/profile')}
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
-          style={{ color: '#2C2C2A' }}
+          style={{ color: 'var(--ef-ink)' }}
           onMouseEnter={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
@@ -76,9 +77,23 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
           Profile
         </button>
         <button
+          onClick={() => handleNav('/dashboard/appearance')}
+          className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
+          style={{ color: 'var(--ef-text-subtle)' }}
+          onMouseEnter={(e) =>
+            ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
+          }
+          onMouseLeave={(e) =>
+            ((e.currentTarget as HTMLElement).style.background = 'transparent')
+          }
+        >
+          <Palette size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+          Appearance
+        </button>
+        <button
           onClick={() => handleNav('/dashboard/security')}
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
-          style={{ color: '#2C2C2A' }}
+          style={{ color: 'var(--ef-ink)' }}
           onMouseEnter={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
@@ -96,7 +111,7 @@ function ProfileDropdown({ onClose }: { onClose: () => void }) {
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-left transition-colors"
-          style={{ color: '#2C2C2A' }}
+          style={{ color: 'var(--ef-ink)' }}
           onMouseEnter={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)')
           }
@@ -139,7 +154,7 @@ function SidebarNavItem({ to, icon, label, isActive }: NavItemProps) {
         }}
         onMouseEnter={(e) => {
           if (!isActive) {
-            (e.currentTarget as HTMLElement).style.color = '#2C2C2A';
+            (e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)';
             (e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas)';
           }
         }}
@@ -226,7 +241,13 @@ export function DashboardLayout() {
           </Link>
         </div>
 
-        {/* Right: Profile */}
+        {/* Right: theme control, then profile */}
+        <div className="flex items-center gap-2">
+        {/* In the chrome rather than three clicks deep in a settings page: the
+            point of letting someone choose is that changing their mind is
+            cheap. */}
+        <ThemeButton onOpen={() => setMenuOpen(false)} />
+
         <div className="relative">
           <button
             onClick={() => setMenuOpen((v) => !v)}
@@ -253,6 +274,7 @@ export function DashboardLayout() {
           <AnimatePresence>
             {menuOpen && <ProfileDropdown onClose={() => setMenuOpen(false)} />}
           </AnimatePresence>
+        </div>
         </div>
       </header>
 

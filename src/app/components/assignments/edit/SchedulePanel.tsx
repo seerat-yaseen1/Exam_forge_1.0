@@ -112,7 +112,7 @@ export function SchedulePanel({ assessment, open, onOpenChange, onSaved }: Props
             onChange={(e) => setEndDate(e.target.value)}
             className="w-full text-xs px-3 py-2"
             style={{
-              border: `1px solid ${endValid ? 'var(--ef-border)' : '#D97757'}`,
+              border: `1px solid ${endValid ? 'var(--ef-border)' : 'var(--ef-danger)'}`,
               borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
             }}
           />
@@ -129,7 +129,7 @@ export function SchedulePanel({ assessment, open, onOpenChange, onSaved }: Props
             placeholder="Unlimited"
             className="w-full text-xs px-3 py-2"
             style={{
-              border: `1px solid ${attemptsValid ? 'var(--ef-border)' : '#D97757'}`,
+              border: `1px solid ${attemptsValid ? 'var(--ef-border)' : 'var(--ef-danger)'}`,
               borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
             }}
           />

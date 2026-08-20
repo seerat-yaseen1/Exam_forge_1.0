@@ -263,7 +263,7 @@ function CameraStep({
   if (state === 'denied') {
     return (
       <div className="flex items-start gap-3 px-4 py-3"
-        style={{ background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+        style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
         <AlertTriangle size={14} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0, marginTop: 1 }} />
         <div>
           <p className="text-xs" style={{ color: 'var(--ef-warning)' }}>
@@ -713,11 +713,11 @@ export function ExamBriefingPage() {
                   <div className="flex flex-col items-center gap-5 py-24">
                     <div className="flex items-center justify-center"
                       style={{ width: 52, height: 52, borderRadius: '50%',
-                        background: '#FFF7ED', border: '1px solid #FED7AA' }}>
-                      <Ban size={22} strokeWidth={1} style={{ color: '#9A3412' }} />
+                        background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)' }}>
+                      <Ban size={22} strokeWidth={1} style={{ color: 'var(--ef-warning-strong)' }} />
                     </div>
                     <div className="text-center" style={{ maxWidth: 360 }}>
-                      <p className="text-xs mb-2" style={{ color: '#9A3412', letterSpacing: '0.1em' }}>
+                      <p className="text-xs mb-2" style={{ color: 'var(--ef-warning-strong)', letterSpacing: '0.1em' }}>
                         ACCESS RESTRICTED
                       </p>
                       <p className="text-sm mb-2" style={{ color: 'var(--ef-ink)', lineHeight: 1.7 }}>
@@ -840,7 +840,7 @@ export function ExamBriefingPage() {
                 {/* Resume banner */}
                 {existingAttempt?.status === 'in_progress' && (
                   <div className="flex items-center gap-3 px-4 py-3 mb-5"
-                    style={{ background: '#FEF9EC', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
+                    style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
                     <Info size={13} strokeWidth={1.5} style={{ color: 'var(--ef-warning)' }} />
                     <p className="text-xs" style={{ color: 'var(--ef-warning)' }}>
                       You have an in-progress attempt for this exam. Entering will resume where you left off.
@@ -1080,8 +1080,8 @@ export function ExamBriefingPage() {
                     </p>
                     <div className="px-4 py-3"
                       style={{
-                        background: sebGate === 'blocked' ? '#FBF3F3' : sebGate === 'verified' ? 'var(--ef-success-bg)' : 'var(--ef-canvas-raised)',
-                        border: `1px solid ${sebGate === 'blocked' ? '#E3C9C9' : sebGate === 'verified' ? 'var(--ef-success-border)' : 'var(--ef-border)'}`,
+                        background: sebGate === 'blocked' ? 'var(--ef-danger-bg)' : sebGate === 'verified' ? 'var(--ef-success-bg)' : 'var(--ef-canvas-raised)',
+                        border: `1px solid ${sebGate === 'blocked' ? 'var(--ef-danger-border)' : sebGate === 'verified' ? 'var(--ef-success-border)' : 'var(--ef-border)'}`,
                         borderRadius: 2,
                       }}>
                       <div className="flex items-center justify-between gap-3">
@@ -1107,7 +1107,7 @@ export function ExamBriefingPage() {
                         )}
                       </div>
                       {sebGate === 'blocked' && (
-                        <div className="mt-3" style={{ borderTop: '1px solid #E3C9C9', paddingTop: 12 }}>
+                        <div className="mt-3" style={{ borderTop: '1px solid var(--ef-danger-border)', paddingTop: 12 }}>
                           <p className="text-xs mb-3" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>
                             {sebGateError === 'SEB_CONFIG_MISMATCH'
                               ? 'Safe Exam Browser was detected, but it is not running the exam configuration for this platform. Close SEB and reopen the exam using the .seb configuration file provided by your institute.'
@@ -1128,7 +1128,7 @@ export function ExamBriefingPage() {
                               <a
                                 href={assessment.sebConfigFileUrl || platformSebUrl}
                                 className="flex items-center gap-1.5 text-xs px-4 py-2"
-                                style={{ color: 'var(--ef-text-subtle)', border: '1px solid #E3C9C9', borderRadius: 2, background: 'var(--ef-surface)', textDecoration: 'none' }}
+                                style={{ color: 'var(--ef-text-subtle)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, background: 'var(--ef-surface)', textDecoration: 'none' }}
                               >
                                 <Download size={11} strokeWidth={1.5} />
                                 Exam configuration (.seb)
@@ -1149,8 +1149,8 @@ export function ExamBriefingPage() {
                     </p>
                     <div className="px-4 py-3"
                       style={{
-                        background: extScanState === 'dirty' ? '#FBF3F3' : 'var(--ef-canvas-raised)',
-                        border: `1px solid ${extScanState === 'dirty' ? '#E3C9C9' : 'var(--ef-border)'}`,
+                        background: extScanState === 'dirty' ? 'var(--ef-danger-bg)' : 'var(--ef-canvas-raised)',
+                        border: `1px solid ${extScanState === 'dirty' ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
                         borderRadius: 2,
                       }}>
                       <div className="flex items-center justify-between">

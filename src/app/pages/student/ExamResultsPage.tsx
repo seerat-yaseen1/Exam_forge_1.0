@@ -74,29 +74,31 @@ function ScoreRing({ pct, passed }: { pct: number; passed: boolean | null }) {
   const circ = 2 * Math.PI * r;
   const dash = circ * Math.min(1, pct / 100);
 
-  // LITERAL, deliberately (H3). These feed SVG PRESENTATION ATTRIBUTES
-  // (stroke={color} below), and a presentation attribute does not parse
-  // var() — the browser drops the whole declaration and the ring renders
-  // black. Only CSS property positions can take a token. Kept in step with
-  // --ef-success-strong / --ef-danger / --ef-warning in palette.css.
-  const color = passed === true ? '#1E7B3C'
-    : passed === false ? '#9B2828'
-    : '#92680A';
+  // Tokens, through `style` rather than through `stroke=""`.
+  //
+  // The note that used to sit here said a token could not be used at all,
+  // because a presentation attribute does not parse var(). That is the right
+  // diagnosis of the wrong position: the fix is to put the colour where CSS is
+  // parsed — the style declaration — not to give up and hardcode a hex. Doing
+  // so is also what makes this ring follow the student's theme, which a literal
+  // could not do.
+  const color = passed === true ? 'var(--ef-success-strong)'
+    : passed === false ? 'var(--ef-danger)'
+    : 'var(--ef-warning)';
 
   return (
     <svg width={110} height={110} viewBox="0 0 110 110">
       {/* Track */}
-      <circle cx={55} cy={55} r={r} fill="none" stroke="#F0EFEB" strokeWidth={8} />{/* literal: SVG attribute, see above */}
+      <circle cx={55} cy={55} r={r} fill="none" strokeWidth={8} style={{ stroke: 'var(--ef-border-subtle)' }} />
       {/* Fill */}
       <circle
         cx={55} cy={55} r={r}
         fill="none"
-        stroke={color}
         strokeWidth={8}
         strokeDasharray={`${dash} ${circ - dash}`}
         strokeDashoffset={circ / 4}  /* start at top */
         strokeLinecap="round"
-        style={{ transition: 'stroke-dasharray 1s ease' }}
+        style={{ stroke: color, transition: 'stroke-dasharray 1s ease, stroke 0.35s ease' }}
       />
       {/* Percentage */}
       <text x={55} y={50} textAnchor="middle" style={{ fontSize: 18, fill: color, fontWeight: 300 }}>
@@ -646,7 +648,7 @@ export function ExamResultsPage() {
       */}
       {saveWarning && (
         <div className="flex items-start gap-2.5 px-4 py-3 mb-6"
-          style={{ background: '#FBF3F3', border: '1px solid #E3C9C9', borderRadius: 2 }}>
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
           <AlertTriangle size={14} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', marginTop: 1 }} />
           <p className="text-xs" style={{ color: 'var(--ef-danger)', lineHeight: 1.6 }}>{saveWarning}</p>
         </div>
@@ -860,10 +862,10 @@ export function ExamResultsPage() {
                         style={{
                           background: attempt.scores.passed === true ? 'var(--ef-success-bg)'
                             : attempt.scores.passed === false ? 'var(--ef-danger-bg)'
-                            : '#FDF8EC',
+                            : 'var(--ef-warning-bg)',
                           border: `1px solid ${attempt.scores.passed === true ? 'var(--ef-success-border)'
                             : attempt.scores.passed === false ? 'var(--ef-danger-border)'
-                            : '#EBD9A8'}`,
+                            : 'var(--ef-warning-border)'}`,
                           borderRadius: 2, display: 'inline-flex',
                         }}
                       >
@@ -977,12 +979,12 @@ export function ExamResultsPage() {
                 <div className="flex flex-col gap-2">
                   {reports.map((r) => {
                     const sc = r.status === 'fixed'
-                      ? { bg: '#EAF6EE', border: '#B5D9C0', text: 'var(--ef-success-strong)' }
+                      ? { bg: 'var(--ef-success-bg)', border: 'var(--ef-success-border)', text: 'var(--ef-success-strong)' }
                       : r.status === 'dismissed'
                         ? { bg: 'var(--ef-canvas)', border: 'var(--ef-border)', text: 'var(--ef-text-muted)' }
                         : r.status === 'reviewed'
                           ? { bg: 'var(--ef-canvas)', border: 'var(--ef-border)', text: 'var(--ef-text-subtle)' }
-                          : { bg: '#FEF9EC', border: 'var(--ef-warning-border)', text: 'var(--ef-warning)' };
+                          : { bg: 'var(--ef-warning-bg)', border: 'var(--ef-warning-border)', text: 'var(--ef-warning)' };
                     const reasonLabel = {
                       wrong_answer: 'Wrong answer',
                       typo: 'Typo',

@@ -26,48 +26,28 @@ import {
   type AttemptStatus,
 } from '../../../lib/submissionService';
 import { buildResultRows, studentResultVisibility } from '../../../lib/studentResults';
+import {
+  buildSchedule,
+  canStillOpen,
+  effectiveMaxAttempts,
+  finishedCount,
+  timeLeft,
+  timeUntil,
+  type ScheduleBucket,
+  type ScheduleEntry,
+} from '../../../lib/studentSchedule';
 import { ResultsTab } from './ResultsTab';
+import {
+  Button, Card, Chip, EmptyState as EmptyPanel, ErrorBanner, LiveDot,
+  LoadingBlock, PageHeader, PageShell,
+} from '../../components/student/ui';
 
 // ══════════════════════════════════════════════════════════════════
 // TYPES
 // ══════════════════════════════════════════════════════════════════
 
-type AvailabilityState = 'available' | 'upcoming' | 'window_closed' | 'admin_closed';
-
-type AssessmentWithMeta = {
-  assessment: Assessment;
-  attempt: Attempt | undefined;
-  allAttempts: Attempt[];
-  availability: AvailabilityState;
-};
-
-const FINISHED_STATUSES: AttemptStatus[] = ['submitted', 'auto_submitted', 'terminated'];
-
 /**
- * The student can still open/access the test when the window is active AND
- * they're not blocked AND either an in-progress attempt exists to resume OR
- * they have remaining attempts (respecting per-student override). Mirrors the
- * gate in ExamBriefingPage so the card and the briefing never disagree.
- */
-function canStillOpen(
-  a: Assessment,
-  availability: AvailabilityState,
-  allAttempts: Attempt[],
-  studentId: string,
-): boolean {
-  if (availability !== 'available') return false;
-  if (a.blockedStudents?.includes(studentId)) return false;
-
-  const effMax = a.attemptOverrides?.[studentId] ?? a.maxAttempts ?? 1;
-  const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
-  if (finished >= effMax) return false; // matches ExamBriefingPage attempt-limit gate
-
-  // Slots remaining: either resume an in-progress attempt or start a fresh one.
-  return true;
-}
-
-/**
- * `results` is deliberately NOT part of the bucketing below.
+ * `results` is deliberately NOT part of the bucketing.
  *
  * Available / Missed / Submitted partition the list — every assessment lands
  * in exactly one of them. Results is a cross-cutting VIEW over the same data:
@@ -76,70 +56,17 @@ function canStillOpen(
  * with a reattempt left pick between seeing the mark they already have and
  * seeing the button that lets them improve it. See ResultsTab.tsx.
  */
-type TabKey = 'available' | 'missed' | 'submitted' | 'results';
+type TabKey = ScheduleBucket | 'results';
 
 /**
- * Tab bucketing rule (the three partitioning tabs only):
- *  - available: student can still open the test now (or window not yet open)
- *  - submitted: has at least one finished attempt and can NOT still open
- *  - missed:    everything else (window closed/blocked, never submitted)
- *
- * A card with prior submissions AND a remaining attempt stays in `available`
- * — the card itself surfaces a "Submitted N×" badge so the student knows.
+ * The bucketing rule, the availability rule, the attempt-limit rule and the
+ * two clock formatters all used to live here as module-private functions.
+ * They moved to lib/studentSchedule.ts when the Overview page needed the same
+ * answers — two screens deciding independently whether a student may open an
+ * exam is precisely the disagreement the "mirrors the gate in
+ * ExamBriefingPage" note in that module exists to prevent.
  */
-function classifyForTab(
-  a: Assessment,
-  availability: AvailabilityState,
-  allAttempts: Attempt[],
-  studentId: string,
-): Exclude<TabKey, 'results'> {
-  if (canStillOpen(a, availability, allAttempts, studentId)) return 'available';
-  if (availability === 'upcoming') return 'available';
-
-  const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
-  if (finished > 0) return 'submitted';
-  return 'missed';
-}
-
-// ══════════════════════════════════════════════════════════════════
-// PURE HELPERS
-// ══════════════════════════════════════════════════════════════════
-
-function getAvailability(a: Assessment, now: Date): AvailabilityState {
-  if (a.status === 'closed') return 'admin_closed';
-
-  const start = a.startDate ? new Date(a.startDate) : null;
-  const end   = a.endDate   ? new Date(a.endDate)   : null;
-
-  if (start && now < start) return 'upcoming';
-  if (end   && now > end)   return 'window_closed';
-  return 'available';
-}
-
-
-function timeLeft(endIso: string, now: Date): { label: string; urgent: boolean } {
-  const diff = new Date(endIso).getTime() - now.getTime();
-  if (diff <= 0) return { label: 'ended', urgent: true };
-  const totalMin = Math.floor(diff / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  const days = Math.floor(h / 24);
-  if (days >= 2)  return { label: `${days}d left`,          urgent: false };
-  if (days === 1) return { label: `1d ${h % 24}h left`,     urgent: false };
-  if (h > 0)      return { label: `${h}h ${m}m left`,       urgent: h < 2  };
-  return              { label: `${m}m left`,                 urgent: m < 30 };
-}
-
-function timeUntil(startIso: string, now: Date): string {
-  const diff = new Date(startIso).getTime() - now.getTime();
-  if (diff <= 0) return 'starting soon';
-  const totalMin = Math.floor(diff / 60000);
-  const h = Math.floor(totalMin / 60);
-  const days = Math.floor(h / 24);
-  if (days >= 1) return `in ${days}d ${h % 24}h`;
-  if (h > 0)     return `in ${h}h ${totalMin % 60}m`;
-  return `in ${totalMin}m`;
-}
+type AssessmentWithMeta = ScheduleEntry;
 
 // ══════════════════════════════════════════════════════════════════
 // SUB-COMPONENTS
@@ -148,37 +75,29 @@ function timeUntil(startIso: string, now: Date): string {
 
 // ── Attempt status indicator ──────────────────────────────────────
 
-function AttemptStatusBadge({ status, autoTerminated }: { status: AttemptStatus; autoTerminated?: boolean }) {
+function AttemptStatusBadge({ status }: { status: AttemptStatus }) {
   if (status === 'in_progress') {
     return (
-      <div className="flex items-center gap-1.5">
-        <div className="relative w-2 h-2">
-          <span
-            className="absolute inline-flex w-2 h-2 rounded-full opacity-70"
-            style={{ background: 'var(--ef-warning)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }}
-          />
-          <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-warning)', margin: '1px' }} />
-        </div>
-        <span className="text-xs" style={{ color: 'var(--ef-warning)' }}>In progress</span>
-      </div>
+      <span className="flex items-center gap-2" style={{ fontSize: 12, color: 'var(--ef-warning)' }}>
+        <span className="ef-pulse" style={{ ['--ef-success' as string]: 'var(--ef-warning)' }} />
+        In progress
+      </span>
     );
   }
   if (status === 'submitted' || status === 'auto_submitted') {
     return (
-      <div className="flex items-center gap-1.5">
-        <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
-        <span className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>
-          {status === 'auto_submitted' ? 'Auto-submitted' : 'Submitted'}
-        </span>
-      </div>
+      <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ef-success-strong)' }}>
+        <CheckCircle2 size={12} strokeWidth={1.6} />
+        {status === 'auto_submitted' ? 'Auto-submitted' : 'Submitted'}
+      </span>
     );
   }
   if (status === 'terminated') {
     return (
-      <div className="flex items-center gap-1.5">
-        <XCircle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
-        <span className="text-xs" style={{ color: 'var(--ef-danger)' }}>Terminated</span>
-      </div>
+      <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ef-danger)' }}>
+        <XCircle size={12} strokeWidth={1.6} />
+        Terminated
+      </span>
     );
   }
   return null;
@@ -219,10 +138,10 @@ function ScoreDisplay({ attempt, assessment }: { attempt: Attempt; assessment: A
       <span
         className="text-xs px-1.5 py-0.5"
         style={{
-          background: passed === true ? 'var(--ef-success-bg)' : passed === false ? 'var(--ef-danger-bg)' : '#FDF8EC',
+          background: passed === true ? 'var(--ef-success-bg)' : passed === false ? 'var(--ef-danger-bg)' : 'var(--ef-warning-bg)',
           color: passed === true ? 'var(--ef-success-strong)' : passed === false ? 'var(--ef-danger)' : 'var(--ef-warning)',
-          border: `1px solid ${passed === true ? 'var(--ef-success-border)' : passed === false ? 'var(--ef-danger-border)' : '#EBD9A8'}`,
-          borderRadius: 2,
+          border: `1px solid ${passed === true ? 'var(--ef-success-border)' : passed === false ? 'var(--ef-danger-border)' : 'var(--ef-warning-border)'}`,
+          borderRadius: 'var(--ef-radius-pill)',
         }}
       >
         {percentage}%
@@ -255,7 +174,6 @@ function AssessmentCard({
   deviceClass: DeviceClass;
 }) {
   const { assessment: a, attempt, allAttempts, availability } = data;
-  const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
 
   const sectionCount   = a.sections?.length ?? 0;
@@ -275,11 +193,10 @@ function AssessmentCard({
   // When the student has already submitted but still has chances left,
   // surface that explicitly so they don't think the card is a fresh test.
   const attemptInfo = useMemo(() => {
-    const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
+    const finished = finishedCount(allAttempts);
     if (finished === 0) return null;
     if (!canStillOpen(a, availability, allAttempts, studentId)) return null;
-    const effMax = a.attemptOverrides?.[studentId] ?? a.maxAttempts ?? 1;
-    return { used: finished, total: effMax };
+    return { used: finished, total: effectiveMaxAttempts(a, studentId) };
   }, [a, availability, allAttempts, studentId]);
 
   // ── Can this device sit this exam? ─────────────────────────────
@@ -319,8 +236,7 @@ function AssessmentCard({
       if (hasInProgress) {
         return { label: 'Resume', icon: <RotateCcw size={12} strokeWidth={1.5} />, variant: 'primary' };
       }
-      const finishedCount = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
-      if (finishedCount > 0) {
+      if (finishedCount(allAttempts) > 0) {
         return { label: 'Retake', icon: <RotateCcw size={12} strokeWidth={1.5} />, variant: 'primary' };
       }
       return { label: 'Begin', icon: <PlayCircle size={12} strokeWidth={1.5} />, variant: 'primary' };
@@ -351,8 +267,7 @@ function AssessmentCard({
     if (availability === 'admin_closed' || availability === 'window_closed') {
       return 'Access closed';
     }
-    const finished = allAttempts.filter((at) => FINISHED_STATUSES.includes(at.status)).length;
-    if (finished > 0) {
+    if (finishedCount(allAttempts) > 0) {
       const lastTerminated = attempt?.status === 'terminated';
       return lastTerminated ? 'No attempts left' : 'Attempts exhausted';
     }
@@ -365,48 +280,43 @@ function AssessmentCard({
       return <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Not started</span>;
     }
     return (
-      <AttemptStatusBadge
-        status={attempt.status}
-        autoTerminated={attempt.integrityLog?.autoTerminated}
-      />
+      <AttemptStatusBadge status={attempt.status} />
     );
   }, [attempt]);
 
   // ── Availability colours ───────────────────────────────────────
-  const leftBarColor =
-    availability === 'available'     ? 'var(--ef-success-strong)' :
-    availability === 'upcoming'      ? '#4A6FA5' :
-    availability === 'window_closed' ? 'var(--ef-text-muted)' :
-    'var(--ef-text-muted)';
+  const railColour =
+    availability === 'available'     ? 'var(--ef-success)' :
+    availability === 'upcoming'      ? 'var(--ef-info)' :
+    'var(--ef-border-muted)';
+
+  const go = () => {
+    // The wrong-device action is styled secondary but belongs at the briefing,
+    // not at results — that page carries the refusal explanation and the
+    // copyable link. Keyed off deviceOk rather than the variant so the two
+    // cannot drift.
+    if (!action) return;
+    if (action.variant === 'primary' || !deviceOk) navigate(`/student/exam/${a.id}/briefing`);
+    else navigate(`/student/exam/${a.id}/results`);
+  };
 
   return (
-    <motion.div
+    <motion.article
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: index * 0.05, ease: [0.16, 1, 0.3, 1] }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: hovered ? 'var(--ef-canvas-raised)' : 'var(--ef-surface)',
-        border: '1px solid var(--ef-border)',
-        borderRadius: 3,
-        overflow: 'hidden',
-        transition: 'background 0.15s',
-        display: 'flex',
-      }}
+      transition={{ duration: 0.25, delay: Math.min(index, 6) * 0.045, ease: [0.16, 1, 0.3, 1] }}
+      className="ef-card flex"
+      style={{ overflow: 'hidden' }}
     >
-      {/* Left colour bar */}
-      <div style={{ width: 3, background: leftBarColor, flexShrink: 0 }} />
+      <div className="ef-card-rail" style={{ background: railColour }} />
 
-      {/* Card body */}
-      <div className="flex-1 px-4 py-4">
-
-        {/* Top row: title + time indicator */}
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.5, flex: 1 }}>
+      <div className="flex-1" style={{ padding: 'var(--ef-pad-card)' }}>
+        {/* Title + the badges that change what the student can do */}
+        <div className="flex items-start justify-between gap-3 mb-2.5">
+          <h3 style={{ fontSize: 14.5, lineHeight: 1.45, color: 'var(--ef-ink)', flex: 1, fontWeight: 500 }}>
             {a.title || <em style={{ color: 'var(--ef-text-muted)' }}>Untitled Assessment</em>}
-          </p>
-          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+          </h3>
+          <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
             {/* ── What kind of exam this is ────────────────────────────
                 The security tier reached the student nowhere at all before
                 this: not on the card, not as a word on the briefing. A
@@ -418,296 +328,167 @@ function AssessmentCard({
                 'normal' gets no chip on purpose. It is the ordinary case, and
                 a badge on every row is a badge that says nothing. */}
             {a.securityTier === 'mock' && (
-              <span
-                className="text-xs px-2 py-0.5 flex items-center gap-1"
-                style={{
-                  background: 'var(--ef-canvas)',
-                  color: 'var(--ef-text-muted)',
-                  border: '1px solid var(--ef-border)',
-                  borderRadius: 2,
-                }}
-                title="A practice exam. Not proctored, and the result does not count."
-              >
-                <GraduationCap size={9} strokeWidth={1.5} />
+              <Chip small icon={<GraduationCap size={9} strokeWidth={1.6} />}
+                title="A practice exam. Not proctored, and the result does not count.">
                 Practice
-              </span>
+              </Chip>
             )}
             {a.securityTier === 'high_stake' && (
-              <span
-                className="text-xs px-2 py-0.5 flex items-center gap-1"
-                style={{
-                  background: 'var(--ef-canvas)',
-                  color: 'var(--ef-text-subtle)',
-                  border: '1px solid var(--ef-border-muted)',
-                  borderRadius: 2,
-                }}
-                title="A high-stake exam. Camera, a clean browser, Safe Exam Browser and a computer are all required."
-              >
-                <Shield size={9} strokeWidth={1.5} />
+              <Chip small tone="accent" icon={<Shield size={9} strokeWidth={1.6} />}
+                title="A high-stake exam. Camera, a clean browser, Safe Exam Browser and a computer are all required.">
                 High-stake
-              </span>
+              </Chip>
             )}
             {/* Only where it changes what the student can do — a laptop needs
                 no badge telling it that it is a laptop. */}
             {!deviceOk && (
-              <span
-                className="text-xs px-2 py-0.5 flex items-center gap-1"
-                style={{
-                  background: '#FEF9EC',
-                  color: 'var(--ef-warning)',
-                  border: '1px solid var(--ef-warning-border)',
-                  borderRadius: 2,
-                }}
-                title="This exam cannot be taken on this device. Open it on a laptop or desktop computer."
-              >
-                <Laptop size={9} strokeWidth={1.5} />
+              <Chip small tone="warning" icon={<Laptop size={9} strokeWidth={1.6} />}
+                title="This exam cannot be taken on this device. Open it on a laptop or desktop computer.">
                 Computer only
-              </span>
+              </Chip>
             )}
             {/* Reattempt badge — only when prior submission exists + chances left */}
             {attemptInfo && (
-              <span
-                className="text-xs px-2 py-0.5 flex items-center gap-1"
-                style={{
-                  background: '#FFF7E6',
-                  color: 'var(--ef-warning-strong)',
-                  border: '1px solid #F0DFA0',
-                  borderRadius: 2,
-                }}
-                title="You've already submitted this assessment but have a reattempt available."
-              >
-                <RotateCcw size={9} strokeWidth={1.5} />
+              <Chip small tone="warning" icon={<RotateCcw size={9} strokeWidth={1.6} />}
+                title="You've already submitted this assessment but have a reattempt available.">
                 Submitted {attemptInfo.used}× · {attemptInfo.total - attemptInfo.used} left
-              </span>
+              </Chip>
             )}
-            {/* Time left badge for available */}
             {timeInfo && (
-              <span
-                className="text-xs px-2 py-0.5 flex items-center gap-1"
-                style={{
-                  background: timeInfo.urgent ? 'var(--ef-danger-bg)' : 'var(--ef-success-bg)',
-                  color: timeInfo.urgent ? 'var(--ef-danger)' : 'var(--ef-success-strong)',
-                  border: `1px solid ${timeInfo.urgent ? 'var(--ef-danger-border)' : 'var(--ef-success-border)'}`,
-                  borderRadius: 2,
-                }}
-              >
-                <Clock size={9} strokeWidth={1.5} />
+              <Chip small tone={timeInfo.urgent ? 'danger' : 'success'} icon={<Clock size={9} strokeWidth={1.6} />}>
                 {timeInfo.label}
-              </span>
+              </Chip>
             )}
-            {/* Upcoming badge */}
             {availability === 'upcoming' && a.startDate && (
-              <span
-                className="text-xs px-2 py-0.5 flex items-center gap-1"
-                style={{
-                  background: '#EEF3FB',
-                  color: '#4A6FA5',
-                  border: '1px solid #C8D8F0',
-                  borderRadius: 2,
-                }}
-              >
-                <Calendar size={9} strokeWidth={1.5} />
+              <Chip small tone="info" icon={<Calendar size={9} strokeWidth={1.6} />}>
                 {timeUntil(a.startDate, nowDate)}
-              </span>
+              </Chip>
             )}
-            {/* Closed badge */}
             {(availability === 'window_closed' || availability === 'admin_closed') && (
-              <span
-                className="text-xs px-2 py-0.5"
-                style={{
-                  background: '#F5F5F5',
-                  color: 'var(--ef-text-muted)',
-                  border: '1px solid var(--ef-border-muted)',
-                  borderRadius: 2,
-                }}
-              >
-                {availability === 'admin_closed' ? 'Closed' : 'Window closed'}
-              </span>
+              <Chip small>{availability === 'admin_closed' ? 'Closed' : 'Window closed'}</Chip>
             )}
           </div>
         </div>
 
-        {/* Meta pills row */}
-        <div className="flex items-center gap-3 flex-wrap mb-3">
+        {/* What the paper is made of */}
+        <div className="flex items-center gap-3.5 flex-wrap mb-3" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
           {a.subject && (
-            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-              <BookOpen size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
+            <span className="flex items-center gap-1.5">
+              <BookOpen size={11} strokeWidth={1.5} />
               {a.subject}
             </span>
           )}
           {sectionCount > 0 && (
-            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-              <Layers size={10} strokeWidth={1.5} />
+            <span className="flex items-center gap-1.5">
+              <Layers size={11} strokeWidth={1.5} />
               {sectionCount} section{sectionCount !== 1 ? 's' : ''}
             </span>
           )}
-          <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-            <ClipboardList size={10} strokeWidth={1.5} />
+          <span className="flex items-center gap-1.5">
+            <ClipboardList size={11} strokeWidth={1.5} />
             {questionCount} question{questionCount !== 1 ? 's' : ''}
           </span>
-          <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-            <Award size={10} strokeWidth={1.5} />
+          <span className="flex items-center gap-1.5">
+            <Award size={11} strokeWidth={1.5} />
             {a.totalMarks} marks
           </span>
           {totalSectionTime > 0 && (
-            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-              <Timer size={10} strokeWidth={1.5} />
+            <span className="flex items-center gap-1.5">
+              <Timer size={11} strokeWidth={1.5} />
               {totalSectionTime}m
             </span>
           )}
-          {a.passingScore !== undefined && (
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-              · Pass: {a.passingScore}%
-            </span>
-          )}
+          {a.passingScore !== undefined && <span>· Pass: {a.passingScore}%</span>}
         </div>
 
-        {/* Date range */}
+        {/* When it runs */}
         {(a.startDate || a.endDate) && (
-          <div className="flex items-center gap-1.5 mb-3">
-            <Calendar size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-              {a.startDate ? formatDateTime(a.startDate) : 'Open'}
-            </span>
+          <div className="flex items-center gap-1.5 mb-3" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+            <Calendar size={11} strokeWidth={1.5} />
+            <span>{a.startDate ? formatDateTime(a.startDate) : 'Open'}</span>
             {a.endDate && (
               <>
-                <ArrowRight size={9} strokeWidth={1.5} style={{ color: 'var(--ef-border-muted)' }} />
-                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                  {formatDateTime(a.endDate)}
-                </span>
+                <ArrowRight size={10} strokeWidth={1.5} style={{ color: 'var(--ef-border-muted)' }} />
+                <span>{formatDateTime(a.endDate)}</span>
               </>
             )}
           </div>
         )}
 
-        {/* Section breakdown (subtle) */}
         {a.sections && a.sections.length > 1 && (
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            {a.sections.map((sec, si) => (
-              <span
-                key={sec.id}
-                className="text-xs px-2 py-0.5"
-                style={{
-                  background: 'var(--ef-canvas)',
-                  color: 'var(--ef-text-muted)',
-                  border: '1px solid var(--ef-border)',
-                  borderRadius: 2,
-                }}
-              >
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            {a.sections.map((sec) => (
+              <Chip key={sec.id} small>
                 {sec.name}
                 {sec.timeLimit ? ` · ${sec.timeLimit}m` : ''}
-              </span>
+              </Chip>
             ))}
           </div>
         )}
 
-        {/* Bottom row: attempt status + score + action */}
+        {/* Where the student stands, and the one thing they can do about it */}
         <div
-          className="flex items-center justify-between gap-3 pt-3"
+          className="flex items-center justify-between gap-3 pt-3 flex-wrap"
           style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
         >
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3.5 flex-wrap">
             {statusLeft}
-            {noAccessReason && (
-              <span
-                className="text-xs px-2 py-0.5"
-                style={{
-                  background: '#F5F5F5',
-                  color: 'var(--ef-text-muted)',
-                  border: '1px solid var(--ef-border-muted)',
-                  borderRadius: 2,
-                }}
-              >
-                {noAccessReason}
-              </span>
-            )}
+            {noAccessReason && <Chip small>{noAccessReason}</Chip>}
             {attempt && (attempt.status === 'submitted' || attempt.status === 'auto_submitted') && (
               <ScoreDisplay attempt={attempt} assessment={a} />
             )}
             {attempt && attempt.integrityLog && attempt.integrityLog.totalViolations > 0 && (
-              <div className="flex items-center gap-1" title={`${attempt.integrityLog.totalViolations} integrity violation(s) logged`}>
-                <Shield size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                  {attempt.integrityLog.totalViolations}v
-                </span>
-              </div>
+              <span
+                className="flex items-center gap-1"
+                style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}
+                title={`${attempt.integrityLog.totalViolations} integrity violation(s) logged`}
+              >
+                <Shield size={11} strokeWidth={1.5} />
+                {attempt.integrityLog.totalViolations}v
+              </span>
             )}
           </div>
 
           {action && (
-            <button
-              onClick={() => {
-                // The wrong-device action is styled secondary but belongs at
-                // the briefing, not at results — that page carries the refusal
-                // explanation and the copyable link. Keyed off deviceOk rather
-                // than the variant so the two cannot drift.
-                if (action.variant === 'primary' || !deviceOk) {
-                  navigate(`/student/exam/${a.id}/briefing`);
-                } else {
-                  navigate(`/student/exam/${a.id}/results`);
-                }
-              }}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-opacity hover:opacity-75"
-              style={{
-                background: action.variant === 'primary' ? 'var(--ef-ink)' : 'var(--ef-surface)',
-                color: action.variant === 'primary' ? 'var(--ef-surface)' : 'var(--ef-text-subtle)',
-                border: action.variant === 'primary' ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
-                borderRadius: 2,
-                cursor: 'pointer',
-              }}
-            >
+            <Button size="sm" variant={action.variant} onClick={go}>
               {action.icon}
               {action.label}
-              <ChevronRight size={10} strokeWidth={1.5} />
-            </button>
+              <ChevronRight size={11} strokeWidth={1.6} />
+            </Button>
           )}
         </div>
       </div>
-    </motion.div>
+    </motion.article>
   );
 }
 
 // ── Empty state ───────────────────────────────────────────────────
 
-function EmptyState({ category }: { category: 'available' | 'missed' | 'submitted' | 'all' }) {
-  const messages: Record<typeof category, { icon: React.ReactNode; title: string; body: string }> = {
+function EmptyState({ category }: { category: ScheduleBucket | 'all' }) {
+  const messages: Record<ScheduleBucket | 'all', { icon: React.ReactNode; title: string; body: string }> = {
     all: {
-      icon: <ClipboardList size={28} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />,
+      icon: <ClipboardList size={30} strokeWidth={1} />,
       title: 'No assessments yet',
       body: 'Assessments assigned to you will appear here once your administrator publishes them.',
     },
     available: {
-      icon: <PlayCircle size={20} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />,
+      icon: <PlayCircle size={26} strokeWidth={1} />,
       title: 'Nothing available right now',
-      body: 'Check back later — new assessments will appear here when they open.',
+      body: 'Check back later — new assessments appear here as soon as they open.',
     },
     missed: {
-      icon: <XCircle size={20} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />,
+      icon: <XCircle size={26} strokeWidth={1} />,
       title: 'Nothing missed',
-      body: 'Assessments you did not submit before they closed will appear here.',
+      body: 'Assessments you did not submit before they closed would appear here.',
     },
     submitted: {
-      icon: <CheckCircle2 size={20} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />,
+      icon: <CheckCircle2 size={26} strokeWidth={1} />,
       title: 'No submissions yet',
-      body: 'Your completed assessments will appear here.',
+      body: 'Papers you have handed in appear here, with whatever your examiner has released.',
     },
   };
   const m = messages[category];
-
-  return (
-    <div
-      className="flex flex-col items-center py-10"
-      style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border-subtle)', borderRadius: 3 }}
-    >
-      {m.icon}
-      <p className="text-xs mt-3" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>{m.title}</p>
-      {m.body && (
-        <p className="text-xs mt-1 text-center" style={{ color: 'var(--ef-border-muted)', maxWidth: 300, lineHeight: 1.7 }}>
-          {m.body}
-        </p>
-      )}
-    </div>
-  );
+  return <EmptyPanel icon={m.icon} title={m.title} body={m.body} />;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -717,13 +498,12 @@ function EmptyState({ category }: { category: 'available' | 'missed' | 'submitte
 export function StudentAssessmentsPage() {
   const { session } = useStudentAuth();
 
-  const [assessments, setAssessments]     = useState<Assessment[]>([]);
-  const [attemptMap, setAttemptMap]       = useState<Record<string, Attempt>>({});
-  const [attemptsByAssessment, setAttemptsByAssessment] = useState<Record<string, Attempt[]>>({});
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState('');
-  const [lastSynced, setLastSynced]       = useState<Date | null>(null);
-  const [syncAge, setSyncAge]             = useState('');
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [attempts, setAttempts]       = useState<Attempt[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState('');
+  const [lastSynced, setLastSynced]   = useState<Date | null>(null);
+  const [syncAge, setSyncAge]         = useState('');
 
   const [activeTab, setActiveTab] = useState<TabKey>('available');
 
@@ -749,22 +529,8 @@ export function StudentAssessmentsPage() {
         getAssessmentsForStudent(),
         getAttemptsByStudent(session.studentId),
       ]);
-
-      // Build attempt map: assessmentId → most recent attempt, plus a parallel
-      // map of assessmentId → all attempts (needed for attempt-limit math).
-      const map: Record<string, Attempt> = {};
-      const allMap: Record<string, Attempt[]> = {};
-      const sorted = [...attemptList].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-      sorted.forEach((at) => {
-        map[at.assessmentId] = at;
-        (allMap[at.assessmentId] ??= []).push(at);
-      });
-
       setAssessments(aList);
-      setAttemptMap(map);
-      setAttemptsByAssessment(allMap);
+      setAttempts(attemptList);
       setLastSynced(new Date());
     } catch (e: any) {
       console.error('[StudentAssessmentsPage] load error:', e);
@@ -791,216 +557,110 @@ export function StudentAssessmentsPage() {
   }, [lastSynced]);
 
   // ── Categorise ────────────────────────────────────────────────
-
-  const { available, missed, submitted } = useMemo(() => {
-    const available: AssessmentWithMeta[] = [];
-    const missed:    AssessmentWithMeta[] = [];
-    const submitted: AssessmentWithMeta[] = [];
-
-    assessments.forEach((a) => {
-      const avail = getAvailability(a, nowDate);
-      const all   = attemptsByAssessment[a.id] ?? [];
-      const entry: AssessmentWithMeta = {
-        assessment: a,
-        attempt: attemptMap[a.id],
-        allAttempts: all,
-        availability: avail,
-      };
-
-      const tab = session
-        ? classifyForTab(a, avail, all, session.studentId)
-        : 'available';
-      if (tab === 'available')      available.push(entry);
-      else if (tab === 'submitted') submitted.push(entry);
-      else                          missed.push(entry);
-    });
-
-    // Available: open-now (by closest end date) before upcoming (by soonest start)
-    available.sort((x, y) => {
-      const xOpen = x.availability === 'available';
-      const yOpen = y.availability === 'available';
-      if (xOpen !== yOpen) return xOpen ? -1 : 1;
-      if (xOpen) {
-        if (x.assessment.endDate && y.assessment.endDate)
-          return new Date(x.assessment.endDate).getTime() - new Date(y.assessment.endDate).getTime();
-        if (x.assessment.endDate) return -1;
-        if (y.assessment.endDate) return  1;
-        return 0;
-      }
-      if (x.assessment.startDate && y.assessment.startDate)
-        return new Date(x.assessment.startDate).getTime() - new Date(y.assessment.startDate).getTime();
-      return 0;
-    });
-
-    // Submitted: most recently submitted first
-    submitted.sort((x, y) => {
-      const xd = x.attempt?.submittedAt ?? x.assessment.endDate ?? x.assessment.updatedAt;
-      const yd = y.attempt?.submittedAt ?? y.assessment.endDate ?? y.assessment.updatedAt;
-      return new Date(yd).getTime() - new Date(xd).getTime();
-    });
-
-    // Missed: most recently closed first
-    missed.sort((x, y) => {
-      const xd = x.assessment.endDate || x.assessment.updatedAt;
-      const yd = y.assessment.endDate || y.assessment.updatedAt;
-      return new Date(yd).getTime() - new Date(xd).getTime();
-    });
-
-    return { available, missed, submitted };
-  }, [assessments, attemptMap, attemptsByAssessment, nowDate, session]);
+  // The bucketing and its three sort orders live in lib/studentSchedule so the
+  // Overview page leads with the same "most urgent" assessment this list puts
+  // at the top.
+  const buckets = useMemo(
+    () => buildSchedule(assessments, attempts, session?.studentId ?? '', nowDate),
+    [assessments, attempts, session?.studentId, nowDate],
+  );
 
   // Results is built from the same two fetches, not a third one: every mark a
   // student is allowed to see is already on the attempt documents this page
   // loaded. Deliberately NOT dependent on `nowDate` — a result does not change
   // on the 30-second clock tick, and rebuilding these rows twice a minute
   // would remount every card in the tab.
-  const resultRows = useMemo(
-    () => buildResultRows(assessments, attemptsByAssessment),
-    [assessments, attemptsByAssessment],
-  );
+  const resultRows = useMemo(() => {
+    const byAssessment: Record<string, Attempt[]> = {};
+    for (const at of attempts) (byAssessment[at.assessmentId] ??= []).push(at);
+    return buildResultRows(assessments, byAssessment);
+  }, [assessments, attempts]);
 
   const total = assessments.length;
 
   if (!session) return null;
 
+  const counts: Record<TabKey, number> = {
+    available: buckets.available.length,
+    missed: buckets.missed.length,
+    submitted: buckets.submitted.length,
+    results: resultRows.length,
+  };
+  const TAB_LABELS: Record<TabKey, string> = {
+    available: 'Available',
+    missed: 'Missed',
+    submitted: 'Submitted',
+    results: 'Results',
+  };
+
   // ── Render ────────────────────────────────────────────────────
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="px-8 py-10"
-      style={{ maxWidth: 860, margin: '0 auto' }}
-    >
-      {/* Page header */}
-      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
-        <div className="flex items-center gap-2 mb-2">
-          <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#4A6FA5' }} />
-          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
-            ASSESSMENTS · {session.instituteName.toUpperCase()}
-          </p>
-        </div>
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-light" style={{ color: 'var(--ef-ink)', letterSpacing: '0.02em' }}>
-              Your Assessments
-            </h1>
-            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
-              Tests and exams assigned to you will appear here.
-            </p>
-          </div>
-          {/* Controls */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {lastSynced && !loading && (
-              <div className="flex items-center gap-1.5 select-none">
-                <div className="relative w-2 h-2">
-                  <span
-                    className="absolute inline-flex w-2 h-2 rounded-full opacity-60"
-                    style={{ background: 'var(--ef-success)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }}
-                  />
-                  <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-success)', margin: '1px' }} />
-                </div>
-                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{syncAge}</span>
-              </div>
-            )}
-            <button
-              onClick={load}
-              disabled={loading}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
-              style={{
-                border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)',
-                borderRadius: 2, background: 'var(--ef-surface)',
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}
-            >
-              <RefreshCw size={10} strokeWidth={1.5} className={loading ? 'animate-spin' : ''} />
+    <PageShell>
+      <PageHeader
+        eyebrow={
+          <>
+            <span className="ef-eyebrow-dot" />
+            Assessments · {session.instituteName}
+          </>
+        }
+        title="Your assessments"
+        subtitle="Everything assigned to you, ordered by what runs out first."
+        actions={
+          <>
+            {lastSynced && !loading && <LiveDot label={syncAge} />}
+            <Button size="sm" onClick={load} disabled={loading} aria-label="Refresh assessments">
+              <RefreshCw size={11} strokeWidth={1.6} className={loading ? 'animate-spin' : ''} />
               Refresh
-            </button>
-          </div>
-        </div>
-      </div>
+            </Button>
+          </>
+        }
+      />
 
-      {/* Content */}
       <AnimatePresence mode="wait">
-
-        {/* Loading */}
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="flex flex-col items-center py-24">
-              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-              <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Loading assessments…</p>
-            </div>
+            <LoadingBlock label="Loading assessments…" rows={3} />
           </motion.div>
         )}
 
-        {/* Error */}
         {!loading && error && (
           <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div
-              className="flex items-center gap-2.5 px-4 py-3"
-              style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}
-            >
-              <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
-              <p className="text-xs flex-1" style={{ color: 'var(--ef-danger)' }}>{error}</p>
-              <button onClick={load} className="text-xs" style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>
-                Retry
-              </button>
-            </div>
+            <ErrorBanner message={error} onRetry={load} />
           </motion.div>
         )}
 
-        {/* Empty — no assessments at all */}
         {!loading && !error && total === 0 && (
           <motion.div key="empty-all" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <EmptyState category="all" />
           </motion.div>
         )}
 
-        {/* Main content */}
         {!loading && !error && total > 0 && (
           <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-
             {/* Tab strip */}
-            <div className="flex items-center gap-1 mb-5" style={{ borderBottom: '1px solid var(--ef-border)' }}>
+            <div
+              className="flex items-center gap-1 mb-5 overflow-x-auto"
+              role="tablist"
+              aria-label="Assessment views"
+              style={{ borderBottom: '1px solid var(--ef-border)' }}
+            >
               {(['available', 'missed', 'submitted', 'results'] as TabKey[]).map((key) => {
-                const count =
-                  key === 'available' ? available.length
-                  : key === 'missed'    ? missed.length
-                  : key === 'submitted' ? submitted.length
-                  : resultRows.length;
-                const label =
-                  key === 'available' ? 'Available'
-                  : key === 'missed'    ? 'Missed'
-                  : key === 'submitted' ? 'Submitted'
-                  : 'Results';
                 const isActive = activeTab === key;
                 return (
                   <button
                     key={key}
                     type="button"
+                    role="tab"
+                    aria-selected={isActive}
                     onClick={() => setActiveTab(key)}
-                    className="flex items-center gap-1.5 text-xs px-3 py-2 transition-colors"
-                    style={{
-                      color: isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
-                      borderBottom: isActive ? '2px solid var(--ef-ink)' : '2px solid transparent',
-                      marginBottom: -1,
-                      background: 'transparent',
-                      letterSpacing: '0.04em',
-                    }}
+                    className="ef-nav-link"
+                    aria-current={isActive ? 'page' : undefined}
+                    style={{ marginBottom: -1, paddingLeft: 10, paddingRight: 10 }}
                   >
-                    {label}
-                    <span
-                      className="text-xs px-1.5"
-                      style={{
-                        background: isActive ? 'var(--ef-ink)' : 'var(--ef-border-subtle)',
-                        color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
-                        borderRadius: 2,
-                        fontSize: 10,
-                      }}
-                    >
-                      {count}
+                    {TAB_LABELS[key]}
+                    <span className="ef-chip ef-chip--sm" data-tone={isActive ? 'solid' : undefined}>
+                      {counts[key]}
                     </span>
                   </button>
                 );
@@ -1015,25 +675,30 @@ export function StudentAssessmentsPage() {
               // in it (nothing finished yet, rather than nothing assigned).
               if (activeTab === 'results') return <ResultsTab rows={resultRows} />;
 
-              const list = activeTab === 'available' ? available : activeTab === 'missed' ? missed : submitted;
+              const list = buckets[activeTab];
               if (list.length === 0) return <EmptyState category={activeTab} />;
               return (
-                <div className="space-y-3">
+                <div className="flex flex-col" style={{ gap: 'var(--ef-gap)' }}>
                   {list.map((d, i) => (
-                    <AssessmentCard key={d.assessment.id} data={d} nowDate={nowDate} index={i} studentId={session.studentId} deviceClass={deviceClass} />
+                    <AssessmentCard
+                      key={d.assessment.id}
+                      data={d}
+                      nowDate={nowDate}
+                      index={i}
+                      studentId={session.studentId}
+                      deviceClass={deviceClass}
+                    />
                   ))}
                 </div>
               );
             })()}
 
-            {/* Footer note */}
-            <p className="text-xs mt-6 text-center" style={{ color: 'var(--ef-text-muted)' }}>
+            <p className="mt-6 text-center" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
               {total} assessment{total !== 1 ? 's' : ''} assigned to your account
             </p>
           </motion.div>
         )}
-
       </AnimatePresence>
-    </motion.div>
+    </PageShell>
   );
 }

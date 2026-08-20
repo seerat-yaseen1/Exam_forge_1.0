@@ -421,6 +421,59 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // studentPreferences/{studentId}   (themes, 2026-08-20)
+    //
+    // How the student's own account looks: the chosen colour theme, whether
+    // motion is reduced, whether the layout is compact. Nothing else.
+    //
+    // ── WHY IT IS NOT A FIELD ON students/{id} ──────────────────────────────
+    // Because that document is deliberately NOT self-writable. Audit N4
+    // removed `isStudentSelf` from its update clause after finding that it let
+    // a DISABLED student flip their own `status` back to active. Re-opening
+    // that door to carry a colour preference would trade an access-control
+    // property for a cosmetic one, so the preference gets its own document
+    // instead — one the student owns completely and no decision depends on.
+    //
+    // ── WHY THE SHAPE IS VALIDATED, NOT JUST THE CALLER ─────────────────────
+    // This is the platform's only client-writable, student-owned document. A
+    // rule that checked the caller alone would hand every signed-in student an
+    // unmetered key-value store attached to an authenticated identity, which
+    // is a storage-abuse and data-residency problem wearing a preferences
+    // costume. So: exactly four keys, each of a known type, `theme` bounded to
+    // a length no legitimate id approaches.
+    //
+    // Staff can READ it — a support question is "what does the student
+    // actually see" — and can never write it. Nobody's theme is chosen for
+    // them.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /studentPreferences/{studentId} {
+      function validPreferences(d) {
+        return d.keys().hasOnly(['theme', 'motion', 'density', 'updatedAt'])
+          && d.keys().hasAll(['theme', 'motion', 'density'])
+          && d.theme is string && d.theme.size() > 0 && d.theme.size() <= 40
+          && d.motion in ['system', 'reduced']
+          && d.density in ['comfortable', 'compact']
+          && (!('updatedAt' in d.keys()) || (d.updatedAt is string && d.updatedAt.size() <= 40));
+      }
+
+      allow read: if isStudentSelf(studentId)
+                     || isWebOwner()
+                     || (
+                          exists(/databases/$(database)/documents/students/$(studentId))
+                          && (
+                               isInstituteOf(get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                               || (role() == 'faculty'
+                                   && request.auth.token.instituteId == get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
+                             )
+                        );
+      allow create, update: if isStudentSelf(studentId)
+                               && validPreferences(request.resource.data);
+      // Same reasoning as every other collection here: removal is the cascade's
+      // job (Admin SDK, rules bypassed), never the client's.
+      allow delete: if false;
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // ACADEMIC HIERARCHY
     //

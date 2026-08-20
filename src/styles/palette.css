@@ -19,8 +19,7 @@
    migration therefore CANNOT change a rendered pixel: it is a redirection,
    not a redesign. That property is deliberate and worth preserving — this
    repo has no visual regression tests, so a migration that also adjusted
-   colours would be unverifiable. Pick new values here, later, as a separate
-   and reviewable change.
+   colours would be unverifiable.
 
    ── WHY --ef- ─────────────────────────────────────────────────────
    theme.css already defines --border, --background, --primary and friends for
@@ -28,22 +27,39 @@
    surviving components in components/ui. Prefixing avoids silently
    redefining them.
 
-   ── WHAT IS NOT HERE ──────────────────────────────────────────────
-   150 distinct hex values exist in src/; these 22 cover ~94% of all
-   occurrences. The remaining 128 are genuine one-offs — a single badge, one
-   chart series, a lone illustration tint — and promoting each to a global
-   token would produce a palette nobody could hold in their head, which is a
-   different failure from the one being fixed. They stay literal until a
-   second use gives them a reason to be named.
+   ══════════════════════════════════════════════════════════════════
+   THEMES (2026-08-20)
+   ══════════════════════════════════════════════════════════════════
 
-   ── DARK MODE ─────────────────────────────────────────────────────
-   Not attempted, and now possible. Redefining these 22 under
-   @media (prefers-color-scheme: dark) is the whole job, where before it was
-   6,315 edits. That is the point of the change; doing it is a design
-   decision, not a mechanical one.
+   The dark-mode note that used to close this file said redefining these
+   tokens "is the whole job". It was right, and this is that job — with one
+   correction: the choice belongs to the student, not to the operating system,
+   so the values are written onto <html> from src/lib/themes.ts rather than
+   under a media query. See src/app/context/AppearanceContext.tsx.
+
+   THREE RULES GOVERN THIS FILE NOW.
+
+   1. WHAT IS DECLARED HERE IS THE UNTHEMED DEFAULT — the classic light
+      palette, unchanged. The Web Owner, Institute and Faculty consoles never
+      mount the appearance provider, so they resolve every token from this
+      block and are byte-identical to before.
+
+   2. `.ef-exam-scope` RE-DECLARES THE SAME DEFAULTS. It is applied to the
+      root of the exam shell, which must look the way the invigilation rules
+      were written against no matter what theme the candidate's account
+      carries. Because the class sits below <html>, its declarations beat the
+      inherited themed ones for that whole subtree — and because the exemption
+      is expressed here rather than in the provider, it holds automatically
+      for every theme added later.
+
+   3. A THEMED PAGE IS ONE WITH [data-ef-theme] ON <html>. Rules that would
+      change an unthemed surface — the page background, the theme-change
+      transition — are gated on that attribute, so this file can add
+      behaviour without any of it reaching the other three roles.
    ══════════════════════════════════════════════════════════════════ */
 
-:root {
+:root,
+.ef-exam-scope {
   /* ── Text ──────────────────────────────────────────────────────
      ink is also used as a dark BACKGROUND (exam overlays, the terminated
      screen), which is why it is named for the colour rather than for one
@@ -51,6 +67,10 @@
   --ef-ink:              #0C0C0B;
   --ef-text-muted:       #6B6B66;   /* the single most-used value in the app */
   --ef-text-subtle:      #4A4A45;
+  /* Text drawn ON --ef-ink. A literal white was written at each of those
+     call sites; naming it is what lets a theme whose ink is near-WHITE keep
+     the inverted chips and the avatar legible. */
+  --ef-ink-text:         #FFFFFF;
 
   /* ── Surfaces ──────────────────────────────────────────────────
      canvas is the page, surface is what sits on it. canvas-raised is the
@@ -58,6 +78,7 @@
   --ef-surface:          #FFFFFF;
   --ef-canvas:           #F7F6F3;
   --ef-canvas-raised:    #FAFAF8;
+  --ef-surface-hover:    #F7F6F3;
 
   /* ── Lines ─────────────────────────────────────────────────────
      Three weights, in the order they are reached for: the default rule, the
@@ -66,12 +87,26 @@
   --ef-border:           #E3E1DB;
   --ef-border-subtle:    #F0EFEB;
   --ef-border-muted:     #DDDBD5;
+  --ef-border-strong:    #A8A6A0;
   --ef-track:            #C8C7C2;
+
+  /* ── Accent ────────────────────────────────────────────────────
+     New with themes, and the reason a theme reads as a theme rather than as
+     a change of greys. Untinted by default: the classic console's primary
+     action has always been near-black on white, and this block is what that
+     console keeps resolving to. */
+  --ef-accent:           #0C0C0B;
+  --ef-accent-text:      #FFFFFF;
+  --ef-accent-hover:     #262624;
+  --ef-accent-soft:      #F2F1EF;
+  --ef-accent-border:    #C9C7C2;
+  --ef-accent-muted:     #3C3C39;
 
   /* ── Status: danger ────────────────────────────────────────────
      Also the integrity-violation colour — the terminated overlay and the
      warning counters use it, which is why it is the most-used status hue. */
   --ef-danger:           #9B2828;
+  --ef-danger-strong:    #7E1F1F;
   --ef-danger-border:    #F2CECE;
   --ef-danger-bg:        #FDF5F5;
 
@@ -81,16 +116,157 @@
   --ef-warning:          #92680A;
   --ef-warning-strong:   #8B5E1A;
   --ef-warning-border:   #F5DFA0;
+  --ef-warning-bg:       #FDF8EC;
 
   /* ── Status: success ───────────────────────────────────────────
      Two greens, two tinted backgrounds and two borders are genuinely in the
      codebase. They are near-duplicates and probably want reconciling, but
-     that changes rendered colour, so it is left for the design pass this
-     file makes possible. */
+     that changes rendered colour, so it is left for a later design pass. */
   --ef-success:          #2A6B3A;
   --ef-success-strong:   #1E7B3C;
   --ef-success-bg:       #F0F9F4;
   --ef-success-bg-alt:   #F0F7F2;
   --ef-success-border:   #B8E6C8;
   --ef-success-border-alt: #C6DECE;
+
+  /* ── Status: informational ─────────────────────────────────────
+     The blue that the academic-level badges and the "assessments" eyebrow
+     were each spelling out as #4A6FA5 / #EEF3FB / #C8D8F0. */
+  --ef-info:             #4A6FA5;
+  --ef-info-bg:          #EEF3FB;
+  --ef-info-border:      #C8D8F0;
+
+  /* ── Depth ─────────────────────────────────────────────────────
+     A shadow is a darker version of the page, never a grey — on a dark
+     canvas a grey shadow glows instead of receding. */
+  --ef-shadow-color:     rgba(18, 17, 15, 0.10);
+  --ef-shadow-sm:        0 1px 2px rgba(18, 17, 15, 0.06);
+  --ef-shadow-md:        0 4px 16px rgba(18, 17, 15, 0.07), 0 1px 2px rgba(18, 17, 15, 0.05);
+  --ef-shadow-lg:        0 18px 44px rgba(18, 17, 15, 0.12), 0 2px 6px rgba(18, 17, 15, 0.06);
+  --ef-overlay:          rgba(18, 17, 15, 0.34);
+
+  /* ── Geometry ──────────────────────────────────────────────────
+     The old surfaces hardcode `borderRadius: 2` at several hundred call
+     sites; those are left alone. Screens rebuilt for the theme release use
+     these instead, which is also what makes the density switch possible —
+     compact re-declares the three spacing values and nothing else. */
+  --ef-radius-sm:        6px;
+  --ef-radius:           10px;
+  --ef-radius-lg:        16px;
+  --ef-radius-pill:      999px;
+
+  --ef-pad-page:         40px;   /* vertical breathing room around a page */
+  --ef-pad-card:         20px;
+  --ef-gap:              16px;
+}
+
+/* ── Focus ring ───────────────────────────────────────────────────
+   a11y.css draws the keyboard ring from these two. Declared here, in the
+   same block as the palette, so the exam scope resolves its own pair
+   locally: a ring inherited from a themed <html> would be drawn in the
+   theme's accent on a surface that is deliberately not themed. */
+:root,
+.ef-exam-scope {
+  --focus-ring:          #0C0C0B;
+  --focus-ring-contrast: #FFFFFF;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   THEMED-PAGE BEHAVIOUR
+   Everything below applies only when a theme is mounted.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* The page itself. Without this the browser paints its own white behind the
+   app, which shows through as a flash on navigation and as a white gutter
+   when a dark theme's content is shorter than the viewport. */
+html[data-ef-theme] {
+  background: var(--ef-canvas);
+}
+
+html[data-ef-theme] body {
+  background: var(--ef-canvas);
+  color: var(--ef-ink);
+}
+
+/* Tailwind's `bg-white` is a literal white and there are a handful left on
+   student surfaces. Inside a themed page it means "a card", which is what
+   --ef-surface is. Scoped to [data-ef-theme] so the other three consoles
+   keep the literal. */
+html[data-ef-theme] .bg-white {
+  background-color: var(--ef-surface);
+}
+
+/* Scrollbars. `color-scheme` already flips the native ones on most platforms;
+   this covers the WebKit overlay bar, which does not follow it. */
+html[data-ef-theme] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+html[data-ef-theme] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html[data-ef-theme] ::-webkit-scrollbar-thumb {
+  background: var(--ef-border-muted);
+  border-radius: var(--ef-radius-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+html[data-ef-theme] ::-webkit-scrollbar-thumb:hover {
+  background: var(--ef-track);
+  background-clip: content-box;
+}
+
+html[data-ef-theme] ::selection {
+  background: var(--ef-accent-soft);
+  color: var(--ef-ink);
+}
+
+/* ── Density ──────────────────────────────────────────────────────
+   Compact tightens the three spacing tokens and nothing else. The type scale
+   is deliberately untouched: a student who wants less scrolling is not
+   asking for smaller text, and shrinking it is how a density control turns
+   into an accessibility regression. */
+html[data-ef-density='compact'] {
+  --ef-pad-page: 24px;
+  --ef-pad-card: 14px;
+  --ef-gap: 10px;
+}
+
+/* ── Motion ───────────────────────────────────────────────────────
+   The account-level equivalent of the OS setting. a11y.css already honours
+   `prefers-reduced-motion`; this is for a student who wants the calmer
+   interface without changing a setting on a shared machine. Same rules, so
+   the two cannot drift. */
+html[data-ef-motion='reduced'] *,
+html[data-ef-motion='reduced'] *::before,
+html[data-ef-motion='reduced'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ── The switch itself ────────────────────────────────────────────
+   Applied for ~320ms around a theme change, then removed. Without it the new
+   palette snaps in, which on a full-page colour change reads as a glitch
+   rather than as a choice taking effect. Every surface is covered because
+   almost all of them are inline styles with no transition of their own.
+
+   Not applied when motion is reduced: the class is only ever added by the
+   provider, which checks first. The `:not()` is the belt to that braces. */
+html.ef-theming:not([data-ef-motion='reduced']) *,
+html.ef-theming:not([data-ef-motion='reduced']) *::before,
+html.ef-theming:not([data-ef-motion='reduced']) *::after {
+  transition:
+    background-color 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    fill 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.ef-theming * {
+    transition: none !important;
+  }
 }

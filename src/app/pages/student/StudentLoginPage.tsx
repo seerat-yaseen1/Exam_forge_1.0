@@ -1,37 +1,24 @@
 import { useState } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
-
-const inputStyle: React.CSSProperties = {
-  background: 'var(--ef-canvas-raised)',
-  border: '1px solid var(--ef-border)',
-  color: 'var(--ef-ink)',
-  borderRadius: 2,
-  width: '100%',
-  outline: 'none',
-  fontSize: 13,
-  padding: '10px 14px',
-};
-const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--ef-ink)';
-  e.target.style.background = 'var(--ef-surface)';
-};
-const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--ef-border)';
-  e.target.style.background = 'var(--ef-canvas-raised)';
-};
+import { AuthShell, Field, PasswordField } from '../../components/student/fields';
+import { Button } from '../../components/student/ui';
 
 export function StudentLoginPage() {
   const navigate = useNavigate();
   const { session, login } = useStudentAuth();
+  // The wordmark used to be the string "STRATUM", hardcoded, while every other
+  // student screen renders `platformSettings.name`. An institute that had set
+  // its own product name saw it everywhere except on the page where a student
+  // arrives first.
+  const { platformSettings } = usePlatformSettings();
 
   const [instituteCode, setInstituteCode] = useState('');
   const [email, setEmail]                 = useState('');
   const [password, setPassword]           = useState('');
-  const [showPassword, setShowPassword]   = useState(false);
   const [error, setError]                 = useState('');
   const [loading, setLoading]             = useState(false);
 
@@ -42,7 +29,8 @@ export function StudentLoginPage() {
       : <Navigate to="/student/dashboard" replace />;
   }
 
-  const canSubmit = instituteCode.trim().length > 0 && email.trim().length > 0 && password.length > 0 && !loading;
+  const canSubmit =
+    instituteCode.trim().length > 0 && email.trim().length > 0 && password.length > 0 && !loading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,170 +43,110 @@ export function StudentLoginPage() {
       setError(result.error ?? 'An error occurred.');
       return;
     }
-    if (result.firstLoginRequired) {
-      navigate('/student/change-password', { replace: true });
-    } else {
-      navigate('/student/dashboard', { replace: true });
-    }
+    navigate(result.firstLoginRequired ? '/student/change-password' : '/student/dashboard', {
+      replace: true,
+    });
   };
 
+  const roleLink = (to: string, label: string) => (
+    <Link
+      to={to}
+      style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+    >
+      {label}
+    </Link>
+  );
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: 'var(--ef-canvas)' }}>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[380px]"
-      >
-        {/* Platform identity */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
-            <LogoMark px={36} />
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <AuthShell
+        mark={
+          platformSettings.logoUrl
+            ? <img src={platformSettings.logoUrl} alt={platformSettings.name}
+                style={{ width: 34, height: 34, objectFit: 'contain' }} />
+            : <LogoMark px={34} />
+        }
+        wordmark={platformSettings.name}
+        footer={
+          <div className="flex items-center justify-center gap-3 mt-6">
+            {roleLink('/login', 'Web Owner')}
+            <span style={{ color: 'var(--ef-border)' }}>·</span>
+            {roleLink('/institute/login', 'Institute Admin')}
+            <span style={{ color: 'var(--ef-border)' }}>·</span>
+            {roleLink('/faculty/login', 'Faculty')}
           </div>
-          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}>
-            STRATUM
-          </span>
-          <div className="mt-5 w-8" style={{ height: 1, background: 'var(--ef-border-muted)' }} />
-        </div>
+        }
+      >
+        <p className="ef-eyebrow mb-1.5">Student access</p>
+        <p className="mb-6" style={{ fontSize: 12.5, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+          Your Institute Code was provided in your registration email.
+        </p>
 
-        {/* Form card */}
-        <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
-          style={{ border: '1px solid var(--ef-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-            STUDENT ACCESS
-          </p>
-          <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-            Your Institute Code was provided in your registration email.
-          </p>
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col" style={{ gap: 16 }}>
+          <Field
+            label="Institute Code"
+            autoFocus
+            autoComplete="off"
+            autoCapitalize="characters"
+            value={instituteCode}
+            onChange={(e) => { setInstituteCode(e.target.value.toUpperCase()); setError(''); }}
+            disabled={loading}
+            placeholder="e.g. A3B7C2"
+            style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.16em' }}
+          />
 
-          <form onSubmit={handleSubmit} noValidate>
-            {/* Institute Code */}
-            <div className="mb-4">
-              <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                Institute Code
-              </label>
-              <input
-                type="text"
-                autoFocus
-                autoComplete="off"
-                autoCapitalize="characters"
-                value={instituteCode}
-                onChange={(e) => { setInstituteCode(e.target.value.toUpperCase()); setError(''); }}
-                disabled={loading}
-                placeholder="e.g. A3B7C2"
-                style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '0.16em' }}
-                onFocus={onFocus}
-                onBlur={onBlur}
-              />
-            </div>
+          <Field
+            label="Email address"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setError(''); }}
+            disabled={loading}
+            placeholder="you@institute.edu"
+          />
 
-            {/* Email */}
-            <div className="mb-4">
-              <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                Email address
-              </label>
-              <input
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                disabled={loading}
-                placeholder="you@institute.edu"
-                style={inputStyle}
-                onFocus={onFocus}
-                onBlur={onBlur}
-              />
-            </div>
-
-            {/* Password */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                  Password
-                </label>
-                <Link to="/student/forgot-password"
-                  className="text-xs transition-colors"
-                  style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
+          <PasswordField
+            label="Password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(''); }}
+            disabled={loading}
+            placeholder="••••••••••"
+            footer={
+              <div className="flex justify-end mt-2">
+                <Link
+                  to="/student/forgot-password"
+                  style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', textDecoration: 'none' }}
+                >
                   Forgot password?
                 </Link>
               </div>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                  disabled={loading}
-                  placeholder="••••••••••"
-                  style={{ ...inputStyle, paddingRight: 40 }}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                />
-                <button type="button" tabIndex={-1}
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: 'var(--ef-text-muted)' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-                  {showPassword ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
-                </button>
-              </div>
-            </div>
+            }
+          />
 
-            <AnimatePresence>
-              {error && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="text-xs mb-4 -mt-2" style={{ color: 'var(--ef-danger)' }}>
-                  {error}
-                </motion.p>
-              )}
-            </AnimatePresence>
+          <AnimatePresence>
+            {error && (
+              <motion.p
+                role="alert"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                style={{ fontSize: 12, color: 'var(--ef-danger)' }}
+              >
+                {error}
+              </motion.p>
+            )}
+          </AnimatePresence>
 
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="w-full py-2.5 text-sm flex items-center justify-center gap-2 transition-opacity"
-              style={{
-                background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
-                color: 'var(--ef-surface)',
-                borderRadius: 2,
-                letterSpacing: '0.04em',
-                cursor: canSubmit ? 'pointer' : 'not-allowed',
-              }}>
-              {loading
-                ? <><Loader2 size={14} className="animate-spin" /><span>Signing in…</span></>
-                : 'Sign in'}
-            </button>
-          </form>
-        </div>
-
-        {/* Role links */}
-        <div className="flex items-center justify-center gap-4 mt-6">
-          <Link to="/login" className="text-xs transition-colors"
-            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-            Web Owner
-          </Link>
-          <span style={{ color: 'var(--ef-border)' }}>·</span>
-          <Link to="/institute/login" className="text-xs transition-colors"
-            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-            Institute Admin
-          </Link>
-          <span style={{ color: 'var(--ef-border)' }}>·</span>
-          <Link to="/faculty/login" className="text-xs transition-colors"
-            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-            Faculty
-          </Link>
-        </div>
-      </motion.div>
-    </div>
+          <Button type="submit" variant="primary" size="lg" block disabled={!canSubmit} loading={loading}>
+            {loading ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+      </AuthShell>
+    </motion.div>
   );
 }

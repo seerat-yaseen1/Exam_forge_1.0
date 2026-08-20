@@ -1,137 +1,365 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+/**
+ * The student's Overview.
+ *
+ * ── WHAT CHANGED, AND WHY ─────────────────────────────────────────
+ * This page used to list the student's academic mappings — which school, which
+ * course, which section they had been placed in. Useful once, on the first
+ * login, and never again: the information does not change, and it answers a
+ * question nobody arrives at a dashboard asking.
+ *
+ * What they do arrive asking is "is there anything I have to do right now".
+ * So the page now leads with the single most urgent assessment and a live
+ * countdown to it, and the placement data has moved to the bottom, where it
+ * still is when it is wanted.
+ *
+ * ── ONE RULE, THREE SCREENS ───────────────────────────────────────
+ * The "most urgent" decision is `pickUpNext` in lib/studentSchedule, the same
+ * module the assessment list sorts with. This page cannot lead with an exam
+ * that the list does not have at the top, because both are reading the answer
+ * out of one function rather than each deciding for itself.
+ */
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion } from 'motion/react';
+import { useNavigate } from 'react-router';
 import {
-  GraduationCap, Loader2, School, BookOpen, BookMarked, Calendar,
-  Hash, Layers, Users, Group, ChevronRight, RefreshCw, AlertTriangle,
+  ArrowRight, BookOpen, Calendar, CheckCircle2, ChevronRight, ClipboardList,
+  GraduationCap, Hash, Layers, PlayCircle, RefreshCw, RotateCcw, School,
+  TrendingUp, Users, Group, Clock, Sparkles,
 } from 'lucide-react';
 import { useStudentAuth } from '../../context/StudentAuthContext';
-import { formatDate as formatShortDate } from '../../../lib/dateFormat';
+import { formatDayMonthTime } from '../../../lib/dateFormat';
 import {
   getMappingsByStudent,
   type AcademicMapping,
   type NodeLevel,
 } from '../../../lib/firebaseService';
+import { getAssessmentsForStudent, type Assessment } from '../../../lib/assessmentService';
+import { getAttemptsByStudent, type Attempt } from '../../../lib/submissionService';
+import { buildResultRows, summariseResults } from '../../../lib/studentResults';
+import {
+  buildSchedule,
+  countdownTo,
+  pickUpNext,
+  timeLeft,
+  type UpNext,
+} from '../../../lib/studentSchedule';
+import {
+  Button, Card, Chip, EmptyState, ErrorBanner, LiveDot, LoadingBlock,
+  PageHeader, PageShell, SectionHeading, StatRow, StatTile,
+} from '../../components/student/ui';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
+function getGreeting(hour: number): string {
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
   return 'Good evening';
 }
 
-function formatDate(): string {
-  return new Date().toLocaleDateString('en-US', {
+function longDate(d: Date): string {
+  return d.toLocaleDateString(undefined, {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
 }
 
+/**
+ * A clock that ticks no faster than the thing it is driving needs.
+ *
+ * The countdown card wants seconds; the rest of the page wants a date that
+ * changes at midnight. Re-rendering the whole page every second to keep a
+ * "3d left" chip accurate is work nobody sees.
+ */
+function useTicker(intervalMs: number): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}
+
 // ── Node level metadata ────────────────────────────────────────────
 
-const LEVEL_CONFIG: Record<NodeLevel, { label: string; icon: React.ReactNode; color: string; bg: string; border: string }> = {
-  school:          { label: 'School',          icon: <School size={12} strokeWidth={1.5} />,      color: '#4A6FA5', bg: '#EEF3FB', border: '#C8D8F0' },
-  academicLevel:   { label: 'Level',           icon: <GraduationCap size={12} strokeWidth={1.5} />, color: '#6B4A9B', bg: '#F3EEFB', border: '#D8C8F0' },
-  program:         { label: 'Program',         icon: <BookOpen size={12} strokeWidth={1.5} />,    color: 'var(--ef-success)', bg: 'var(--ef-success-bg-alt)', border: 'var(--ef-success-border-alt)' },
-  academicSession: { label: 'Session',         icon: <Calendar size={12} strokeWidth={1.5} />,    color: '#7A5A2A', bg: '#FAF5EE', border: '#E8D8B8' },
-  academicYear:    { label: 'Year',            icon: <Hash size={12} strokeWidth={1.5} />,        color: '#5A7A2A', bg: '#F2F7EE', border: '#CCDAB8' },
-  semester:        { label: 'Semester',        icon: <Layers size={12} strokeWidth={1.5} />,      color: '#2A6A7A', bg: '#EEF6F8', border: '#B8D8DE' },
-  course:          { label: 'Course',          icon: <BookMarked size={12} strokeWidth={1.5} />,  color: '#6A2A3A', bg: '#F8EEF1', border: '#E0B8C4' },
-  section:         { label: 'Section',         icon: <Users size={12} strokeWidth={1.5} />,       color: 'var(--ef-text-subtle)', bg: '#F3F2EF', border: 'var(--ef-border-muted)' },
-  group:           { label: 'Group',           icon: <Group size={12} strokeWidth={1.5} />,       color: 'var(--ef-success)', bg: 'var(--ef-success-bg-alt)', border: 'var(--ef-success-border-alt)' },
+const LEVEL_CONFIG: Record<NodeLevel, { label: string; icon: React.ReactNode }> = {
+  school:          { label: 'School',   icon: <School size={11} strokeWidth={1.6} /> },
+  academicLevel:   { label: 'Level',    icon: <GraduationCap size={11} strokeWidth={1.6} /> },
+  program:         { label: 'Program',  icon: <BookOpen size={11} strokeWidth={1.6} /> },
+  academicSession: { label: 'Session',  icon: <Calendar size={11} strokeWidth={1.6} /> },
+  academicYear:    { label: 'Year',     icon: <Hash size={11} strokeWidth={1.6} /> },
+  semester:        { label: 'Semester', icon: <Layers size={11} strokeWidth={1.6} /> },
+  course:          { label: 'Course',   icon: <BookOpen size={11} strokeWidth={1.6} /> },
+  section:         { label: 'Section',  icon: <Users size={11} strokeWidth={1.6} /> },
+  group:           { label: 'Group',    icon: <Group size={11} strokeWidth={1.6} /> },
 };
 
-// ── Assignment card ────────────────────────────────────────────────
+const LEVEL_ORDER: NodeLevel[] = [
+  'school', 'academicLevel', 'program', 'academicSession',
+  'academicYear', 'semester', 'course', 'section', 'group',
+];
 
-function AssignmentCard({ mapping, index }: { mapping: AcademicMapping; index: number }) {
-  const cfg = LEVEL_CONFIG[mapping.nodeType];
+// ══════════════════════════════════════════════════════════════════
+// UP NEXT
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * The countdown.
+ *
+ * Days and hours are dropped once they are zero rather than shown as "00d",
+ * because a padded zero is a digit the eye has to read before discovering it
+ * means nothing. Under an hour the seconds appear — that is the point at
+ * which they stop being decoration and start being the information.
+ */
+function Countdown({ iso, now, urgent }: { iso: string; now: Date; urgent: boolean }) {
+  const c = countdownTo(iso, now);
+  if (c.expired) {
+    return (
+      <span className="ef-display" style={{ fontSize: 22, color: 'var(--ef-danger)' }}>
+        Closed
+      </span>
+    );
+  }
+
+  const showSeconds = c.days === 0 && c.hours === 0;
+  const parts: Array<[number, string]> = [];
+  if (c.days > 0) parts.push([c.days, 'd']);
+  if (c.days > 0 || c.hours > 0) parts.push([c.hours, 'h']);
+  parts.push([c.minutes, 'm']);
+  if (showSeconds) parts.push([c.seconds, 's']);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: index * 0.04 }}
-      className="p-4"
-      style={{
-        background: 'var(--ef-surface)',
-        border: '1px solid var(--ef-border)',
-        borderRadius: 3,
-      }}
+    <span
+      className="ef-display flex items-baseline gap-1.5"
+      style={{ fontSize: 26, lineHeight: 1, color: urgent ? 'var(--ef-danger)' : 'var(--ef-ink)' }}
+      // The value changes every second; announcing each one would make a
+      // screen reader unusable. The label beside it already says what the
+      // number is counting down to.
+      aria-hidden="true"
     >
-      {/* Level badge + name */}
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-flex items-center gap-1 text-xs px-2 py-0.5"
-            style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, borderRadius: 2 }}
-          >
-            {cfg.icon}
-            {cfg.label}
-          </span>
-        </div>
-        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }}>
-          {formatShortDate(mapping.createdAt)}
+      {parts.map(([value, unit]) => (
+        <span key={unit}>
+          {value}
+          <span style={{ fontSize: 13, color: 'var(--ef-text-muted)', fontFamily: 'var(--font-sans)' }}>{unit}</span>
         </span>
-      </div>
-
-      <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.5, marginBottom: 8 }}>
-        {mapping.nodeName}
-      </p>
-
-      {/* Breadcrumb trail */}
-      <div className="flex items-center flex-wrap gap-0.5">
-        {mapping.breadcrumb.split(' › ').map((crumb, i, arr) => (
-          <span key={i} className="flex items-center gap-0.5">
-            <span
-              className="text-xs"
-              style={{
-                color: i === arr.length - 1 ? 'var(--ef-text-subtle)' : 'var(--ef-text-muted)',
-                fontWeight: i === arr.length - 1 ? 500 : 400,
-              }}
-            >
-              {crumb}
-            </span>
-            {i < arr.length - 1 && (
-              <ChevronRight size={10} strokeWidth={1.5} style={{ color: 'var(--ef-border-muted)', flexShrink: 0 }} />
-            )}
-          </span>
-        ))}
-      </div>
-    </motion.div>
+      ))}
+    </span>
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────
+function UpNextCard({ up, now }: { up: UpNext; now: Date }) {
+  const navigate = useNavigate();
+  const a = up.entry.assessment;
+
+  const urgency = up.deadline ? timeLeft(up.deadline, now) : null;
+  const urgent = up.kind === 'resume' || (urgency?.urgent ?? false);
+
+  const headline =
+    up.kind === 'resume'   ? 'You have a sitting in progress'
+    : up.kind === 'open'   ? 'Open now'
+    : 'Scheduled next';
+
+  const deadlineLabel =
+    up.kind === 'upcoming' ? 'Opens in' : 'Closes in';
+
+  const cta =
+    up.kind === 'resume'   ? { label: 'Resume sitting', icon: <RotateCcw size={13} strokeWidth={1.6} /> }
+    : up.kind === 'open'   ? { label: 'Begin', icon: <PlayCircle size={13} strokeWidth={1.6} /> }
+    : null;
+
+  return (
+    <Card
+      padded={false}
+      style={{
+        overflow: 'hidden',
+        borderColor: urgent ? 'var(--ef-danger-border)' : 'var(--ef-accent-border)',
+        boxShadow: 'var(--ef-shadow-md)',
+      }}
+    >
+      {/* The accent band. It is the one place on the console where the
+          student's theme is used at full strength — this card is the thing
+          they are meant to look at first, and colour is how a page says so. */}
+      <div
+        style={{
+          height: 3,
+          background: urgent ? 'var(--ef-danger)' : 'var(--ef-accent)',
+        }}
+      />
+
+      <div style={{ padding: 'calc(var(--ef-pad-card) + 4px)' }}>
+        <div className="flex items-start justify-between gap-5 flex-wrap">
+          <div style={{ minWidth: 240, flex: 1 }}>
+            <div className="ef-eyebrow mb-2.5">
+              <span
+                className="ef-eyebrow-dot"
+                style={urgent ? { background: 'var(--ef-danger)' } : undefined}
+              />
+              {headline}
+            </div>
+
+            <h2 className="ef-display" style={{ fontSize: 21, lineHeight: 1.25, color: 'var(--ef-ink)' }}>
+              {a.title || 'Untitled Assessment'}
+            </h2>
+
+            <div
+              className="flex items-center gap-3.5 flex-wrap mt-3"
+              style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}
+            >
+              {a.subject && (
+                <span className="flex items-center gap-1.5">
+                  <BookOpen size={11} strokeWidth={1.5} />
+                  {a.subject}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5">
+                <ClipboardList size={11} strokeWidth={1.5} />
+                {a.questions.length} question{a.questions.length !== 1 ? 's' : ''}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Layers size={11} strokeWidth={1.5} />
+                {a.totalMarks} marks
+              </span>
+              {up.deadline && (
+                <span className="flex items-center gap-1.5">
+                  <Calendar size={11} strokeWidth={1.5} />
+                  {formatDayMonthTime(up.deadline)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {up.deadline && (
+            <div style={{ minWidth: 132 }}>
+              <p
+                style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}
+              >
+                {deadlineLabel}
+              </p>
+              <div className="mt-1.5">
+                <Countdown iso={up.deadline} now={now} urgent={urgent} />
+              </div>
+              {/* The accessible version of the same fact, phrased once rather
+                  than re-announced every second. */}
+              <span className="sr-only">
+                {deadlineLabel} {urgency?.label ?? ''}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap mt-5">
+          {cta && (
+            <Button variant="primary" onClick={() => navigate(`/student/exam/${a.id}/briefing`)}>
+              {cta.icon}
+              {cta.label}
+            </Button>
+          )}
+          <Button onClick={() => navigate('/student/assessments')}>
+            All assessments
+            <ChevronRight size={12} strokeWidth={1.6} />
+          </Button>
+          {up.kind === 'resume' && (
+            <span style={{ fontSize: 11.5, color: 'var(--ef-warning)' }}>
+              An unfinished sitting is submitted automatically when its window closes.
+            </span>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PLACEMENT
+// ══════════════════════════════════════════════════════════════════
+
+function PlacementCard({ mappings }: { mappings: AcademicMapping[] }) {
+  const grouped = useMemo(() => {
+    const byLevel = new Map<NodeLevel, AcademicMapping[]>();
+    for (const m of mappings) {
+      if (!byLevel.has(m.nodeType)) byLevel.set(m.nodeType, []);
+      byLevel.get(m.nodeType)!.push(m);
+    }
+    return LEVEL_ORDER
+      .filter((l) => byLevel.has(l))
+      .map((l) => ({ level: l, items: byLevel.get(l)! }));
+  }, [mappings]);
+
+  if (grouped.length === 0) return null;
+
+  return (
+    <Card>
+      <div className="flex flex-col" style={{ gap: 14 }}>
+        {grouped.map(({ level, items }) => (
+          <div key={level} className="flex items-start gap-3 flex-wrap">
+            <span
+              className="flex items-center gap-1.5 flex-shrink-0"
+              style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)', width: 104, paddingTop: 3 }}
+            >
+              {LEVEL_CONFIG[level].icon}
+              {LEVEL_CONFIG[level].label}
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap flex-1" style={{ minWidth: 200 }}>
+              {items.map((m) => (
+                <Chip key={m.id} title={m.breadcrumb}>
+                  {m.nodeName}
+                </Chip>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 pt-3" style={{ fontSize: 11, color: 'var(--ef-text-muted)', borderTop: '1px solid var(--ef-border-subtle)' }}>
+        Your placement is managed by your institute administrator. Hover a tag to see its full path.
+      </p>
+    </Card>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ══════════════════════════════════════════════════════════════════
 
 export function StudentLandingPage() {
   const { session } = useStudentAuth();
+  const navigate = useNavigate();
 
-  const [mappings, setMappings]   = useState<AcademicMapping[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
-  const [lastSynced, setLastSynced] = useState<Date | null>(null);
-  const [syncAge, setSyncAge]     = useState('');
+  const [mappings, setMappings]       = useState<AcademicMapping[]>([]);
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [attempts, setAttempts]       = useState<Attempt[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState('');
+  const [lastSynced, setLastSynced]   = useState<Date | null>(null);
+  const [syncAge, setSyncAge]         = useState('');
 
-  const fetchMappings = useCallback(async () => {
+  const now = useTicker(1000);
+
+  const load = useCallback(async () => {
     if (!session?.studentId) return;
     setLoading(true);
     setError('');
     try {
-      const data = await getMappingsByStudent(session.studentId);
-      // Sort by creation date descending
-      data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setMappings(data);
+      // Three reads, one round trip. The placement list is the slowest and the
+      // least urgent of them, and running it after the assessments would have
+      // the page's least important section gate its most important one.
+      const [mapList, aList, attemptList] = await Promise.all([
+        getMappingsByStudent(session.studentId),
+        getAssessmentsForStudent(),
+        getAttemptsByStudent(session.studentId),
+      ]);
+      setMappings(mapList);
+      setAssessments(aList);
+      setAttempts(attemptList);
       setLastSynced(new Date());
     } catch (e: any) {
-      setError(e.message || 'Failed to load assignments.');
+      console.error('[StudentLandingPage] load error:', e);
+      setError(e?.message || 'Failed to load your dashboard.');
     } finally {
       setLoading(false);
     }
   }, [session?.studentId]);
 
-  useEffect(() => { fetchMappings(); }, [fetchMappings]);
+  useEffect(() => { load(); }, [load]);
 
-  // Sync age ticker
   useEffect(() => {
     if (!lastSynced) return;
     const fmt = (d: Date) => {
@@ -145,197 +373,226 @@ export function StudentLandingPage() {
     return () => clearInterval(t);
   }, [lastSynced]);
 
+  // ── Derived ───────────────────────────────────────────────────
+  //
+  // Bucketed against a MINUTE-resolution clock, not the one-second ticker that
+  // drives the countdown. The buckets only change when a window opens or
+  // closes, so recomputing them 60 times a minute would rebuild every card in
+  // the page for an answer that changed once.
+  const minuteKey = Math.floor(now.getTime() / 60_000);
+  const buckets = useMemo(
+    () => buildSchedule(assessments, attempts, session?.studentId ?? '', new Date(minuteKey * 60_000)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [assessments, attempts, session?.studentId, minuteKey],
+  );
+
+  const upNext = useMemo(() => pickUpNext(buckets), [buckets]);
+
+  const resultRows = useMemo(() => {
+    const byAssessment: Record<string, Attempt[]> = {};
+    for (const at of attempts) (byAssessment[at.assessmentId] ??= []).push(at);
+    return buildResultRows(assessments, byAssessment);
+  }, [assessments, attempts]);
+
+  const summary = useMemo(() => summariseResults(resultRows), [resultRows]);
+
+  const openNow = buckets.available.filter((e) => e.availability === 'available').length;
+
   if (!session) return null;
 
-  const firstName = session.name.split(' ')[0];
-
-  // Group mappings by level
-  const grouped = mappings.reduce<Record<string, AcademicMapping[]>>((acc, m) => {
-    const label = LEVEL_CONFIG[m.nodeType]?.label ?? m.nodeType;
-    if (!acc[label]) acc[label] = [];
-    acc[label].push(m);
-    return acc;
-  }, {});
-
-  // Preferred display order
-  const LEVEL_ORDER: NodeLevel[] = [
-    'school', 'academicLevel', 'program', 'academicSession',
-    'academicYear', 'semester', 'course', 'section', 'group',
-  ];
-
-  const orderedGroups = LEVEL_ORDER
-    .map((nl) => ({ nodeType: nl, label: LEVEL_CONFIG[nl].label, items: grouped[LEVEL_CONFIG[nl].label] ?? [] }))
-    .filter((g) => g.items.length > 0);
+  const firstName = session.name.split(' ')[0] || session.name;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="px-8 py-10"
-      style={{ maxWidth: 960, margin: '0 auto' }}
-    >
-      {/* Page header */}
-      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
-        <div className="flex items-center gap-2 mb-2">
-          <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--ef-success)' }} />
-          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
-            STUDENT · {session.instituteName.toUpperCase()}
-          </p>
-        </div>
-        <p className="text-xs mb-2" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
-          {formatDate()}
-        </p>
-        <h1 className="text-2xl font-light" style={{ color: 'var(--ef-ink)', letterSpacing: '0.02em' }}>
-          {getGreeting()}, {firstName}.
-        </h1>
-        <div className="flex items-center gap-3 mt-2">
-          <span className="inline-block text-xs px-2 py-0.5"
-            style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-subtle)', borderRadius: 2 }}>
-            Student
-          </span>
-          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-            <span style={{ fontFamily: 'monospace', letterSpacing: '0.08em', color: 'var(--ef-text-muted)' }}>
-              {session.email}
-            </span>
-          </span>
-          <span style={{ color: 'var(--ef-border)' }}>·</span>
-          <span className="inline-flex items-center gap-1.5 text-xs"
-            style={session.status === 'active'
-              ? { color: 'var(--ef-success)' }
-              : { color: 'var(--ef-text-muted)' }}>
-            <span style={{
-              width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
-              background: session.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
-            }} />
+    <PageShell>
+      <PageHeader
+        eyebrow={
+          <>
+            <span className="ef-eyebrow-dot" />
+            {longDate(now)}
+          </>
+        }
+        title={
+          <>
+            {getGreeting(now.getHours())}, {firstName}.
+          </>
+        }
+        subtitle={
+          openNow > 0
+            ? `You have ${openNow} assessment${openNow !== 1 ? 's' : ''} open right now.`
+            : 'Nothing is open right now — here is where everything stands.'
+        }
+        actions={
+          <>
+            {lastSynced && !loading && <LiveDot label={syncAge} />}
+            <Button size="sm" onClick={load} disabled={loading} aria-label="Refresh dashboard">
+              <RefreshCw size={11} strokeWidth={1.6} className={loading ? 'animate-spin' : ''} />
+              Refresh
+            </Button>
+          </>
+        }
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <Chip tone={session.status === 'active' ? 'success' : 'muted'}>
             {session.status === 'active' ? 'Active' : 'Disabled'}
+          </Chip>
+          <Chip>{session.instituteName}</Chip>
+          <span style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', fontFamily: 'ui-monospace, monospace' }}>
+            {session.email}
           </span>
         </div>
-      </div>
+      </PageHeader>
 
-      {/* Assignments section */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-            ACADEMIC ASSIGNMENTS
-          </span>
-          {!loading && mappings.length > 0 && (
-            <span className="text-xs px-1.5 py-0.5"
-              style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 10 }}>
-              {mappings.length}
-            </span>
-          )}
+      {error && (
+        <div className="mb-6">
+          <ErrorBanner message={error} onRetry={load} />
         </div>
+      )}
 
-        <div className="flex items-center gap-3">
-          {/* Live indicator */}
-          {lastSynced && !loading && (
-            <div className="flex items-center gap-1.5 select-none">
-              <div className="relative w-2 h-2 flex items-center justify-center">
-                <span className="absolute inline-flex w-2 h-2 rounded-full opacity-60"
-                  style={{ background: 'var(--ef-success)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-success)' }} />
-              </div>
-              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{syncAge}</span>
-            </div>
+      {loading ? (
+        <LoadingBlock label="Loading your dashboard…" rows={3} />
+      ) : (
+        <div className="flex flex-col" style={{ gap: 28 }}>
+          {/* ── Up next ── */}
+          {upNext ? (
+            <UpNextCard up={upNext} now={now} />
+          ) : (
+            <EmptyState
+              icon={<CheckCircle2 size={28} strokeWidth={1} />}
+              title="Nothing due"
+              body="No assessment is open or scheduled for you at the moment. Anything your institute publishes will show up here first."
+              action={
+                <Button onClick={() => navigate('/student/assessments')}>
+                  Browse assessments
+                  <ChevronRight size={12} strokeWidth={1.6} />
+                </Button>
+              }
+            />
           )}
-          <button
-            onClick={fetchMappings}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors"
-            style={{ border: '1px solid var(--ef-border)', color: 'var(--ef-text-subtle)', borderRadius: 2, background: 'var(--ef-surface)' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-ink)')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)')}
-          >
-            <RefreshCw size={10} strokeWidth={1.5} className={loading ? 'animate-spin' : ''} />
-            Refresh
-          </button>
-        </div>
-      </div>
 
-      {/* Content */}
-      <AnimatePresence mode="wait">
-        {loading && (
-          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="flex flex-col items-center py-20">
-              <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-              <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Loading assignments…</p>
-            </div>
-          </motion.div>
-        )}
+          {/* ── At a glance ── */}
+          <section>
+            <SectionHeading label="At a glance" />
+            <StatRow>
+              <StatTile
+                label="Open now"
+                value={openNow}
+                icon={<PlayCircle size={12} strokeWidth={1.6} />}
+                tone={openNow > 0 ? 'accent' : undefined}
+                sub={buckets.available.length - openNow > 0
+                  ? `${buckets.available.length - openNow} scheduled`
+                  : 'nothing waiting to open'}
+                hint="Assessments you can start right now."
+              />
+              <StatTile
+                label="Submitted"
+                value={buckets.submitted.length}
+                icon={<CheckCircle2 size={12} strokeWidth={1.6} />}
+                sub={summary.awaitingMarking > 0 ? `${summary.awaitingMarking} still being marked` : 'all marked'}
+                hint="Papers you have handed in."
+              />
+              <StatTile
+                label="Missed"
+                value={buckets.missed.length}
+                icon={<Clock size={12} strokeWidth={1.6} />}
+                tone={buckets.missed.length > 0 ? 'warning' : undefined}
+                sub={buckets.missed.length > 0 ? 'closed without a submission' : 'none'}
+                hint="Assessments that closed before you submitted."
+              />
+              <StatTile
+                label="Average best"
+                value={summary.averageBestPercentage !== null ? `${summary.averageBestPercentage}%` : '—'}
+                icon={<TrendingUp size={12} strokeWidth={1.6} />}
+                sub={summary.averageBestPercentage !== null
+                  ? `across ${summary.settledCount} fully marked`
+                  : 'no marked papers yet'}
+                hint="Mean of your best sitting in each fully marked assessment. Papers still being marked are left out."
+              />
+            </StatRow>
+          </section>
 
-        {!loading && error && (
-          <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="flex items-center gap-2.5 px-4 py-3"
-              style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
-              <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
-              <p className="text-xs flex-1" style={{ color: 'var(--ef-danger)' }}>{error}</p>
-              <button onClick={fetchMappings} className="text-xs"
-                style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>Retry</button>
-            </div>
-          </motion.div>
-        )}
-
-        {!loading && !error && mappings.length === 0 && (
-          <motion.div key="empty" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-            <div className="flex flex-col items-center py-24"
-              style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
-              <GraduationCap size={32} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
-              <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
-                No assignments yet
-              </p>
-              <p className="text-xs mt-2" style={{ color: 'var(--ef-border-muted)', maxWidth: 280, textAlign: 'center', lineHeight: 1.7 }}>
-                You haven't been assigned to any courses, sections, or groups. Your institute administrator will set this up.
-              </p>
-            </div>
-          </motion.div>
-        )}
-
-        {!loading && !error && mappings.length > 0 && (
-          <motion.div key="content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            {/* Grouped by level */}
-            {orderedGroups.length > 0 ? (
-              <div className="space-y-8">
-                {orderedGroups.map(({ nodeType, label, items }) => {
-                  const cfg = LEVEL_CONFIG[nodeType];
+          {/* ── Recently released ── */}
+          {resultRows.length > 0 && (
+            <section>
+              <SectionHeading
+                label="Recent results"
+                count={resultRows.length}
+                action={
+                  <Button size="sm" variant="ghost" onClick={() => navigate('/student/progress')}>
+                    See progress
+                    <ArrowRight size={11} strokeWidth={1.6} />
+                  </Button>
+                }
+              />
+              <div className="flex flex-col" style={{ gap: 'var(--ef-gap)' }}>
+                {resultRows.slice(0, 3).map((row, i) => {
+                  const entry = row.best ?? row.latest;
+                  const pct = entry.attempt.scores?.percentage ?? null;
+                  const withheld = row.visibility === 'withheld';
                   return (
-                    <div key={nodeType}>
-                      {/* Group header */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-                          {label.toUpperCase()}S
-                        </span>
-                        <span className="text-xs px-1.5 py-0.5"
-                          style={{ background: cfg.bg, color: cfg.color, borderRadius: 10 }}>
-                          {items.length}
-                        </span>
+                    <motion.button
+                      key={row.assessment.id}
+                      type="button"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.24, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                      onClick={() =>
+                        navigate(
+                          `/student/exam/${row.assessment.id}/results?attempt=${encodeURIComponent(entry.attempt.id)}`,
+                        )
+                      }
+                      className="ef-card ef-card--interactive flex items-center gap-4 text-left"
+                      style={{ padding: 'var(--ef-pad-card)' }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate" style={{ fontSize: 13.5, color: 'var(--ef-ink)' }}>
+                          {row.assessment.title || 'Untitled Assessment'}
+                        </p>
+                        <p className="truncate mt-1" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+                          {row.assessment.subject ? `${row.assessment.subject} · ` : ''}
+                          {entry.attempt.submittedAt ? formatDayMonthTime(entry.attempt.submittedAt) : 'not submitted'}
+                        </p>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {items.map((m, i) => (
-                          <AssignmentCard key={m.id} mapping={m} index={i} />
-                        ))}
-                      </div>
-                    </div>
+                      {withheld ? (
+                        <Chip small>Withheld</Chip>
+                      ) : pct !== null ? (
+                        <span className="ef-display" style={{ fontSize: 20, color: 'var(--ef-ink)' }}>
+                          {pct}%
+                        </span>
+                      ) : (
+                        <Chip small tone="warning">Awaiting marking</Chip>
+                      )}
+                      <ChevronRight size={14} strokeWidth={1.6} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
+                    </motion.button>
                   );
                 })}
               </div>
-            ) : (
-              // Flat list fallback (ungrouped)
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {mappings.map((m, i) => (
-                  <AssignmentCard key={m.id} mapping={m} index={i} />
-                ))}
-              </div>
-            )}
+            </section>
+          )}
 
-            {/* Footer note */}
-            <p className="text-xs mt-6" style={{ color: 'var(--ef-text-muted)', textAlign: 'center' }}>
-              Your assignments are managed by your institute administrator.
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+          {/* ── Placement ── */}
+          <section>
+            <SectionHeading
+              label="Your placement"
+              count={mappings.length || undefined}
+              hint="Where your institute has placed you in its academic structure."
+            />
+            {mappings.length > 0 ? (
+              <PlacementCard mappings={mappings} />
+            ) : (
+              <EmptyState
+                icon={<GraduationCap size={26} strokeWidth={1} />}
+                title="No placement yet"
+                body="You have not been assigned to any courses, sections or groups. Your institute administrator sets this up."
+              />
+            )}
+          </section>
+
+          <p className="text-center flex items-center justify-center gap-1.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+            <Sparkles size={11} strokeWidth={1.6} />
+            Prefer a different look? Pick a theme from the palette icon in the header.
+          </p>
+        </div>
+      )}
+    </PageShell>
   );
 }

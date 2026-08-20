@@ -6,7 +6,7 @@ import { usePlatformSettings } from '../context/PlatformSettingsContext';
 import { LogoMark } from '../components/PlatformLogo';
 import { AccountProfile } from '../components/console/account';
 import { Button, Card, SectionHeading } from '../components/console/ui';
-import { Field } from '../components/student/fields';
+import { Field } from '../components/console/fields';
 
 /**
  * The Web Owner's profile — and the platform's own identity.

@@ -5,7 +5,7 @@ import { Check, Copy, ShieldCheck, Smartphone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ChangePassword } from '../components/console/account';
 import { Button, Card, Chip, SectionHeading } from '../components/console/ui';
-import { Field } from '../components/student/fields';
+import { Field } from '../components/console/fields';
 
 /**
  * The Web Owner's security page: password, then two-factor.

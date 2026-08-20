@@ -1,12 +1,13 @@
 /**
- * Form fields for the student's four credential screens.
+ * Form fields for every credential screen in the product.
  *
  * Login, first-login change, reset and the security page each carried their own
  * copy of the same `inputStyle` object, the same pair of focus/blur handlers
- * that repainted the border by hand, and — in three of them — the same
- * `StrengthBar`. Four copies of a control is four places for a theme token to
- * be missed, and the hand-rolled focus handling meant `:focus-visible` never
- * applied to any of them.
+ * that repainted the border by hand, and — in most of them — the same
+ * `StrengthBar`. Written once per screen, per role, that came to sixteen
+ * copies of one text field: sixteen places for a theme token to be missed,
+ * and the hand-rolled focus handling meant `:focus-visible` never applied to
+ * any of them.
  *
  * The styling now lives in `.ef-input` (styles/console.css). These components
  * are what is left once it does: a label, a field, and the one piece of real

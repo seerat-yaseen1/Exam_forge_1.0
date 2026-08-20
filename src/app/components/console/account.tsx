@@ -23,7 +23,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Check, KeyRound, ShieldCheck } from 'lucide-react';
-import { MatchNote, PasswordField, StrengthBar } from '../student/fields';
+import { MatchNote, PasswordField, StrengthBar } from './fields';
 import { Button, Card, Chip, PageHeader, PageShell, SectionHeading } from './ui';
 import { Avatar, Fact, Facts } from './data';
 

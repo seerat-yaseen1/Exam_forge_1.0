@@ -7,7 +7,7 @@ import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../../components/PlatformLogo';
 import {
   AuthShell, Field, MatchNote, PasswordField, StrengthBar,
-} from '../../components/student/fields';
+} from '../../components/console/fields';
 import { Button } from '../../components/console/ui';
 
 type Stage = 'form' | 'success';

@@ -1,307 +1,142 @@
 import { useState } from 'react';
-import { useNavigate, Link, Navigate } from 'react-router';
+import { useNavigate, Navigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { usePlatformSettings } from '../context/PlatformSettingsContext';
-import { LogoMark } from '../components/PlatformLogo';
+import { BackToSignIn, FormError, RoleSwitcher, SignIn, useBrand } from '../components/console/auth';
+import { AuthShell, Field } from '../components/console/fields';
+import { Button } from '../components/console/ui';
 
-const inputStyle: React.CSSProperties = {
-  background: 'var(--ef-canvas-raised)',
-  border: '1px solid var(--ef-border)',
-  color: 'var(--ef-ink)',
-  borderRadius: 2,
-  width: '100%',
-  outline: 'none',
-  fontSize: 13,
-  padding: '10px 14px',
-};
+/**
+ * The Web Owner's sign-in.
+ *
+ * The credential half is the shared SignIn every role uses. What is only true
+ * here is the second factor: this account can hold a TOTP enrolment, so a
+ * correct password may be answered with a challenge rather than a session.
+ *
+ * That challenge REPLACES the form rather than appearing beside it. Two
+ * credential forms on one screen is a screen people fill in wrongly under
+ * time pressure, and this one always arrives under time pressure — the code
+ * on the phone is already counting down.
+ */
+
+const OTHER_ROLES = [
+  { to: '/institute/login', label: 'Institute Admin' },
+  { to: '/faculty/login', label: 'Faculty' },
+  { to: '/student/login', label: 'Student' },
+];
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { user, login, mfaPending, resolveMfaSignIn } = useAuth();
-  const { platformSettings } = usePlatformSettings();
-
-  const [email, setEmail]               = useState('');
-  const [password, setPassword]         = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]               = useState('');
-  const [loading, setLoading]           = useState(false);
-  // Second-factor step
-  const [mfaCode, setMfaCode]           = useState('');
 
   if (user) return <Navigate to="/dashboard" replace />;
 
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !loading;
+  // `mfaPending` is owned by the auth context — it is set when Firebase
+  // answers the password with a multi-factor resolver, and cleared when the
+  // code is accepted. Reading it here rather than keeping a second copy is
+  // what stops the two from disagreeing after a failed code.
+  if (mfaPending) return <SecondFactor onResolve={resolveMfaSignIn} />;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  return (
+    <SignIn
+      audience="Web owner access"
+      hint="The account that administers every institute on the platform."
+      forgotTo="/forgot-password"
+      otherRoles={OTHER_ROLES}
+      onSubmit={async ({ email, password }) => {
+        const result = await login(email, password);
+        // On success the context either signs in — and the redirect above
+        // takes over on the next render — or raises the second factor.
+        return result;
+      }}
+    />
+  );
+}
+
+function SecondFactor({
+  onResolve,
+}: {
+  onResolve: (code: string) => Promise<{ success: boolean; error?: string }>;
+}) {
+  const navigate = useNavigate();
+  const brand = useBrand();
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (code.trim().length < 6 || busy) return;
     setError('');
-    setLoading(true);
-    const result = await login(email, password);
-    setLoading(false);
+    setBusy(true);
+    const result = await onResolve(code);
+    setBusy(false);
     if (!result.success) {
-      // Not a real error — the account has 2FA and we now need the code.
-      if (result.error === '__MFA_REQUIRED__') { setError(''); return; }
-      setError(result.error ?? 'An error occurred.');
+      setError(result.error ?? 'That code was not accepted.');
+      setCode('');
       return;
     }
     navigate('/dashboard', { replace: true });
-  };
-
-  const handleMfaSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (mfaCode.trim().length < 6 || loading) return;
-    setError('');
-    setLoading(true);
-    const result = await resolveMfaSignIn(mfaCode);
-    setLoading(false);
-    if (!result.success) {
-      setError(result.error ?? 'Verification failed.');
-      return;
-    }
-    navigate('/dashboard', { replace: true });
-  };
-
-  const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.target.style.borderColor = 'var(--ef-ink)';
-    e.target.style.background = 'var(--ef-surface)';
-  };
-  const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.target.style.borderColor = 'var(--ef-border)';
-    e.target.style.background = 'var(--ef-canvas-raised)';
   };
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: 'var(--ef-canvas)' }}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
     >
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[380px]"
+      <AuthShell
+        mark={brand.mark}
+        wordmark={brand.wordmark}
+        footer={<RoleSwitcher links={OTHER_ROLES} />}
       >
-        {/* Platform identity */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
-            {platformSettings.logoUrl ? (
-              <img
-                src={platformSettings.logoUrl}
-                alt={platformSettings.name}
-                style={{ width: 36, height: 36, objectFit: 'contain' }}
-              />
-            ) : (
-              <LogoMark px={36} />
-            )}
-          </div>
-          <span
-            className="text-sm font-medium"
-            style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}
+        <p className="ef-eyebrow mb-3">
+          <ShieldCheck size={12} strokeWidth={1.8} />
+          Two-factor required
+        </p>
+        <p className="ef-t-sm ef-muted mb-6" style={{ lineHeight: 'var(--ef-leading-normal)' }}>
+          Your password was accepted. Enter the six-digit code from your authenticator app to
+          finish signing in.
+        </p>
+
+        <form onSubmit={submit} noValidate className="flex flex-col" style={{ gap: 16 }}>
+          <Field
+            label="Authentication code"
+            autoFocus
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) => {
+              setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+              setError('');
+            }}
+            disabled={busy}
+            placeholder="000000"
+            style={{
+              fontFamily: 'ui-monospace, monospace',
+              letterSpacing: '0.4em',
+              fontSize: 18,
+              textAlign: 'center',
+            }}
+          />
+
+          <FormError message={error} />
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            block
+            disabled={code.length < 6 || busy}
+            loading={busy}
           >
-            {platformSettings.name}
-          </span>
-          <div className="mt-5 w-8" style={{ height: 1, background: 'var(--ef-border-muted)' }} />
-        </div>
+            {busy ? 'Verifying…' : 'Verify and sign in'}
+          </Button>
+        </form>
 
-        {/* Form card */}
-        <div
-          className="bg-white px-5 py-7 sm:px-8 sm:py-8"
-          style={{
-            border: '1px solid var(--ef-border)',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-            {mfaPending ? 'TWO-FACTOR VERIFICATION' : 'WEB OWNER ACCESS'}
-          </p>
-
-          {mfaPending ? (
-            <form onSubmit={handleMfaSubmit} noValidate>
-              <p className="text-xs mb-6" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-                Enter the 6-digit code from your authenticator app to finish signing in.
-              </p>
-              <div className="mb-6">
-                <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                  Authentication code
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  autoFocus
-                  maxLength={6}
-                  value={mfaCode}
-                  onChange={(e) => { setMfaCode(e.target.value.replace(/\D/g, '')); setError(''); }}
-                  disabled={loading}
-                  placeholder="000000"
-                  style={{ ...inputStyle, letterSpacing: '0.3em', textAlign: 'center', fontSize: 16 }}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                />
-              </div>
-
-              {error && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-4 -mt-2">
-                  <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</p>
-                </motion.div>
-              )}
-
-              <button
-                type="submit"
-                disabled={mfaCode.trim().length < 6 || loading}
-                className="w-full py-2.5 text-sm flex items-center justify-center gap-2 transition-opacity"
-                style={{
-                  background: mfaCode.trim().length === 6 && !loading ? 'var(--ef-ink)' : 'var(--ef-track)',
-                  color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em',
-                  cursor: mfaCode.trim().length === 6 && !loading ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {loading ? (<><Loader2 size={14} className="animate-spin" /><span>Verifying…</span></>) : 'Verify & sign in'}
-              </button>
-            </form>
-          ) : (
-          <form onSubmit={handleSubmit} noValidate>
-            {/* Email */}
-            <div className="mb-4">
-              <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                Email address
-              </label>
-              <input
-                type="email"
-                autoComplete="email"
-                autoFocus
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                disabled={loading}
-                placeholder="you@platform.com"
-                style={inputStyle}
-                onFocus={onFocus}
-                onBlur={onBlur}
-              />
-            </div>
-
-            {/* Password */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                  Password
-                </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-xs transition-colors"
-                  style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-ink)')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                  disabled={loading}
-                  placeholder="••••••••••"
-                  style={{ ...inputStyle, paddingRight: 40 }}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                />
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: 'var(--ef-text-muted)' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-                >
-                  {showPassword ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Error */}
-            {error && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="mb-4 -mt-2"
-              >
-                <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</p>
-                {error.includes('Account not found') && (
-                  <Link
-                    to="/initialize"
-                    className="text-xs mt-1.5 inline-block transition-colors"
-                    style={{ color: 'var(--ef-ink)', textDecoration: 'underline' }}
-                    onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.textDecoration = 'none')}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.textDecoration = 'underline')}
-                  >
-                    → Initialize Web Owner account
-                  </Link>
-                )}
-              </motion.div>
-            )}
-
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="w-full py-2.5 text-sm flex items-center justify-center gap-2 transition-opacity"
-              style={{
-                background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
-                color: 'var(--ef-surface)',
-                borderRadius: 2,
-                letterSpacing: '0.04em',
-                cursor: canSubmit ? 'pointer' : 'not-allowed',
-              }}
-            >
-              {loading ? (
-                <><Loader2 size={14} className="animate-spin" /><span>Signing in…</span></>
-              ) : (
-                'Sign in'
-              )}
-            </button>
-          </form>
-          )}
-        </div>
-
-        {/* Role links */}
-        <div className="flex items-center justify-center gap-4 mt-6">
-          <Link
-            to="/institute/login"
-            className="text-xs transition-colors"
-            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-          >
-            Institute
-          </Link>
-          <span style={{ color: 'var(--ef-border)' }}>·</span>
-          <Link
-            to="/faculty/login"
-            className="text-xs transition-colors"
-            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-          >
-            Faculty
-          </Link>
-          <span style={{ color: 'var(--ef-border)' }}>·</span>
-          <Link
-            to="/student/login"
-            className="text-xs transition-colors"
-            style={{ color: 'var(--ef-text-muted)', textDecoration: 'none' }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}
-          >
-            Student
-          </Link>
-        </div>
-      </motion.div>
-    </div>
+        <BackToSignIn to="/login" />
+      </AuthShell>
+    </motion.div>
   );
 }

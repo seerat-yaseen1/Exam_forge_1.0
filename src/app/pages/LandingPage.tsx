@@ -230,10 +230,25 @@ export function LandingPage() {
                     <span className="ef-t-xs ef-muted block truncate" style={{ marginTop: 3 }}>
                       {institute.adminName} · {institute.adminEmail}
                     </span>
+
+                    {/* On a phone the deadline moves INSIDE the card rather
+                        than disappearing with the column that held it. It is
+                        the reason the row is in this list at all — dropping
+                        it at 390px would leave four cards that all look
+                        equally urgent. */}
+                    <span
+                      className="ef-t-xs sm:hidden block"
+                      style={{
+                        marginTop: 5,
+                        color: health === 'expired' ? 'var(--ef-danger)' : 'var(--ef-text-muted)',
+                      }}
+                    >
+                      {health === 'disabled' ? 'Switched off' : expiryPhrase(days)}
+                    </span>
                   </span>
 
-                  {/* The date itself is the title, so it is one hover away
-                      without spending a column on it. */}
+                  {/* Wide screens get it as its own column, with the exact
+                      date one hover away. */}
                   <span
                     className="ef-t-sm hidden sm:block flex-shrink-0"
                     style={{ color: health === 'expired' ? 'var(--ef-danger)' : 'var(--ef-text-muted)' }}

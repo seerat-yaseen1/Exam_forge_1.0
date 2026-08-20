@@ -6,7 +6,7 @@ import { useStudentAuth } from '../../context/StudentAuthContext';
 import { LogoMark } from '../../components/PlatformLogo';
 import {
   AuthShell, MatchNote, PasswordField, StrengthBar,
-} from '../../components/student/fields';
+} from '../../components/console/fields';
 import { Button } from '../../components/console/ui';
 
 export function StudentChangePasswordPage() {

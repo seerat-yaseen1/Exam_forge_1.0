@@ -1,5 +1,5 @@
 /*
-  Font face is loaded via <link rel="preconnect"> + <link rel="stylesheet">
+  Font faces are loaded via <link rel="preconnect"> + <link rel="stylesheet">
   in index.html, NOT with @import here (Remediation plan Batch C / ext #17).
   An @import inside a bundled stylesheet is render-blocking and serialised:
   the browser only discovers the font request after this CSS has downloaded
@@ -8,6 +8,19 @@
 
 :root {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /*
+    Display face — page titles, large figures, the greeting on the student
+    dashboard. Deliberately NOT applied to `body`: at 11–13px, which is most of
+    this interface, an optical-sized serif is harder to read than Inter, and a
+    console is not an article. It is opted into per element via `--font-display`
+    so the places it appears stay countable.
+
+    Georgia is the fallback rather than a generic `serif` because it is metric-
+    stable and present nearly everywhere, so the swap when Fraunces arrives
+    shifts layout the least.
+  */
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
 }
 
 body {

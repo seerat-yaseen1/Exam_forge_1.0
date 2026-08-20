@@ -1,0 +1,543 @@
+/* ══════════════════════════════════════════════════════════════════
+   STUDENT CONSOLE — the shared surface language
+   ══════════════════════════════════════════════════════════════════
+
+   ── WHY THIS FILE EXISTS ──────────────────────────────────────────
+   The student pages were built the way the rest of the app was: every button
+   an inline `style={{ }}` object, every hover an onMouseEnter that assigns to
+   `element.style`. That works, and it has three costs that themes make
+   expensive rather than merely untidy.
+
+     1. A hover written in JavaScript cannot be a hover. `:hover` knows about
+        the pointer leaving during a scroll, about touch, about the element
+        being removed mid-gesture. A pair of mouse handlers knows none of that,
+        and leaves the hover colour stuck on when any of them happens.
+     2. `:active`, `:disabled` and `:focus-visible` have no inline equivalent
+        at all, so they were simply absent.
+     3. Every one of those objects is a place a themed token can be forgotten.
+        A class is written once.
+
+   So: the primitives live here, keyed to the --ef-* tokens, and the pages
+   compose them. Everything is prefixed `ef-` and nothing here matches an
+   existing class name, so the other three role consoles are untouched.
+
+   ── WHAT IS DELIBERATELY NOT HERE ─────────────────────────────────
+   Layout. Tailwind already does that well and the pages read better with the
+   grid next to the markup. This file owns colour, elevation, radius, states
+   and motion — the things that have to agree across pages.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Page scaffolding ─────────────────────────────────────────── */
+
+.ef-page {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--ef-pad-page) 24px calc(var(--ef-pad-page) + 24px);
+}
+
+.ef-page--narrow {
+  max-width: 780px;
+}
+
+@media (max-width: 640px) {
+  .ef-page {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* The display face, opted into. See fonts.css for why it is not on body. */
+.ef-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-optical-sizing: auto;
+}
+
+/* Small tracked-out label above a title or a group of cards. */
+.ef-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ef-text-muted);
+}
+
+.ef-eyebrow-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ef-accent);
+  flex-shrink: 0;
+}
+
+.ef-rule {
+  height: 1px;
+  background: var(--ef-border);
+  border: 0;
+}
+
+/* ── Surfaces ─────────────────────────────────────────────────── */
+
+.ef-card {
+  background: var(--ef-surface);
+  border: 1px solid var(--ef-border);
+  border-radius: var(--ef-radius);
+  box-shadow: var(--ef-shadow-sm);
+}
+
+.ef-card--flat {
+  box-shadow: none;
+}
+
+.ef-card--inset {
+  background: var(--ef-canvas-raised);
+  box-shadow: none;
+}
+
+/* A card that is also a link or a button. The lift is small on purpose: at
+   4px it reads as a card that moved, at 2px as a card that responded. */
+.ef-card--interactive {
+  cursor: pointer;
+  transition:
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms ease;
+}
+
+.ef-card--interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ef-shadow-md);
+  border-color: var(--ef-border-muted);
+}
+
+.ef-card--interactive:active {
+  transform: translateY(0);
+  box-shadow: var(--ef-shadow-sm);
+}
+
+/* The accent rail down the left edge of a card, used to carry status without
+   spending a badge on it. */
+.ef-card-rail {
+  width: 3px;
+  flex-shrink: 0;
+  background: var(--ef-border-muted);
+  border-radius: var(--ef-radius) 0 0 var(--ef-radius);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────── */
+
+.ef-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: var(--ef-radius-sm);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 160ms ease;
+}
+
+.ef-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ef-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ef-btn--primary {
+  background: var(--ef-accent);
+  border-color: var(--ef-accent);
+  color: var(--ef-accent-text);
+}
+
+.ef-btn--primary:hover:not(:disabled) {
+  background: var(--ef-accent-hover);
+  border-color: var(--ef-accent-hover);
+}
+
+.ef-btn--secondary {
+  background: var(--ef-surface);
+  border-color: var(--ef-border);
+  color: var(--ef-text-subtle);
+}
+
+.ef-btn--secondary:hover:not(:disabled) {
+  border-color: var(--ef-border-strong);
+  color: var(--ef-ink);
+  background: var(--ef-surface-hover);
+}
+
+.ef-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ef-text-muted);
+}
+
+.ef-btn--ghost:hover:not(:disabled) {
+  background: var(--ef-surface-hover);
+  color: var(--ef-ink);
+}
+
+.ef-btn--danger {
+  background: var(--ef-danger-bg);
+  border-color: var(--ef-danger-border);
+  color: var(--ef-danger);
+}
+
+.ef-btn--danger:hover:not(:disabled) {
+  background: var(--ef-danger);
+  border-color: var(--ef-danger);
+  color: var(--ef-surface);
+}
+
+.ef-btn--sm {
+  padding: 6px 11px;
+  font-size: 12px;
+  gap: 5px;
+}
+
+.ef-btn--lg {
+  padding: 12px 22px;
+  font-size: 14px;
+}
+
+.ef-btn--block {
+  width: 100%;
+}
+
+/* An icon-only square button — the theme toggle, the refresh control. */
+.ef-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--ef-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ef-text-muted);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.ef-icon-btn:hover {
+  background: var(--ef-surface-hover);
+  color: var(--ef-ink);
+}
+
+.ef-icon-btn[data-active='true'] {
+  background: var(--ef-accent-soft);
+  border-color: var(--ef-accent-border);
+  color: var(--ef-accent);
+}
+
+/* ── Chips ────────────────────────────────────────────────────── */
+
+.ef-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--ef-radius-pill);
+  border: 1px solid var(--ef-border);
+  background: var(--ef-canvas-raised);
+  color: var(--ef-text-subtle);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.ef-chip[data-tone='accent'] {
+  background: var(--ef-accent-soft);
+  border-color: var(--ef-accent-border);
+  color: var(--ef-accent);
+}
+
+.ef-chip[data-tone='success'] {
+  background: var(--ef-success-bg);
+  border-color: var(--ef-success-border);
+  color: var(--ef-success);
+}
+
+.ef-chip[data-tone='warning'] {
+  background: var(--ef-warning-bg);
+  border-color: var(--ef-warning-border);
+  color: var(--ef-warning);
+}
+
+.ef-chip[data-tone='danger'] {
+  background: var(--ef-danger-bg);
+  border-color: var(--ef-danger-border);
+  color: var(--ef-danger);
+}
+
+.ef-chip[data-tone='info'] {
+  background: var(--ef-info-bg);
+  border-color: var(--ef-info-border);
+  color: var(--ef-info);
+}
+
+.ef-chip[data-tone='solid'] {
+  background: var(--ef-accent);
+  border-color: var(--ef-accent);
+  color: var(--ef-accent-text);
+}
+
+.ef-chip--sm {
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
+
+/* ── Navigation ───────────────────────────────────────────────── */
+
+.ef-nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 12px 13px;
+  border: 0;
+  background: transparent;
+  color: var(--ef-text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.ef-nav-link:hover {
+  color: var(--ef-ink);
+}
+
+.ef-nav-link[aria-current='page'] {
+  color: var(--ef-ink);
+  font-weight: 500;
+}
+
+/* The active underline is a pseudo-element rather than a rendered span so it
+   cannot be mistaken for content by a screen reader. */
+.ef-nav-link[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--ef-accent);
+}
+
+/* ── Menus and popovers ───────────────────────────────────────── */
+
+.ef-menu {
+  background: var(--ef-surface);
+  border: 1px solid var(--ef-border);
+  border-radius: var(--ef-radius);
+  box-shadow: var(--ef-shadow-lg);
+  overflow: hidden;
+}
+
+.ef-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ef-text-subtle);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.ef-menu-item:hover {
+  background: var(--ef-surface-hover);
+  color: var(--ef-ink);
+}
+
+.ef-menu-item[data-tone='danger'] {
+  color: var(--ef-danger);
+}
+
+.ef-menu-item[data-tone='danger']:hover {
+  background: var(--ef-danger-bg);
+}
+
+/* ── Fields ───────────────────────────────────────────────────── */
+
+.ef-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--ef-radius-sm);
+  border: 1px solid var(--ef-border);
+  background: var(--ef-canvas-raised);
+  color: var(--ef-ink);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.ef-input::placeholder {
+  color: var(--ef-text-muted);
+}
+
+.ef-input:hover {
+  border-color: var(--ef-border-muted);
+}
+
+.ef-input:focus {
+  background: var(--ef-surface);
+  border-color: var(--ef-accent);
+  outline: none;
+}
+
+/* ── Theme swatches ───────────────────────────────────────────── */
+
+/*
+  A swatch is a miniature of the theme, not a colour sample: page behind, card
+  on top of it, accent as the mark on the card. That is the same three-part
+  relationship every screen in the console is built from, which is why a
+  student can tell from the chip alone whether a theme will be comfortable.
+*/
+.ef-swatch {
+  position: relative;
+  border-radius: var(--ef-radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid var(--ef-border);
+}
+
+.ef-swatch-card {
+  position: absolute;
+  inset: 22% 18% 18% 22%;
+  border-radius: 3px;
+}
+
+.ef-swatch-accent {
+  position: absolute;
+  right: 24%;
+  bottom: 24%;
+  width: 28%;
+  height: 12%;
+  min-height: 3px;
+  border-radius: 999px;
+}
+
+/* The picker tile. Selection is a ring rather than a border swap so the tile
+   does not change size when it is chosen — a 1px reflow across a grid of
+   eighteen reads as the whole page twitching. */
+.ef-theme-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px;
+  border-radius: var(--ef-radius);
+  border: 1px solid var(--ef-border);
+  background: var(--ef-surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ef-theme-tile:hover {
+  border-color: var(--ef-border-strong);
+  transform: translateY(-1px);
+}
+
+.ef-theme-tile[aria-pressed='true'] {
+  border-color: var(--ef-accent);
+  box-shadow: 0 0 0 1px var(--ef-accent);
+}
+
+/* ── Progress ─────────────────────────────────────────────────── */
+
+.ef-meter {
+  position: relative;
+  height: 6px;
+  border-radius: var(--ef-radius-pill);
+  background: var(--ef-border-subtle);
+  overflow: hidden;
+}
+
+.ef-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--ef-radius-pill);
+  background: var(--ef-accent);
+  transition: width 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Loading ──────────────────────────────────────────────────── */
+
+.ef-skeleton {
+  border-radius: var(--ef-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--ef-border-subtle) 0%,
+    var(--ef-canvas-raised) 40%,
+    var(--ef-border-subtle) 80%
+  );
+  background-size: 300% 100%;
+  animation: ef-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes ef-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* The live-sync dot. Was an inline `animation: ping …` string repeated on
+   three pages; here once, so all three pulse together. */
+.ef-pulse {
+  position: relative;
+  display: inline-flex;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+}
+
+.ef-pulse::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ef-success);
+  opacity: 0.55;
+  animation: ef-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.ef-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 1.5px;
+  border-radius: 50%;
+  background: var(--ef-success);
+}
+
+@keyframes ef-ping {
+  75%, 100% { transform: scale(2.1); opacity: 0; }
+}

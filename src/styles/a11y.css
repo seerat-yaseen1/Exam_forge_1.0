@@ -19,19 +19,26 @@
   for pointer users.
 */
 
-:root {
-  /* Near-black ring matches the #0C0C0B type colour rather than a browser blue,
-     so the indicator reads as part of the design system. */
-  --focus-ring: #0C0C0B;
-  --focus-ring-contrast: #FFFFFF;
-}
+/*
+  ── Where --focus-ring comes from (moved 2026-08-20) ──────────────────────────
+  The ring's two colours are declared in palette.css, alongside the palette they
+  belong to, and a theme overrides them like any other token — a near-black ring
+  is invisible on a near-black canvas, so a themed page needs a themed ring.
+
+  They were declared HERE, and could not stay: this file is imported last (it
+  has to be, so the ring beats the inline `outline: none` call sites), which
+  meant its `:root` declaration won over the themed one every time. The
+  fallbacks in the rules below cover the moment before any stylesheet resolves.
+*/
 
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--focus-ring) !important;
+  outline: 2px solid var(--focus-ring, #0C0C0B) !important;
   outline-offset: 2px !important;
-  /* Second, light ring: keeps the indicator visible when the element sits on a
-     dark surface (primary buttons are #0C0C0B on #0C0C0B otherwise). */
-  box-shadow: 0 0 0 4px var(--focus-ring-contrast) !important;
+  /* Second, contrasting ring: keeps the indicator visible when the element sits
+     on a surface the same colour as the ring (primary buttons are #0C0C0B on
+     #0C0C0B otherwise). It is the SURFACE colour, not white, so it does the
+     same job on a dark theme. */
+  box-shadow: 0 0 0 4px var(--focus-ring-contrast, #FFFFFF) !important;
   border-radius: 2px;
 }
 

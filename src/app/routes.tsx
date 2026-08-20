@@ -70,6 +70,8 @@ const StudentForgotPasswordPage = lazy(() => import('./pages/student/StudentForg
 const StudentLandingPage = lazy(() => import('./pages/student/StudentLandingPage').then((m) => ({ default: m.StudentLandingPage })));
 const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage').then((m) => ({ default: m.StudentProfilePage })));
 const StudentSecurityPage = lazy(() => import('./pages/student/StudentSecurityPage').then((m) => ({ default: m.StudentSecurityPage })));
+const StudentAppearancePage = lazy(() => import('./pages/student/StudentAppearancePage').then((m) => ({ default: m.StudentAppearancePage })));
+const StudentProgressPage = lazy(() => import('./pages/student/StudentProgressPage').then((m) => ({ default: m.StudentProgressPage })));
 const StudentAssessmentsPage = lazy(() => import('./pages/student/StudentAssessmentsPage').then((m) => ({ default: m.StudentAssessmentsPage })));
 const ExamBriefingPage = lazy(() => import('./pages/student/ExamBriefingPage').then((m) => ({ default: m.ExamBriefingPage })));
 const ExamShell = lazy(() => import('./pages/student/ExamShell').then((m) => ({ default: m.ExamShell })));
@@ -188,11 +190,28 @@ export const router = createBrowserRouter([
               </ErrorBoundary>
             ),
           },
+          // ── The exam shell is exempt from the student's theme ──────
+          // A candidate's colour preference stops at the door of a sitting:
+          // the shell renders in the classic palette the invigilation rules,
+          // the integrity overlays and the printed guidance were all written
+          // against, whatever theme the account carries.
+          //
+          // The exemption is a wrapper here rather than an edit inside
+          // ExamShell because the shell has nine top-level returns (loading,
+          // refused-device, terminated, submitted, …) and pinning it at the
+          // route covers all nine at once — including any added later.
+          //
+          // `display: contents` means the element takes part in inheritance,
+          // which is all a custom-property scope needs, while contributing no
+          // box of its own: the shell's `fixed inset-0` root is laid out
+          // exactly as if this div were not here.
           {
             path: 'exam/:assessmentId/shell',
             element: (
               <ErrorBoundary variant="exam" label="exam-shell">
-                <ExamShell />
+                <div className="ef-exam-scope" style={{ display: 'contents' }}>
+                  <ExamShell />
+                </div>
               </ErrorBoundary>
             ),
           },
@@ -201,8 +220,10 @@ export const router = createBrowserRouter([
             children: [
               { path: 'dashboard',                      element: <StudentLandingPage /> },
               { path: 'assessments',                    element: <StudentAssessmentsPage /> },
+              { path: 'progress',                       element: <StudentProgressPage /> },
               { path: 'exam/:assessmentId/results',     element: <ExamResultsPage /> },
               { path: 'profile',                        element: <StudentProfilePage /> },
+              { path: 'appearance',                     element: <StudentAppearancePage /> },
               { path: 'security',                       element: <StudentSecurityPage /> },
             ],
           },

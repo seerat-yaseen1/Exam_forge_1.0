@@ -56,7 +56,7 @@ const inp: React.CSSProperties = {
   color: 'var(--ef-ink)',
   borderRadius: 2,
   outline: 'none',
-  fontSize: 13,
+  fontSize: 14,
   padding: '9px 12px',
   width: '100%',
 };
@@ -154,7 +154,7 @@ function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVar
             <div className="flex items-center gap-2 mb-1.5">
               <span
                 className="text-xs px-1.5 py-0.5 select-none"
-                style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}
+                style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 12 }}
               >
                 {t.badge}
               </span>
@@ -195,7 +195,7 @@ function TypePicker({ onSelect }: { onSelect: (e: QuestionEngine, v: QuestionVar
                 <div key={row.category}>
                   <div
                     className="text-xs mb-1.5 select-none"
-                    style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 10, textTransform: 'uppercase' }}
+                    style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 12, textTransform: 'uppercase' }}
                   >
                     {row.label}
                   </div>
@@ -282,7 +282,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
         onBlur={() => { if (input.trim()) commit(input); }}
         placeholder={tags.length === 0 ? 'Type and press Enter or comma…' : ''}
         className="flex-1 text-xs outline-none min-w-24"
-        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
+        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 14 }}
       />
     </div>
   );
@@ -582,7 +582,7 @@ function MatchEngine({
                 />
                 <InlineMathButton onInsert={(m) => appendLeftMath(idx, m)} />
               </div>
-              <span style={{ color: 'var(--ef-text-muted)', flexShrink: 0, fontSize: 12 }}>→</span>
+              <span style={{ color: 'var(--ef-text-muted)', flexShrink: 0, fontSize: 13 }}>→</span>
               {/* Right input */}
               <div className="flex items-center gap-1.5 flex-1">
                 <input
@@ -925,7 +925,7 @@ export function QuestionTypeEngine({ initialData, ownerType, ownerId, instituteI
           <div className="flex items-center gap-2 mb-5">
             <span
               className="text-xs px-1.5 py-0.5 select-none"
-              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}
+              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 12 }}
             >
               {currentType.badge}
             </span>
@@ -1103,7 +1103,7 @@ function DuplicateBanner({
         <p className="text-xs" style={{ color: palette.text }}>
           {REASON_LABEL[score.matchedReason] ?? 'Possible duplicate'}
         </p>
-        <p className="text-xs mt-0.5" style={{ color: palette.sub, fontSize: 11 }}>
+        <p className="text-xs mt-0.5" style={{ color: palette.sub, fontSize: 12 }}>
           Stem {pct(score.stemSim)} · Options {pct(score.optionsSim)} · Correct answer {score.answerMatch ? 'matches' : 'differs'}
         </p>
       </div>

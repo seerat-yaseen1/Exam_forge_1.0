@@ -2,3 +2,49 @@
 @source '../**/*.{js,ts,jsx,tsx}';
 
 @import 'tw-animate-css';
+
+/*
+  ── THE TYPE SCALE TAILWIND HANDS OUT ─────────────────────────────────────────
+
+  palette.css defines a deliberate scale anchored at 14px body, and says in as
+  many words why: the app "had been using" 12px for everything, a screen where
+  everything is the same size has no hierarchy, and the eye ends up READING to
+  find things instead of scanning.
+
+  That scale was never reaching the screen. Almost nothing uses the .ef-t-*
+  classes it powers — the app is built out of `text-xs`, 1,538 times, and
+  `text-xs` is 12px. So the interface shipped at exactly the size the scale was
+  written to replace, and the fix people reached for was browser zoom.
+
+  The class names in this codebase do not mean what Tailwind's defaults mean.
+  `text-xs` here is BODY text — the default for every label, field, button and
+  paragraph in the console — not "extra small". So each step is mapped onto the
+  tier it is actually being used as, rather than the tier it is named after:
+
+      text-xs   → --ef-text-base   body            12px → 14px
+      text-sm   → --ef-text-md     lead copy       14px → 15px
+      text-base → --ef-text-lg     section heads   16px → 17px
+
+  Renaming 1,538 call sites to `.ef-t-base` would say the same thing more
+  honestly, and is the change to make when someone has a quiet week. This one
+  is a single file and it moves the whole product onto the scale today.
+
+  Sizes below body still exist and still matter — chips, table superscripts,
+  the "3 topics" counts hanging off a rail row. Those are the inline `fontSize`
+  values in the components, and they are pinned to the same scale's lower
+  tiers rather than left at 9 and 10px underneath a 14px body.
+*/
+@theme {
+  --text-xs: var(--ef-text-base);
+  --text-xs--line-height: var(--ef-leading-normal);
+  --text-sm: var(--ef-text-md);
+  --text-sm--line-height: var(--ef-leading-normal);
+  --text-base: var(--ef-text-lg);
+  --text-base--line-height: var(--ef-leading-snug);
+  --text-lg: var(--ef-text-xl);
+  --text-lg--line-height: var(--ef-leading-snug);
+  --text-xl: var(--ef-text-xl);
+  --text-xl--line-height: var(--ef-leading-tight);
+  --text-2xl: var(--ef-text-2xl);
+  --text-2xl--line-height: var(--ef-leading-tight);
+}

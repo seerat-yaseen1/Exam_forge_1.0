@@ -36,7 +36,7 @@ const inp: React.CSSProperties = {
   border: '1px solid var(--ef-border)',
   borderRadius: 2,
   color: 'var(--ef-ink)',
-  fontSize: 12,
+  fontSize: 13,
   padding: '5px 7px',
   width: 62,
   outline: 'none',
@@ -182,13 +182,13 @@ export function GroupRulePanel({
           : <ChevronRight size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />}
         <Layers size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
         <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>Grouped sets</span>
-        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
           {buckets.length} available
         </span>
         {activeCount > 0 && (
           <span
             className="text-xs px-1.5 py-0.5 ml-auto"
-            style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, fontSize: 10 }}
+            style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, fontSize: 12 }}
           >
             {activeCount} in use
           </span>
@@ -202,7 +202,7 @@ export function GroupRulePanel({
             style={{ background: 'var(--ef-canvas-raised)', borderTop: '1px solid var(--ef-border-subtle)' }}
           >
             <AlertTriangle size={11} strokeWidth={1.5} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--ef-text-muted)' }} />
-            <p style={{ color: 'var(--ef-text-muted)', fontSize: 11, lineHeight: 1.5 }}>
+            <p style={{ color: 'var(--ef-text-muted)', fontSize: 12, lineHeight: 1.5 }}>
               You draw whole <strong>sets</strong>, not individual questions — a DI question without its
               chart is unanswerable. Grouped sets need Standard delivery and no per-question timer.
             </p>
@@ -233,27 +233,27 @@ export function GroupRulePanel({
                 <div className="flex items-center gap-2 flex-wrap mb-2">
                   <span
                     className="text-xs px-1.5 py-0.5"
-                    style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10 }}
+                    style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 12 }}
                   >
                     {GROUP_KIND_LABEL[b.kind]}
                   </span>
                   <span
                     className="text-xs px-1.5 py-0.5 capitalize"
-                    style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 10 }}
+                    style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 12 }}
                   >
                     {b.difficulty}
                   </span>
                   <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{b.subject}</span>
-                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>›</span>
-                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>{b.topic}</span>
-                  <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>›</span>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>{b.topic}</span>
+                  <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
                     {b.groups.length} set{b.groups.length === 1 ? '' : 's'} in bank
                   </span>
                 </div>
 
                 <div className="flex items-end gap-3 flex-wrap">
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>Sets to draw</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>Sets to draw</span>
                     <input
                       type="number" min={0} max={b.groups.length}
                       value={rule?.groupCount ?? ''}
@@ -264,7 +264,7 @@ export function GroupRulePanel({
                   </label>
 
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>Questions per set</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>Questions per set</span>
                     <select
                       value={perSet}
                       onChange={(e) => patchRule(b, 'questionsPerGroup', e.target.value)}
@@ -278,7 +278,7 @@ export function GroupRulePanel({
                   </label>
 
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>Marks / question</span>
+                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>Marks / question</span>
                     <input
                       type="number" min={0} step="0.5"
                       value={rule?.marksPerQuestion ?? '1'}
@@ -298,7 +298,7 @@ export function GroupRulePanel({
                     </button>
                   )}
 
-                  <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>
+                  <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
                     {setsWanted > 0 && (estimate !== null
                       ? `${estimate} question${estimate === 1 ? '' : 's'}`
                       /* "All" cannot be counted until the draw picks which sets,

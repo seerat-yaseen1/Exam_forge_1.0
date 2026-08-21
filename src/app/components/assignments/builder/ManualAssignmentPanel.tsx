@@ -410,13 +410,13 @@ export function ManualAssignmentPanel({
                     {plainStem(q.stem) || <em style={{ color: 'var(--ef-text-muted)' }}>No question text</em>}
                   </p>
                   <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 3 }}>
-                    <span style={{ fontSize: 10, color: 'var(--ef-text-muted)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
                       {ENGINE_LABEL[q.engine]} · {DIFF_LABEL[q.difficulty]}
                       {qTopic(q) ? ` · ${qTopic(q)}` : ''}
                     </span>
                     {q.tags.slice(0, 3).map((t) => (
                       <span key={t} style={{
-                        fontSize: 9, color: 'var(--ef-text-muted)', padding: '0 4px',
+                        fontSize: 11, color: 'var(--ef-text-muted)', padding: '0 4px',
                         border: '1px solid var(--ef-border-subtle)', borderRadius: 2,
                       }}>{t}</span>
                     ))}
@@ -430,7 +430,7 @@ export function ManualAssignmentPanel({
                   className="text-xs flex-shrink-0"
                   style={{
                     color: at ? 'var(--ef-text-subtle)' : 'var(--ef-warning-strong)',
-                    fontSize: 10,
+                    fontSize: 12,
                     padding: '2px 6px',
                     borderRadius: 2,
                     border: `1px solid ${at ? 'var(--ef-border)' : 'var(--ef-warning-border)'}`,
@@ -496,7 +496,7 @@ function SectionTally({ name, count, marks, onMarks, active, locked, onFocus }: 
         </span>
       </button>
       <div className="flex items-center gap-1.5">
-        <label className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+        <label className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
           Marks each
         </label>
         <input

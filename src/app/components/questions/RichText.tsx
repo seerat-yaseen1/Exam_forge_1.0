@@ -189,7 +189,7 @@ export function RichText({ text, image, className, style, onImageClick }: RichTe
                   className="block select-none"
                   style={{
                     fontFamily: MONO,
-                    fontSize: 10,
+                    fontSize: 12,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
                     color: 'var(--ef-text-muted)',

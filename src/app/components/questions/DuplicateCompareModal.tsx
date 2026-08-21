@@ -172,7 +172,7 @@ function ScorePill({ label, value, tone }: { label: string; value: string; tone:
   }[tone];
   return (
     <div className="flex flex-col">
-      <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 10 }}>{label.toUpperCase()}</span>
+      <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 12 }}>{label.toUpperCase()}</span>
       <span
         className="text-xs px-2 py-0.5 mt-1 self-start"
         style={{ background: palette.bg, border: `1px solid ${palette.border}`, color: palette.text, borderRadius: 2 }}
@@ -204,18 +204,18 @@ function Side({
       }}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em', fontSize: 10 }}>{heading}</span>
-        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{sheet}</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em', fontSize: 12 }}>{heading}</span>
+        <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>{sheet}</span>
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {subject && (
-          <span className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)', fontSize: 11 }}>
+          <span className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)', fontSize: 12 }}>
             {subject}
           </span>
         )}
         {topic && (
-          <span className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 11 }}>
+          <span className="text-xs px-2 py-0.5" style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 12 }}>
             {topic}
           </span>
         )}
@@ -239,14 +239,14 @@ function Side({
                   borderRadius: 2,
                 }}
               >
-                <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10, minWidth: 14 }}>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12, minWidth: 14 }}>
                   {String.fromCharCode(65 + i)}.
                 </span>
                 <span className="text-xs flex-1" style={{ color: 'var(--ef-ink)', lineHeight: 1.5 }}>
                   {opt}
                 </span>
                 {isCorrect && (
-                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-success)', fontSize: 10, letterSpacing: '0.04em' }}>
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-success)', fontSize: 12, letterSpacing: '0.04em' }}>
                     ✓ CORRECT
                   </span>
                 )}

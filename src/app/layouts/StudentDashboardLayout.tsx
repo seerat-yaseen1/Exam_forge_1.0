@@ -104,8 +104,8 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
       <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
         <StudentAvatar name={session?.name ?? ''} size={34} />
         <div className="min-w-0">
-          <p className="truncate" style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ef-ink)' }}>{session?.name}</p>
-          <p className="truncate mt-0.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>{session?.email}</p>
+          <p className="truncate" style={{ fontSize: 13, fontWeight: 500, color: 'var(--ef-ink)' }}>{session?.name}</p>
+          <p className="truncate mt-0.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>{session?.email}</p>
         </div>
       </div>
 
@@ -120,7 +120,7 @@ function StudentProfileDropdown({ onClose }: { onClose: () => void }) {
           {/* The current theme, named here as well as in the theme menu: this
               is where a student looks when the console has come up in an
               unexpected palette on a shared machine. */}
-          <span className="ml-auto truncate" style={{ fontSize: 11, color: 'var(--ef-text-muted)', maxWidth: 92 }}>
+          <span className="ml-auto truncate" style={{ fontSize: 12, color: 'var(--ef-text-muted)', maxWidth: 92 }}>
             {theme.label}
           </span>
         </button>
@@ -212,7 +212,7 @@ export function StudentDashboardLayout() {
               </span>
               <span
                 className="truncate hidden sm:block"
-                style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ef-ink)', letterSpacing: '0.15em' }}
+                style={{ fontSize: 13, fontWeight: 600, color: 'var(--ef-ink)', letterSpacing: '0.15em' }}
               >
                 {platformSettings.name}
               </span>
@@ -231,7 +231,7 @@ export function StudentDashboardLayout() {
                 title={session.instituteName}
               >
                 <InstituteMark logo={instituteLogo} name={session.instituteName} size={20} />
-                <span className="truncate" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', maxWidth: 180 }}>
+                <span className="truncate" style={{ fontSize: 13, color: 'var(--ef-text-muted)', maxWidth: 180 }}>
                   {session.instituteName}
                 </span>
               </div>

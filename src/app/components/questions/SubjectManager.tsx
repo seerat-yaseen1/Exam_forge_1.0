@@ -15,7 +15,7 @@ import { invalidateSubjectCache } from './SubjectCombobox';
 // ── Shared input style ────────────────────────────────────────────────────────
 const inp: React.CSSProperties = {
   background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', color: 'var(--ef-ink)',
-  borderRadius: 2, outline: 'none', fontSize: 13,
+  borderRadius: 2, outline: 'none', fontSize: 14,
   padding: '8px 12px', width: '100%',
 };
 function iFocus(e: React.FocusEvent<HTMLInputElement>) { e.target.style.borderColor = 'var(--ef-ink)'; e.target.style.background = 'var(--ef-surface)'; }
@@ -119,7 +119,7 @@ function SubjectCard({
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') { setRenaming(false); setNewName(subject.name); } }}
-                style={{ ...inp, flex: 1, width: 'auto', padding: '5px 8px', fontSize: 12 }}
+                style={{ ...inp, flex: 1, width: 'auto', padding: '5px 8px', fontSize: 13 }}
                 onFocus={iFocus} onBlur={iBlur}
                 autoFocus
               />
@@ -211,7 +211,7 @@ function SubjectCard({
               onChange={(e) => setNewAlias(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') submitAddAlias(); }}
               placeholder="Add alias (e.g. QUANT, Maths)"
-              style={{ ...inp, flex: 1, width: 'auto', padding: '7px 10px', fontSize: 12 }}
+              style={{ ...inp, flex: 1, width: 'auto', padding: '7px 10px', fontSize: 13 }}
               onFocus={iFocus} onBlur={iBlur}
             />
             <button
@@ -539,7 +539,7 @@ export function SubjectManager({
             type="text" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search subjects or aliases…"
             className="flex-1 text-xs outline-none"
-            style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
+            style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 14 }}
           />
         </div>
 

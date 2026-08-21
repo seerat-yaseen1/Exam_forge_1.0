@@ -201,7 +201,7 @@ export function AssessmentReportsPanel({ assessmentId, reviewerId, reviewerRole,
               <span style={{
                 background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--ef-border-subtle)',
                 color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
-                borderRadius: 2, padding: '0 4px', fontSize: 10,
+                borderRadius: 2, padding: '0 4px', fontSize: 12,
               }}>{count}</span>
             </button>
           );

@@ -294,7 +294,7 @@ export function SetupStep({
                 <input
                   type="text" value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px' }}
+                  style={{ ...inputStyle, fontSize: 14, padding: '9px 12px' }}
                   placeholder="e.g., Midterm Exam — Mathematics" autoFocus
                 />
                 {/* The red "Title is required" that used to sit here could
@@ -306,14 +306,14 @@ export function SetupStep({
 
               <Field label="Subject" hint="(optional)">
                 <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
-                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px' }} placeholder="e.g., Mathematics" />
+                  style={{ ...inputStyle, fontSize: 14, padding: '9px 12px' }} placeholder="e.g., Mathematics" />
               </Field>
             </div>
 
             {/* Row 2: Description (full-width) */}
             <Field label="Description" hint="(optional)">
               <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                style={{ ...inputStyle, minHeight: 80, resize: 'none', fontSize: 13, padding: '9px 12px' }}
+                style={{ ...inputStyle, minHeight: 80, resize: 'none', fontSize: 14, padding: '9px 12px' }}
                 placeholder="Instructions or notes visible to students" />
             </Field>
           </div>
@@ -364,7 +364,7 @@ export function SetupStep({
                   <div className="flex items-center gap-2 px-3 py-2 mb-4"
                     style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
                     <BookOpen size={10} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: 'var(--ef-success-strong)', flex: 1 }}>
+                    <span style={{ fontSize: 12, color: 'var(--ef-success-strong)', flex: 1 }}>
                       Topic pool: {topicPool.length} topic{topicPool.length !== 1 ? 's' : ''} across {subjectPool.length} subject{subjectPool.length !== 1 ? 's' : ''}
                     </span>
                     <button
@@ -402,7 +402,7 @@ export function SetupStep({
                           {/* Top row: index + name + time + topics toggle + remove */}
                           <div className="flex items-center" style={{ gap: 8, padding: '8px 10px', background: 'var(--ef-surface)' }}>
                             <div className="flex-shrink-0 flex items-center justify-center"
-                              style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)', fontSize: 10, color: 'var(--ef-text-muted)' }}>
+                              style={{ width: 26, height: 26, borderRadius: 2, background: 'var(--ef-canvas)', border: '1px solid var(--ef-border-subtle)', fontSize: 12, color: 'var(--ef-text-muted)' }}>
                               {(idx + 1).toString().padStart(2, '0')}
                             </div>
                             <input
@@ -588,10 +588,10 @@ export function SetupStep({
                                   <span
                                     key={key}
                                     className="inline-flex items-center gap-1 px-2 py-0.5"
-                                    style={{ background: 'var(--ef-success-bg)', color: 'var(--ef-success-strong)', border: '1px solid var(--ef-success-border)', borderRadius: 2, fontSize: 10 }}
+                                    style={{ background: 'var(--ef-success-bg)', color: 'var(--ef-success-strong)', border: '1px solid var(--ef-success-border)', borderRadius: 2, fontSize: 12 }}
                                   >
-                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 9 }}>{subj}</span>
-                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 9 }}>›</span>
+                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>{subj}</span>
+                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>›</span>
                                     <span>{topic}</span>
                                     <button
                                       type="button"

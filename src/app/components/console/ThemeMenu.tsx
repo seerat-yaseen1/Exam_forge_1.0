@@ -98,7 +98,7 @@ export function ThemeMenu({ onClose }: { onClose: () => void }) {
         style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}
       >
         <span className="ef-eyebrow">Theme</span>
-        <span style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
           {choice === SYSTEM_CHOICE ? `System · ${theme.label}` : theme.label}
         </span>
       </div>
@@ -124,7 +124,7 @@ export function ThemeMenu({ onClose }: { onClose: () => void }) {
             <div key={group} className="mt-1.5">
               <p
                 className="px-2.5 pt-2 pb-1.5 flex items-center gap-1.5"
-                style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}
+                style={{ fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}
               >
                 {group === 'light' && <Sun size={10} strokeWidth={1.6} />}
                 {group === 'dark' && <Moon size={10} strokeWidth={1.6} />}
@@ -198,10 +198,10 @@ function ThemeRow({
     >
       <span style={{ display: 'flex', flexShrink: 0 }}>{icon}</span>
       <span className="flex-1 min-w-0">
-        <span className="block truncate" style={{ color: 'var(--ef-ink)', fontSize: 12.5 }}>
+        <span className="block truncate" style={{ color: 'var(--ef-ink)', fontSize: 13 }}>
           {label}
         </span>
-        <span className="block truncate" style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>
+        <span className="block truncate" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
           {caption}
         </span>
       </span>

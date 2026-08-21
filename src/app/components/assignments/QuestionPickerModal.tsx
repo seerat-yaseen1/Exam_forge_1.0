@@ -56,7 +56,7 @@ function EngineBadge({ engine }: { engine: QuestionEngine }) {
         color: m.color,
         border: `1px solid ${m.color}22`,
         borderRadius: 2,
-        fontSize: 9,
+        fontSize: 11,
         letterSpacing: '0.06em',
       }}
     >
@@ -119,20 +119,20 @@ function QuestionRow({
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           <EngineBadge engine={question.engine} />
           {question.variant && (
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
               {question.variant}
             </span>
           )}
-          <span className="text-xs" style={{ color: diff.color, fontSize: 10 }}>
+          <span className="text-xs" style={{ color: diff.color, fontSize: 12 }}>
             {diff.label}
           </span>
           {question.subject && (
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
               {question.subject}
             </span>
           )}
           {question.topic && (
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
               · {question.topic}
             </span>
           )}
@@ -151,7 +151,7 @@ function QuestionRow({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col items-end gap-0.5">
-              <label style={{ color: 'var(--ef-text-muted)', fontSize: 9, letterSpacing: '0.06em' }}>MARKS</label>
+              <label style={{ color: 'var(--ef-text-muted)', fontSize: 11, letterSpacing: '0.06em' }}>MARKS</label>
               <input
                 type="number"
                 min="0.5"
@@ -368,7 +368,7 @@ export function QuestionPickerModal({
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by stem, subject, topic, or tag…"
               className="flex-1 text-xs outline-none"
-              style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12 }}
+              style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
             />
             {search && (
               <button onClick={() => setSearch('')} className="hover:opacity-60 transition-opacity">
@@ -379,7 +379,7 @@ export function QuestionPickerModal({
 
           {/* Filter row */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.05em' }}>
+            <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12, letterSpacing: '0.05em' }}>
               TYPE:
             </span>
             <FilterChip label="All" active={!engineFilter} onClick={() => setEngineFilter('')} />
@@ -393,7 +393,7 @@ export function QuestionPickerModal({
                 did not offer them. */}
             <FilterChip label="Code" active={engineFilter === 'code'} onClick={() => setEngineFilter(engineFilter === 'code' ? '' : 'code')} />
 
-            <span className="text-xs ml-2" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.05em' }}>
+            <span className="text-xs ml-2" style={{ color: 'var(--ef-text-muted)', fontSize: 12, letterSpacing: '0.05em' }}>
               DIFF:
             </span>
             <FilterChip label="Easy" active={diffFilter === 'easy'} onClick={() => setDiffFilter(diffFilter === 'easy' ? '' : 'easy')} />
@@ -485,7 +485,7 @@ export function QuestionPickerModal({
                 className="sticky top-0 px-4 py-2 flex items-center justify-between"
                 style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border-subtle)', zIndex: 2 }}
               >
-                <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.08em' }}>
+                <span className="text-xs" style={{ color: 'var(--ef-text-muted)', fontSize: 12, letterSpacing: '0.08em' }}>
                   {filtered.length} QUESTION{filtered.length !== 1 ? 'S' : ''}{hasFilters ? ' MATCHING' : ''}
                 </span>
                 <button

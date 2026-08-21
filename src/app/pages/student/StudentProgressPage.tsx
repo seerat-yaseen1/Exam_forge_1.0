@@ -205,7 +205,7 @@ export function StudentProgressPage() {
             />
             <Card>
               {trend.length === 1 ? (
-                <p style={{ fontSize: 12.5, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
+                <p style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
                   One marked sitting so far — {trend[0].title} at{' '}
                   <strong style={{ color: 'var(--ef-ink)', fontWeight: 500 }}>{trend[0].percentage}%</strong>.
                   A second one gives this chart something to draw a line between.
@@ -221,7 +221,7 @@ export function StudentProgressPage() {
             <section>
               <SectionHeading label="Every marked sitting" count={trend.length} />
               <Card padded={false} style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--ef-border)' }}>
                       {['Assessment', 'Subject', 'Submitted', 'Mark', 'Verdict'].map((h, i) => (
@@ -231,7 +231,7 @@ export function StudentProgressPage() {
                           style={{
                             padding: '10px 14px',
                             textAlign: i >= 3 ? 'right' : 'left',
-                            fontSize: 10.5,
+                            fontSize: 12,
                             letterSpacing: '0.08em',
                             textTransform: 'uppercase',
                             color: 'var(--ef-text-muted)',
@@ -291,7 +291,7 @@ export function StudentProgressPage() {
                 <SubjectBars stats={subjects} passMark={sharedPassMark} />
                 <p
                   className="mt-4 pt-3"
-                  style={{ fontSize: 11, color: 'var(--ef-text-muted)', borderTop: '1px solid var(--ef-border-subtle)', lineHeight: 1.6 }}
+                  style={{ fontSize: 12, color: 'var(--ef-text-muted)', borderTop: '1px solid var(--ef-border-subtle)', lineHeight: 1.6 }}
                 >
                   Averages use your best sitting on each paper, so retaking one to improve it never
                   counts against the subject.
@@ -308,11 +308,11 @@ export function StudentProgressPage() {
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
                 {summary.withheld > 0 && (
                   <Card variant="inset">
-                    <p className="flex items-center gap-2" style={{ fontSize: 12.5, color: 'var(--ef-ink)' }}>
+                    <p className="flex items-center gap-2" style={{ fontSize: 13, color: 'var(--ef-ink)' }}>
                       <EyeOff size={13} strokeWidth={1.6} style={{ color: 'var(--ef-text-muted)' }} />
                       {summary.withheld} paper{summary.withheld !== 1 ? 's' : ''} withheld
                     </p>
-                    <p className="mt-1.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                    <p className="mt-1.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                       Your examiner has your work but has not released the marks to students. Nothing
                       from these papers is in any figure on this page.
                     </p>
@@ -320,11 +320,11 @@ export function StudentProgressPage() {
                 )}
                 {summary.terminated > 0 && (
                   <Card variant="inset">
-                    <p className="flex items-center gap-2" style={{ fontSize: 12.5, color: 'var(--ef-ink)' }}>
+                    <p className="flex items-center gap-2" style={{ fontSize: 13, color: 'var(--ef-ink)' }}>
                       <ShieldAlert size={13} strokeWidth={1.6} style={{ color: 'var(--ef-danger)' }} />
                       {summary.terminated} sitting{summary.terminated !== 1 ? 's' : ''} ended early
                     </p>
-                    <p className="mt-1.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                    <p className="mt-1.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                       A sitting the institution ended carries no verdict, so it is left out of your
                       average and your trend rather than counted as a low mark. Speak to your examiner
                       if you think that is wrong.
@@ -335,7 +335,7 @@ export function StudentProgressPage() {
             </section>
           )}
 
-          <p className="text-center" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
+          <p className="text-center" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
             Which sitting counts towards your record is decided by your institution — this page shows
             you all of them.
           </p>

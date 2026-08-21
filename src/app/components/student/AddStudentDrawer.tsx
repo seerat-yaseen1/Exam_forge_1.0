@@ -35,7 +35,7 @@ interface Props {
 const inputBase: React.CSSProperties = {
   background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)',
   color: 'var(--ef-ink)', borderRadius: 2, width: '100%',
-  outline: 'none', fontSize: 13, padding: '9px 12px',
+  outline: 'none', fontSize: 14, padding: '9px 12px',
 };
 const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
   e.target.style.borderColor = 'var(--ef-ink)'; e.target.style.background = 'var(--ef-surface)';

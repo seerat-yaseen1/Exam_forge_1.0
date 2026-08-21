@@ -889,7 +889,7 @@ export function DetailsStep({
                     style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
                     <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                     <input type="datetime-local" value={startDate} readOnly className="flex-1 outline-none"
-                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
+                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }} />
                   </div>
                 </LockedFieldWrapper>
               )}
@@ -905,7 +905,7 @@ export function DetailsStep({
                       <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                       <input type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)}
                         className="flex-1 outline-none"
-                        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }}
+                        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }}
                         min={toDateTimeLocal(assessment?.endDate) || startDate || undefined} />
                     </div>
                   </Field>
@@ -921,7 +921,7 @@ export function DetailsStep({
                     style={{ border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)' }}>
                     <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                     <input type="datetime-local" value={endDate} readOnly className="flex-1 outline-none"
-                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
+                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }} />
                   </div>
                 </LockedFieldWrapper>
               )}
@@ -946,8 +946,8 @@ export function DetailsStep({
                   <Award size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input type="number" value={passingScore} onChange={(e) => setPassingScore(e.target.value)}
                     placeholder="e.g., 50" min="0" max="100" className="flex-1 outline-none"
-                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
-                  {passingScore && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>%</span>}
+                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }} />
+                  {passingScore && <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>%</span>}
                 </div>
               </Field>
 
@@ -957,8 +957,8 @@ export function DetailsStep({
                   <ClipboardList size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input type="number" value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)}
                     placeholder="e.g., 2" min="1" className="flex-1 outline-none"
-                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
-                  {maxAttempts && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>attempts</span>}
+                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }} />
+                  {maxAttempts && <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>attempts</span>}
                 </div>
               </Field>
 
@@ -968,8 +968,8 @@ export function DetailsStep({
                   <Timer size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input type="number" value={sectionGraceSeconds} onChange={(e) => setSectionGraceSeconds(e.target.value)}
                     placeholder="e.g., 30" min="0" className="flex-1 outline-none"
-                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
-                  {sectionGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>seconds</span>}
+                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }} />
+                  {sectionGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>seconds</span>}
                 </div>
               </Field>
 
@@ -1021,10 +1021,10 @@ export function DetailsStep({
                     style={{
                       background: 'transparent',
                       color: overallAuto ? 'var(--ef-text-muted)' : 'var(--ef-ink)',
-                      fontSize: 12, border: 'none',
+                      fontSize: 13, border: 'none',
                     }}
                   />
-                  {overallLimitDisplay && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>minutes</span>}
+                  {overallLimitDisplay && <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>minutes</span>}
                 </div>
                 <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
                   {overallAuto
@@ -1039,8 +1039,8 @@ export function DetailsStep({
                   <Timer size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                   <input type="number" value={overallGraceSeconds} onChange={(e) => setOverallGraceSeconds(e.target.value)}
                     placeholder={`e.g., ${DEFAULT_OVERALL_GRACE_SECONDS}`} min="0" className="flex-1 outline-none"
-                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
-                  {overallGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>seconds</span>}
+                    style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }} />
+                  {overallGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>seconds</span>}
                 </div>
               </Field>
 
@@ -1055,8 +1055,8 @@ export function DetailsStep({
                     <Timer size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                     <input type="number" value={questionGraceSeconds} onChange={(e) => setQuestionGraceSeconds(e.target.value)}
                       placeholder="e.g., 5" min="0" className="flex-1 outline-none"
-                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
-                    {questionGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>seconds</span>}
+                      style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }} />
+                    {questionGraceSeconds && <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>seconds</span>}
                   </div>
                 </Field>
               )}
@@ -1086,7 +1086,7 @@ export function DetailsStep({
                     <span
                       className="flex items-center px-2 py-0.5"
                       style={{
-                        borderRadius: 2, fontSize: 10,
+                        borderRadius: 2, fontSize: 12,
                         border: `1px solid ${negMarkingOn ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
                         background: negMarkingOn ? 'var(--ef-surface)' : 'var(--ef-canvas)',
                         color: negMarkingOn ? 'var(--ef-danger)' : 'var(--ef-text-muted)',
@@ -1123,9 +1123,9 @@ export function DetailsStep({
                         placeholder="0"
                         step="0.5"
                         className="flex-1 outline-none"
-                        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }}
+                        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }}
                       />
-                      <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>marks</span>
+                      <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>marks</span>
                     </div>
                   </Field>
                 </div>
@@ -1456,14 +1456,27 @@ export function DetailsStep({
                     ],
                   },
                   {
+                    // NOT SELECTABLE. Honest labelling was not enough: the
+                    // card said "identical to Linear today" and authors could
+                    // still pick it, and picking it costs them something —
+                    // negative marking is stripped on save. An option that is
+                    // strictly worse than the one beside it, for a capability
+                    // that does not exist, is a trap with a footnote.
+                    //
+                    // It stays on screen rather than being deleted, because
+                    // the ladder is coming and an author planning a paper is
+                    // entitled to know it exists. CapabilityChoice keeps a
+                    // disabled option SELECTED when it already is, so the
+                    // assessments already saved as adaptive still load, still
+                    // edit, and still show what they are.
                     value: 'adaptive',
                     label: 'Adaptive',
-                    summary: 'Identical to Linear today.',
+                    summary: 'Difficulty adapts to the student. Not built yet.',
                     points: [
-                      'Difficulty adaptation is not built yet',
+                      'There is no difficulty ladder behind it — it runs exactly as Linear',
                       'Negative marking is discarded on save',
-                      'Choose Linear unless you are trialling this',
                     ],
+                    disabledReason: 'Not available yet — use Linear',
                   },
                 ]}
               />
@@ -1635,7 +1648,7 @@ export function DetailsStep({
                 style={{ color: 'var(--ef-text-muted)' }}>
                 <X size={11} strokeWidth={1.5} /> Back to Rules &amp; Settings
               </button>
-              <span style={{ color: 'var(--ef-border-muted)', fontSize: 10 }}>·</span>
+              <span style={{ color: 'var(--ef-border-muted)', fontSize: 12 }}>·</span>
               <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>STEP 3 OF 3 — ALLOCATION</p>
             </div>
 
@@ -1657,7 +1670,7 @@ export function DetailsStep({
                       setHierarchyMode(false);
                       setTargetType(v as 'all' | 'institutes' | 'students');
                     }}
-                    style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}
+                    style={{ ...selectStyle, fontSize: 14, padding: '9px 12px' }}
                   >
                     <option value="all">All Students</option>
                     <option value="institutes">Specific Institutes</option>
@@ -1678,7 +1691,7 @@ export function DetailsStep({
                         the DOM ignores it, so the control was locked only by being
                         a controlled value with no onChange, which also logs a React
                         warning. `disabled` is the attribute that actually locks it. */}
-                    <select value={targetType} disabled style={{ ...selectStyle, fontSize: 13, padding: '9px 12px' }}>
+                    <select value={targetType} disabled style={{ ...selectStyle, fontSize: 14, padding: '9px 12px' }}>
                       <option value="all">All Students</option>
                       <option value="institutes">Specific Institutes</option>
                       <option value="students">Specific Students</option>

@@ -49,14 +49,14 @@ function Detail({
 
   return (
     <div>
-      <p style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}>
+      <p style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}>
         {label}
       </p>
       <div className="flex items-center gap-2 mt-1.5">
         <span
           className="min-w-0 break-words"
           style={{
-            fontSize: 13.5,
+            fontSize: 14,
             color: 'var(--ef-ink)',
             fontFamily: mono ? 'ui-monospace, monospace' : undefined,
             letterSpacing: mono ? '0.1em' : undefined,
@@ -114,7 +114,7 @@ function AcademicStructure({ studentId }: { studentId: string }) {
   if (loading) {
     return (
       <Card>
-        <span className="flex items-center gap-2" style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
+        <span className="flex items-center gap-2" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
           <Loader2 size={13} strokeWidth={1.6} className="animate-spin" />
           Loading your academic structure…
         </span>
@@ -161,7 +161,7 @@ function AcademicStructure({ studentId }: { studentId: string }) {
             <div style={{ padding: 'var(--ef-pad-card)' }} className="flex flex-col gap-5">
               {grouped.map(([schoolName, schoolMappings]) => (
                 <div key={schoolName}>
-                  <p className="mb-2.5" style={{ fontSize: 12, color: 'var(--ef-text-subtle)', fontWeight: 500 }}>
+                  <p className="mb-2.5" style={{ fontSize: 13, color: 'var(--ef-text-subtle)', fontWeight: 500 }}>
                     {schoolName}
                   </p>
                   <div className="flex flex-col gap-2 pl-3.5" style={{ borderLeft: '2px solid var(--ef-border-subtle)' }}>
@@ -169,8 +169,8 @@ function AcademicStructure({ studentId }: { studentId: string }) {
                       <div key={m.id} className="flex items-start gap-2.5">
                         <Chip small>{NODE_LEVEL_LABELS[m.nodeType]}</Chip>
                         <div className="min-w-0">
-                          <p style={{ fontSize: 12.5, color: 'var(--ef-ink)' }}>{m.nodeName}</p>
-                          <p className="mt-0.5 break-all" style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>
+                          <p style={{ fontSize: 13, color: 'var(--ef-ink)' }}>{m.nodeName}</p>
+                          <p className="mt-0.5 break-all" style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
                             {m.breadcrumb}
                           </p>
                         </div>
@@ -278,7 +278,7 @@ export function StudentProfilePage() {
                       <span
                         className="flex-shrink-0"
                         style={{
-                          fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase',
                           color: 'var(--ef-text-muted)', width: 118, paddingTop: 3,
                         }}
                       >
@@ -300,7 +300,7 @@ export function StudentProfilePage() {
           <AcademicStructure studentId={session.studentId} />
         </section>
 
-        <p style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
+        <p style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
           Your name, email and placement are maintained by your institute — ask your administrator if
           any of it is wrong. Your password and the way this console looks are yours to change.
         </p>

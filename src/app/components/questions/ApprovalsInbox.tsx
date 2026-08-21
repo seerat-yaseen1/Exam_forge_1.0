@@ -32,7 +32,7 @@ function StatusChip({ status }: { status: QuestionRequestStatus }) {
     rejected: { bg: 'var(--ef-danger-bg)', fg: 'var(--ef-danger)', icon: <X size={11} strokeWidth={2} />,        label: 'Rejected' },
   }[status];
   return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5" style={{ background: map.bg, color: map.fg, borderRadius: 2, fontSize: 10 }}>
+    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5" style={{ background: map.bg, color: map.fg, borderRadius: 2, fontSize: 12 }}>
       {map.icon} {map.label}
     </span>
   );

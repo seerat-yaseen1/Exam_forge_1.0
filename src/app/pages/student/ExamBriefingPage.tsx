@@ -922,7 +922,7 @@ export function ExamBriefingPage() {
                           className="flex items-center gap-4 px-4 py-3"
                           style={{ borderBottom: idx < assessment.sections!.length - 1 ? '1px solid var(--ef-border-subtle)' : 'none' }}>
                           <div className="flex items-center justify-center flex-shrink-0"
-                            style={{ width: 22, height: 22, borderRadius: 2, background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)', fontSize: 10, color: 'var(--ef-text-muted)' }}>
+                            style={{ width: 22, height: 22, borderRadius: 2, background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)', fontSize: 12, color: 'var(--ef-text-muted)' }}>
                             {idx + 1}
                           </div>
                           <p className="text-xs flex-1" style={{ color: 'var(--ef-ink)' }}>{sec.name}</p>

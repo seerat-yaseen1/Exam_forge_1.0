@@ -126,12 +126,12 @@ function stringSimilarity(a: string, b: string): number {
 function MatchKindBadge({ kind, alias }: { kind: 'exact' | 'alias' | 'fuzzy'; alias?: string }) {
   if (kind === 'exact')  return null;
   if (kind === 'alias')  return (
-    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: 'var(--ef-warning-strong)', fontSize: 10, letterSpacing: '0.06em' }}>
+    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: 'var(--ef-warning-strong)', fontSize: 12, letterSpacing: '0.06em' }}>
       alias: {alias}
     </span>
   );
   return (
-    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.06em' }}>
+    <span className="text-xs ml-auto select-none flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 12, letterSpacing: '0.06em' }}>
       suggested
     </span>
   );
@@ -286,7 +286,7 @@ export function SubjectCombobox({
           style={{
             background: 'transparent',
             color: 'var(--ef-ink)',
-            fontSize: 13,
+            fontSize: 14,
             cursor: disabled ? 'not-allowed' : 'text',
           }}
         />
@@ -342,7 +342,7 @@ export function SubjectCombobox({
               {subjects.length > 0 && inputVal.trim() === '' && (
                 <div className="px-3 pt-2 pb-1.5 flex items-center gap-1.5">
                   <Search size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 10 }}>
+                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em', fontSize: 12 }}>
                     ALL SUBJECTS — type to search
                   </span>
                 </div>
@@ -407,7 +407,7 @@ export function SubjectCombobox({
                     {s.subject.questionCount > 0 && (
                       <span
                         className="text-xs px-1.5 py-0.5 select-none flex-shrink-0"
-                        style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 2, fontSize: 10 }}
+                        style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)', borderRadius: 2, fontSize: 12 }}
                       >
                         {s.subject.questionCount}
                       </span>

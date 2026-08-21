@@ -29,7 +29,7 @@ function TypeBadge({ engine, variant }: Pick<Question, 'engine' | 'variant'>) {
   return (
     <span
       className="text-xs px-1.5 py-0.5 select-none inline-block"
-      style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}
+      style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 12 }}
     >
       {questionTypeBadge(engine, variant)}
     </span>
@@ -115,7 +115,7 @@ function MCQPreview({
                   borderRadius: isMulti ? 2 : '50%',
                   border: `1.5px solid ${isCorrect ? 'var(--ef-success)' : 'var(--ef-border-muted)'}`,
                   background: isCorrect ? 'var(--ef-success)' : 'transparent',
-                  fontSize: 10,
+                  fontSize: 12,
                 }}
               >
                 {isCorrect
@@ -302,7 +302,7 @@ function CodePreview({
   };
   const mono: React.CSSProperties = {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: 11, whiteSpace: 'pre', overflowX: 'auto', display: 'block',
+    fontSize: 12, whiteSpace: 'pre', overflowX: 'auto', display: 'block',
     color: 'var(--ef-ink)', lineHeight: 1.6,
   };
   const heading = (t: string) => (

@@ -54,7 +54,7 @@ export function SourcePickerModal({ assessments, onPick, onCancel }: {
             className="w-full outline-none mt-3"
             style={{
               border: '1px solid var(--ef-border)', borderRadius: 2,
-              padding: '8px 10px', fontSize: 13, color: 'var(--ef-ink)',
+              padding: '8px 10px', fontSize: 14, color: 'var(--ef-ink)',
               background: 'var(--ef-canvas-raised)',
             }}
           />
@@ -315,7 +315,7 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5" style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border-subtle)' }}>
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="flex items-center justify-center flex-shrink-0"
-                          style={{ width: 18, height: 18, borderRadius: 2, background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)', fontSize: 9, color: 'var(--ef-text-muted)' }}>
+                          style={{ width: 18, height: 18, borderRadius: 2, background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)', fontSize: 11, color: 'var(--ef-text-muted)' }}>
                           {si + 1}
                         </div>
                         <span className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>{sec.name}</span>
@@ -349,24 +349,24 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
                                 {cell && dc ? (
                                   <>
                                     <span className="px-1.5 py-0.5 capitalize"
-                                      style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 10 }}>
+                                      style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 12 }}>
                                       {cell.difficulty}
                                     </span>
                                     {isGroupRule(r) && (
                                       <span
                                         title="Grouped set — shared passage, chart or scenario"
-                                        style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10, padding: '1px 5px' }}>
+                                        style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 12, padding: '1px 5px' }}>
                                         {r.groupKind ? GROUP_KIND_LABEL[r.groupKind] : 'Grouped Set'}
                                       </span>
                                     )}
                                     <span style={{ color: 'var(--ef-text-muted)' }}>{cell.subject}</span>
-                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>›</span>
-                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>{cell.topic}</span>
+                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>›</span>
+                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>{cell.topic}</span>
                                   </>
                                 ) : (
                                   <span
                                     title="Hand-picked questions, in the author's order"
-                                    style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10, padding: '1px 5px' }}>
+                                    style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 12, padding: '1px 5px' }}>
                                     Hand-picked
                                   </span>
                                 )}

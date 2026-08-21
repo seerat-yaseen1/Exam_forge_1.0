@@ -21,7 +21,7 @@ export function Field({ label, hint, required, children }: {
         <label className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
           {label}{required && <span style={{ color: 'var(--ef-danger)' }}> *</span>}
         </label>
-        {hint && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{hint}</span>}
+        {hint && <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>{hint}</span>}
       </div>
       {children}
     </div>
@@ -32,7 +32,7 @@ export function SectionLabel({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2 pt-1">
       <div style={{ flex: 1, height: 1, background: 'var(--ef-border-subtle)' }} />
-      <span style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em', fontSize: 10, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em', fontSize: 12, flexShrink: 0 }}>{label}</span>
       <div style={{ flex: 1, height: 1, background: 'var(--ef-border-subtle)' }} />
     </div>
   );
@@ -41,7 +41,7 @@ export function SectionLabel({ label }: { label: string }) {
 export const inputStyle: React.CSSProperties = {
   border: '1px solid var(--ef-border)', borderRadius: 2,
   color: 'var(--ef-ink)', background: 'var(--ef-surface)',
-  width: '100%', fontSize: 12, padding: '7px 10px', outline: 'none',
+  width: '100%', fontSize: 13, padding: '7px 10px', outline: 'none',
 };
 
 export const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' };
@@ -188,7 +188,7 @@ export function PresetChip({ label, onClick }: { label: string; onClick: () => v
       className="px-2.5 py-1 transition-all"
       style={{
         background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 999,
-        fontSize: 11, color: 'var(--ef-text-subtle)', letterSpacing: '0.01em',
+        fontSize: 12, color: 'var(--ef-text-subtle)', letterSpacing: '0.01em',
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLElement).style.background = 'var(--ef-ink)';
@@ -215,7 +215,7 @@ export function SegmentedToggle({
 }) {
   const btn = (active: boolean): React.CSSProperties => ({
     flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    gap: 6, padding: '7px 10px', fontSize: 11, letterSpacing: '0.02em',
+    gap: 6, padding: '7px 10px', fontSize: 12, letterSpacing: '0.02em',
     background: active ? 'var(--ef-ink)' : 'transparent',
     color: active ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
     transition: 'all 0.15s',
@@ -273,7 +273,7 @@ export function StartScheduleControl({
               <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
               <input type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)}
                 className="flex-1 outline-none"
-                style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }} />
+                style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }} />
             </div>
             <div className="flex flex-wrap gap-1.5">
               <PresetChip label="In 15 min" onClick={() => setRelative(15)} />
@@ -329,7 +329,7 @@ export function EndScheduleControl({
               <Calendar size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
               <input type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)}
                 className="flex-1 outline-none"
-                style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 12, border: 'none' }}
+                style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13, border: 'none' }}
                 min={startDate || undefined} />
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -359,7 +359,7 @@ export function LockedFieldWrapper({ label, reason, children }: {
         <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{label}</span>
         <div className="flex items-center gap-1">
           <Lock size={9} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{reason}</span>
+          <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>{reason}</span>
         </div>
       </div>
       <div style={{ opacity: 0.4, pointerEvents: 'none', userSelect: 'none' }}>
@@ -428,7 +428,7 @@ export function PenaltyInput({
             background: 'transparent', color: 'var(--ef-ink)',
           }}
         />
-        <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{type === 'percent' ? '%' : 'mk'}</span>
+        <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>{type === 'percent' ? '%' : 'mk'}</span>
       </div>
     </div>
   );
@@ -477,7 +477,7 @@ export function DifficultyRow({
         className="flex-shrink-0 capitalize"
         style={{
           background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`,
-          borderRadius: 2, fontSize: 10, padding: '2px 7px', minWidth: 48, textAlign: 'center',
+          borderRadius: 2, fontSize: 12, padding: '2px 7px', minWidth: 48, textAlign: 'center',
         }}
       >
         {DIFF_LABEL[diff]}
@@ -490,7 +490,7 @@ export function DifficultyRow({
 
       {/* Pick count */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <span style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>pick</span>
+        <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>pick</span>
         <input
           type="number"
           disabled={isEmpty}
@@ -501,7 +501,7 @@ export function DifficultyRow({
           max={available}
           className="outline-none text-center"
           style={{
-            width: 38, padding: '3px 4px', fontSize: 12, borderRadius: 2,
+            width: 38, padding: '3px 4px', fontSize: 13, borderRadius: 2,
             border: `1px solid ${isOver ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
             background: isOver ? 'var(--ef-danger-bg)' : 'var(--ef-surface)',
             color: isOver ? 'var(--ef-danger)' : 'var(--ef-ink)',
@@ -522,12 +522,12 @@ export function DifficultyRow({
           step="0.5"
           className="outline-none text-center"
           style={{
-            width: 38, padding: '3px 4px', fontSize: 12, borderRadius: 2,
+            width: 38, padding: '3px 4px', fontSize: 13, borderRadius: 2,
             border: '1px solid var(--ef-border)', background: 'var(--ef-surface)', color: 'var(--ef-ink)',
             cursor: isEmpty ? 'not-allowed' : 'text',
           }}
         />
-        <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>mk/Q</span>
+        <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>mk/Q</span>
       </div>
 
       {/* Per-level negative-marking override (Standard/Linear, gate open) */}
@@ -540,7 +540,7 @@ export function DifficultyRow({
                 type="button"
                 onClick={() => onRowPolicyChange(null)}
                 title="Reset to inherited penalty"
-                style={{ fontSize: 10, color: 'var(--ef-text-muted)', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ fontSize: 12, color: 'var(--ef-text-muted)', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}
               >
                 reset
               </button>
@@ -552,7 +552,7 @@ export function DifficultyRow({
               title="Override the penalty for this difficulty"
               className="flex items-center gap-1"
               style={{
-                fontSize: 10, color: 'var(--ef-text-muted)', padding: '2px 7px',
+                fontSize: 12, color: 'var(--ef-text-muted)', padding: '2px 7px',
                 border: '1px dashed var(--ef-border)', borderRadius: 2, background: 'transparent', cursor: 'pointer',
               }}
             >
@@ -566,7 +566,7 @@ export function DifficultyRow({
       {/* Subtotal + status */}
       <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
         {hasValue && !isOver && (
-          <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+          <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
             {count * (parseFloat(rule?.marksPerQuestion ?? '') || 1)} mk
           </span>
         )}
@@ -574,7 +574,7 @@ export function DifficultyRow({
           isOver
             ? <div className="flex items-center gap-0.5">
                 <AlertCircle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
-                <span style={{ color: 'var(--ef-danger)', fontSize: 10 }}>only {available}</span>
+                <span style={{ color: 'var(--ef-danger)', fontSize: 12 }}>only {available}</span>
               </div>
             : <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
         )}
@@ -625,7 +625,7 @@ export function SettingsToggle({ icon, label, hint, value, onChange, locked, loc
       {locked ? (
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <Lock size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          {lockReason && <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{lockReason}</span>}
+          {lockReason && <span style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>{lockReason}</span>}
         </div>
       ) : (
         <div

@@ -1,206 +1,37 @@
-import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router';
-import { motion } from 'motion/react';
-import { Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 import { useFacultyAuth } from '../../context/FacultyAuthContext';
-import { LogoMark } from '../../components/PlatformLogo';
+import { FirstLoginNotice, SetPassword } from '../../components/console/auth';
 
-const inputStyle: React.CSSProperties = {
-  background: 'var(--ef-canvas-raised)',
-  border: '1px solid var(--ef-border)',
-  color: 'var(--ef-ink)',
-  borderRadius: 2,
-  width: '100%',
-  outline: 'none',
-  fontSize: 13,
-  padding: '10px 14px',
-};
-const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--ef-ink)';
-  e.target.style.background = 'var(--ef-surface)';
-};
-const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--ef-border)';
-  e.target.style.background = 'var(--ef-canvas-raised)';
-};
-
-function StrengthBar({ password }: { password: string }) {
-  const score = [
-    password.length >= 8,
-    /[A-Z]/.test(password),
-    /[0-9]/.test(password),
-    /[^A-Za-z0-9]/.test(password),
-    password.length >= 12,
-  ].filter(Boolean).length;
-
-  const colors = ['var(--ef-border)', 'var(--ef-danger)', 'var(--ef-warning)', 'var(--ef-success)', 'var(--ef-success)'];
-  const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
-
-  if (!password) return null;
-  return (
-    <div className="mt-2">
-      <div className="flex gap-1 mb-1">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex-1 h-0.5 rounded-full transition-all"
-            style={{ background: i <= score ? colors[score] : 'var(--ef-border)' }} />
-        ))}
-      </div>
-      {score > 0 && (
-        <p className="text-xs" style={{ color: colors[score] }}>{labels[score]}</p>
-      )}
-    </div>
-  );
-}
-
+/**
+ * The forced password change on a first sign-in.
+ *
+ * A route rather than a modal, because it is not optional: there is nothing
+ * behind it to go back to, and the guards in every dashboard layout send you
+ * here until it is done.
+ */
 export function FacultyChangePasswordPage() {
   const navigate = useNavigate();
-  // Audit L3 (2026-08-04): the logo comes from the CONTEXT, not the session.
-  // This page read `session.logoUrl`, a field FacultySession has never had, so
-  // it was always undefined and the institute's uploaded logo silently never
-  // appeared here — the generic LogoMark fallback rendered every time.
-  const { session, changePassword, instituteLogo } = useFacultyAuth();
-
-  const [newPassword, setNewPassword]         = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showNew, setShowNew]                 = useState(false);
-  const [showConfirm, setShowConfirm]         = useState(false);
-  const [error, setError]                     = useState('');
-  const [loading, setLoading]                 = useState(false);
+  const { session, changePassword } = useFacultyAuth();
 
   if (!session) return <Navigate to="/faculty/login" replace />;
   if (!session.firstLoginRequired) return <Navigate to="/faculty/dashboard" replace />;
 
-  const canSubmit = newPassword.length >= 8 && confirmPassword.length > 0 && !loading;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    if (newPassword !== confirmPassword) { setError('Passwords do not match.'); return; }
-    if (newPassword.length < 8) { setError('Password must be at least 8 characters.'); return; }
-    setError('');
-    setLoading(true);
-    const result = await changePassword(newPassword);
-    setLoading(false);
-    if (!result.success) { setError(result.error ?? 'Failed to set password.'); return; }
-    navigate('/faculty/dashboard', { replace: true });
-  };
-
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: 'var(--ef-canvas)' }}>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[380px]"
-      >
-        {/* Platform identity */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="mb-4" style={{ color: 'var(--ef-ink)' }}>
-            {instituteLogo
-              ? <img src={instituteLogo} alt={session.instituteName}
-                  style={{ width: 36, height: 36, objectFit: 'contain' }} />
-              : <LogoMark px={36} />}
-          </div>
-          <span className="text-sm font-medium" style={{ letterSpacing: '0.2em', color: 'var(--ef-ink)' }}>
-            {session.name}
-          </span>
-          <div className="mt-5 w-8" style={{ height: 1, background: 'var(--ef-border-muted)' }} />
-        </div>
-
-        {/* Notice banner */}
-        <div className="flex items-start gap-3 px-4 py-3 mb-6"
-          style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderLeft: '2px solid var(--ef-ink)' }}>
-          <ShieldCheck size={14} strokeWidth={1.5} style={{ color: 'var(--ef-ink)', marginTop: 1, flexShrink: 0 }} />
-          <div>
-            <p className="text-xs font-medium" style={{ color: 'var(--ef-ink)', letterSpacing: '0.04em' }}>
-              Password change required
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
-              You are signed in with a temporary password. Set a permanent password to access your workspace.
-            </p>
-          </div>
-        </div>
-
-        {/* Form card */}
-        <div className="bg-white px-5 py-7 sm:px-8 sm:py-8"
-          style={{ border: '1px solid var(--ef-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>SET NEW PASSWORD</p>
-          <p className="text-sm mb-6" style={{ color: 'var(--ef-ink)' }}>{session.name}</p>
-          <p className="text-xs -mt-3 mb-6" style={{ color: 'var(--ef-text-muted)' }}>{session.instituteName}</p>
-
-          <form onSubmit={handleSubmit} noValidate>
-            <div className="mb-4">
-              <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                New password
-              </label>
-              <div className="relative">
-                <input type={showNew ? 'text' : 'password'} autoFocus autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(e) => { setNewPassword(e.target.value); setError(''); }}
-                  disabled={loading} placeholder="Min. 8 characters"
-                  style={{ ...inputStyle, paddingRight: 40 }}
-                  onFocus={onFocus} onBlur={onBlur} />
-                <button type="button" tabIndex={-1} onClick={() => setShowNew((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: 'var(--ef-text-muted)' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-                  {showNew ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
-                </button>
-              </div>
-              <StrengthBar password={newPassword} />
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-xs mb-2" style={{ color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}>
-                Confirm new password
-              </label>
-              <div className="relative">
-                <input type={showConfirm ? 'text' : 'password'} autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
-                  disabled={loading} placeholder="Repeat password"
-                  style={{ ...inputStyle, paddingRight: 40 }}
-                  onFocus={onFocus} onBlur={onBlur} />
-                <button type="button" tabIndex={-1} onClick={() => setShowConfirm((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: 'var(--ef-text-muted)' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)')}>
-                  {showConfirm ? <EyeOff size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
-                </button>
-              </div>
-              {confirmPassword && newPassword && (
-                <p className="text-xs mt-1.5" style={{
-                  color: confirmPassword === newPassword ? 'var(--ef-success)' : 'var(--ef-danger)',
-                }}>
-                  {confirmPassword === newPassword ? 'Passwords match' : 'Passwords do not match'}
-                </p>
-              )}
-            </div>
-
-            {error && (
-              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="text-xs mb-4 -mt-2" style={{ color: 'var(--ef-danger)' }}>
-                {error}
-              </motion.p>
-            )}
-
-            <button type="submit" disabled={!canSubmit}
-              className="w-full py-2.5 text-sm flex items-center justify-center gap-2 transition-opacity"
-              style={{
-                background: canSubmit ? 'var(--ef-ink)' : 'var(--ef-track)',
-                color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em',
-                cursor: canSubmit ? 'pointer' : 'not-allowed',
-              }}>
-              {loading
-                ? <><Loader2 size={14} className="animate-spin" /><span>Saving…</span></>
-                : 'Set password & enter workspace'}
-            </button>
-          </form>
-        </div>
-      </motion.div>
-    </div>
+    <SetPassword
+      audience="Set your password"
+      intro="This one opens the question bank and, where you have been granted it, live exam rosters."
+      notice={
+        <FirstLoginNotice>
+          You are signed in with a temporary password. Choose a permanent one to reach your
+          workspace.
+        </FirstLoginNotice>
+      }
+      submitLabel="Set password and continue"
+      onSubmit={async ({ password }) => {
+        const result = await changePassword(password);
+        if (result.success) navigate('/faculty/dashboard', { replace: true });
+        return result;
+      }}
+    />
   );
 }

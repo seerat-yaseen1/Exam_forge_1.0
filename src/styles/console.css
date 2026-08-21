@@ -457,6 +457,64 @@
     }
   }
 
+  /* ── A grid of cards ──────────────────────────────────────────────
+     auto-fill rather than fixed column counts: the number of columns follows
+     the space available, which is what makes it right in a sidebar-narrowed
+     content area as well as full width, without a breakpoint per layout. */
+
+  .ef-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--ef-gap);
+  }
+
+  /* The card body that is itself the link into the record. */
+  .ef-registry-open {
+    background: transparent;
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+    border-radius: var(--ef-radius);
+    transition: background-color 160ms ease;
+  }
+
+  .ef-registry-open:hover {
+    background: var(--ef-canvas-raised);
+  }
+
+  /* An id, shown as the monospace token it is. */
+  .ef-mono-chip {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.06em;
+    font-size: 10.5px;
+  }
+
+  /* The "back to the level above" link in a drill-in page's eyebrow. It
+     replaces the eyebrow rather than sitting beside the title, because that
+     is where the reader already looks for "where am I". */
+  .ef-crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px 4px 6px;
+    margin-left: -6px;
+    border: 0;
+    border-radius: var(--ef-radius-sm);
+    background: transparent;
+    font-family: inherit;
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ef-text-muted);
+    cursor: pointer;
+    transition: color 160ms ease, background-color 160ms ease;
+  }
+
+  .ef-crumb:hover {
+    color: var(--ef-ink);
+    background: var(--ef-canvas-raised);
+  }
+
   /* ── Disclosure ───────────────────────────────────────────────────
      A card that is a closed section until it is opened. The chevron rotates
      rather than swapping glyphs, so the control reads as the same object in

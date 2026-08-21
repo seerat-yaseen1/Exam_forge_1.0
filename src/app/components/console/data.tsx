@@ -30,6 +30,7 @@ import React, { useCallback, useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { MoreHorizontal, Search, X } from 'lucide-react';
+import { Button } from './ui';
 
 // ══════════════════════════════════════════════════════════════════
 // TABLE
@@ -341,6 +342,67 @@ export function Tabs({
         );
       })}
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONFIRM
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * "Are you sure?", in the product's own voice.
+ *
+ * ── WHY NOT window.confirm ────────────────────────────────────────
+ * Because it is the browser's dialog, not ours: system chrome, system
+ * typography, an OK/Cancel pair the user cannot be sure maps to the verbs
+ * they were reading, and no room to say what the consequence actually is.
+ * The subjects page had nine of these — `confirm("Delete topic \"X\" (t-1)?")`
+ * and `alert("Merged. 12 question(s) re-pointed.")` — which is a designed
+ * product asking questions through a 1995 dialog box.
+ *
+ * The button says the verb. "Delete subject", never "OK": the label is what
+ * someone reads at the moment of committing, and it should name the act.
+ */
+export function ConfirmSheet({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  body,
+  confirmLabel,
+  tone = 'danger',
+  busy = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  body: React.ReactNode;
+  confirmLabel: string;
+  tone?: 'danger' | 'primary';
+  busy?: boolean;
+}) {
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      variant="centre"
+      title={title}
+      footer={
+        <div className="flex items-center gap-2.5">
+          <Button variant={tone === 'danger' ? 'danger' : 'primary'} size="lg" onClick={onConfirm} loading={busy}>
+            {confirmLabel}
+          </Button>
+          <Button size="lg" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+        </div>
+      }
+    >
+      <div className="ef-t-sm ef-muted" style={{ lineHeight: 'var(--ef-leading-relaxed)' }}>
+        {body}
+      </div>
+    </Sheet>
   );
 }
 

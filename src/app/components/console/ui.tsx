@@ -530,6 +530,34 @@ export function Toast({ message, tone = 'ink' }: { message: React.ReactNode; ton
   );
 }
 
+/**
+ * A toast and the function that raises it, so a page does not carry the
+ * timer, the state and the element in three places.
+ *
+ * Returns the element rather than rendering into a portal, because where a
+ * page puts its confirmations is the page's business — and a provider at the
+ * app root would be a lot of machinery for a line of text.
+ */
+export function useToast() {
+  const [notice, setNotice] = React.useState<{ text: string; tone: 'ink' | 'success' | 'danger' } | null>(null);
+
+  React.useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const say = React.useCallback((text: string, tone: 'ink' | 'success' | 'danger' = 'ink') => {
+    setNotice({ text, tone });
+  }, []);
+
+  return {
+    say,
+    /** Render this once, anywhere in the page. */
+    toast: <Toast message={notice?.text ?? ''} tone={notice?.tone} />,
+  };
+}
+
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div

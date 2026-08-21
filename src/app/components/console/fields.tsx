@@ -47,6 +47,46 @@ export function Field({ label, hint, id, className = '', ...rest }: FieldProps) 
   );
 }
 
+// ── Labelled select ───────────────────────────────────────────────
+
+/**
+ * A `<select>`, not a custom listbox.
+ *
+ * The native control gets the platform's own picker on a phone — a
+ * full-height wheel that beats any div a web app can build at that size —
+ * and it is already themed: palette.css styles `select` alongside the text
+ * inputs, so the two match without this component doing anything.
+ */
+export function SelectField({
+  label,
+  hint,
+  id,
+  children,
+  ...rest
+}: React.SelectHTMLAttributes<HTMLSelectElement> & { label: string; hint?: React.ReactNode }) {
+  const generated = useId();
+  const fieldId = id ?? generated;
+  return (
+    <div>
+      <label
+        htmlFor={fieldId}
+        className="block mb-2"
+        style={{ fontSize: 11.5, color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
+      >
+        {label}
+      </label>
+      <select id={fieldId} style={{ width: '100%' }} {...rest}>
+        {children}
+      </select>
+      {hint && (
+        <p className="mt-1.5" style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Password, with a reveal toggle ────────────────────────────────
 
 type PasswordFieldProps = Omit<FieldProps, 'type'> & {

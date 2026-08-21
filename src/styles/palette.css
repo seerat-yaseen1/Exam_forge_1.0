@@ -318,6 +318,10 @@ html[data-ef-theme] textarea {
   color: var(--ef-ink);
   font-family: inherit;
   font-size: var(--ef-text-sm);
+  /* Matches .ef-input exactly. Without it a bare <select> keeps the browser's
+     own cramped inset and sits visibly shorter than the text field beside it
+     — which is the tell this block exists to remove. */
+  padding: 10px 12px;
   transition:
     border-color 160ms ease,
     background-color 160ms ease,

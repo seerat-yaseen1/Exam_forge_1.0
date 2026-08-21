@@ -1,5 +1,33 @@
+/**
+ * The subject and topic registry — subjects → topics → the questions in one.
+ *
+ * ── WHAT CHANGED ──────────────────────────────────────────────────
+ * The structure was already sound: a master-to-detail drill-in, built
+ * mobile-first with real 44px targets. Two things were not.
+ *
+ * 1. It asked its questions through the browser. Nine `confirm()` and
+ *    `alert()` calls — "Delete topic \"Probability\" (prob-0001)?", "Merged.
+ *    12 question(s) re-pointed." — inside an otherwise designed product.
+ *    Merging two topics rewrites every question tagged with one of them and
+ *    then deletes it; that is not a decision to put behind an OS dialog with
+ *    an OK button. Every one is now a sheet that names the verb and says what
+ *    the consequence is, or a toast that says what happened.
+ *
+ * 2. Subjects listed one per row at every width, so a platform with forty of
+ *    them was a forty-item scroll on a 1440px screen — while the topics one
+ *    level down were already in a responsive grid. Subjects now match, and
+ *    both levels gained a search box.
+ *
+ * The forms moved into sheets for the same reason: an inline form that pushes
+ * the list down re-flows the thing you were looking at in order to ask you
+ * three fields.
+ */
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Loader2, FolderTree, Trash2, ArrowRightLeft, Pencil, BookOpen, Layers, ChevronRight, ArrowLeft, Merge, RefreshCw } from 'lucide-react';
+import {
+  ArrowLeft, ArrowRightLeft, BookOpen, ChevronRight, FolderTree, Layers, Merge,
+  Pencil, Plus, RefreshCw, Trash2,
+} from 'lucide-react';
 import {
   getAllSubjects,
   getAllTopics,
@@ -13,846 +41,861 @@ import {
   updateSubject,
   updateTopic,
   isValidSlugId,
-  SLUG_ID_REGEX,
   type Subject,
   type Topic,
 } from '../../lib/subjectService';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
 import { QuestionBankCore } from '../components/questions/QuestionBankCore';
+import {
+  Button, Card, EmptyState, PageHeader, PageShell, SectionHeading, StatRow, StatTile,
+  useToast,
+} from '../components/console/ui';
+import { ConfirmSheet, SearchField, Sheet, Toolbar } from '../components/console/data';
+import { Field, SelectField } from '../components/console/fields';
 
-// ──────────────────────────────────────────────────────────────────
-// SubjectsPage — master → detail drill-in. The list shows subject
-// cards; clicking one slides into a detail view where its topics live.
-// IDs are user-typed slugs: 1–4 letters + '-' + 1–4 digits.
-// Mobile-first (works at 320px).
-// ──────────────────────────────────────────────────────────────────
+/**
+ * The id rule, in words.
+ *
+ * The page used to print the regex source — `^[a-z]{1,4}-\d{1,4}$` — under
+ * the field, which tells a developer everything and a registrar nothing.
+ * SLUG_ID_REGEX stays the authority; this is how it reads out loud, and the
+ * live example under it is what most people will copy anyway.
+ */
+const SLUG_FORMAT = 'One to four lowercase letters, a hyphen, then one to four digits';
+
+function errorText(e: unknown): string {
+  return (e as { message?: string })?.message ?? String(e);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PAGE
+// ══════════════════════════════════════════════════════════════════
 
 export function SubjectsPage() {
+  const { say, toast } = useToast();
+
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [loadingSubjects, setLoadingSubjects] = useState(true);
-
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [loadingTopics, setLoadingTopics] = useState(true);
-
-  const [showSubjectForm, setShowSubjectForm] = useState(false);
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [recounting, setRecounting] = useState(false);
 
-  const refreshSubjects = useCallback(async () => {
-    setLoadingSubjects(true);
+  const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [topicId, setTopicId] = useState<string | null>(null);
+
+  const [query, setQuery] = useState('');
+  const [newSubjectOpen, setNewSubjectOpen] = useState(false);
+  const [newTopicOpen, setNewTopicOpen] = useState(false);
+  const [renaming, setRenaming] = useState<{ kind: 'subject' | 'topic'; id: string; name: string } | null>(null);
+  const [deletingSubject, setDeletingSubject] = useState<Subject | null>(null);
+  const [deletingTopic, setDeletingTopic] = useState<Topic | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [moving, setMoving] = useState<Topic | null>(null);
+  const [merging, setMerging] = useState<Topic | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
     try {
-      setSubjects(await getAllSubjects());
+      const [s, t] = await Promise.all([getAllSubjects(), getAllTopics()]);
+      setSubjects(s);
+      setTopics(t);
+    } catch (e) {
+      say(errorText(e), 'danger');
     } finally {
-      setLoadingSubjects(false);
+      setLoading(false);
     }
-  }, []);
+  }, [say]);
 
-  const refreshTopics = useCallback(async () => {
-    setLoadingTopics(true);
-    try {
-      setTopics(await getAllTopics());
-    } finally {
-      setLoadingTopics(false);
-    }
-  }, []);
+  useEffect(() => { reload(); }, [reload]);
 
-  useEffect(() => { refreshSubjects(); refreshTopics(); }, [refreshSubjects, refreshTopics]);
-
-  const recountTopics = useCallback(async () => {
+  const recount = async () => {
     setRecounting(true);
     try {
       await refreshAllTopicCounts();
-      await refreshTopics();
-    } catch (e: any) {
-      alert(e.message ?? String(e));
+      await reload();
+      say('Question counts recalculated.', 'success');
+    } catch (e) {
+      say(errorText(e), 'danger');
     } finally {
       setRecounting(false);
     }
-  }, [refreshTopics]);
+  };
 
-  // Topics grouped by their subject for the detail view.
   const topicsBySubject = useMemo(() => {
     const m: Record<string, Topic[]> = {};
     topics.forEach((t) => { (m[t.subjectId] ??= []).push(t); });
     return m;
   }, [topics]);
 
-  const topicCountBySubject = useMemo(() => {
-    const m: Record<string, number> = {};
-    topics.forEach((t) => { m[t.subjectId] = (m[t.subjectId] ?? 0) + 1; });
-    return m;
-  }, [topics]);
+  const subject = subjectId ? subjects.find((s) => s.id === subjectId) ?? null : null;
+  const topic = topicId ? topics.find((t) => t.id === topicId) ?? null : null;
+  const subjectTopics = subject ? topicsBySubject[subject.id] ?? [] : [];
 
-  const selectedSubject = selectedSubjectId
-    ? subjects.find((s) => s.id === selectedSubjectId) ?? null
-    : null;
-  const selectedTopic = selectedTopicId
-    ? topics.find((t) => t.id === selectedTopicId) ?? null
-    : null;
-
-  return (
-    <div className="px-4 py-6 md:px-10 md:py-8" style={{ maxWidth: 1280, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <FolderTree size={18} strokeWidth={1.5} />
-        <h1 style={{ margin: 0 }}>Subjects</h1>
-      </div>
-
-      <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 4, overflow: 'hidden' }}>
-        {selectedSubject && selectedTopic ? (
-          <TopicQuestionsView
-            key={selectedTopic.id}
-            subject={selectedSubject}
-            topic={selectedTopic}
-            onBack={() => setSelectedTopicId(null)}
-            onChanged={async () => { await refreshTopics(); await refreshSubjects(); }}
-          />
-        ) : selectedSubject ? (
-          <SubjectDetail
-            key={selectedSubject.id}
-            subject={selectedSubject}
-            topics={topicsBySubject[selectedSubject.id] ?? []}
-            allSubjects={subjects}
-            topicsLoading={loadingTopics}
-            onBack={() => { setSelectedSubjectId(null); setSelectedTopicId(null); }}
-            onOpenTopic={(id) => setSelectedTopicId(id)}
-            onRenamed={(newId) => { setSelectedSubjectId(newId); refreshSubjects(); refreshTopics(); }}
-            onDeleted={() => { setSelectedSubjectId(null); setSelectedTopicId(null); refreshSubjects(); refreshTopics(); }}
-            onTopicsChanged={async () => { await refreshTopics(); await refreshSubjects(); }}
-          />
-        ) : (
-          <>
-            <div style={{ padding: 14, borderBottom: '1px solid var(--ef-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, letterSpacing: '0.04em', color: 'var(--ef-text-muted)' }}>
-                ALL SUBJECTS
-                {topics.length > 0 && <span style={{ color: 'var(--ef-text-muted)' }}> · {topics.length} topics</span>}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={recountTopics}
-                  disabled={recounting}
-                  title="Recalculate question counts for all topics"
-                  style={{ height: 28, padding: '0 10px', fontSize: 12 }}
-                >
-                  {recounting
-                    ? <Loader2 size={12} className="animate-spin" />
-                    : <RefreshCw size={12} strokeWidth={1.5} />}
-                  Recount
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowSubjectForm((v) => !v)}
-                  style={{ height: 28, padding: '0 12px', fontSize: 12 }}
-                >
-                  <Plus size={12} strokeWidth={1.5} /> New Subject
-                </Button>
-              </div>
-            </div>
-
-            {showSubjectForm && (
-              <NewSubjectForm
-                onCreated={async () => {
-                  setShowSubjectForm(false);
-                  await refreshSubjects();
-                }}
-                onCancel={() => setShowSubjectForm(false)}
-              />
-            )}
-
-            {loadingSubjects ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--ef-text-muted)' }}>
-                <Loader2 size={16} className="animate-spin" />
-              </div>
-            ) : subjects.length === 0 ? (
-              <EmptyHint text="No subjects yet. Click + New Subject to create one." />
-            ) : (
-              <div className="flex flex-col gap-3 p-3 sm:p-4">
-                {subjects.map((s) => (
-                  <SubjectCard
-                    key={s.id}
-                    subject={s}
-                    topicCount={topicCountBySubject[s.id] ?? 0}
-                    onOpen={() => { setSelectedSubjectId(s.id); setSelectedTopicId(null); }}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export default SubjectsPage;
-
-// ── Sub-components ────────────────────────────────────────────────
-
-function SlugChip({ id }: { id: string }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        background: 'var(--ef-ink)',
-        color: 'var(--ef-surface)',
-        fontSize: 10,
-        padding: '2px 6px',
-        borderRadius: 2,
-        letterSpacing: '0.04em',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {id}
-    </span>
-  );
-}
-
-function EmptyHint({ text }: { text: string }) {
-  return (
-    <div style={{ padding: 24, textAlign: 'center', color: 'var(--ef-text-muted)', fontSize: 13 }}>
-      {text}
-    </div>
-  );
-}
-
-function NewSubjectForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
-  const [id, setId] = useState('');
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const idValid = isValidSlugId(id);
-
-  const submit = async () => {
-    setErr(null);
-    setBusy(true);
-    try {
-      await createSubjectWithSlug(id.trim(), name);
-      setId(''); setName('');
-      onCreated();
-    } catch (e: any) {
-      setErr(e.message ?? String(e));
-    } finally {
-      setBusy(false);
-    }
+  // Clearing the search on every level change is deliberate: a filter that
+  // survives a drill-in silently hides half of the next screen.
+  const goTo = (nextSubject: string | null, nextTopic: string | null) => {
+    setSubjectId(nextSubject);
+    setTopicId(nextTopic);
+    setQuery('');
   };
 
-  return (
-    <div style={{ padding: 14, borderBottom: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
-      <div className="flex flex-col sm:flex-row" style={{ gap: 8, marginBottom: 8 }}>
-        <Input
-          placeholder="ID e.g. math-0001"
-          value={id}
-          onChange={(e) => setId(e.target.value.toLowerCase())}
-          style={{ width: '100%', maxWidth: 200, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
-          disabled={busy}
-        />
-        <Input
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={busy}
-        />
-      </div>
-      <div style={{ fontSize: 11, color: idValid || id === '' ? 'var(--ef-text-muted)' : 'var(--ef-danger)', marginBottom: 8 }}>
-        Format: {SLUG_ID_REGEX.toString().slice(1, -1)} — e.g. <code>math-0001</code>
-      </div>
-      {err && <div style={{ fontSize: 12, color: 'var(--ef-danger)', marginBottom: 8 }}>{err}</div>}
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
-        <Button size="sm" onClick={submit} disabled={busy || !idValid || !name.trim()}>
-          {busy ? <Loader2 size={12} className="animate-spin" /> : 'Create'}
-        </Button>
-      </div>
-    </div>
-  );
-}
+  const matches = (id: string, name: string) => {
+    const q = query.trim().toLowerCase();
+    return !q || id.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+  };
 
-// List item — clicking drills into the subject's detail view.
-function SubjectCard({
-  subject, topicCount, onOpen,
-}: {
-  subject: Subject;
-  topicCount: number;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      onClick={onOpen}
-      className="flex flex-col gap-3 p-4 text-left w-full cursor-pointer transition-colors hover:bg-[var(--ef-canvas-raised)]"
-      style={{
-        background: 'var(--ef-surface)',
-        border: '1px solid var(--ef-border)',
-        borderRadius: 3,
-        touchAction: 'manipulation',
-      }}
-    >
-      {/* Header: slug + drill affordance */}
-      <div className="flex items-center justify-between gap-2">
-        <SlugChip id={subject.id} />
-        <ChevronRight size={16} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
-      </div>
+  const visibleSubjects = subjects.filter((s) => matches(s.id, s.name));
+  const visibleTopics = subjectTopics.filter((t) => matches(t.id, t.name));
 
-      {/* Name */}
-      <p className="break-words" style={{ color: 'var(--ef-ink)', fontSize: 14, lineHeight: 1.4 }}>
-        {subject.name}
-      </p>
+  const totalQuestions = subjects.reduce((n, s) => n + (s.questionCount ?? 0), 0);
 
-      {/* Stats footer */}
-      <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
-        <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
-          <BookOpen size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          <span style={{ fontSize: 12 }}>{subject.questionCount}</span>
-          <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>questions</span>
-        </span>
-        <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
-          <Layers size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          <span style={{ fontSize: 12 }}>{topicCount}</span>
-          <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>topics</span>
-        </span>
-      </div>
-    </button>
-  );
-}
+  // ── Level 3: one topic's questions ─────────────────────────────
 
-// Detail view — slides in; the subject's topics are managed here.
-function SubjectDetail({
-  subject, topics, allSubjects, topicsLoading, onBack, onOpenTopic, onRenamed, onDeleted, onTopicsChanged,
-}: {
-  subject: Subject;
-  topics: Topic[];
-  allSubjects: Subject[];
-  topicsLoading: boolean;
-  onBack: () => void;
-  onOpenTopic: (topicId: string) => void;
-  onRenamed: (newId: string) => void;
-  onDeleted: () => void;
-  onTopicsChanged: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [addingTopic, setAddingTopic] = useState(false);
-
-  return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-200">
-      {/* Back bar */}
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--ef-border)' }}>
-        <button
-          onClick={onBack}
-          aria-label="Back to all subjects"
-          className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[var(--ef-border-subtle)]"
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ef-text-muted)', fontSize: 12, touchAction: 'manipulation' }}
+  if (subject && topic) {
+    return (
+      <PageShell>
+        <PageHeader
+          eyebrow={
+            <button type="button" className="ef-crumb" onClick={() => goTo(subject.id, null)}>
+              <ArrowLeft size={12} strokeWidth={1.8} />
+              {subject.name} · topics
+            </button>
+          }
+          title={topic.name}
+          subtitle={`Every question tagged ${topic.id}. Anything added here is tagged with this topic automatically.`}
         >
-          <ArrowLeft size={14} strokeWidth={1.5} /> All subjects
-        </button>
-      </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="ef-chip ef-mono-chip">{topic.id}</span>
+            <span className="ef-t-xs ef-muted">in {subject.name}</span>
+          </div>
+        </PageHeader>
 
-      {/* Subject header */}
-      {editing ? (
-        <EditSlugForm
-          initialId={subject.id}
-          initialName={subject.name}
-          onSave={async (newId, newName) => {
-            await updateSubject(subject.id, newId, newName);
-            setEditing(false);
-            onRenamed(newId);
-          }}
-          onCancel={() => setEditing(false)}
+        <QuestionBankCore
+          lockSubjectId={subject.id}
+          lockTopicId={topic.id}
+          showAddButton
+          onChanged={reload}
         />
-      ) : (
-        <div style={{ padding: 16, borderBottom: '1px solid var(--ef-border)' }}>
-          <div className="flex items-start justify-between gap-2" style={{ marginBottom: 10 }}>
-            <SlugChip id={subject.id} />
-            <div className="flex items-center gap-1 flex-shrink-0 -mt-2 -mr-2 sm:-mt-1 sm:-mr-1">
-              <IconBtn title="Edit subject" onClick={() => setEditing(true)}>
-                <Pencil size={13} strokeWidth={1.5} />
-              </IconBtn>
-              <IconBtn
-                title="Delete subject"
-                onClick={async () => {
-                  if (!confirm(`Delete subject "${subject.name}" (${subject.id})?`)) return;
-                  try {
-                    await deleteSubject(subject.id);
-                    onDeleted();
-                  } catch (e: any) {
-                    alert(e.message ?? String(e));
-                  }
-                }}
+        {toast}
+      </PageShell>
+    );
+  }
+
+  // ── Level 2: one subject's topics ──────────────────────────────
+
+  if (subject) {
+    return (
+      <PageShell>
+        <PageHeader
+          eyebrow={
+            <button type="button" className="ef-crumb" onClick={() => goTo(null, null)}>
+              <ArrowLeft size={12} strokeWidth={1.8} />
+              All subjects
+            </button>
+          }
+          title={subject.name}
+          subtitle="Topics divide a subject up. A question is tagged with exactly one of them, which is what lets a paper ask for two questions from probability."
+          actions={
+            <>
+              <Button
+                size="sm"
+                onClick={() => setRenaming({ kind: 'subject', id: subject.id, name: subject.name })}
               >
-                <Trash2 size={13} strokeWidth={1.5} />
-              </IconBtn>
-            </div>
-          </div>
-          <p className="break-words" style={{ color: 'var(--ef-ink)', fontSize: 16, lineHeight: 1.3, marginBottom: 10 }}>
-            {subject.name}
-          </p>
-          <div className="flex items-center gap-4">
-            <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
-              <BookOpen size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-              <span style={{ fontSize: 12 }}>{subject.questionCount}</span>
-              <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>questions</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
-              <Layers size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-              <span style={{ fontSize: 12 }}>{topics.length}</span>
-              <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>topics</span>
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Topics list */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--ef-border-subtle)' }}>
-        <span style={{ fontSize: 12, letterSpacing: '0.04em', color: 'var(--ef-text-muted)' }}>TOPICS</span>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setAddingTopic((v) => !v)}
-          style={{ height: 28, padding: '0 12px', fontSize: 12 }}
+                <Pencil size={12} strokeWidth={1.7} />
+                Rename
+              </Button>
+              <Button size="sm" variant="danger" onClick={() => setDeletingSubject(subject)}>
+                <Trash2 size={12} strokeWidth={1.7} />
+                Delete
+              </Button>
+            </>
+          }
         >
-          <Plus size={12} strokeWidth={1.5} /> New Topic
-        </Button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="ef-chip ef-mono-chip">{subject.id}</span>
+            <span className="ef-t-xs ef-muted inline-flex items-center gap-1.5">
+              <BookOpen size={12} strokeWidth={1.7} />
+              {subject.questionCount ?? 0} questions
+            </span>
+            <span className="ef-t-xs ef-muted inline-flex items-center gap-1.5">
+              <Layers size={12} strokeWidth={1.7} />
+              {subjectTopics.length} topics
+            </span>
+          </div>
+        </PageHeader>
+
+        <Toolbar
+          end={
+            <Button size="sm" variant="primary" onClick={() => setNewTopicOpen(true)}>
+              <Plus size={12} strokeWidth={1.9} />
+              New topic
+            </Button>
+          }
+        >
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            label="Search topics"
+            placeholder="Search topics by name or id…"
+          />
+        </Toolbar>
+
+        {loading ? (
+          <CardGridSkeleton />
+        ) : visibleTopics.length === 0 ? (
+          <EmptyState
+            icon={<Layers size={28} strokeWidth={1.1} />}
+            title={query ? 'Nothing matches' : 'No topics yet'}
+            body={
+              query
+                ? 'No topic in this subject matches that search.'
+                : 'A subject with no topics cannot be drawn from by a paper rule. Add the first one.'
+            }
+            action={
+              query ? (
+                <Button onClick={() => setQuery('')}>Clear search</Button>
+              ) : (
+                <Button variant="primary" onClick={() => setNewTopicOpen(true)}>
+                  <Plus size={13} strokeWidth={1.9} />
+                  New topic
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <div className="ef-card-grid">
+            {visibleTopics.map((t) => (
+              <RegistryCard
+                key={t.id}
+                id={t.id}
+                name={t.name}
+                questionCount={t.questionCount ?? 0}
+                onOpen={() => goTo(subject.id, t.id)}
+                actions={
+                  <>
+                    <IconAction
+                      title="Merge into another topic"
+                      onClick={() => setMerging(t)}
+                      disabled={subjectTopics.length < 2}
+                    >
+                      <Merge size={14} strokeWidth={1.7} />
+                    </IconAction>
+                    <IconAction
+                      title="Move to another subject"
+                      onClick={() => setMoving(t)}
+                      disabled={subjects.length < 2}
+                    >
+                      <ArrowRightLeft size={14} strokeWidth={1.7} />
+                    </IconAction>
+                    <IconAction title="Rename topic" onClick={() => setRenaming({ kind: 'topic', id: t.id, name: t.name })}>
+                      <Pencil size={14} strokeWidth={1.7} />
+                    </IconAction>
+                    <IconAction title="Delete topic" onClick={() => setDeletingTopic(t)}>
+                      <Trash2 size={14} strokeWidth={1.7} />
+                    </IconAction>
+                  </>
+                }
+              />
+            ))}
+          </div>
+        )}
+
+        <SlugFormSheet
+          open={newTopicOpen}
+          onClose={() => setNewTopicOpen(false)}
+          title="New topic"
+          description={`It will belong to ${subject.name}.`}
+          submitLabel="Create topic"
+          example="prob-0001"
+          onSubmit={async (id, name) => {
+            await createTopicWithSlug(id, name, subject.id);
+            setNewTopicOpen(false);
+            await reload();
+            say(`Topic ${name} created.`, 'success');
+          }}
+        />
+
+        {sharedSheets()}
+        {toast}
+      </PageShell>
+    );
+  }
+
+  // ── Level 1: every subject ─────────────────────────────────────
+
+  return (
+    <PageShell>
+      <PageHeader
+        eyebrow={
+          <>
+            <span className="ef-eyebrow-dot" />
+            Web owner
+          </>
+        }
+        title="Subjects"
+        subtitle="The taxonomy every question is filed under. Papers are built from it — a rule that asks for three questions from a topic is asking this registry."
+        actions={
+          <>
+            <Button size="sm" onClick={recount} disabled={recounting} title="Recalculate question counts from the questions themselves">
+              <RefreshCw size={12} strokeWidth={1.7} className={recounting ? 'animate-spin' : ''} />
+              Recount
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => setNewSubjectOpen(true)}>
+              <Plus size={12} strokeWidth={1.9} />
+              New subject
+            </Button>
+          </>
+        }
+      />
+
+      <div style={{ marginBottom: 26 }}>
+        <StatRow>
+          <StatTile
+            label="Subjects"
+            value={loading ? '—' : subjects.length}
+            icon={<FolderTree size={13} strokeWidth={1.7} />}
+            sub="top level"
+            hint="The coarsest division. Every topic belongs to exactly one."
+          />
+          <StatTile
+            label="Topics"
+            value={loading ? '—' : topics.length}
+            icon={<Layers size={13} strokeWidth={1.7} />}
+            sub="across all subjects"
+            hint="What a paper rule actually draws from."
+          />
+          <StatTile
+            label="Questions filed"
+            value={loading ? '—' : totalQuestions}
+            icon={<BookOpen size={13} strokeWidth={1.7} />}
+            sub="counted per subject"
+            hint="From each subject's stored count. Recount rebuilds these from the questions themselves."
+          />
+        </StatRow>
       </div>
 
-      {addingTopic && (
-        <NewTopicForm
-          fixedSubjectId={subject.id}
-          subjects={allSubjects}
-          onCreated={async () => { setAddingTopic(false); onTopicsChanged(); }}
-          onCancel={() => setAddingTopic(false)}
-        />
-      )}
+      <SectionHeading label="All subjects" count={loading ? undefined : subjects.length} />
 
-      {topicsLoading ? (
-        <div style={{ padding: 20, textAlign: 'center', color: 'var(--ef-text-muted)' }}>
-          <Loader2 size={14} className="animate-spin" />
-        </div>
-      ) : topics.length === 0 ? (
-        <EmptyHint text="No topics in this subject yet. Click + New Topic to create one." />
+      <Toolbar>
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          label="Search subjects"
+          placeholder="Search subjects by name or id…"
+        />
+      </Toolbar>
+
+      {loading ? (
+        <CardGridSkeleton />
+      ) : visibleSubjects.length === 0 ? (
+        <EmptyState
+          icon={<FolderTree size={28} strokeWidth={1.1} />}
+          title={query ? 'Nothing matches' : 'No subjects yet'}
+          body={
+            query
+              ? 'No subject matches that search.'
+              : 'Nothing can be filed until there is somewhere to file it. Create the first subject, then give it topics.'
+          }
+          action={
+            query ? (
+              <Button onClick={() => setQuery('')}>Clear search</Button>
+            ) : (
+              <Button variant="primary" onClick={() => setNewSubjectOpen(true)}>
+                <Plus size={13} strokeWidth={1.9} />
+                New subject
+              </Button>
+            )
+          }
+        />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3 sm:p-4">
-          {topics.map((t) => (
-            <TopicCard
-              key={t.id}
-              topic={t}
-              subjects={allSubjects}
-              siblingTopics={topics}
-              onOpen={() => onOpenTopic(t.id)}
-              onChanged={onTopicsChanged}
+        <div className="ef-card-grid">
+          {visibleSubjects.map((s) => (
+            <RegistryCard
+              key={s.id}
+              id={s.id}
+              name={s.name}
+              questionCount={s.questionCount ?? 0}
+              topicCount={(topicsBySubject[s.id] ?? []).length}
+              onOpen={() => goTo(s.id, null)}
             />
           ))}
         </div>
       )}
-    </div>
+
+      <SlugFormSheet
+        open={newSubjectOpen}
+        onClose={() => setNewSubjectOpen(false)}
+        title="New subject"
+        description="The id is typed rather than generated: it is what bulk uploads and question records refer to, so it has to be readable and stable."
+        submitLabel="Create subject"
+        example="math-0001"
+        onSubmit={async (id, name) => {
+          await createSubjectWithSlug(id, name);
+          setNewSubjectOpen(false);
+          await reload();
+          say(`Subject ${name} created.`, 'success');
+        }}
+      />
+
+      {sharedSheets()}
+      {toast}
+    </PageShell>
   );
-}
 
-function TopicCard({
-  topic, subjects, siblingTopics, onOpen, onChanged,
-}: {
-  topic: Topic;
-  subjects: Subject[];
-  siblingTopics: Topic[];
-  onOpen: () => void;
-  onChanged: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
+  // ── The dialogs both levels use ────────────────────────────────
 
-  if (editing) {
+  function sharedSheets() {
     return (
-      <div style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
-        <EditSlugForm
-          initialId={topic.id}
-          initialName={topic.name}
-          onSave={async (newId, newName) => {
-            await updateTopic(topic.id, newId, newName);
-            setEditing(false);
-            onChanged();
+      <>
+        {renaming && (
+          <SlugFormSheet
+            open
+            onClose={() => setRenaming(null)}
+            title={renaming.kind === 'subject' ? 'Rename subject' : 'Rename topic'}
+            description="Changing the id re-points every question filed under it. Nothing is lost, but anything that referred to the old id by hand will need updating."
+            submitLabel="Save"
+            initialId={renaming.id}
+            initialName={renaming.name}
+            example={renaming.kind === 'subject' ? 'math-0001' : 'prob-0001'}
+            onSubmit={async (id, name) => {
+              if (renaming.kind === 'subject') {
+                await updateSubject(renaming.id, id, name);
+                if (subjectId === renaming.id) setSubjectId(id);
+              } else {
+                await updateTopic(renaming.id, id, name);
+                if (topicId === renaming.id) setTopicId(id);
+              }
+              setRenaming(null);
+              await reload();
+              say('Renamed.', 'success');
+            }}
+          />
+        )}
+
+        <ConfirmSheet
+          open={!!deletingSubject}
+          onClose={() => setDeletingSubject(null)}
+          busy={busy}
+          title="Delete this subject?"
+          confirmLabel="Delete subject"
+          body={
+            deletingSubject && (
+              <>
+                <strong className="ef-ink">{deletingSubject.name}</strong> ({deletingSubject.id}) will be
+                removed from the registry. Its {(topicsBySubject[deletingSubject.id] ?? []).length} topic
+                {(topicsBySubject[deletingSubject.id] ?? []).length === 1 ? '' : 's'} and the{' '}
+                {deletingSubject.questionCount ?? 0} question
+                {(deletingSubject.questionCount ?? 0) === 1 ? '' : 's'} filed under it lose their
+                classification.
+              </>
+            )
+          }
+          onConfirm={async () => {
+            if (!deletingSubject) return;
+            setBusy(true);
+            try {
+              await deleteSubject(deletingSubject.id);
+              const name = deletingSubject.name;
+              setDeletingSubject(null);
+              goTo(null, null);
+              await reload();
+              say(`${name} deleted.`, 'success');
+            } catch (e) {
+              say(errorText(e), 'danger');
+            } finally {
+              setBusy(false);
+            }
           }}
-          onCancel={() => setEditing(false)}
         />
-      </div>
+
+        <ConfirmSheet
+          open={!!deletingTopic}
+          onClose={() => setDeletingTopic(null)}
+          busy={busy}
+          title="Delete this topic?"
+          confirmLabel="Delete topic"
+          body={
+            deletingTopic && (
+              <>
+                <strong className="ef-ink">{deletingTopic.name}</strong> ({deletingTopic.id}) will be
+                removed. The {deletingTopic.questionCount ?? 0} question
+                {(deletingTopic.questionCount ?? 0) === 1 ? '' : 's'} tagged with it stay, but no paper
+                rule can draw from them until they are filed somewhere else. Merging into another topic
+                keeps them reachable.
+              </>
+            )
+          }
+          onConfirm={async () => {
+            if (!deletingTopic) return;
+            setBusy(true);
+            try {
+              await deleteTopic(deletingTopic.id);
+              const name = deletingTopic.name;
+              setDeletingTopic(null);
+              await reload();
+              say(`${name} deleted.`, 'success');
+            } catch (e) {
+              say(errorText(e), 'danger');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+
+        <PickTargetSheet
+          open={!!moving}
+          onClose={() => setMoving(null)}
+          title="Move to another subject"
+          description={moving ? `Every question tagged ${moving.id} moves with it.` : ''}
+          label="Move into"
+          placeholder="Pick a subject…"
+          submitLabel="Move topic"
+          options={subjects.filter((s) => s.id !== moving?.subjectId).map((s) => ({ value: s.id, label: `${s.name} · ${s.id}` }))}
+          onSubmit={async (target) => {
+            if (!moving) return;
+            const res = await moveTopic(moving.id, target);
+            setMoving(null);
+            await reload();
+            say(`Moved. ${res.updatedQuestions} question${res.updatedQuestions === 1 ? '' : 's'} reassigned.`, 'success');
+          }}
+        />
+
+        <PickTargetSheet
+          open={!!merging}
+          onClose={() => setMerging(null)}
+          title="Merge into another topic"
+          description={
+            merging
+              ? `Every question tagged ${merging.id} is re-pointed at the topic you choose, and ${merging.id} is deleted. This cannot be undone.`
+              : ''
+          }
+          label="Merge into"
+          placeholder="Pick a topic…"
+          submitLabel="Merge topics"
+          tone="danger"
+          options={subjectTopics
+            .filter((t) => t.id !== merging?.id)
+            .map((t) => ({ value: t.id, label: `${t.name} · ${t.id}` }))}
+          onSubmit={async (target) => {
+            if (!merging) return;
+            const res = await mergeTopics(merging.id, target);
+            setMerging(null);
+            await reload();
+            say(`Merged. ${res.updatedQuestions} question${res.updatedQuestions === 1 ? '' : 's'} re-pointed.`, 'success');
+          }}
+        />
+      </>
     );
   }
+}
 
+export default SubjectsPage;
+
+// ══════════════════════════════════════════════════════════════════
+// PIECES
+// ══════════════════════════════════════════════════════════════════
+
+/** One subject or topic, as a card you can open. */
+function RegistryCard({
+  id,
+  name,
+  questionCount,
+  topicCount,
+  onOpen,
+  actions,
+}: {
+  id: string;
+  name: string;
+  questionCount: number;
+  topicCount?: number;
+  onOpen: () => void;
+  actions?: React.ReactNode;
+}) {
   return (
-    <div
-      className="flex flex-col"
-      style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}
-    >
-      {/* Clickable region → drill into this topic's questions */}
+    <Card padded={false} className="flex flex-col">
       <button
+        type="button"
         onClick={onOpen}
-        className="flex flex-col gap-3 p-4 text-left w-full cursor-pointer transition-colors hover:bg-[var(--ef-canvas-raised)]"
-        style={{ background: 'transparent', border: 'none', touchAction: 'manipulation', borderRadius: '3px 3px 0 0' }}
+        className="ef-registry-open flex flex-col gap-3 text-left w-full"
+        style={{ padding: 'var(--ef-pad-card)' }}
       >
-        <div className="flex items-center justify-between gap-2">
-          <SlugChip id={topic.id} />
-          <ChevronRight size={16} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
-        </div>
-        <p className="break-words" style={{ color: 'var(--ef-ink)', fontSize: 14, lineHeight: 1.4 }}>
-          {topic.name}
-        </p>
-        <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--ef-text-muted)' }}>
-          <BookOpen size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          <span style={{ fontSize: 12 }}>{topic.questionCount}</span>
-          <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>questions</span>
+        <span className="flex items-center justify-between gap-2">
+          <span className="ef-chip ef-mono-chip">{id}</span>
+          <ChevronRight size={16} strokeWidth={1.7} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
+        </span>
+        <span className="ef-t-md ef-ink break-words" style={{ fontWeight: 500 }}>
+          {name}
+        </span>
+        <span className="flex items-center gap-4 flex-wrap">
+          <span className="ef-t-xs ef-muted inline-flex items-center gap-1.5">
+            <BookOpen size={12} strokeWidth={1.7} />
+            {questionCount} question{questionCount === 1 ? '' : 's'}
+          </span>
+          {topicCount !== undefined && (
+            <span className="ef-t-xs ef-muted inline-flex items-center gap-1.5">
+              <Layers size={12} strokeWidth={1.7} />
+              {topicCount} topic{topicCount === 1 ? '' : 's'}
+            </span>
+          )}
         </span>
       </button>
 
-      {/* Action bar */}
-      <div
-        className="flex flex-wrap items-center gap-1 px-2 py-1.5"
-        style={{ borderTop: '1px solid var(--ef-border-subtle)' }}
-      >
-        <MergeTopicControl topic={topic} siblingTopics={siblingTopics} onMerged={onChanged} />
-        <MoveTopicControl topic={topic} subjects={subjects} onMoved={onChanged} />
-        <IconBtn title="Edit topic" onClick={() => setEditing(true)}>
-          <Pencil size={13} strokeWidth={1.5} />
-        </IconBtn>
-        <IconBtn
-          title="Delete topic"
-          onClick={async () => {
-            if (!confirm(`Delete topic "${topic.name}" (${topic.id})?`)) return;
-            await deleteTopic(topic.id);
-            onChanged();
-          }}
+      {actions && (
+        <div
+          className="flex items-center gap-0.5 flex-wrap"
+          style={{ padding: '6px 10px', borderTop: '1px solid var(--ef-border-subtle)' }}
         >
-          <Trash2 size={13} strokeWidth={1.5} />
-        </IconBtn>
-      </div>
-    </div>
+          {actions}
+        </div>
+      )}
+    </Card>
   );
 }
 
-// Third drill level — questions inside one topic (shared QuestionBankCore, locked).
-function TopicQuestionsView({
-  subject, topic, onBack, onChanged,
+function IconAction({
+  title,
+  onClick,
+  disabled,
+  children,
 }: {
-  subject: Subject;
-  topic: Topic;
-  onBack: () => void;
-  onChanged: () => void;
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-200">
-      {/* Back bar */}
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--ef-border)' }}>
-        <button
-          onClick={onBack}
-          aria-label={`Back to ${subject.name} topics`}
-          className="inline-flex items-center gap-1.5 rounded-sm transition-colors min-h-[44px] sm:min-h-[32px] px-2 -ml-2 hover:bg-[var(--ef-border-subtle)]"
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ef-text-muted)', fontSize: 12, touchAction: 'manipulation' }}
-        >
-          <ArrowLeft size={14} strokeWidth={1.5} /> {subject.name} · topics
-        </button>
-      </div>
-
-      {/* Topic header */}
-      <div style={{ padding: 16, borderBottom: '1px solid var(--ef-border)' }}>
-        <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
-          <SlugChip id={topic.id} />
-          <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>in {subject.name}</span>
-        </div>
-        <p className="break-words" style={{ color: 'var(--ef-ink)', fontSize: 16, lineHeight: 1.3 }}>{topic.name}</p>
-      </div>
-
-      {/* Shared question bank, scoped to this topic */}
-      <QuestionBankCore
-        lockSubjectId={subject.id}
-        lockTopicId={topic.id}
-        showAddButton
-        onChanged={onChanged}
-      />
-    </div>
-  );
-}
-
-function IconBtn({
-  title, onClick, disabled, children,
-}: { title: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
-  return (
     <button
+      type="button"
+      className="ef-icon-btn"
       onClick={onClick}
       disabled={disabled}
-      aria-label={title}
       title={title}
-      // Touch-friendly: ≥44px tap target on mobile (pointer: coarse), compact on desktop.
-      className="inline-flex items-center justify-center rounded-sm transition-colors min-h-[44px] min-w-[44px] sm:min-h-[30px] sm:min-w-[30px] hover:bg-[var(--ef-border-subtle)] disabled:opacity-40 disabled:cursor-not-allowed"
-      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ef-text-muted)', touchAction: 'manipulation' }}
+      aria-label={title}
     >
       {children}
     </button>
   );
 }
 
-function EditSlugForm({
-  initialId, initialName, onSave, onCancel,
+function CardGridSkeleton() {
+  return (
+    <div className="ef-card-grid" aria-busy="true">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="ef-skeleton" style={{ height: 132 }} />
+      ))}
+    </div>
+  );
+}
+
+// ── Sheets ────────────────────────────────────────────────────────
+
+/**
+ * Create or rename a subject or a topic.
+ *
+ * One sheet for four cases, because they are one form: a typed id, a name,
+ * and the rule the id has to satisfy. The id being user-typed rather than
+ * generated is the reason the format hint is always visible rather than only
+ * appearing once it has been got wrong.
+ */
+function SlugFormSheet({
+  open,
+  onClose,
+  title,
+  description,
+  submitLabel,
+  example,
+  initialId = '',
+  initialName = '',
+  onSubmit,
 }: {
-  initialId: string;
-  initialName: string;
-  onSave: (newId: string, newName: string) => Promise<void>;
-  onCancel: () => void;
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  description?: string;
+  submitLabel: string;
+  example: string;
+  initialId?: string;
+  initialName?: string;
+  onSubmit: (id: string, name: string) => Promise<void>;
 }) {
   const [id, setId] = useState(initialId);
   const [name, setName] = useState(initialName);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setId(initialId);
+    setName(initialName);
+    setError('');
+    setBusy(false);
+  }, [open, initialId, initialName]);
 
   const idValid = isValidSlugId(id);
+  const canSubmit = idValid && name.trim().length > 0 && !busy;
 
   const submit = async () => {
-    setErr(null);
+    if (!canSubmit) return;
     setBusy(true);
+    setError('');
     try {
-      await onSave(id.trim(), name);
-    } catch (e: any) {
-      setErr(e.message ?? String(e));
+      await onSubmit(id.trim(), name.trim());
+    } catch (e) {
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div style={{ padding: 12, borderBottom: '1px solid var(--ef-border)', background: 'var(--ef-canvas-raised)' }}>
-      <div className="flex flex-col sm:flex-row" style={{ gap: 8, marginBottom: 8 }}>
-        <Input
-          value={id}
-          onChange={(e) => setId(e.target.value.toLowerCase())}
-          style={{ width: '100%', maxWidth: 200, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
-          disabled={busy}
-        />
-        <Input value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
-      </div>
-      <div style={{ fontSize: 11, color: idValid ? 'var(--ef-text-muted)' : 'var(--ef-danger)', marginBottom: 8 }}>
-        Format: {SLUG_ID_REGEX.toString().slice(1, -1)}
-      </div>
-      {err && <div style={{ fontSize: 12, color: 'var(--ef-danger)', marginBottom: 8 }}>{err}</div>}
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
-        <Button size="sm" onClick={submit} disabled={busy || !idValid || !name.trim()}>
-          {busy ? <Loader2 size={12} className="animate-spin" /> : 'Save'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function MoveTopicControl({
-  topic, subjects, onMoved,
-}: { topic: Topic; subjects: Subject[]; onMoved: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [target, setTarget] = useState('');
-  const [busy, setBusy] = useState(false);
-  const candidates = subjects.filter((s) => s.id !== topic.subjectId);
-
-  const submit = async () => {
-    if (!target) return;
-    setBusy(true);
-    try {
-      const res = await moveTopic(topic.id, target);
-      alert(`Moved. ${res.updatedQuestions} question(s) reassigned.`);
-      setOpen(false);
-      setTarget('');
-      onMoved();
-    } catch (e: any) {
-      alert(e.message ?? String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <IconBtn
-        title="Move topic to another subject"
-        onClick={() => setOpen(true)}
-        disabled={candidates.length === 0}
-      >
-        <ArrowRightLeft size={13} strokeWidth={1.5} />
-      </IconBtn>
-    );
-  }
-
-  // Open state spans the full row width so the select + buttons never overflow at 320px.
-  return (
-    <div className="flex flex-wrap items-center gap-2 w-full mt-1">
-      <select
-        value={target}
-        onChange={(e) => setTarget(e.target.value)}
-        disabled={busy}
-        className="min-w-0"
-        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
-      >
-        <option value="">→ move to subject…</option>
-        {candidates.map((s) => (
-          <option key={s.id} value={s.id}>{s.id} · {s.name}</option>
-        ))}
-      </select>
-      <Button size="sm" onClick={submit} disabled={busy || !target} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>
-        {busy ? <Loader2 size={11} className="animate-spin" /> : 'Move'}
-      </Button>
-      <Button size="sm" variant="ghost" onClick={() => { setOpen(false); setTarget(''); }} disabled={busy} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>
-        Cancel
-      </Button>
-    </div>
-  );
-}
-
-function MergeTopicControl({
-  topic, siblingTopics, onMerged,
-}: { topic: Topic; siblingTopics: Topic[]; onMerged: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [target, setTarget] = useState('');
-  const [busy, setBusy] = useState(false);
-  // Can only merge into another topic in the same subject.
-  const candidates = siblingTopics.filter((t) => t.id !== topic.id);
-
-  const submit = async () => {
-    if (!target) return;
-    const targetTopic = candidates.find((t) => t.id === target);
-    if (!confirm(
-      `Merge "${topic.name}" (${topic.id}) into "${targetTopic?.name}" (${target})?\n\n` +
-      `All questions tagged "${topic.id}" will be re-pointed to "${target}", and "${topic.id}" will be deleted. This can't be undone.`
-    )) return;
-    setBusy(true);
-    try {
-      const res = await mergeTopics(topic.id, target);
-      alert(`Merged. ${res.updatedQuestions} question(s) re-pointed to "${target}".`);
-      setOpen(false);
-      setTarget('');
-      onMerged();
-    } catch (e: any) {
-      alert(e.message ?? String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <IconBtn
-        title="Merge this topic into another"
-        onClick={() => setOpen(true)}
-        disabled={candidates.length === 0}
-      >
-        <Merge size={13} strokeWidth={1.5} />
-      </IconBtn>
-    );
-  }
-
-  // Open state spans the full row width so the select + buttons never overflow at 320px.
-  return (
-    <div className="flex flex-wrap items-center gap-2 w-full mt-1">
-      <select
-        value={target}
-        onChange={(e) => setTarget(e.target.value)}
-        disabled={busy}
-        className="min-w-0"
-        style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid var(--ef-border)', borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)' }}
-      >
-        <option value="">⤵ merge into topic…</option>
-        {candidates.map((t) => (
-          <option key={t.id} value={t.id}>{t.id} · {t.name}</option>
-        ))}
-      </select>
-      <Button size="sm" onClick={submit} disabled={busy || !target} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>
-        {busy ? <Loader2 size={11} className="animate-spin" /> : 'Merge'}
-      </Button>
-      <Button size="sm" variant="ghost" onClick={() => { setOpen(false); setTarget(''); }} disabled={busy} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>
-        Cancel
-      </Button>
-    </div>
-  );
-}
-
-function NewTopicForm({
-  subjects, fixedSubjectId, onCreated, onCancel,
-}: {
-  subjects: Subject[];
-  fixedSubjectId?: string;       // when set, form is scoped to one subject (no picker)
-  onCreated: () => void;
-  onCancel: () => void;
-}) {
-  const [subjectId, setSubjectId] = useState(fixedSubjectId ?? '');
-  const [id, setId] = useState('');
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const idValid = isValidSlugId(id);
-
-  const submit = async () => {
-    if (!subjectId) { setErr('Pick a subject.'); return; }
-    setErr(null);
-    setBusy(true);
-    try {
-      await createTopicWithSlug(id.trim(), name, subjectId);
-      setId(''); setName('');
-      onCreated();
-    } catch (e: any) {
-      setErr(e.message ?? String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div style={{ padding: 14, borderBottom: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}>
-      {/* Subject selector — only when not scoped to a specific subject */}
-      {!fixedSubjectId && (
-        <div style={{ marginBottom: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--ef-text-muted)', display: 'block', marginBottom: 4 }}>
-            Subject <span style={{ color: 'var(--ef-danger)' }}>*</span>
-          </label>
-          <select
-            value={subjectId}
-            onChange={(e) => setSubjectId(e.target.value)}
-            disabled={busy}
-            style={{
-              width: '100%', maxWidth: 320, fontSize: 12, padding: '6px 8px',
-              border: `1px solid ${!subjectId ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`, borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
-            }}
-          >
-            <option value="">— pick a subject —</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
-            ))}
-          </select>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      variant="centre"
+      title={title}
+      description={description}
+      footer={
+        <div className="flex items-center gap-2.5">
+          <Button variant="primary" size="lg" onClick={submit} disabled={!canSubmit} loading={busy}>
+            {submitLabel}
+          </Button>
+          <Button size="lg" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
         </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row" style={{ gap: 8, marginBottom: 8 }}>
-        <Input
-          placeholder="ID e.g. prob-0001"
+      }
+    >
+      <div className="flex flex-col" style={{ gap: 16 }}>
+        <Field
+          label="Identifier"
           value={id}
-          onChange={(e) => setId(e.target.value.toLowerCase())}
-          style={{ width: '100%', maxWidth: 200, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+          onChange={(e) => {
+            setId(e.target.value.toLowerCase());
+            setError('');
+          }}
           disabled={busy}
+          placeholder={example}
+          autoFocus
+          style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.06em' }}
+          hint={
+            <span style={{ color: id && !idValid ? 'var(--ef-danger)' : undefined }}>
+              {SLUG_FORMAT} — for example {example}
+            </span>
+          }
         />
-        <Input
-          placeholder="Name"
+        <Field
+          label="Name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            setError('');
+          }}
           disabled={busy}
+          placeholder="What people will read"
         />
+        {error && (
+          <p className="ef-t-sm" role="alert" style={{ color: 'var(--ef-danger)' }}>
+            {error}
+          </p>
+        )}
       </div>
-      <div style={{ fontSize: 11, color: idValid || id === '' ? 'var(--ef-text-muted)' : 'var(--ef-danger)', marginBottom: 8 }}>
-        Format: {SLUG_ID_REGEX.toString().slice(1, -1)} — e.g. <code>prob-0001</code>
+    </Sheet>
+  );
+}
+
+/** Move or merge: pick one target, confirm, done. */
+function PickTargetSheet({
+  open,
+  onClose,
+  title,
+  description,
+  label,
+  placeholder,
+  submitLabel,
+  options,
+  onSubmit,
+  tone = 'primary',
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  description: string;
+  label: string;
+  placeholder: string;
+  submitLabel: string;
+  options: Array<{ value: string; label: string }>;
+  onSubmit: (target: string) => Promise<void>;
+  tone?: 'primary' | 'danger';
+}) {
+  const [target, setTarget] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setTarget('');
+    setError('');
+    setBusy(false);
+  }, [open]);
+
+  const submit = async () => {
+    if (!target || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onSubmit(target);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      variant="centre"
+      title={title}
+      description={description}
+      footer={
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant={tone === 'danger' ? 'danger' : 'primary'}
+            size="lg"
+            onClick={submit}
+            disabled={!target || busy}
+            loading={busy}
+          >
+            {submitLabel}
+          </Button>
+          <Button size="lg" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col" style={{ gap: 16 }}>
+        <SelectField
+          label={label}
+          value={target}
+          disabled={busy}
+          onChange={(e) => {
+            setTarget(e.target.value);
+            setError('');
+          }}
+        >
+          <option value="">{placeholder}</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </SelectField>
+        {error && (
+          <p className="ef-t-sm" role="alert" style={{ color: 'var(--ef-danger)' }}>
+            {error}
+          </p>
+        )}
       </div>
-      {err && <div style={{ fontSize: 12, color: 'var(--ef-danger)', marginBottom: 8 }}>{err}</div>}
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
-        <Button size="sm" onClick={submit} disabled={busy || !subjectId || !idValid || !name.trim()}>
-          {busy ? <Loader2 size={12} className="animate-spin" /> : 'Create'}
-        </Button>
-      </div>
-    </div>
+    </Sheet>
   );
 }

@@ -81,7 +81,7 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
           style={{
             border: '1px solid var(--ef-border)', borderRadius: 2,
             background: 'var(--ef-canvas-raised)', color: 'var(--ef-ink)',
-            fontFamily: 'monospace', fontSize: 12,
+            fontFamily: 'monospace', fontSize: 13,
           }}
         />
       </div>
@@ -99,7 +99,7 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
             color: !isBlock ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
           }}
         >
-          Inline &nbsp;<code style={{ fontSize: 10, opacity: 0.8 }}>$...$</code>
+          Inline &nbsp;<code style={{ fontSize: 12, opacity: 0.8 }}>$...$</code>
         </button>
         <button
           type="button"
@@ -112,7 +112,7 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
             color: isBlock ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
           }}
         >
-          Block &nbsp;<code style={{ fontSize: 10, opacity: 0.8 }}>$$...$$</code>
+          Block &nbsp;<code style={{ fontSize: 12, opacity: 0.8 }}>$$...$$</code>
         </button>
       </div>
 
@@ -135,7 +135,7 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
             style={{
               border: '1px solid var(--ef-border)', borderRadius: 2,
               background: 'var(--ef-canvas)', color: 'var(--ef-text-subtle)',
-              fontFamily: 'serif', fontSize: 13,
+              fontFamily: 'serif', fontSize: 14,
             }}
           >
             {s.label}

@@ -564,7 +564,7 @@ function StimulusTable({ table }: { table: NonNullable<ExamQuestionGroup['stimul
         </figcaption>
       )}
       <div style={{ overflowX: 'auto', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 14 }}>
           {table.headers.length > 0 && (
             <thead>
               <tr>
@@ -578,7 +578,7 @@ function StimulusTable({ table }: { table: NonNullable<ExamQuestionGroup['stimul
                       borderBottom: '1px solid var(--ef-border)', fontWeight: 600,
                     }}
                   >
-                    <RichText text={h} style={{ fontSize: 13 }} />
+                    <RichText text={h} style={{ fontSize: 14 }} />
                   </th>
                 ))}
               </tr>
@@ -595,7 +595,7 @@ function StimulusTable({ table }: { table: NonNullable<ExamQuestionGroup['stimul
                       borderBottom: ri === table.rows.length - 1 ? 'none' : '1px solid var(--ef-border)',
                     }}
                   >
-                    <RichText text={cell} style={{ fontSize: 13 }} />
+                    <RichText text={cell} style={{ fontSize: 14 }} />
                   </td>
                 ))}
               </tr>
@@ -615,7 +615,7 @@ export function StimulusBody({ group }: { group: ExamQuestionGroup }) {
       {stimulus.body && (
         <RichText
           text={stimulus.body}
-          style={{ fontSize: 14.5, color: 'var(--ef-ink)', lineHeight: '1.8', display: 'block' }}
+          style={{ fontSize: 15, color: 'var(--ef-ink)', lineHeight: '1.8', display: 'block' }}
         />
       )}
       {stimulus.table && <StimulusTable table={stimulus.table} />}
@@ -642,7 +642,7 @@ export function StimulusHeading({
         className="text-xs px-2 py-0.5 select-none"
         style={{
           background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)',
-          borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10,
+          borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 12,
           letterSpacing: '0.04em',
         }}
       >
@@ -861,7 +861,7 @@ export function QuestionRenderer({
               className="text-xs px-2 py-0.5 select-none"
               style={{
                 background: 'var(--ef-ink)', color: 'var(--ef-surface)',
-                borderRadius: 2, letterSpacing: '0.04em', fontSize: 10,
+                borderRadius: 2, letterSpacing: '0.04em', fontSize: 12,
               }}
             >
               {badgeText}

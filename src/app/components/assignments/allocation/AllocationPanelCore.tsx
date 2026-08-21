@@ -34,7 +34,7 @@ const INK = 'var(--ef-ink)', MUTED = 'var(--ef-text-muted)', FAINT = 'var(--ef-t
 
 const selectStyle: React.CSSProperties = {
   width: '100%', border: `1px solid ${LINE}`, borderRadius: 2,
-  background: PAPER, color: INK, fontSize: 13, padding: '9px 12px', outline: 'none',
+  background: PAPER, color: INK, fontSize: 14, padding: '9px 12px', outline: 'none',
 };
 
 type Props = {

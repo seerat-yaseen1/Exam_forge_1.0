@@ -139,7 +139,7 @@ function Countdown({ iso, now, urgent }: { iso: string; now: Date; urgent: boole
       {parts.map(([value, unit]) => (
         <span key={unit}>
           {value}
-          <span style={{ fontSize: 13, color: 'var(--ef-text-muted)', fontFamily: 'var(--font-sans)' }}>{unit}</span>
+          <span style={{ fontSize: 14, color: 'var(--ef-text-muted)', fontFamily: 'var(--font-sans)' }}>{unit}</span>
         </span>
       ))}
     </span>
@@ -202,7 +202,7 @@ function UpNextCard({ up, now }: { up: UpNext; now: Date }) {
 
             <div
               className="flex items-center gap-3.5 flex-wrap mt-3"
-              style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}
+              style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}
             >
               {a.subject && (
                 <span className="flex items-center gap-1.5">
@@ -230,7 +230,7 @@ function UpNextCard({ up, now }: { up: UpNext; now: Date }) {
           {up.deadline && (
             <div style={{ minWidth: 132 }}>
               <p
-                style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}
+                style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}
               >
                 {deadlineLabel}
               </p>
@@ -258,7 +258,7 @@ function UpNextCard({ up, now }: { up: UpNext; now: Date }) {
             <ChevronRight size={12} strokeWidth={1.6} />
           </Button>
           {up.kind === 'resume' && (
-            <span style={{ fontSize: 11.5, color: 'var(--ef-warning)' }}>
+            <span style={{ fontSize: 13, color: 'var(--ef-warning)' }}>
               An unfinished sitting is submitted automatically when its window closes.
             </span>
           )}
@@ -293,7 +293,7 @@ function PlacementCard({ mappings }: { mappings: AcademicMapping[] }) {
           <div key={level} className="flex items-start gap-3 flex-wrap">
             <span
               className="flex items-center gap-1.5 flex-shrink-0"
-              style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)', width: 104, paddingTop: 3 }}
+              style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)', width: 104, paddingTop: 3 }}
             >
               {LEVEL_CONFIG[level].icon}
               {LEVEL_CONFIG[level].label}
@@ -308,7 +308,7 @@ function PlacementCard({ mappings }: { mappings: AcademicMapping[] }) {
           </div>
         ))}
       </div>
-      <p className="mt-4 pt-3" style={{ fontSize: 11, color: 'var(--ef-text-muted)', borderTop: '1px solid var(--ef-border-subtle)' }}>
+      <p className="mt-4 pt-3" style={{ fontSize: 12, color: 'var(--ef-text-muted)', borderTop: '1px solid var(--ef-border-subtle)' }}>
         Your placement is managed by your institute administrator. Hover a tag to see its full path.
       </p>
     </Card>
@@ -436,7 +436,7 @@ export function StudentLandingPage() {
             {session.status === 'active' ? 'Active' : 'Disabled'}
           </Chip>
           <Chip>{session.instituteName}</Chip>
-          <span style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', fontFamily: 'ui-monospace, monospace' }}>
+          <span style={{ fontSize: 13, color: 'var(--ef-text-muted)', fontFamily: 'ui-monospace, monospace' }}>
             {session.email}
           </span>
         </div>
@@ -544,10 +544,10 @@ export function StudentLandingPage() {
                       style={{ padding: 'var(--ef-pad-card)' }}
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="truncate" style={{ fontSize: 13.5, color: 'var(--ef-ink)' }}>
+                        <p className="truncate" style={{ fontSize: 14, color: 'var(--ef-ink)' }}>
                           {row.assessment.title || 'Untitled Assessment'}
                         </p>
-                        <p className="truncate mt-1" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+                        <p className="truncate mt-1" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
                           {row.assessment.subject ? `${row.assessment.subject} · ` : ''}
                           {entry.attempt.submittedAt ? formatDayMonthTime(entry.attempt.submittedAt) : 'not submitted'}
                         </p>
@@ -587,7 +587,7 @@ export function StudentLandingPage() {
             )}
           </section>
 
-          <p className="text-center flex items-center justify-center gap-1.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+          <p className="text-center flex items-center justify-center gap-1.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
             <Sparkles size={11} strokeWidth={1.6} />
             Prefer a different look? Pick a theme from the palette icon in the header.
           </p>

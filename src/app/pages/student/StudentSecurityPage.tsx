@@ -64,7 +64,7 @@ export function StudentSecurityPage() {
                   }}
                 >
                   <Check size={13} strokeWidth={2.2} style={{ color: 'var(--ef-success)', flexShrink: 0 }} />
-                  <p style={{ fontSize: 12.5, color: 'var(--ef-success)' }}>Password updated.</p>
+                  <p style={{ fontSize: 13, color: 'var(--ef-success)' }}>Password updated.</p>
                 </div>
               </motion.div>
             )}
@@ -96,7 +96,7 @@ export function StudentSecurityPage() {
                 role="alert"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                style={{ fontSize: 12, color: 'var(--ef-danger)' }}
+                style={{ fontSize: 13, color: 'var(--ef-danger)' }}
               >
                 {error}
               </motion.p>
@@ -113,10 +113,10 @@ export function StudentSecurityPage() {
           <div className="flex items-start gap-3">
             <ShieldCheck size={15} strokeWidth={1.6} style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 1 }} />
             <div>
-              <p style={{ fontSize: 12.5, color: 'var(--ef-ink)', fontWeight: 500 }}>
+              <p style={{ fontSize: 13, color: 'var(--ef-ink)', fontWeight: 500 }}>
                 What makes a good one
               </p>
-              <p className="mt-1.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
+              <p className="mt-1.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}>
                 At least eight characters — twelve is better — with upper and lower case, a number and a
                 symbol. Do not reuse the password from another site: a breach somewhere else becomes a
                 breach here.

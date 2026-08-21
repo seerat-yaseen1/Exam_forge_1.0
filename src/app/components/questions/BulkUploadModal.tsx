@@ -56,7 +56,7 @@ function StepStrip({ current }: { current: number }) {
                   width: 18, height: 18, borderRadius: '50%',
                   background: done ? 'var(--ef-success)' : active ? 'var(--ef-ink)' : 'var(--ef-border-subtle)',
                   color: (done || active) ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
-                  fontSize: 9,
+                  fontSize: 11,
                   letterSpacing: '0.03em',
                   fontVariantNumeric: 'tabular-nums',
                 }}
@@ -119,12 +119,12 @@ function Step1({ onNext }: { onNext: () => void }) {
         {cards.map((c) => (
           <div key={c.badge} className="p-4" style={{ border: '1px solid var(--ef-border)', borderRadius: 3 }}>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs px-1.5 py-0.5 select-none" style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}>{c.badge}</span>
+              <span className="text-xs px-1.5 py-0.5 select-none" style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 12 }}>{c.badge}</span>
               <span className="text-xs" style={{ color: 'var(--ef-ink)' }}>{c.title}</span>
             </div>
             <div className="space-y-1 mb-3">
               {c.cols.map((col) => (
-                <p key={col} className="text-xs" style={{ color: 'var(--ef-text-muted)', fontFamily: 'monospace', fontSize: 11 }}>{col}</p>
+                <p key={col} className="text-xs" style={{ color: 'var(--ef-text-muted)', fontFamily: 'monospace', fontSize: 12 }}>{col}</p>
               ))}
             </div>
             <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>{c.note}</p>
@@ -290,13 +290,13 @@ function RowCard({
         <StatusDot status={status} />
 
         {/* Sheet + row */}
-        <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 10, minWidth: 60 }}>
+        <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 12, minWidth: 60 }}>
           {row.sheet} #{row.rowIndex}
         </span>
 
         {/* Type badge */}
         {draft.engine && (
-          <span className="text-xs px-1.5 py-0.5 select-none flex-shrink-0" style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, fontSize: 10 }}>
+          <span className="text-xs px-1.5 py-0.5 select-none flex-shrink-0" style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, fontSize: 12 }}>
             {draft.variant ?? draft.engine}
           </span>
         )}
@@ -308,13 +308,13 @@ function RowCard({
 
         {/* Subject pill */}
         {draft.subject && (
-          <span className="text-xs px-2 py-0.5 flex-shrink-0" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)', fontSize: 11 }}>
+          <span className="text-xs px-2 py-0.5 flex-shrink-0" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-subtle)', fontSize: 12 }}>
             {draft.subject}
             {subjectResolution?.kind === 'new' && (
-              <span style={{ color: 'var(--ef-warning-strong)', marginLeft: 4, fontSize: 10 }}>NEW</span>
+              <span style={{ color: 'var(--ef-warning-strong)', marginLeft: 4, fontSize: 12 }}>NEW</span>
             )}
             {subjectResolution?.kind === 'alias' && (
-              <span style={{ color: 'var(--ef-text-muted)', marginLeft: 4, fontSize: 10 }}>→ alias</span>
+              <span style={{ color: 'var(--ef-text-muted)', marginLeft: 4, fontSize: 12 }}>→ alias</span>
             )}
           </span>
         )}
@@ -327,7 +327,7 @@ function RowCard({
               background: status === 'error' ? 'var(--ef-danger-bg)' : 'var(--ef-warning-bg)',
               border: `1px solid ${status === 'error' ? 'var(--ef-danger-border)' : 'var(--ef-warning-border)'}`,
               color: status === 'error' ? 'var(--ef-danger)' : 'var(--ef-warning-strong)',
-              borderRadius: 2, fontSize: 10, letterSpacing: '0.04em',
+              borderRadius: 2, fontSize: 12, letterSpacing: '0.04em',
             }}
             title={`stem ${fmtPct(duplicateScore!.stemSim)} · options ${fmtPct(duplicateScore!.optionsSim)} · answer ${duplicateScore!.answerMatch ? '✓' : '✗'}`}
           >
@@ -350,7 +350,7 @@ function RowCard({
           </span>
         )}
 
-        <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+        <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
           {expanded ? '▲' : '▼'}
         </span>
       </button>
@@ -392,7 +392,7 @@ function RowCard({
             <div key={i} className="flex items-start gap-2 mb-1.5">
               <AlertCircle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 2 }} />
               <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>
-                <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{e.field}</span>: {e.message}
+                <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{e.field}</span>: {e.message}
               </p>
             </div>
           ))}
@@ -400,7 +400,7 @@ function RowCard({
             <div key={i} className="flex items-start gap-2 mb-1.5">
               <AlertTriangle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 2 }} />
               <p className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
-                <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{w.field}</span>: {w.message}
+                <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{w.field}</span>: {w.message}
               </p>
             </div>
           ))}

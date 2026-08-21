@@ -83,7 +83,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.4;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -228,7 +228,7 @@
     border-radius: var(--ef-radius-sm);
     border: 1px solid transparent;
     font-family: inherit;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     line-height: 1.2;
     letter-spacing: 0.01em;
@@ -299,13 +299,13 @@
 
   .ef-btn--sm {
     padding: 6px 11px;
-    font-size: 12px;
+    font-size: 13px;
     gap: 5px;
   }
 
   .ef-btn--lg {
     padding: 12px 22px;
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .ef-btn--block {
@@ -349,7 +349,7 @@
     border: 1px solid var(--ef-border);
     background: var(--ef-canvas-raised);
     color: var(--ef-text-subtle);
-    font-size: 11.5px;
+    font-size: 13px;
     line-height: 1.5;
     white-space: nowrap;
   }
@@ -392,7 +392,7 @@
 
   .ef-chip--sm {
     padding: 1px 7px;
-    font-size: 10.5px;
+    font-size: 12px;
   }
 
   /* A chip that does something — CopyChip is the only one so far. A <button>
@@ -486,7 +486,7 @@
   .ef-mono-chip {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     letter-spacing: 0.06em;
-    font-size: 10.5px;
+    font-size: 12px;
   }
 
   /* The "back to the level above" link in a drill-in page's eyebrow. It
@@ -502,7 +502,7 @@
     border-radius: var(--ef-radius-sm);
     background: transparent;
     font-family: inherit;
-    font-size: 11.5px;
+    font-size: 13px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--ef-text-muted);
@@ -647,7 +647,7 @@
     border: 0;
     background: transparent;
     color: var(--ef-text-muted);
-    font-size: 12.5px;
+    font-size: 13px;
     cursor: pointer;
     transition: color 160ms ease;
   }
@@ -693,7 +693,7 @@
     border: 0;
     background: transparent;
     color: var(--ef-text-subtle);
-    font-size: 12.5px;
+    font-size: 13px;
     text-align: left;
     cursor: pointer;
     transition: background-color 140ms ease, color 140ms ease;
@@ -722,7 +722,7 @@
     background: var(--ef-canvas-raised);
     color: var(--ef-ink);
     font-family: inherit;
-    font-size: 13px;
+    font-size: 14px;
     transition: border-color 160ms ease, background-color 160ms ease;
   }
 

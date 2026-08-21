@@ -79,7 +79,7 @@ export function PageHeader({
             {title}
           </h1>
           {subtitle && (
-            <p className="mt-2" style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--ef-text-muted)', maxWidth: '58ch' }}>
+            <p className="mt-2" style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ef-text-muted)', maxWidth: '58ch' }}>
               {subtitle}
             </p>
           )}
@@ -465,7 +465,7 @@ export function StatTile({
         {icon && <span style={{ color: 'var(--ef-text-muted)', display: 'flex' }}>{icon}</span>}
         <p
           className="truncate"
-          style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}
+          style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}
         >
           {label}
         </p>
@@ -474,7 +474,7 @@ export function StatTile({
         {value}
       </p>
       {sub && (
-        <p className="mt-1" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
+        <p className="mt-1" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
           {sub}
         </p>
       )}
@@ -521,7 +521,7 @@ export function LiveDot({ label }: { label: string }) {
   return (
     <span className="flex items-center gap-2 select-none">
       <span className="ef-pulse" />
-      <span style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>{label}</span>
     </span>
   );
 }
@@ -556,7 +556,7 @@ export function EmptyState({
       <p className="ef-display mt-4" style={{ fontSize: 16, color: 'var(--ef-ink)' }}>
         {title}
       </p>
-      <p className="mt-2" style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--ef-text-muted)', maxWidth: 380 }}>
+      <p className="mt-2" style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--ef-text-muted)', maxWidth: 380 }}>
         {body}
       </p>
       {action && <div className="mt-5">{action}</div>}
@@ -647,7 +647,7 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
       }}
     >
       <AlertTriangle size={14} strokeWidth={1.6} style={{ color: 'var(--ef-danger)', flexShrink: 0 }} />
-      <p className="flex-1" style={{ fontSize: 12.5, color: 'var(--ef-danger)' }}>
+      <p className="flex-1" style={{ fontSize: 13, color: 'var(--ef-danger)' }}>
         {message}
       </p>
       {onRetry && (

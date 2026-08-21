@@ -44,7 +44,7 @@ const inp: React.CSSProperties = {
   border: '1px solid var(--ef-border)',
   color: 'var(--ef-ink)',
   borderRadius: 2,
-  fontSize: 13,
+  fontSize: 14,
   padding: '8px 10px',
   width: '100%',
   outline: 'none',
@@ -442,11 +442,11 @@ export function QuestionGroupEditor({
                 <div className="flex-1 min-w-0">
                   <RichText
                     text={c.stem}
-                    style={{ fontSize: 12.5, color: 'var(--ef-ink)', lineHeight: '1.5',
+                    style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.5',
                       display: '-webkit-box', WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}
                   />
-                  <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+                  <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
                     {/* Was a three-arm ternary ending in 'Match', so a coding
                         child was labelled "Match". ENGINE_LABEL is exhaustive
                         over QuestionEngine, so a fifth engine fails the build
@@ -561,7 +561,7 @@ export function QuestionGroupEditor({
                   }}
                 >
                   <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{f.label}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>{f.hint}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>{f.hint}</p>
                 </button>
               );
             })}

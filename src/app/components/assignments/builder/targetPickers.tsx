@@ -164,7 +164,7 @@ export function InstitutePicker({
                   className="text-xs px-1.5 py-0.5 flex-shrink-0"
                   style={{
                     background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)',
-                    borderRadius: 2, fontSize: 10,
+                    borderRadius: 2, fontSize: 12,
                   }}
                 >
                   {inst.code}
@@ -182,7 +182,7 @@ export function InstitutePicker({
           style={{ borderTop: '1px solid var(--ef-border-subtle)', background: 'var(--ef-warning-bg)' }}
         >
           <AlertTriangle size={10} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0 }} />
-          <span style={{ color: 'var(--ef-warning)', fontSize: 10 }}>
+          <span style={{ color: 'var(--ef-warning)', fontSize: 12 }}>
             No institutes selected — no students will receive this assessment.
           </span>
         </div>
@@ -344,7 +344,7 @@ export function StudentPicker({
                       background: isActive ? 'rgba(255,255,255,0.25)' : 'var(--ef-ink)',
                       color: 'var(--ef-surface)',
                       borderRadius: 9,
-                      fontSize: 9,
+                      fontSize: 11,
                       padding: '1px 5px',
                     }}
                   >
@@ -431,7 +431,7 @@ export function StudentPicker({
                   className="text-xs px-1.5 py-0.5 flex-shrink-0"
                   style={{
                     background: 'var(--ef-border-subtle)', color: 'var(--ef-text-muted)',
-                    borderRadius: 2, fontSize: 10,
+                    borderRadius: 2, fontSize: 12,
                     maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
                   title={instName}
@@ -451,7 +451,7 @@ export function StudentPicker({
           style={{ borderTop: '1px solid var(--ef-border-subtle)', background: 'var(--ef-warning-bg)' }}
         >
           <AlertTriangle size={10} strokeWidth={1.5} style={{ color: 'var(--ef-warning)', flexShrink: 0 }} />
-          <span style={{ color: 'var(--ef-warning)', fontSize: 10 }}>
+          <span style={{ color: 'var(--ef-warning)', fontSize: 12 }}>
             No students selected — this assessment will not be visible to anyone.
           </span>
         </div>

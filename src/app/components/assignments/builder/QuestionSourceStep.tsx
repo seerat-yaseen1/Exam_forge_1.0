@@ -457,7 +457,7 @@ function BankPicker({ banks, loading, selected, onToggle, locked }: {
       <div className="flex flex-col items-center justify-center py-10" style={{ color: 'var(--ef-text-muted)' }}>
         <Library size={20} strokeWidth={1} style={{ marginBottom: 8 }} />
         <p className="text-xs">No question banks yet</p>
-        <p style={{ fontSize: 11, color: 'var(--ef-border-muted)', marginTop: 4 }}>
+        <p style={{ fontSize: 12, color: 'var(--ef-border-muted)', marginTop: 4 }}>
           Create one in the question bank, or pick a different pool.
         </p>
       </div>
@@ -488,7 +488,7 @@ function BankPicker({ banks, loading, selected, onToggle, locked }: {
               <p className="text-xs" style={{ color: isSelected ? 'var(--ef-ink)' : 'var(--ef-text-subtle)' }}>
                 {bank.name}
               </p>
-              <p style={{ fontSize: 10, color: 'var(--ef-text-muted)', marginTop: 2 }}>
+              <p style={{ fontSize: 12, color: 'var(--ef-text-muted)', marginTop: 2 }}>
                 {bank.questionIds.length} question{bank.questionIds.length === 1 ? '' : 's'}
                 {bank.subject ? ` · ${bank.subject}` : ''}
                 {bank.description ? ` · ${bank.description}` : ''}
@@ -663,7 +663,7 @@ function QuestionMultiPicker({
                 <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.55 }}>
                   {plainStem(q.stem) || <em style={{ color: 'var(--ef-text-muted)' }}>No question text</em>}
                 </p>
-                <p style={{ fontSize: 10, color: 'var(--ef-text-muted)', marginTop: 3 }}>
+                <p style={{ fontSize: 12, color: 'var(--ef-text-muted)', marginTop: 3 }}>
                   {ENGINE_LABEL[q.engine]} · {DIFF_LABEL[q.difficulty]}
                   {qSubject(q) ? ` · ${qSubject(q)}` : ''}
                   {qTopic(q) ? ` › ${qTopic(q)}` : ''}

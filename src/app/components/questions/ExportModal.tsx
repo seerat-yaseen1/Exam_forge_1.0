@@ -91,7 +91,7 @@ function SubjectMultiSelect({
           >
             {s.name}
             {s.questionCount > 0 && (
-              <span style={{ opacity: 0.6, fontSize: 10 }}>{s.questionCount}</span>
+              <span style={{ opacity: 0.6, fontSize: 12 }}>{s.questionCount}</span>
             )}
           </button>
         );
@@ -134,7 +134,7 @@ function TagFilterInput({
         onBlur={() => { if (input.trim()) commit(input); }}
         placeholder={tags.length === 0 ? 'Filter by tags (Enter to add)…' : ''}
         className="flex-1 text-xs outline-none min-w-20"
-        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
+        style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 14 }}
       />
     </div>
   );
@@ -325,7 +325,7 @@ export function ExportModal({ questions, subjects, onClose }: ExportModalProps) 
 
   const inp: React.CSSProperties = {
     background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', color: 'var(--ef-ink)',
-    borderRadius: 2, outline: 'none', fontSize: 12, padding: '7px 10px', width: '100%',
+    borderRadius: 2, outline: 'none', fontSize: 13, padding: '7px 10px', width: '100%',
   };
 
   // Live-filtered count

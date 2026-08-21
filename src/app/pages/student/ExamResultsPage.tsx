@@ -104,7 +104,7 @@ function ScoreRing({ pct, passed }: { pct: number; passed: boolean | null }) {
       <text x={55} y={50} textAnchor="middle" style={{ fontSize: 18, fill: color, fontWeight: 300 }}>
         {pct}%
       </text>
-      <text x={55} y={66} textAnchor="middle" style={{ fontSize: 10, fill: 'var(--ef-text-muted)' }}>
+      <text x={55} y={66} textAnchor="middle" style={{ fontSize: 12, fill: 'var(--ef-text-muted)' }}>
         {passed === true ? 'PASSED' : passed === false ? 'FAILED' : 'PENDING'}
       </text>
     </svg>
@@ -252,7 +252,7 @@ function ReviewQuestion({
         <div className="flex-1 min-w-0">
           <RichText
             text={question.stem}
-            style={{ fontSize: 12, color: 'var(--ef-ink)', lineHeight: '1.5',
+            style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.5',
               display: '-webkit-box', WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical', overflow: 'hidden' } as any}
           />
@@ -306,7 +306,7 @@ function ReviewQuestion({
                 <RichText
                   text={question.stem}
                   image={question.stemImage}
-                  style={{ fontSize: 13, color: 'var(--ef-ink)', lineHeight: '1.7', display: 'block' }}
+                  style={{ fontSize: 14, color: 'var(--ef-ink)', lineHeight: '1.7', display: 'block' }}
                 />
               </div>
 
@@ -367,7 +367,7 @@ function ReviewQuestion({
                     className="px-3 py-2.5"
                     style={{
                       background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2,
-                      fontSize: 13, color: 'var(--ef-success-strong)', lineHeight: 1.6,
+                      fontSize: 14, color: 'var(--ef-success-strong)', lineHeight: 1.6,
                     }}
                   >
                     {question.options
@@ -438,7 +438,7 @@ function ReviewQuestion({
                   <p className="text-xs mb-1.5" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>EXPLANATION</p>
                   <RichText
                     text={question.explanation}
-                    style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: '1.7', display: 'block' }}
+                    style={{ fontSize: 14, color: 'var(--ef-text-muted)', lineHeight: '1.7', display: 'block' }}
                   />
                 </div>
               )}
@@ -913,7 +913,7 @@ export function ExamResultsPage() {
                           className="flex items-center gap-4 px-4 py-3"
                           style={{ borderBottom: idx < attempt.scores!.bySection.length - 1 ? '1px solid var(--ef-border-subtle)' : 'none' }}>
                           <div style={{ width: 20, height: 20, borderRadius: 2, background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--ef-text-muted)', flexShrink: 0 }}>
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--ef-text-muted)', flexShrink: 0 }}>
                             {idx + 1}
                           </div>
                           <p className="text-xs flex-1" style={{ color: 'var(--ef-ink)' }}>{sec.sectionName}</p>

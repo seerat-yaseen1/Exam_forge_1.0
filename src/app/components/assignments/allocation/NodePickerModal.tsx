@@ -314,7 +314,7 @@ function RowItem({ row, checked, onToggle, query }: {
           <Highlight text={row.name} query={query} />
         </span>
         {row.breadcrumb && (
-          <span className="text-xs block truncate" style={{ color: FAINT, fontSize: 10 }}>
+          <span className="text-xs block truncate" style={{ color: FAINT, fontSize: 12 }}>
             <Highlight text={row.breadcrumb} query={query} />
           </span>
         )}

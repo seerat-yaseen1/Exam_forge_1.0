@@ -86,7 +86,7 @@ function Segmented<T extends string>({
               borderRadius: 'calc(var(--ef-radius-sm) - 2px)',
               border: 0,
               cursor: 'pointer',
-              fontSize: 12.5,
+              fontSize: 13,
               background: active ? 'var(--ef-surface)' : 'transparent',
               color: active ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
               boxShadow: active ? 'var(--ef-shadow-sm)' : 'none',
@@ -130,7 +130,7 @@ function ThemeTile({
       <ThemeSwatch theme={theme} size={44} />
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-1.5">
-          <span className="truncate" style={{ fontSize: 13, color: 'var(--ef-ink)', fontWeight: 500 }}>
+          <span className="truncate" style={{ fontSize: 14, color: 'var(--ef-ink)', fontWeight: 500 }}>
             {theme.label}
           </span>
           {theme.mode === 'dark'
@@ -140,7 +140,7 @@ function ThemeTile({
         <span
           className="block mt-0.5"
           style={{
-            fontSize: 11.5,
+            fontSize: 13,
             color: 'var(--ef-text-muted)',
             lineHeight: 1.4,
             display: '-webkit-box',
@@ -176,11 +176,11 @@ function Specimen() {
       >
         <span className="flex items-center gap-2">
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--ef-accent)' }} />
-          <span style={{ fontSize: 11, letterSpacing: '0.14em', color: 'var(--ef-ink)', fontWeight: 600 }}>
+          <span style={{ fontSize: 12, letterSpacing: '0.14em', color: 'var(--ef-ink)', fontWeight: 600 }}>
             SPECIMEN
           </span>
         </span>
-        <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>every piece, at once</span>
+        <span style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>every piece, at once</span>
       </div>
 
       <div style={{ background: 'var(--ef-canvas)', padding: 'var(--ef-pad-card)' }}>
@@ -189,7 +189,7 @@ function Specimen() {
             <p className="ef-display" style={{ fontSize: 17, color: 'var(--ef-ink)' }}>
               Statistics · Paper 2
             </p>
-            <p className="mt-1.5" style={{ fontSize: 12, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+            <p className="mt-1.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
               Secondary text carries most of this interface — timestamps, labels, the quiet
               half of every row. It is the first thing a palette gets wrong.
             </p>
@@ -204,7 +204,7 @@ function Specimen() {
 
             <div className="mt-4">
               <div className="flex items-center justify-between mb-1.5">
-                <span style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}>
+                <span style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ef-text-muted)' }}>
                   Progress
                 </span>
                 <span className="ef-display" style={{ fontSize: 14, color: 'var(--ef-ink)' }}>72%</span>
@@ -229,7 +229,7 @@ function Specimen() {
             }}
           >
             <AlertTriangle size={13} strokeWidth={1.6} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 1 }} />
-            <p style={{ fontSize: 12, color: 'var(--ef-danger)', lineHeight: 1.55 }}>
+            <p style={{ fontSize: 13, color: 'var(--ef-danger)', lineHeight: 1.55 }}>
               Warnings have to stay legible in every theme — this banner is checked against each
               palette's own surface, not against white.
             </p>
@@ -360,7 +360,7 @@ export function AppearancePage({ role }: { role: AppearanceRole }) {
             }}
           >
             <Info size={13} strokeWidth={1.6} style={{ color: 'var(--ef-text-muted)', flexShrink: 0, marginTop: 1 }} />
-            <p style={{ fontSize: 12, color: 'var(--ef-text-muted)', lineHeight: 1.65 }}>
+            <p style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.65 }}>
               Your choice is stored on this device and against your account. Signing in somewhere
               else brings it with you; the local copy is what makes the theme correct on the very
               first frame after a refresh, before the account has finished loading.
@@ -386,7 +386,7 @@ export function AppearancePage({ role }: { role: AppearanceRole }) {
           return (
             <section key={group}>
               <SectionHeading label={GROUP_LABELS[group].title} count={group === 'base' ? undefined : themes.length} />
-              <p className="-mt-2 mb-3.5" style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
+              <p className="-mt-2 mb-3.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
                 {GROUP_LABELS[group].caption}
               </p>
 
@@ -412,10 +412,10 @@ export function AppearancePage({ role }: { role: AppearanceRole }) {
                       <Monitor size={18} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="block truncate" style={{ fontSize: 13, color: 'var(--ef-ink)', fontWeight: 500 }}>
+                      <span className="block truncate" style={{ fontSize: 14, color: 'var(--ef-ink)', fontWeight: 500 }}>
                         Match system
                       </span>
-                      <span className="block mt-0.5" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.4 }}>
+                      <span className="block mt-0.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.4 }}>
                         Follows your device, light or dark.
                       </span>
                     </span>
@@ -447,7 +447,7 @@ export function AppearancePage({ role }: { role: AppearanceRole }) {
         {/* ── Specimen ── */}
         <section>
           <SectionHeading label="How it looks" />
-          <p className="-mt-2 mb-3.5" style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
+          <p className="-mt-2 mb-3.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
             Hover any theme above to try it here — and everywhere else on the page. Nothing is
             saved until you click.
           </p>
@@ -461,11 +461,11 @@ export function AppearancePage({ role }: { role: AppearanceRole }) {
             <div className="flex flex-col" style={{ gap: 22 }}>
               <div className="flex items-start justify-between gap-6 flex-wrap">
                 <div style={{ maxWidth: '46ch' }}>
-                  <p className="flex items-center gap-2" style={{ fontSize: 13, color: 'var(--ef-ink)', fontWeight: 500 }}>
+                  <p className="flex items-center gap-2" style={{ fontSize: 14, color: 'var(--ef-ink)', fontWeight: 500 }}>
                     <Rows3 size={13} strokeWidth={1.7} style={{ color: 'var(--ef-text-muted)' }} />
                     Density
                   </p>
-                  <p className="mt-1.5" style={{ fontSize: 12, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                  <p className="mt-1.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                     Compact tightens the space around and inside cards so more of a long list fits on
                     screen. Text size is not affected — less scrolling should not cost legibility.
                   </p>
@@ -485,11 +485,11 @@ export function AppearancePage({ role }: { role: AppearanceRole }) {
 
               <div className="flex items-start justify-between gap-6 flex-wrap">
                 <div style={{ maxWidth: '46ch' }}>
-                  <p className="flex items-center gap-2" style={{ fontSize: 13, color: 'var(--ef-ink)', fontWeight: 500 }}>
+                  <p className="flex items-center gap-2" style={{ fontSize: 14, color: 'var(--ef-ink)', fontWeight: 500 }}>
                     <Zap size={13} strokeWidth={1.7} style={{ color: 'var(--ef-text-muted)' }} />
                     Motion
                   </p>
-                  <p className="mt-1.5" style={{ fontSize: 12, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
+                  <p className="mt-1.5" style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
                     Cards fade and slide in as they arrive. <em>Match system</em> already honours a
                     reduced-motion setting on your device; choose <em>Reduced</em> to switch the
                     animation off for this account only — useful on a shared machine.
@@ -511,7 +511,7 @@ export function AppearancePage({ role }: { role: AppearanceRole }) {
 
         <p
           className="flex items-start gap-2"
-          style={{ fontSize: 11.5, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}
+          style={{ fontSize: 13, color: 'var(--ef-text-muted)', lineHeight: 1.7 }}
         >
           <CloudOff size={12} strokeWidth={1.6} style={{ flexShrink: 0, marginTop: 3 }} />
           If your connection drops, the theme still applies — it is remembered on this device too, and

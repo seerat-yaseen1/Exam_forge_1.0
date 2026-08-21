@@ -38,7 +38,7 @@ const sel: React.CSSProperties = {
   border: '1px solid var(--ef-border)',
   borderRadius: 2,
   background: 'var(--ef-surface)',
-  fontSize: 13,
+  fontSize: 14,
 };
 
 export function SubjectTopicSelect({ subjectId, topicId, onChange, subjectError, topicError }: Props) {
@@ -119,7 +119,7 @@ export function SubjectTopicSelect({ subjectId, topicId, onChange, subjectError,
             <option key={s.id} value={s.id}>{s.id} · {s.name}</option>
           ))}
         </select>
-        {subjectError && <div style={{ fontSize: 11, color: 'var(--ef-danger)', marginTop: 4 }}>{subjectError}</div>}
+        {subjectError && <div style={{ fontSize: 12, color: 'var(--ef-danger)', marginTop: 4 }}>{subjectError}</div>}
       </div>
 
       <div>
@@ -148,9 +148,9 @@ export function SubjectTopicSelect({ subjectId, topicId, onChange, subjectError,
             <option key={t.id} value={t.id}>{t.id} · {t.name}</option>
           ))}
         </select>
-        {topicError && <div style={{ fontSize: 11, color: 'var(--ef-danger)', marginTop: 4 }}>{topicError}</div>}
+        {topicError && <div style={{ fontSize: 12, color: 'var(--ef-danger)', marginTop: 4 }}>{topicError}</div>}
         {loadingTopics && (
-          <div style={{ fontSize: 11, color: 'var(--ef-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ fontSize: 12, color: 'var(--ef-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Loader2 size={11} className="animate-spin" /> loading topics…
           </div>
         )}

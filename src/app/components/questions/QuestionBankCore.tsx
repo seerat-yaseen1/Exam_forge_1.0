@@ -48,7 +48,7 @@ function TypeBadgeChip({ engine, variant }: Pick<Question, 'engine' | 'variant'>
   return (
     <span
       className="text-xs px-1.5 py-0.5 select-none flex-shrink-0 inline-block"
-      style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 10 }}
+      style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.04em', fontSize: 12 }}
     >
       {label}
     </span>
@@ -119,7 +119,7 @@ function FilterBar({
 
   const selectStyle: React.CSSProperties = {
     background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2,
-    color: 'var(--ef-ink)', fontSize: 12, padding: '6px 8px', outline: 'none',
+    color: 'var(--ef-ink)', fontSize: 13, padding: '6px 8px', outline: 'none',
   };
   return (
     <div className="flex flex-col gap-3 px-5 py-4" style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
@@ -132,7 +132,7 @@ function FilterBar({
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search stem, subject, topic…"
           className="flex-1 text-xs outline-none"
-          style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 13 }}
+          style={{ background: 'transparent', color: 'var(--ef-ink)', fontSize: 14 }}
         />
         {search && (
           <button onClick={() => setSearch('')} className="hover:opacity-60 transition-opacity">
@@ -248,7 +248,7 @@ function QuestionRow({
       {question.subject && <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{question.subject}</span>}
       {question.topic && <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>· {question.topic}</span>}
       {question.tags.slice(0, 3).map((tag) => (
-        <span key={tag} className="text-xs px-1.5 py-0.5" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10 }}>
+        <span key={tag} className="text-xs px-1.5 py-0.5" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 12 }}>
           #{tag}
         </span>
       ))}
@@ -304,7 +304,7 @@ function QuestionRow({
         {question.tags.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
             {question.tags.slice(0, 4).map((tag) => (
-              <span key={tag} className="px-1.5 py-0.5" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10 }}>
+              <span key={tag} className="px-1.5 py-0.5" style={{ background: 'var(--ef-border-subtle)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 12 }}>
                 #{tag}
               </span>
             ))}
@@ -518,21 +518,21 @@ function GroupRow({
 
         <span
           className="flex-shrink-0 text-xs px-1.5 py-0.5"
-          style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10 }}
+          style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 12 }}
         >
           {GROUP_KIND_LABEL[group.kind] ?? 'Set'}
         </span>
 
         <div className="flex-1 min-w-0">
           <p className="text-xs truncate" style={{ color: 'var(--ef-ink)' }}>{group.title || '(untitled set)'}</p>
-          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
             {group.subject} › {group.topic} · {childQuestions.length} question{childQuestions.length === 1 ? '' : 's'}
           </p>
         </div>
 
         <span
           className="flex-shrink-0 text-xs px-1.5 py-0.5 capitalize"
-          style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 10 }}
+          style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 12 }}
         >
           {group.difficulty}
         </span>
@@ -564,7 +564,7 @@ function GroupRow({
                 >
                   <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', minWidth: 16 }}>{i + 1}</span>
                   <span className="text-xs flex-1 truncate" style={{ color: 'var(--ef-ink)' }}>{truncate(q.stem, 90)}</span>
-                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--ef-text-muted)', fontSize: 12 }}>
                     {questionTypeBadge(q.engine, q.variant)} · {q.difficulty}
                   </span>
                 </button>

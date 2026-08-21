@@ -78,7 +78,7 @@ type AssessmentWithMeta = ScheduleEntry;
 function AttemptStatusBadge({ status }: { status: AttemptStatus }) {
   if (status === 'in_progress') {
     return (
-      <span className="flex items-center gap-2" style={{ fontSize: 12, color: 'var(--ef-warning)' }}>
+      <span className="flex items-center gap-2" style={{ fontSize: 13, color: 'var(--ef-warning)' }}>
         <span className="ef-pulse" style={{ ['--ef-success' as string]: 'var(--ef-warning)' }} />
         In progress
       </span>
@@ -86,7 +86,7 @@ function AttemptStatusBadge({ status }: { status: AttemptStatus }) {
   }
   if (status === 'submitted' || status === 'auto_submitted') {
     return (
-      <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ef-success-strong)' }}>
+      <span className="flex items-center gap-1.5" style={{ fontSize: 13, color: 'var(--ef-success-strong)' }}>
         <CheckCircle2 size={12} strokeWidth={1.6} />
         {status === 'auto_submitted' ? 'Auto-submitted' : 'Submitted'}
       </span>
@@ -94,7 +94,7 @@ function AttemptStatusBadge({ status }: { status: AttemptStatus }) {
   }
   if (status === 'terminated') {
     return (
-      <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--ef-danger)' }}>
+      <span className="flex items-center gap-1.5" style={{ fontSize: 13, color: 'var(--ef-danger)' }}>
         <XCircle size={12} strokeWidth={1.6} />
         Terminated
       </span>
@@ -313,7 +313,7 @@ function AssessmentCard({
       <div className="flex-1" style={{ padding: 'var(--ef-pad-card)' }}>
         {/* Title + the badges that change what the student can do */}
         <div className="flex items-start justify-between gap-3 mb-2.5">
-          <h3 style={{ fontSize: 14.5, lineHeight: 1.45, color: 'var(--ef-ink)', flex: 1, fontWeight: 500 }}>
+          <h3 style={{ fontSize: 15, lineHeight: 1.45, color: 'var(--ef-ink)', flex: 1, fontWeight: 500 }}>
             {a.title || <em style={{ color: 'var(--ef-text-muted)' }}>Untitled Assessment</em>}
           </h3>
           <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
@@ -371,7 +371,7 @@ function AssessmentCard({
         </div>
 
         {/* What the paper is made of */}
-        <div className="flex items-center gap-3.5 flex-wrap mb-3" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+        <div className="flex items-center gap-3.5 flex-wrap mb-3" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
           {a.subject && (
             <span className="flex items-center gap-1.5">
               <BookOpen size={11} strokeWidth={1.5} />
@@ -403,7 +403,7 @@ function AssessmentCard({
 
         {/* When it runs */}
         {(a.startDate || a.endDate) && (
-          <div className="flex items-center gap-1.5 mb-3" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+          <div className="flex items-center gap-1.5 mb-3" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
             <Calendar size={11} strokeWidth={1.5} />
             <span>{a.startDate ? formatDateTime(a.startDate) : 'Open'}</span>
             {a.endDate && (
@@ -440,7 +440,7 @@ function AssessmentCard({
             {attempt && attempt.integrityLog && attempt.integrityLog.totalViolations > 0 && (
               <span
                 className="flex items-center gap-1"
-                style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}
+                style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}
                 title={`${attempt.integrityLog.totalViolations} integrity violation(s) logged`}
               >
                 <Shield size={11} strokeWidth={1.5} />
@@ -693,7 +693,7 @@ export function StudentAssessmentsPage() {
               );
             })()}
 
-            <p className="mt-6 text-center" style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+            <p className="mt-6 text-center" style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
               {total} assessment{total !== 1 ? 's' : ''} assigned to your account
             </p>
           </motion.div>

@@ -1475,7 +1475,7 @@ function ResponseViewer({
               <span style={{
                 background: isActive ? (cfg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)') : 'var(--ef-border-subtle)',
                 color: isActive ? (cfg?.text ?? 'var(--ef-surface)') : 'var(--ef-text-muted)',
-                borderRadius: 2, padding: '0 4px', fontSize: 10,
+                borderRadius: 2, padding: '0 4px', fontSize: 12,
               }}>{tab.count}</span>
             </button>
           );
@@ -2202,7 +2202,7 @@ function AttemptsPanel({
                         justifyContent: 'center',
                         background: isDeleted ? 'var(--ef-danger-border)' : 'var(--ef-border-subtle)',
                         color: isDeleted ? 'var(--ef-danger)' : 'var(--ef-text-muted)',
-                        fontSize: 10, flexShrink: 0,
+                        fontSize: 12, flexShrink: 0,
                       }}>
                       {i + 1}
                     </span>
@@ -2217,7 +2217,7 @@ function AttemptsPanel({
                         </p>
                         {isDeleted && (
                           <span className="text-xs px-1.5 py-0.5"
-                            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, color: 'var(--ef-danger)', fontSize: 9 }}>
+                            style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2, color: 'var(--ef-danger)', fontSize: 11 }}>
                             Deleted
                           </span>
                         )}
@@ -2238,7 +2238,7 @@ function AttemptsPanel({
                           border: `1px solid ${(a.timingAnalysis.anomalyScore ?? 0) >= 70 ? 'var(--ef-danger-border)' : 'var(--ef-warning-border)'}`,
                           borderRadius: 2,
                           color: (a.timingAnalysis.anomalyScore ?? 0) >= 70 ? 'var(--ef-danger)' : 'var(--ef-warning)',
-                          fontSize: 9,
+                          fontSize: 11,
                         }}>
                         <Flag size={9} strokeWidth={1.5} />
                         {a.timingAnalysis.anomalyScore}
@@ -2396,7 +2396,7 @@ function AttemptDrawer({
               <div className="flex items-center gap-1 px-1.5 py-0.5"
                 style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
                 <Ban size={9} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)' }} />
-                <span style={{ color: 'var(--ef-warning-strong)', fontSize: 10 }}>Blocked</span>
+                <span style={{ color: 'var(--ef-warning-strong)', fontSize: 12 }}>Blocked</span>
               </div>
             )}
           </div>
@@ -3765,7 +3765,7 @@ export function AssessmentRosterCore({
                 <span style={{
                   background: filterStatus === tab.value ? 'rgba(255,255,255,0.2)' : 'var(--ef-border-subtle)',
                   color: filterStatus === tab.value ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
-                  borderRadius: 2, padding: '0 4px', fontSize: 10,
+                  borderRadius: 2, padding: '0 4px', fontSize: 12,
                 }}>{tab.count}</span>
               </button>
             ))}

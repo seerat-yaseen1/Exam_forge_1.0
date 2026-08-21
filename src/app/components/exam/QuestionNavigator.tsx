@@ -354,7 +354,7 @@ export function QuestionNavigator({
               >
                 <p
                   className="text-xs mb-1.5 px-0.5"
-                  style={{ color: 'var(--ef-text-muted)', fontSize: 10, letterSpacing: '0.04em' }}
+                  style={{ color: 'var(--ef-text-muted)', fontSize: 12, letterSpacing: '0.04em' }}
                 >
                   {runLabel(run)}
                 </p>

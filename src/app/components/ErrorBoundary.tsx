@@ -178,7 +178,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             style={{
               background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)', borderRadius: 2,
               color: 'var(--ef-text-subtle)', maxHeight: 260, whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word', fontSize: 11, lineHeight: 1.5,
+              wordBreak: 'break-word', fontSize: 12, lineHeight: 1.5,
             }}
           >
 {`[${label}] ${error.name}: ${error.message}

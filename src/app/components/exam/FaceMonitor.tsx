@@ -258,7 +258,7 @@ export function FaceMonitor({ enabled, active, onViolation, onStateChange }: Fac
             animation: detectionState === 'ready' ? 'pulse 2s ease-in-out infinite' : 'none',
           }}
         />
-        <p style={{ fontSize: 9, color: 'var(--ef-text-muted)', letterSpacing: '0.04em', lineHeight: 1 }}>
+        <p style={{ fontSize: 11, color: 'var(--ef-text-muted)', letterSpacing: '0.04em', lineHeight: 1 }}>
           {statusDot.label}
         </p>
       </div>

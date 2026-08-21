@@ -134,7 +134,7 @@ export function TrendChart({
                 />
                 <text
                   x={-8} y={yAt(t)} dy="0.32em" textAnchor="end"
-                  style={{ fontSize: 10, fill: 'var(--ef-text-muted)', fontVariantNumeric: 'tabular-nums' }}
+                  style={{ fontSize: 12, fill: 'var(--ef-text-muted)', fontVariantNumeric: 'tabular-nums' }}
                 >
                   {t}
                 </text>
@@ -154,7 +154,7 @@ export function TrendChart({
                 />
                 <text
                   x={innerW} y={yAt(passMark) - 5} textAnchor="end"
-                  style={{ fontSize: 9.5, fill: 'var(--ef-warning)' }}
+                  style={{ fontSize: 11, fill: 'var(--ef-warning)' }}
                 >
                   pass {passMark}%
                 </text>
@@ -218,7 +218,7 @@ export function TrendChart({
             {points.length > 1 && bestIndex !== points.length - 1 && (
               <text
                 x={xAt(bestIndex)} y={yAt(points[bestIndex].percentage) - 11} textAnchor="middle"
-                style={{ fontSize: 10.5, fill: 'var(--ef-text-muted)', fontVariantNumeric: 'tabular-nums' }}
+                style={{ fontSize: 12, fill: 'var(--ef-text-muted)', fontVariantNumeric: 'tabular-nums' }}
               >
                 {points[bestIndex].percentage}%
               </text>
@@ -227,7 +227,7 @@ export function TrendChart({
               x={xAt(points.length - 1)}
               y={yAt(points[points.length - 1].percentage) - 11}
               textAnchor={points.length > 1 ? 'end' : 'middle'}
-              style={{ fontSize: 11, fill: 'var(--ef-ink)', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}
+              style={{ fontSize: 12, fill: 'var(--ef-ink)', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}
             >
               {points[points.length - 1].percentage}%
             </text>
@@ -237,14 +237,14 @@ export function TrendChart({
                 smudge. */}
             <text
               x={0} y={innerH + 18} textAnchor="start"
-              style={{ fontSize: 10, fill: 'var(--ef-text-muted)' }}
+              style={{ fontSize: 12, fill: 'var(--ef-text-muted)' }}
             >
               {formatDayMonth(points[0].atIso)}
             </text>
             {points.length > 1 && (
               <text
                 x={innerW} y={innerH + 18} textAnchor="end"
-                style={{ fontSize: 10, fill: 'var(--ef-text-muted)' }}
+                style={{ fontSize: 12, fill: 'var(--ef-text-muted)' }}
               >
                 {formatDayMonth(points[points.length - 1].atIso)}
               </text>
@@ -266,17 +266,17 @@ export function TrendChart({
             }}
           >
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--ef-accent)', flexShrink: 0 }} />
-            <span className="truncate" style={{ fontSize: 12, color: 'var(--ef-ink)' }}>{active.title}</span>
-            <span style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>{formatDayMonth(active.atIso)}</span>
+            <span className="truncate" style={{ fontSize: 13, color: 'var(--ef-ink)' }}>{active.title}</span>
+            <span style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>{formatDayMonth(active.atIso)}</span>
             <span
               className="ml-auto"
-              style={{ fontSize: 12.5, color: 'var(--ef-ink)', fontVariantNumeric: 'tabular-nums' }}
+              style={{ fontSize: 13, color: 'var(--ef-ink)', fontVariantNumeric: 'tabular-nums' }}
             >
               {active.percentage}%
             </span>
           </div>
         ) : (
-          <p style={{ fontSize: 11.5, color: 'var(--ef-text-muted)' }}>
+          <p style={{ fontSize: 13, color: 'var(--ef-text-muted)' }}>
             Hover or tab through the line to see each sitting. Every mark is listed in the table below.
           </p>
         )}
@@ -304,15 +304,15 @@ export function SubjectBars({ stats, passMark }: { stats: SubjectStat[]; passMar
       {stats.map((s) => (
         <div key={s.subject}>
           <div className="flex items-baseline justify-between gap-3 mb-1.5">
-            <span className="truncate" style={{ fontSize: 12.5, color: 'var(--ef-ink)' }}>
+            <span className="truncate" style={{ fontSize: 13, color: 'var(--ef-ink)' }}>
               {s.subject}
             </span>
             <span className="flex items-baseline gap-2 flex-shrink-0">
-              <span style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>
+              <span style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
                 {s.papers} paper{s.papers !== 1 ? 's' : ''}
               </span>
               <span
-                style={{ fontSize: 13, color: 'var(--ef-ink)', fontVariantNumeric: 'tabular-nums' }}
+                style={{ fontSize: 14, color: 'var(--ef-ink)', fontVariantNumeric: 'tabular-nums' }}
               >
                 {s.average}%
               </span>

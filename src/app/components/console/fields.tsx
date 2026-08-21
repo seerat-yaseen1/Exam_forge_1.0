@@ -33,13 +33,13 @@ export function Field({ label, hint, id, className = '', ...rest }: FieldProps) 
       <label
         htmlFor={fieldId}
         className="block mb-2"
-        style={{ fontSize: 11.5, color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
+        style={{ fontSize: 13, color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
       >
         {label}
       </label>
       <input id={fieldId} className={`ef-input ${className}`} {...rest} />
       {hint && (
-        <p className="mt-1.5" style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>
+        <p className="mt-1.5" style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
           {hint}
         </p>
       )}
@@ -71,7 +71,7 @@ export function SelectField({
       <label
         htmlFor={fieldId}
         className="block mb-2"
-        style={{ fontSize: 11.5, color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
+        style={{ fontSize: 13, color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
       >
         {label}
       </label>
@@ -79,7 +79,7 @@ export function SelectField({
         {children}
       </select>
       {hint && (
-        <p className="mt-1.5" style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>
+        <p className="mt-1.5" style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
           {hint}
         </p>
       )}
@@ -104,7 +104,7 @@ export function PasswordField({ label, hint, footer, id, ...rest }: PasswordFiel
       <label
         htmlFor={fieldId}
         className="block mb-2"
-        style={{ fontSize: 11.5, color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
+        style={{ fontSize: 13, color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
       >
         {label}
       </label>
@@ -140,7 +140,7 @@ export function PasswordField({ label, hint, footer, id, ...rest }: PasswordFiel
         </button>
       </div>
       {hint && (
-        <p className="mt-1.5" style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>
+        <p className="mt-1.5" style={{ fontSize: 12, color: 'var(--ef-text-muted)' }}>
           {hint}
         </p>
       )}
@@ -200,7 +200,7 @@ export function StrengthBar({ password }: { password: string }) {
         ))}
       </div>
       {score > 0 && (
-        <p style={{ fontSize: 11, color: colour }} aria-live="polite">
+        <p style={{ fontSize: 12, color: colour }} aria-live="polite">
           {STRENGTH_LABELS[Math.min(score, 4)]}
         </p>
       )}
@@ -215,7 +215,7 @@ export function MatchNote({ password, confirm }: { password: string; confirm: st
   return (
     <p
       className="mt-2"
-      style={{ fontSize: 11, color: ok ? 'var(--ef-success)' : 'var(--ef-danger)' }}
+      style={{ fontSize: 12, color: ok ? 'var(--ef-success)' : 'var(--ef-danger)' }}
       aria-live="polite"
     >
       {ok ? 'Passwords match' : 'Passwords do not match'}
@@ -253,7 +253,7 @@ export function AuthShell({
           <span style={{ color: 'var(--ef-ink)' }}>{mark}</span>
           <span
             className="mt-3.5 truncate"
-            style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: '0.2em', color: 'var(--ef-ink)' }}
+            style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.2em', color: 'var(--ef-ink)' }}
           >
             {wordmark}
           </span>

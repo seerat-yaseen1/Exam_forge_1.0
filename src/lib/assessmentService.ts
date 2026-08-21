@@ -252,7 +252,7 @@ export type AssessmentQuestion = {
 // backfill runs. Read the discriminant through `ruleKind()` below rather than
 // touching `rule.kind` directly, so the absent case is handled in one place.
 
-export type RuleKind = 'topic' | 'group';
+export type RuleKind = 'topic' | 'group' | 'manual';
 
 /** The original rule: N random standalone questions from one taxonomy cell. */
 export type TopicSelectionRule = {
@@ -298,7 +298,34 @@ export type GroupSelectionRule = {
   fixedGroupIds?: string[];
 };
 
-export type QuestionSelectionRule = TopicSelectionRule | GroupSelectionRule;
+/**
+ * A named list of questions, in the author's order, with no draw at all.
+ *
+ * This is what a section holds when the author chose Manual Selection and
+ * turned randomization OFF: every question they picked appears exactly as
+ * picked. It is NOT the same thing as a topic rule carrying fixedQuestionIds.
+ * That one is still a taxonomy cell — it matches on subject, topic and
+ * difficulty, and an id that falls outside the cell is silently dropped — which
+ * is right for "pin three questions inside this Hard/Algebra draw" and wrong
+ * for "these forty questions ARE the paper". A hand-built paper spans cells by
+ * definition, so the cell has to go.
+ *
+ * Marks stay per rule rather than per question: what a question is worth in
+ * THIS paper is a property of the paper, and the same question is routinely
+ * worth 1 mark in a quiz and 4 in a final. Per-question marks are part of the
+ * marks-configuration work the spec defers.
+ */
+export type ManualSelectionRule = {
+  kind: 'manual';
+  /** Ordered. Duplicates are ignored; ids that no longer resolve are dropped. */
+  questionIds: string[];
+  marksPerQuestion: number;
+};
+
+export type QuestionSelectionRule =
+  | TopicSelectionRule
+  | GroupSelectionRule
+  | ManualSelectionRule;
 
 /**
  * The discriminant, with the legacy absent case resolved.
@@ -313,6 +340,197 @@ export function isGroupRule(rule: QuestionSelectionRule): rule is GroupSelection
   return rule.kind === 'group';
 }
 
+export function isManualRule(rule: QuestionSelectionRule): rule is ManualSelectionRule {
+  return rule.kind === 'manual';
+}
+
+/**
+ * A topic rule, or null for the kinds that carry no taxonomy cell.
+ *
+ * Every pre-existing reader of a rule assumed `.subject` / `.topic` /
+ * `.difficulty` were there, because until the manual kind they always were.
+ * Narrowing through this keeps those readers honest about the one shape that
+ * has no cell to report.
+ */
+export function ruleCell(
+  rule: QuestionSelectionRule,
+): { subject: string; topic: string; difficulty: string } | null {
+  if (isManualRule(rule)) return null;
+  return { subject: rule.subject, topic: rule.topic, difficulty: rule.difficulty };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// QUESTION SOURCE — the universe a paper may draw from
+// ══════════════════════════════════════════════════════════════════
+//
+// Selection rules say WHAT to draw. This says WHERE FROM, and it is asked
+// before subjects and topics on purpose: a teacher who restricts the paper to
+// one question bank should never afterwards be offered a subject that bank has
+// nothing in, pick topics under it, build a matrix on top, and only discover at
+// publish that the cells are empty. The pool narrows the taxonomy the author is
+// shown, so the dead end is unreachable rather than merely reported.
+//
+// ABSENT = 'all'. Every assessment written before this existed draws from
+// everything the author can see, which is exactly what it did before, so no
+// backfill runs. Read the mode through `poolMode()` rather than touching
+// `.mode`, so the absent case is handled in one place.
+
+export type QuestionPoolMode =
+  /** Anything the author can see — self-authored or shared with them. */
+  | 'all'
+  /** Only the named question banks. */
+  | 'banks'
+  /** Only questions the author hand-picked. */
+  | 'manual';
+
+export type QuestionSource = {
+  mode: QuestionPoolMode;
+
+  /** mode 'banks': the banks whose contents form the pool. */
+  bankIds?: string[];
+
+  /** mode 'manual': the hand-picked pool. */
+  manualQuestionIds?: string[];
+
+  /**
+   * mode 'manual' only. TRUE (the default) means the manual set is still a
+   * pool — sections draw from it through the ordinary matrix, just from a
+   * smaller universe. FALSE means there is no draw: the picked questions are
+   * the paper, in the order picked.
+   */
+  randomize?: boolean;
+
+  /**
+   * Questions that must appear on the paper and never take part in a random
+   * draw. Layered on top of whichever pool was chosen — not a fourth mode —
+   * so an author can pool 'all', anchor three questions, and let the rest of
+   * every section randomize normally.
+   *
+   * An anchor is placed by the first rule whose cell it matches, consuming one
+   * of that rule's slots. An anchor matching no rule is a blueprint the author
+   * did not finish, and validateSelectionRules refuses the publish rather than
+   * quietly dropping a question they asked for by name.
+   */
+  anchorQuestionIds?: string[];
+};
+
+/** The mode, with the legacy absent case resolved. */
+export function poolMode(source?: QuestionSource): QuestionPoolMode {
+  return source?.mode ?? 'all';
+}
+
+/**
+ * The storable form: only the keys the chosen mode actually uses, and no
+ * `undefined` anywhere.
+ *
+ * Both halves are load-bearing. removeUndefined is SHALLOW — it would strip a
+ * top-level `questionSource: undefined` but happily write
+ * `{ mode: 'all', bankIds: undefined }`, which Firestore rejects outright. And
+ * carrying a stale `manualQuestionIds` under mode 'banks' would resurrect a
+ * pool the author had already moved off, the next time anything read the mode
+ * and the ids separately.
+ *
+ * Returns undefined for a plain 'all' pool with no anchors, so an assessment
+ * nobody restricted is byte-identical to one written before this field
+ * existed.
+ */
+export function sanitizeQuestionSource(
+  source: QuestionSource | undefined,
+): QuestionSource | undefined {
+  if (!source) return undefined;
+  const mode = poolMode(source);
+  const anchors = [...new Set(source.anchorQuestionIds ?? [])];
+
+  if (mode === 'banks') {
+    const bankIds = [...new Set(source.bankIds ?? [])];
+    return {
+      mode: 'banks',
+      bankIds,
+      ...(anchors.length > 0 ? { anchorQuestionIds: anchors } : {}),
+    };
+  }
+
+  if (mode === 'manual') {
+    const manualQuestionIds = [...new Set(source.manualQuestionIds ?? [])];
+    return {
+      mode: 'manual',
+      manualQuestionIds,
+      randomize: source.randomize !== false,
+      ...(anchors.length > 0 ? { anchorQuestionIds: anchors } : {}),
+    };
+  }
+
+  if (anchors.length === 0) return undefined;
+  return { mode: 'all', anchorQuestionIds: anchors };
+}
+
+/** True when sections draw randomly — i.e. everything except manual-no-random. */
+export function poolRandomizes(source?: QuestionSource): boolean {
+  if (poolMode(source) !== 'manual') return true;
+  // Absent means true: a manual pool is still a pool unless the author said
+  // otherwise, and defaulting the other way would turn every legacy document
+  // that somehow carried mode 'manual' into a fixed paper.
+  return source?.randomize !== false;
+}
+
+/**
+ * The ids a source admits, or null when it admits everything.
+ *
+ * null rather than "a set of every id" is deliberate: 'all' means the author's
+ * whole visible bank, which is a moving target resolved by whoever fetched the
+ * questions, and materialising it here would freeze a snapshot that the caller
+ * would then have to keep fresh.
+ */
+export function resolvePoolIds(
+  source: QuestionSource | undefined,
+  banks: readonly { id: string; questionIds: string[] }[] = [],
+): Set<string> | null {
+  const mode = poolMode(source);
+  if (mode === 'all') return null;
+  if (mode === 'manual') return new Set(source?.manualQuestionIds ?? []);
+  const wanted = new Set(source?.bankIds ?? []);
+  const ids = new Set<string>();
+  for (const b of banks) {
+    if (wanted.has(b.id)) b.questionIds.forEach((id) => ids.add(id));
+  }
+  return ids;
+}
+
+/**
+ * Narrow a bank to a pool. Pass the ids from resolvePoolIds; null is a no-op.
+ *
+ * Applied ONCE, as high in the builder as possible, and the narrowed array is
+ * then what every downstream consumer sees — the subject picker, the topic
+ * picker, the per-cell availability counts, the publish validator and the draw
+ * itself. That is the whole reason the pool restriction is trustworthy: there
+ * is no second path to the bank for one of them to take.
+ */
+export function questionsInPool<T extends { id: string }>(
+  questions: readonly T[],
+  poolIds: Set<string> | null,
+): T[] {
+  if (!poolIds) return [...questions];
+  return questions.filter((q) => poolIds.has(q.id));
+}
+
+/**
+ * Anchors, restricted to what the pool actually contains.
+ *
+ * An anchor outside the pool is a contradiction the author cannot see — they
+ * picked it, then narrowed the pool underneath it — and honouring it would
+ * make the pool a suggestion. Dropping it here means the publish validator
+ * reports "anchored question matches no rule" at worst, never "this paper
+ * contains a question from outside its own source".
+ */
+export function anchorIdsInPool(
+  source: QuestionSource | undefined,
+  poolIds: Set<string> | null,
+): Set<string> {
+  const anchors = source?.anchorQuestionIds ?? [];
+  if (!poolIds) return new Set(anchors);
+  return new Set(anchors.filter((id) => poolIds.has(id)));
+}
+
 /**
  * How many QUESTIONS this rule contributes to the paper.
  *
@@ -325,6 +543,9 @@ export function isGroupRule(rule: QuestionSelectionRule): rule is GroupSelection
  * wrongness the marks-drift risk in the extension plan is about.
  */
 export function ruleQuestionCount(rule: QuestionSelectionRule): number | null {
+  // A manual rule's count is not an estimate — it is the length of a list the
+  // author wrote, and it is the one rule kind that can never be short.
+  if (isManualRule(rule)) return rule.questionIds.length;
   if (isGroupRule(rule)) {
     if (rule.questionsPerGroup === 'all') return null;
     return Math.max(0, rule.groupCount) * Math.max(0, rule.questionsPerGroup);
@@ -392,7 +613,8 @@ export type AssessmentSection = {
 // deduplicating across sections (section order = priority).
 // Pass in all available (non-deleted) questions from the bank.
 
-type BankQuestion = {
+/** Exported so a test can build the trimmed bank the resolver contracts for. */
+export type BankQuestion = {
   id: string;
   subject: string;
   topic: string;       // needed for topic-level filtering
@@ -517,6 +739,11 @@ export function resolveQuestionsForSections(
   allQuestions: BankQuestion[],
   taxonomy?: TaxonomyMaps,
   allGroups: BankGroup[] = [],
+  /**
+   * Questions the author pinned. Pass the ids already narrowed to the pool
+   * (anchorIdsInPool) — this function trusts the set it is given.
+   */
+  anchorIds: ReadonlySet<string> = new Set(),
 ): { sections: AssessmentSection[]; flatQuestions: AssessmentQuestion[] } {
   const usedIds = new Set<string>();
   const usedGroupIds = new Set<string>();
@@ -528,6 +755,44 @@ export function resolveQuestionsForSections(
     const sectionQuestions: AssessmentQuestion[] = [];
 
     for (const rule of section.rules) {
+      // ── Manual rule ───────────────────────────────────────────────
+      // No draw, no cell, no shuffle: the author's list, in the author's
+      // order. The only filtering is the rot check every kind gets — an id
+      // that has since been deleted, or that fell outside the pool the
+      // caller passed, is dropped here and reported by the validator.
+      if (isManualRule(rule)) {
+        // Group children keep their stimulus link, so the shell still renders
+        // the passage or chart they depend on — but their position is
+        // re-indexed over the children ACTUALLY picked, exactly as the group
+        // branch below does. Carrying the original indices would leave gaps
+        // (pick children 2 and 5 of an eight-part set and the paper claims
+        // positions 2 and 5 of a two-question set) that the shuffle and the
+        // navigator would then have to reason about.
+        const groupSeats = new Map<string, number>();
+
+        for (const qid of rule.questionIds) {
+          if (usedIds.has(qid)) continue;
+          const q = questionById.get(qid);
+          if (!q || q.isDeleted) continue;
+          if (!sectionAdmitsQuestion(section.engines, q)) continue;
+          usedIds.add(q.id);
+
+          let seat: number | undefined;
+          if (q.groupId) {
+            seat = groupSeats.get(q.groupId) ?? 0;
+            groupSeats.set(q.groupId, seat + 1);
+          }
+
+          sectionQuestions.push({
+            questionId: q.id,
+            marks: rule.marksPerQuestion,
+            order: globalOrder++,
+            ...(q.groupId ? { groupId: q.groupId, groupOrder: seat! } : {}),
+          });
+        }
+        continue;
+      }
+
       // ── Group rule ────────────────────────────────────────────────
       if (isGroupRule(rule)) {
         if (rule.groupCount <= 0) continue;
@@ -631,13 +896,42 @@ export function resolveQuestionsForSections(
           !usedIds.has(q.id)
       );
 
+      // ── Anchors first, then the draw ──────────────────────────────
+      //
+      // An anchored question that matches this cell takes one of the rule's
+      // slots before anything is shuffled, and is removed from the pool the
+      // remainder is drawn from. Both halves matter: taking it first is what
+      // "always included" means, and removing it is what "excluded from
+      // randomization" means — left in, an anchor destined for section B's
+      // Hard/Algebra rule could be picked at random by section A's, and the
+      // author's pin would land somewhere they never asked for.
+      //
+      // When a cell holds more anchors than the rule has slots, the rule wins
+      // and the surplus is left for a later rule on the same cell. Nothing is
+      // silently dropped: validateSelectionRules refuses to publish a paper
+      // with an anchor that no rule placed.
+      //
+      // When SEVERAL rules match an anchor's cell, the first in reading order
+      // takes it. Deterministic on purpose — an anchor whose section varied
+      // with the shuffle would move around the paper on every republish, and
+      // "which section does my pinned question sit in" is exactly the kind of
+      // thing an author pins it to control. Placing it explicitly is what the
+      // manual assignment step is for.
+      const anchoredHere = basePool.filter((q) => anchorIds.has(q.id));
+      const drawable = anchorIds.size > 0
+        ? basePool.filter((q) => !anchorIds.has(q.id))
+        : basePool;
+
       // Hand-picked ids bypass the draw; same rot check as fixed groups.
       const picked = rule.fixedQuestionIds && rule.fixedQuestionIds.length > 0
         ? rule.fixedQuestionIds
             .map((qid) => basePool.find((q) => q.id === qid))
             .filter((q): q is BankQuestion => !!q)
         : rule.count > 0
-          ? shuffled(basePool).slice(0, rule.count)
+          ? [
+              ...anchoredHere.slice(0, rule.count),
+              ...shuffled(drawable).slice(0, Math.max(0, rule.count - anchoredHere.length)),
+            ]
           : [];
 
       picked.forEach((q) => {
@@ -675,10 +969,15 @@ export type RuleValidationResult = {
   /** Group rules only — which flavour was asked for, for the message text. */
   groupKind?: GroupKind;
   /**
-   * A structural problem with the rule itself rather than a shortage of
-   * content: a group rule in a section that cannot present groups. Carries
-   * its own message because "0 of 2 available" would be a lie — the content
-   * may well exist, it just cannot be delivered here.
+   * A ready-made message, used when "requested N, only M available" would not
+   * describe the problem. Two cases: a structural refusal (a group rule in a
+   * section that cannot present groups — the content may well exist, it just
+   * cannot be delivered here), and a rule or anchor that names specific
+   * questions which no longer resolve.
+   *
+   * A result carrying this may have an empty `sectionName`: an anchor belongs
+   * to the paper, not to any one section, and inventing a section for it would
+   * point the author at the wrong place to fix it.
    */
   blocked?: string;
 };
@@ -738,6 +1037,8 @@ export function validateSelectionRules(
   taxonomy?: TaxonomyMaps,
   allGroups: BankGroup[] = [],
   deliveryMode?: 'standard' | 'linear' | 'adaptive',
+  /** Pinned ids, already narrowed to the pool. See resolveQuestionsForSections. */
+  anchorIds: ReadonlySet<string> = new Set(),
 ): { valid: boolean; results: RuleValidationResult[] } {
   const usedCounts: Record<string, number> = {};
   const usedGroupCounts: Record<string, number> = {};
@@ -772,8 +1073,52 @@ export function validateSelectionRules(
       return !!q && !q.isDeleted && q.groupId === g.id;
     }).length;
 
+  /** Anchors a rule has taken a slot for. Anything left over is unplaceable. */
+  const placedAnchors = new Set<string>();
+
   for (const section of sections) {
     for (const rule of section.rules) {
+      // ── Manual rule ───────────────────────────────────────────────
+      // Nothing to be short of — the list IS the count. What can go wrong is
+      // rot: an id deleted from the bank, or one this section's engine lock
+      // refuses. Both would shorten the paper silently at the draw.
+      if (isManualRule(rule)) {
+        if (rule.questionIds.length === 0) continue;
+        const seen = new Set<string>();
+        const usable = rule.questionIds.filter((qid) => {
+          if (seen.has(qid)) return false;
+          seen.add(qid);
+          const q = questionById.get(qid);
+          return !!q && !q.isDeleted && sectionAdmitsQuestion(section.engines, q);
+        });
+        // Every manually placed question is by definition not randomized, so
+        // anchoring one on top adds nothing — but it must not then be reported
+        // as an anchor nobody placed.
+        rule.questionIds.forEach((qid) => {
+          if (anchorIds.has(qid)) placedAnchors.add(qid);
+        });
+        const missing = rule.questionIds.length - usable.length;
+        results.push({
+          subject: '',
+          topic: '',
+          difficulty: '',
+          sectionName: section.name,
+          requested: rule.questionIds.length,
+          available: usable.length,
+          ok: missing === 0,
+          unit: 'questions',
+          ...(missing > 0
+            ? {
+                blocked: `${missing} of ${rule.questionIds.length} hand-picked question`
+                  + `${rule.questionIds.length === 1 ? '' : 's'} can no longer be used — `
+                  + 'deleted from the bank, or refused by this section\'s question-type '
+                  + 'lock. Re-open Question Source and pick again.',
+              }
+            : {}),
+        });
+        continue;
+      }
+
       if (isGroupRule(rule)) {
         if (rule.groupCount <= 0) continue;
 
@@ -824,8 +1169,29 @@ export function validateSelectionRules(
 
       const k = key(rule.subject, rule.topic, rule.difficulty);
       // Only the part of the cell THIS section can run.
-      const total = (cellQuestions[k] ?? [])
-        .filter((q) => sectionAdmitsQuestion(section.engines, q)).length;
+      const runnable = (cellQuestions[k] ?? [])
+        .filter((q) => sectionAdmitsQuestion(section.engines, q));
+      const total = runnable.length;
+
+      // Which anchors this rule will take. Mirrors the resolver's "anchors
+      // first, capped at the rule's count" — approximately, because prior
+      // usage is tracked here as a count rather than as identities, so the
+      // exact questions an earlier rule consumed are not knowable. Erring
+      // towards "placed" is right: the alternative is refusing a publish over
+      // an anchor that the draw would in fact have seated.
+      if (anchorIds.size > 0) {
+        const fixed = new Set(rule.fixedQuestionIds ?? []);
+        let slots = requested;
+        for (const q of runnable) {
+          if (slots <= 0) break;
+          if (!anchorIds.has(q.id) || placedAnchors.has(q.id)) continue;
+          // A rule with a fixed list runs no draw, so it seats an anchor only
+          // by naming it outright.
+          if (fixed.size > 0 && !fixed.has(q.id)) continue;
+          placedAnchors.add(q.id);
+          slots--;
+        }
+      }
       // Usage stays per cell rather than per cell-and-engine. A question
       // consumed by an earlier section is gone whatever engine it ran on, and
       // we cannot know which specific ones the draw took — so subtracting all
@@ -854,6 +1220,38 @@ export function validateSelectionRules(
         usedCounts[k] = alreadyUsed + requested;
       }
     }
+  }
+
+  // ── Anchors nothing will place ──────────────────────────────────
+  //
+  // The author named these questions and said they must appear. If no rule's
+  // cell matches one, the draw will never seat it and the paper will go out
+  // without it — the exact silent failure anchoring exists to prevent. One
+  // result for the lot, because the fix is the same for all of them: add a
+  // rule that covers them, or unpin them.
+  const unplaced = [...anchorIds].filter((id) => {
+    if (placedAnchors.has(id)) return false;
+    const q = questionById.get(id);
+    return !!q && !q.isDeleted;
+  });
+  if (unplaced.length > 0) {
+    const cells = [...new Set(unplaced.map((id) => {
+      const q = questionById.get(id)!;
+      return `${canonicalSubject(q, taxonomy)} › ${canonicalTopic(q, taxonomy)} (${q.difficulty})`;
+    }))];
+    results.push({
+      subject: '',
+      topic: '',
+      difficulty: '',
+      sectionName: '',
+      requested: unplaced.length,
+      available: 0,
+      ok: false,
+      unit: 'questions',
+      blocked: `${unplaced.length} anchored question${unplaced.length === 1 ? '' : 's'} `
+        + `won't appear on this paper — no section asks for ${unplaced.length === 1 ? 'its' : 'their'} `
+        + `topic and level (${cells.join('; ')}). Add a matching rule, or remove the anchor.`,
+    });
   }
 
   return { valid: results.every((r) => r.ok), results };
@@ -897,6 +1295,11 @@ export type Assessment = {
   // topicPool:   "subjectName::topicName" compound keys selected in Phase 2
   subjectPool?: string[];
   topicPool?: string[];
+
+  // Where the paper may draw from at all — chosen BEFORE subjects, and the
+  // thing that narrows which subjects and topics the author is offered.
+  // Absent = 'all', which is what every assessment written before this did.
+  questionSource?: QuestionSource;
 
   // Targeting
   assignedTo: AssignmentTarget;

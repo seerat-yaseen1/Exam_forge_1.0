@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Trash2, Loader2, AlertTriangle, CalendarClock, Timer, CheckSquare, Square, Copy } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
-import { type DuplicateOptions, describeAssignment, isGroupRule, ruleQuestionCount, type Assessment } from '../../../../lib/assessmentService';
+import { type DuplicateOptions, describeAssignment, isGroupRule, ruleCell, ruleQuestionCount, type Assessment } from '../../../../lib/assessmentService';
 import { GROUP_KIND_LABEL } from '../../../../lib/questionBankService';
 import { type Subject } from '../../../../lib/subjectService';
 import { Difficulty, DIFF_COLORS, formatDateTime, formatDateShort, truncate } from '../builder/shared';
@@ -337,24 +337,39 @@ export function PreviewModal({ assessment, onClose }: { assessment: Assessment; 
                     {sec.rules.length > 0 && (
                       <div className="px-3 py-2.5 space-y-1">
                         {sec.rules.filter(r => (ruleQuestionCount(r) ?? 1) > 0).map((r, ri) => {
-                          const dc = DIFF_COLORS[r.difficulty as Difficulty];
+                          // A manual rule has no taxonomy cell to summarise —
+                          // a hand-built section spans cells by definition —
+                          // so it reports what it is instead of borrowing a
+                          // difficulty and subject it does not have.
+                          const cell = ruleCell(r);
+                          const dc = cell ? DIFF_COLORS[cell.difficulty as Difficulty] : null;
                           return (
                             <div key={ri} className="flex items-center justify-between text-xs py-0.5">
                               <div className="flex items-center gap-2">
-                                <span className="px-1.5 py-0.5 capitalize"
-                                  style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 10 }}>
-                                  {r.difficulty}
-                                </span>
-                                {isGroupRule(r) && (
+                                {cell && dc ? (
+                                  <>
+                                    <span className="px-1.5 py-0.5 capitalize"
+                                      style={{ background: dc.bg, color: dc.text, border: `1px solid ${dc.border}`, borderRadius: 2, fontSize: 10 }}>
+                                      {cell.difficulty}
+                                    </span>
+                                    {isGroupRule(r) && (
+                                      <span
+                                        title="Grouped set — shared passage, chart or scenario"
+                                        style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10, padding: '1px 5px' }}>
+                                        {r.groupKind ? GROUP_KIND_LABEL[r.groupKind] : 'Grouped Set'}
+                                      </span>
+                                    )}
+                                    <span style={{ color: 'var(--ef-text-muted)' }}>{cell.subject}</span>
+                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>›</span>
+                                    <span style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>{cell.topic}</span>
+                                  </>
+                                ) : (
                                   <span
-                                    title="Grouped set — shared passage, chart or scenario"
+                                    title="Hand-picked questions, in the author's order"
                                     style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', fontSize: 10, padding: '1px 5px' }}>
-                                    {r.groupKind ? GROUP_KIND_LABEL[r.groupKind] : 'Grouped Set'}
+                                    Hand-picked
                                   </span>
                                 )}
-                                <span style={{ color: 'var(--ef-text-muted)' }}>{r.subject}</span>
-                                <span style={{ color: 'var(--ef-text-muted)', fontSize: 10 }}>›</span>
-                                <span style={{ color: 'var(--ef-text-muted)', fontSize: 11 }}>{r.topic}</span>
                               </div>
                               <span style={{ color: 'var(--ef-text-muted)' }}>
                                 {isGroupRule(r)

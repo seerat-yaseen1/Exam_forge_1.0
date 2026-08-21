@@ -6,15 +6,37 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { X, RotateCcw, AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
-import { type Assessment, type AssessmentDraft, type AssessmentStatus, isGroupRule } from '../../../../lib/assessmentService';
+import {
+  anchorIdsInPool,
+  isGroupRule,
+  isManualRule,
+  poolMode,
+  poolRandomizes,
+  questionsInPool,
+  resolvePoolIds,
+  ruleCell,
+  type Assessment,
+  type AssessmentDraft,
+  type AssessmentStatus,
+  type QuestionSource,
+} from '../../../../lib/assessmentService';
 import { type Question, type QuestionGroup } from '../../../../lib/questionBankService';
-import { type Subject } from '../../../../lib/subjectService';
+import { loadTaxonomyNameMaps, type Subject, type TaxonomyNameMaps } from '../../../../lib/subjectService';
 import { type AllocationNodeType } from '../../../../lib/allocationService';
-import { makeSectionId, type RuleDraft, type SectionDraft } from './shared';
+import { makeSectionId, withEffectiveRules, type RuleDraft, type SectionDraft } from './shared';
 import { SetupStep } from './SetupStep';
 import { DetailsStep } from './DetailsStep';
+import { QuestionSourceStep, useQuestionBanks } from './QuestionSourceStep';
 import { StageRail } from './StageRail';
-import { paperTotals, prevStageOf, stageDef, stageStatus, type BuilderStage } from './stages';
+import {
+  paperTotals,
+  prevStageOf,
+  nextStageOf,
+  stageDef,
+  stageStatus,
+  visibleBuilderStages,
+  type BuilderStage,
+} from './stages';
 import { clearDraft, readDraft, stashDraft, type StashedDraft } from './draftStore';
 
 // ══════════════════════════════════════════════════════════════════
@@ -61,6 +83,14 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
   const [subjectPool, setSubjectPool] = useState<string[]>(assessment?.subjectPool ?? []);
   const [topicPool, setTopicPool] = useState<string[]>(assessment?.topicPool ?? []);
 
+  // ── Question source — the universe everything above narrows ──────
+  // Absent on every assessment written before the stage existed, and 'all' is
+  // exactly what those did, so the fallback is the migration.
+  const [questionSource, setQuestionSource] = useState<QuestionSource>(
+    assessment?.questionSource ?? { mode: 'all' },
+  );
+  const { banks, loading: banksLoading } = useQuestionBanks();
+
   // ── Delivery mode (Phase 0 wiring) — lifted so both Step 1 (Sections,
   // which conditionally shows the per-question timer) and Step 2 (Details,
   // which owns the selector) can read/write it. ──────────────────────
@@ -75,13 +105,30 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
         name: sec.name,
         timeLimit: sec.timeLimit?.toString() ?? '',
         questionTimeLimit: sec.questionTimeLimit?.toString() ?? '',
-        // Restore assigned topics; fall back to inferring from existing rules for old assessments
-        assignedTopics: sec.assignedTopics ?? [...new Set(sec.rules.map((r) => `${r.subject}::${r.topic}`))],
+        // Restore assigned topics; fall back to inferring from existing rules
+        // for old assessments. A manual rule contributes nothing here — it has
+        // no cell to infer from, which is the point of it.
+        assignedTopics: sec.assignedTopics ?? [...new Set(
+          sec.rules
+            .map(ruleCell)
+            .filter((c): c is NonNullable<typeof c> => c !== null)
+            .map((c) => `${c.subject}::${c.topic}`),
+        )],
         // Both rule kinds round-trip. A group rule that came back as a topic
         // draft would be silently rewritten into a random topic draw the next
         // time the author saved — losing the set structure without telling
         // them — so the discriminant is carried explicitly.
-        rules: sec.rules.map((r): RuleDraft => isGroupRule(r)
+        // What a hand-picked question is worth. Read off the saved manual rule
+        // because nothing else can reconstruct it — the picks themselves come
+        // back from questionSource, but the marks were an author's decision.
+        manualMarks: sec.rules.find(isManualRule)?.marksPerQuestion?.toString() ?? '',
+        // The saved manual rule itself is NOT loaded back as a draft. Its
+        // question list is already coming back on questionSource, and
+        // withEffectiveRules rebuilds the rule from there — so loading a second
+        // copy into the editable drafts would create exactly the drift that
+        // deriving it was meant to rule out, and would put a cell-less row in
+        // front of the matrix editor the moment randomization went back on.
+        rules: sec.rules.filter((r) => !isManualRule(r)).map((r): RuleDraft => isGroupRule(r)
           ? {
               kind: 'group',
               subject: r.subject,
@@ -120,8 +167,63 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
       questionTimeLimit: '',
       breakMandatory: false,
       engines: [],
+      manualMarks: '',
     }];
   });
+
+  // ══════════════════════════════════════════════════════════════
+  // THE POOL
+  // ══════════════════════════════════════════════════════════════
+  //
+  // Applied ONCE, here, at the top of the builder — and the narrowed arrays
+  // are then the only bank anything downstream ever sees: the subject picker,
+  // the topic picker, the per-cell availability counts, the publish validator
+  // and the draw itself all take `pooledQuestions`. That single application
+  // point is what makes the restriction trustworthy. Filtering in each
+  // consumer would leave four places to forget, and the one that forgot would
+  // be the one that put an out-of-pool question on a real paper.
+
+  const poolIds = useMemo(
+    () => resolvePoolIds(questionSource, banks),
+    [questionSource, banks],
+  );
+  const pooledQuestions = useMemo(
+    () => questionsInPool(allQuestions, poolIds),
+    [allQuestions, poolIds],
+  );
+  // A group survives on the strength of its children: the resolver already
+  // refuses a group that cannot field the requested number of them, so
+  // narrowing the children narrows the groups without a second rule to keep
+  // in step. Groups with nothing left in the pool are dropped here anyway, so
+  // the group picker does not offer sets it cannot draw.
+  const pooledGroups = useMemo(() => {
+    if (!poolIds) return allGroups;
+    return allGroups.filter((g) => g.childIds.some((id) => poolIds.has(id)));
+  }, [allGroups, poolIds]);
+
+  const anchors = useMemo(
+    () => anchorIdsInPool(questionSource, poolIds),
+    [questionSource, poolIds],
+  );
+
+  /** Manual Selection with randomization off: the author's list IS the paper. */
+  const fixedPaper = poolMode(questionSource) === 'manual' && !poolRandomizes(questionSource);
+
+  /** Canonical (post-rename) subject/topic names, for the source stage's counts. */
+  const [taxonomyMaps, setTaxonomyMaps] = useState<TaxonomyNameMaps>({ subjectNameById: {}, topicNameById: {} });
+  useEffect(() => {
+    loadTaxonomyNameMaps()
+      .then(setTaxonomyMaps)
+      .catch(() => setTaxonomyMaps({ subjectNameById: {}, topicNameById: {} }));
+  }, []);
+  const qSubject = useCallback(
+    (q: Question) => (q.subjectId && taxonomyMaps.subjectNameById[q.subjectId]) || q.subject,
+    [taxonomyMaps],
+  );
+  const qTopic = useCallback(
+    (q: Question) => (q.topicId && taxonomyMaps.topicNameById[q.topicId]) || q.topic,
+    [taxonomyMaps],
+  );
 
   // ── The paper as it stands, and how far each stage has got ──────
   //
@@ -129,12 +231,40 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
   // group rule drawing 'all' of its children has no knowable count until the
   // draw at publish, so it is excluded from the sum and the total is marked
   // approximate rather than reported as a confidently wrong number.
-  const totals = paperTotals(sections);
-  /** Which of the two step components owns the stage on screen. */
-  const setupOwnsStage = stageDef(stage).owner === 'setup';
+  const effectiveSections = useMemo(
+    () => withEffectiveRules(sections, {
+      fixedPaper,
+      manualQuestionIds: questionSource.manualQuestionIds ?? [],
+    }),
+    [sections, fixedPaper, questionSource.manualQuestionIds],
+  );
+  const totals = paperTotals(effectiveSections);
+
+  /** The stages THIS draft has. A hand-picked paper has no matrix to build. */
+  const stages = useMemo(() => visibleBuilderStages({ fixedPaper }), [fixedPaper]);
+
+  // An author on Topics who turns randomization off would otherwise be left
+  // looking at a stage the rail no longer lists, with no way back except the
+  // browser's own history.
+  useEffect(() => {
+    if (!stages.some((s) => s.id === stage)) setStage('questionSource');
+  }, [stages, stage]);
+
+  const ownerOfStage = stageDef(stage).owner;
   const statusFor = useCallback(
-    (id: BuilderStage) => stageStatus(id, { title, subjectPool, topicPool, sections }),
-    [title, subjectPool, topicPool, sections],
+    (id: BuilderStage) => stageStatus(id, {
+      title,
+      subjectPool,
+      topicPool,
+      sections: effectiveSections,
+      source: {
+        mode: poolMode(questionSource),
+        poolSize: poolIds ? pooledQuestions.length : null,
+        anchors: anchors.size,
+        pending: poolMode(questionSource) === 'banks' && banksLoading,
+      },
+    }),
+    [title, subjectPool, topicPool, effectiveSections, questionSource, poolIds, pooledQuestions, anchors, banksLoading],
   );
 
   // ══════════════════════════════════════════════════════════════
@@ -154,7 +284,8 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
    *  worse than one that honestly restores the structural work. */
   const snapshot = useMemo(() => ({
     title, description, subject, status, subjectPool, topicPool, sections, deliveryMode,
-  }), [title, description, subject, status, subjectPool, topicPool, sections, deliveryMode]);
+    questionSource,
+  }), [title, description, subject, status, subjectPool, topicPool, sections, deliveryMode, questionSource]);
 
   /** A restorable draft found at open. Offered, never applied silently. */
   const [recovered, setRecovered] = useState<StashedDraft<typeof snapshot> | null>(null);
@@ -242,6 +373,9 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
     setTitle(d.title); setDescription(d.description); setSubject(d.subject);
     setStatus(d.status); setSubjectPool(d.subjectPool); setTopicPool(d.topicPool);
     setSections(d.sections); setDeliveryMode(d.deliveryMode);
+    // A stash written before the source stage existed has no pool in it, and
+    // 'all' is what that draft was being built against.
+    setQuestionSource(d.questionSource ?? { mode: 'all' });
     setRecovered(null);
   }, [recovered]);
 
@@ -307,6 +441,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
       {/* ── Body: rail + stage ── */}
       <div className="flex-1 overflow-hidden flex">
         <StageRail
+          stages={stages}
           current={stage}
           statusFor={statusFor}
           totals={totals}
@@ -322,14 +457,17 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
           replaced unmounted it whenever the author stepped back to step 1 — so
           a deadline typed before revisiting the sections was silently reset.
           The old code worked around this by keying steps 2 and 3 into one
-          wrapper; with eight freely-navigable stages the workaround does not
-          generalise, and keeping both mounted removes the class of bug rather
-          than the instance.
+          wrapper; with nine freely-navigable stages the workaround does not
+          generalise, and keeping them mounted removes the class of bug rather
+          than the instance. The Question Source pane joins on the same terms:
+          its pickers hold filter and search state that an author would
+          otherwise lose every time they stepped away to check a subject.
         */}
         <div className="flex-1 overflow-hidden flex flex-col" style={{ minWidth: 0 }}>
-          <div className={setupOwnsStage ? 'flex-1 overflow-hidden flex flex-col' : 'hidden'}>
+          <div className={ownerOfStage === 'setup' ? 'flex-1 overflow-hidden flex flex-col' : 'hidden'}>
             <SetupStep
               stage={stage}
+              stages={stages}
               title={title} setTitle={setTitle}
               description={description} setDescription={setDescription}
               subject={subject} setSubject={setSubject}
@@ -337,22 +475,51 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
               sections={sections} setSections={setSections}
               onNavigate={setStage}
               originalStatus={assessment?.status}
-              allQuestions={allQuestions}
+              allQuestions={pooledQuestions}
               subjectPool={subjectPool} setSubjectPool={setSubjectPool}
               topicPool={topicPool} setTopicPool={setTopicPool}
               deliveryMode={deliveryMode}
             />
           </div>
 
-          <div className={setupOwnsStage ? 'hidden' : 'flex-1 overflow-y-auto flex flex-col'}>
+          <div className={ownerOfStage === 'source' ? 'flex-1 overflow-hidden flex flex-col' : 'hidden'}>
+            <QuestionSourceStep
+              source={questionSource}
+              setSource={setQuestionSource}
+              allQuestions={allQuestions}
+              pooledQuestions={pooledQuestions}
+              sections={sections}
+              // The manual rule is derived, so its marks are the one part of
+              // it that has to be stored — on the section that will carry it.
+              manualMarks={sections[0]?.manualMarks ?? ''}
+              setManualMarks={(v) => setSections((prev) =>
+                prev.map((s, i) => (i === 0 ? { ...s, manualMarks: v } : s)))}
+              banks={banks}
+              banksLoading={banksLoading}
+              onNavigate={setStage}
+              nextStage={nextStageOf('questionSource', stages)}
+              locked={!!assessment?.status && assessment.status !== 'draft'}
+              lockReason={assessment?.status === 'closed' ? 'closed' : 'active'}
+              qSubject={qSubject}
+              qTopic={qTopic}
+            />
+          </div>
+
+          <div className={ownerOfStage === 'details' || ownerOfStage === 'allocation'
+            ? 'flex-1 overflow-y-auto flex flex-col' : 'hidden'}>
             <DetailsStep
               stage={stage}
+              stages={stages}
               onSaveApi={receiveSaveApi}
               onNavigate={setStage}
               mode={mode} assessment={assessment} originalStatus={assessment?.status}
-              allQuestions={allQuestions}
-              allGroups={allGroups}
+              allQuestions={pooledQuestions}
+              allGroups={pooledGroups}
               sections={sections} setSections={setSections}
+              effectiveSections={effectiveSections}
+              questionSource={questionSource}
+              anchorIds={anchors}
+              fixedPaper={fixedPaper}
               onBack={() => setStage('sections')} onSave={handleSave}
               title={title} description={description} subject={subject} status={status}
               targetType={targetType} setTargetType={setTargetType}
@@ -366,7 +533,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
               // The stage before Allocation, not a named one: this used to say
               // 'security', which is now second in the flow — the back link
               // would have thrown an author from the last stage to the second.
-              onBackToRules={() => setStage(prevStageOf('allocation')?.id ?? 'grading')}
+              onBackToRules={() => setStage(prevStageOf('allocation', stages)?.id ?? 'grading')}
             />
           </div>
         </div>

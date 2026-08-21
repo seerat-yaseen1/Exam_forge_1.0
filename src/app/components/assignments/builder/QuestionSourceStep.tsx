@@ -41,11 +41,11 @@ import {
   type QuestionBank,
   type QuestionEngine,
 } from '../../../../lib/questionBankService';
-import { StageHeading, LockedNotice } from './StageHeading';
+import { StageHeading, LockedNotice, StageContinue } from './StageHeading';
 import { CapabilityChoice, type CapabilityOption } from './CapabilityChoice';
 import { SettingsToggle } from './controls';
 import { DIFF_LABEL, type SectionDraft } from './shared';
-import type { StageDef } from './stages';
+import type { StageDef, StageLock } from './stages';
 
 const POOL_OPTIONS: readonly CapabilityOption<QuestionPoolMode>[] = [
   {
@@ -80,6 +80,7 @@ export function QuestionSourceStep({
   banksLoading,
   onNavigate,
   nextStage,
+  nextLock,
   locked,
   lockReason,
   qSubject,
@@ -99,6 +100,8 @@ export function QuestionSourceStep({
   banksLoading: boolean;
   onNavigate: (id: StageDef['id']) => void;
   nextStage: StageDef | null;
+  /** That stage's lock — the Continue button explains itself when shut. */
+  nextLock: StageLock;
   locked: boolean;
   lockReason: string;
   /** Canonical (post-rename) names, resolved by the panel. */
@@ -347,18 +350,9 @@ export function QuestionSourceStep({
           </div>
         </div>
 
-        {nextStage && (
-          <div className="mt-10 flex items-center justify-end">
-            <button onClick={() => onNavigate(nextStage.id)}
-              className="flex items-center gap-2 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-              style={{
-                background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2,
-                cursor: 'pointer', letterSpacing: '0.03em',
-              }}>
-              Continue to {nextStage.label} <ChevronRight size={12} strokeWidth={2} />
-            </button>
-          </div>
-        )}
+        <div className="mt-10">
+          <StageContinue next={nextStage} lock={nextLock} onNavigate={onNavigate} />
+        </div>
       </div>
     </motion.div>
   );

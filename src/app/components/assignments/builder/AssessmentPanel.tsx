@@ -29,10 +29,12 @@ import { DetailsStep } from './DetailsStep';
 import { QuestionSourceStep, useQuestionBanks } from './QuestionSourceStep';
 import { StageRail } from './StageRail';
 import {
+  openStages,
   paperTotals,
   prevStageOf,
   nextStageOf,
   stageDef,
+  stageLock,
   stageStatus,
   visibleBuilderStages,
   type BuilderStage,
@@ -52,9 +54,36 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
   onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }, allocation: { mode: 'legacy' | 'rules'; nodeType: AllocationNodeType | ''; nodeIds: string[]; expectedVersion: number }) => Promise<void>;
   onClose: () => void;
 }) {
-  // Which stage is on screen. Free navigation — nothing here gates it; see
-  // stages.ts for why the three-step wizard this replaced was the wrong shape.
+  // Which stage is on screen. Navigation is free in every direction EXCEPT
+  // forward past an unfinished required stage while an assessment is being
+  // created for the first time — see stageLock, and see stages.ts for why the
+  // wizard this replaced was the wrong shape and why this is not it.
   const [stage, setStage] = useState<BuilderStage>('basics');
+
+  /**
+   * Stages that have opened during this session.
+   *
+   * Only ever grows. Completeness is re-derived from the draft on every
+   * keystroke, so a lock that only looked at the present would slam shut
+   * behind an author who cleared the title to retype it — eight stages
+   * re-locking mid-word, having already been earned. Nothing is taken back.
+   */
+  const [unlocked, setUnlocked] = useState<ReadonlySet<BuilderStage>>(
+    () => new Set<BuilderStage>(['basics']),
+  );
+  /** Set once a save succeeds. See savedRef for why this is state as well. */
+  const [hasSaved, setHasSaved] = useState(false);
+
+  /**
+   * Is this draft gated at all?
+   *
+   * Creation only, and only until the first save. Editing an assessment that
+   * already exists is the case the wizard got worst — it insists on a
+   * beginning for something already finished — so a saved paper is freely
+   * navigable forever after, including the one being created here the moment
+   * it is saved as a draft.
+   */
+  const gated = mode === 'create' && !hasSaved;
 
   // Lock body scroll while the panel is open so the page underneath doesn't
   // contribute its own scrollbar alongside the panel's scrollbar.
@@ -295,13 +324,6 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
     [fixedPaper, sections.length],
   );
 
-  // An author on Topics who turns randomization off would otherwise be left
-  // looking at a stage the rail no longer lists, with no way back except the
-  // browser's own history.
-  useEffect(() => {
-    if (!stages.some((s) => s.id === stage)) setStage('questionSource');
-  }, [stages, stage]);
-
   const ownerOfStage = stageDef(stage).owner;
   const statusFor = useCallback(
     (id: BuilderStage) => stageStatus(id, {
@@ -318,6 +340,47 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
     }),
     [title, subjectPool, topicPool, effectiveSections, questionSource, poolIds, pooledQuestions, anchors, banksLoading],
   );
+
+  // ── The lock ─────────────────────────────────────────────────────
+
+  const lockFor = useCallback(
+    (id: BuilderStage) => stageLock(id, { stages, statusFor, unlocked, gated }),
+    [stages, statusFor, unlocked, gated],
+  );
+
+  // Fold everything currently open into the set. Runs on every status change,
+  // which is what makes unlocking feel immediate: typing the last character of
+  // a title opens five stages on that keystroke, and they stay open.
+  useEffect(() => {
+    const open = openStages({ stages, statusFor, unlocked, gated });
+    const missing = open.filter((id) => !unlocked.has(id));
+    if (missing.length === 0) return;
+    setUnlocked((prev) => new Set([...prev, ...missing]));
+  }, [stages, statusFor, unlocked, gated]);
+
+  /**
+   * Navigate, refusing a locked destination.
+   *
+   * Every mover in the builder goes through this — the rail, five Continue
+   * buttons, the pickers' own Next links — because a guard that only covers
+   * the rail is a guard with five doors left open. A locked target sends the
+   * author to what is BLOCKING it instead, which is where the work actually
+   * is; the alternative is a click that does nothing and explains nothing.
+   */
+  const goToStage = useCallback((id: BuilderStage) => {
+    const lock = lockFor(id);
+    setStage(lock.open ? id : lock.blockedBy.id);
+  }, [lockFor]);
+
+  // An author on Topics who turns randomization off would otherwise be left
+  // looking at a stage the rail no longer lists, with no way back except the
+  // browser's own history. Through the guard like every other move — the
+  // fallback is reachable by construction (the toggle that hides these stages
+  // lives on Question Source, so the author is standing on an open stage
+  // already), but a navigator that skips the guard is one that can drift.
+  useEffect(() => {
+    if (!stages.some((s) => s.id === stage)) goToStage('questionSource');
+  }, [stages, stage, goToStage]);
 
   // ══════════════════════════════════════════════════════════════
   // THE CRASH NET
@@ -341,7 +404,16 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
 
   /** A restorable draft found at open. Offered, never applied silently. */
   const [recovered, setRecovered] = useState<StashedDraft<typeof snapshot> | null>(null);
-  /** Suppresses the unsaved guard once a save has succeeded. */
+  /**
+   * Has a save succeeded?
+   *
+   * STATE as well as a ref, and both are needed. The ref is read inside the
+   * stash effect and the close guard, which run after the value has already
+   * been set and must see it synchronously. The state is what stage locking
+   * reads, and locking has to RE-RENDER when a save lands — an assessment that
+   * has been saved is no longer gated, and a ref changing would leave the rail
+   * showing padlocks on a draft that already exists.
+   */
   const savedRef = useRef(false);
 
   // Look for a stash once, at open. `mode` is in the key via assessment.id, so
@@ -442,6 +514,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
   const handleSave = useCallback<typeof onSave>(async (draft, seb, allocation) => {
     await onSave(draft, seb, allocation);
     savedRef.current = true;
+    setHasSaved(true);
     clearDraft(stashKey);
   }, [onSave, stashKey]);
 
@@ -496,8 +569,9 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
           stages={stages}
           current={stage}
           statusFor={statusFor}
+          lockFor={lockFor}
           totals={totals}
-          onSelect={setStage}
+          onSelect={goToStage}
         />
 
         {/*
@@ -525,7 +599,8 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
               subject={subject} setSubject={setSubject}
               status={status} setStatus={setStatus}
               sections={sections} setSections={setSections}
-              onNavigate={setStage}
+              onNavigate={goToStage}
+              lockFor={lockFor}
               originalStatus={assessment?.status}
               allQuestions={pooledQuestions}
               subjectPool={subjectPool} setSubjectPool={setSubjectPool}
@@ -548,8 +623,9 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
                 prev.map((s, i) => (i === 0 ? { ...s, manualMarks: v } : s)))}
               banks={banks}
               banksLoading={banksLoading}
-              onNavigate={setStage}
+              onNavigate={goToStage}
               nextStage={nextStageOf('questionSource', stages)}
+              nextLock={lockFor(nextStageOf('questionSource', stages)?.id ?? 'subjects')}
               locked={!!assessment?.status && assessment.status !== 'draft'}
               lockReason={assessment?.status === 'closed' ? 'closed' : 'active'}
               qSubject={qSubject}
@@ -563,7 +639,8 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
               stage={stage}
               stages={stages}
               onSaveApi={receiveSaveApi}
-              onNavigate={setStage}
+              onNavigate={goToStage}
+              lockFor={lockFor}
               mode={mode} assessment={assessment} originalStatus={assessment?.status}
               allQuestions={pooledQuestions}
               allGroups={pooledGroups}
@@ -573,7 +650,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
               anchorIds={anchors}
               fixedPaper={fixedPaper}
               onAssignManual={assignManual}
-              onBack={() => setStage('sections')} onSave={handleSave}
+              onBack={() => goToStage('sections')} onSave={handleSave}
               title={title} description={description} subject={subject} status={status}
               targetType={targetType} setTargetType={setTargetType}
               selectedInstituteIds={selectedInstituteIds} setSelectedInstituteIds={setSelectedInstituteIds}
@@ -582,11 +659,11 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
               topicPool={topicPool}
               deliveryMode={deliveryMode} setDeliveryMode={setDeliveryMode}
               allocationPhase={stage === 'allocation'}
-              onContinueToAllocation={() => setStage('allocation')}
+              onContinueToAllocation={() => goToStage('allocation')}
               // The stage before Allocation, not a named one: this used to say
               // 'security', which is now second in the flow — the back link
               // would have thrown an author from the last stage to the second.
-              onBackToRules={() => setStage(prevStageOf('allocation', stages)?.id ?? 'grading')}
+              onBackToRules={() => goToStage(prevStageOf('allocation', stages)?.id ?? 'grading')}
             />
           </div>
         </div>

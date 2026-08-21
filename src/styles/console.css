@@ -418,6 +418,95 @@
     background: var(--ef-track);
   }
 
+  /* ── The clickable name in a table row ────────────────────────────
+     A whole row cannot be a button when the row's last cell holds buttons,
+     so the identifying cell carries the navigation instead. The chevron is
+     the affordance: hidden until hover on a mouse, always present on touch,
+     where there is no hover to reveal it with. */
+
+  .ef-row-link {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .ef-row-link__chevron {
+    opacity: 0;
+    transform: translateX(-3px);
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+
+  .ef-row-link:hover .ef-row-link__chevron,
+  .ef-row-link:focus-visible .ef-row-link__chevron {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .ef-row-link:hover .ef-t-sm {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  @media (hover: none) {
+    .ef-row-link__chevron {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ── Disclosure ───────────────────────────────────────────────────
+     A card that is a closed section until it is opened. The chevron rotates
+     rather than swapping glyphs, so the control reads as the same object in
+     both states — a down-arrow replacing a right-arrow is a second control
+     as far as peripheral vision is concerned. */
+
+  .ef-disclosure {
+    background: var(--ef-surface);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+  }
+
+  .ef-disclosure__summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px var(--ef-pad-card);
+    cursor: pointer;
+    list-style: none;
+    border-radius: var(--ef-radius);
+    transition: background-color 160ms ease;
+  }
+
+  .ef-disclosure__summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .ef-disclosure__summary:hover {
+    background: var(--ef-canvas-raised);
+  }
+
+  .ef-disclosure__chevron {
+    flex-shrink: 0;
+    color: var(--ef-text-muted);
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ef-disclosure[open] > .ef-disclosure__summary {
+    border-bottom: 1px solid var(--ef-border-subtle);
+    border-radius: var(--ef-radius) var(--ef-radius) 0 0;
+  }
+
+  .ef-disclosure[open] > .ef-disclosure__summary .ef-disclosure__chevron {
+    transform: rotate(90deg);
+  }
+
+  .ef-disclosure__body {
+    padding: var(--ef-pad-card);
+  }
+
   /* ── Navigation ───────────────────────────────────────────────── */
 
   .ef-nav-link {
@@ -520,6 +609,16 @@
     background: var(--ef-surface);
     border-color: var(--ef-accent);
     outline: none;
+  }
+
+  /* `type="search"` draws its own clear button in WebKit, next to the one
+     SearchField renders — two × glyphs side by side, one of them styled and
+     one of them not. Ours stays: it is the one that is themed, keyboard
+     reachable and labelled. */
+  .ef-input[type='search']::-webkit-search-cancel-button,
+  .ef-input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
   }
 
   /* ── Theme swatches ───────────────────────────────────────────── */
@@ -1087,6 +1186,17 @@
     background: var(--ef-canvas-raised);
     border: 1px solid var(--ef-border);
     border-radius: var(--ef-radius-sm);
+    /* Four options at phone width can exceed the page. It scrolls itself
+       rather than widening the document — one sideways-scrolling control is
+       a control; a sideways-scrolling page takes the sticky app bar out of
+       alignment with everything under it. */
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .ef-segmented::-webkit-scrollbar {
+    display: none;
   }
 
   .ef-segmented__option {

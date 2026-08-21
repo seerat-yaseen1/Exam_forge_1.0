@@ -26,9 +26,21 @@ type Props = {
   /** Required for the institute view; ignored for webOwner. */
   instituteId?: string;
   onResolved?: () => void;
+  /**
+   * Render nothing at all when there is nothing pending — including while
+   * loading.
+   *
+   * For the surfaces that drop this inbox at the top of a page without a
+   * heading of its own. There, "No pending deletion requests." is a line of
+   * grey text that appears on every visit to say that the normal case is
+   * normal, preceded by a spinner that shifts the layout when it goes. Under
+   * its own heading (the institute console's Approvals tab) the empty line is
+   * worth having, which is why this is a prop and not the behaviour.
+   */
+  hideWhenEmpty?: boolean;
 };
 
-export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: Props) {
+export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved, hideWhenEmpty }: Props) {
   const [requests, setRequests] = useState<DeletionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -72,6 +84,7 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
   };
 
   if (loading) {
+    if (hideWhenEmpty) return null;
     return (
       <div className="flex items-center gap-2 text-xs py-4" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={12} className="animate-spin" /> Loading requests…
@@ -88,6 +101,10 @@ export function DeletionApprovalsInbox({ viewerRole, instituteId, onResolved }: 
     : [];
   const toDecide = pending.filter((r) => r.approverRole === viewerRole);
   const resolved = requests.filter((r) => r.status !== 'pending').slice(0, 10);
+
+  if (hideWhenEmpty && !error && toDecide.length === 0 && mine.length === 0 && resolved.length === 0) {
+    return null;
+  }
 
   return (
     <div>

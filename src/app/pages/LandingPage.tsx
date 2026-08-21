@@ -29,29 +29,15 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAllInstitutes, type Institute } from '../../lib/firebaseService';
-import { expiryPhrase, summariseFleet, type InstituteHealth } from '../../lib/fleetOverview';
+import {
+  HEALTH_LABEL, HEALTH_TONE, expiryPhrase, summariseFleet,
+} from '../../lib/fleetOverview';
 import { formatDate } from '../../lib/dateFormat';
 import {
   Button, Card, Chip, EmptyState, ErrorBanner, PageHeader, PageShell, SectionHeading,
   StatRow, StatTile,
 } from '../components/console/ui';
 import { Avatar, TableSkeleton } from '../components/console/data';
-
-const HEALTH_LABEL: Record<InstituteHealth, string> = {
-  expired: 'Access lapsed',
-  lapsing: 'Renewing soon',
-  disabled: 'Disabled',
-  healthy: 'Active',
-  unbounded: 'No expiry',
-};
-
-const HEALTH_TONE: Record<InstituteHealth, 'danger' | 'warning' | 'muted' | 'success'> = {
-  expired: 'danger',
-  lapsing: 'warning',
-  disabled: 'muted',
-  healthy: 'success',
-  unbounded: 'muted',
-};
 
 function greeting(hour: number): string {
   if (hour < 12) return 'Good morning';

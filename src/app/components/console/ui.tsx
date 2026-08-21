@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, Check, Copy, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Copy, Loader2, RefreshCw } from 'lucide-react';
 import type { Theme } from '../../../lib/themes';
 
 // ══════════════════════════════════════════════════════════════════
@@ -157,6 +157,54 @@ export function Card({
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * A section that is closed until asked for.
+ *
+ * ── WHAT IT IS FOR ────────────────────────────────────────────────
+ * Controls that are important but consulted rarely — an erasure policy, a
+ * trash can, an audit log. Left expanded they push the page's actual subject
+ * below the fold and get skimmed past daily until they are invisible; hidden
+ * behind a route they are forgotten entirely. Closed-but-named is the
+ * position that survives both: the reader sees that it exists and what it is,
+ * and pays for it only when they want it.
+ *
+ * Built on <details>, so it works before hydration, is findable by the
+ * browser's own in-page search, and needs no state.
+ */
+export function Disclosure({
+  label,
+  description,
+  icon,
+  defaultOpen = false,
+  children,
+}: {
+  label: string;
+  description?: React.ReactNode;
+  icon?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="ef-disclosure" open={defaultOpen}>
+      <summary className="ef-disclosure__summary">
+        <ChevronRight size={14} strokeWidth={1.8} className="ef-disclosure__chevron" aria-hidden="true" />
+        {icon && <span style={{ display: 'flex', color: 'var(--ef-text-muted)' }}>{icon}</span>}
+        <span style={{ minWidth: 0 }}>
+          <span className="ef-t-sm ef-ink block" style={{ fontWeight: 500 }}>
+            {label}
+          </span>
+          {description && (
+            <span className="ef-t-xs ef-muted block" style={{ marginTop: 2 }}>
+              {description}
+            </span>
+          )}
+        </span>
+      </summary>
+      <div className="ef-disclosure__body">{children}</div>
+    </details>
   );
 }
 

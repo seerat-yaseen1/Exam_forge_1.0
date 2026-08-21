@@ -50,6 +50,30 @@ export function healthOf(institute: Institute, now: number = Date.now()): Instit
   return 'healthy';
 }
 
+/**
+ * The words and the colour each state gets, everywhere it appears.
+ *
+ * Here rather than on a page because two screens show it — the overview and
+ * the institutes table — and the first version of the table said "Expired"
+ * where the overview said "Access lapsed". One state with two names is two
+ * states as far as the reader is concerned.
+ */
+export const HEALTH_LABEL: Record<InstituteHealth, string> = {
+  expired: 'Access lapsed',
+  lapsing: 'Renewing soon',
+  disabled: 'Disabled',
+  healthy: 'Active',
+  unbounded: 'No expiry',
+};
+
+export const HEALTH_TONE: Record<InstituteHealth, 'danger' | 'warning' | 'muted' | 'success'> = {
+  expired: 'danger',
+  lapsing: 'warning',
+  disabled: 'muted',
+  healthy: 'success',
+  unbounded: 'muted',
+};
+
 export type FleetSummary = {
   total: number;
   /** Signed-in-able right now: active status, and not past its date. */

@@ -34,9 +34,13 @@ type Props = {
   /** Web Owner only — enables the erasure execution control. */
   canErase?: boolean;
   onChanged?: () => void;
+  /** Render nothing when there is nothing. See DeletionApprovalsInbox. */
+  hideWhenEmpty?: boolean;
 };
 
-export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged }: Props) {
+export function SubjectRequestsInbox({
+  instituteId, canErase = false, onChanged, hideWhenEmpty,
+}: Props) {
   const [requests, setRequests] = useState<SubjectRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -125,6 +129,7 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
   };
 
   if (loading) {
+    if (hideWhenEmpty) return null;
     return (
       <div className="flex items-center gap-2 text-xs py-4" style={{ color: 'var(--ef-text-muted)' }}>
         <Loader2 size={12} className="animate-spin" /> Loading requests…
@@ -134,6 +139,10 @@ export function SubjectRequestsInbox({ instituteId, canErase = false, onChanged 
 
   const open = requests.filter((r) => r.status === 'open');
   const closed = requests.filter((r) => r.status !== 'open').slice(0, 10);
+
+  // See DeletionApprovalsInbox for why this is a prop: dropped at the top of
+  // a page with no heading, an empty inbox should occupy no space.
+  if (hideWhenEmpty && !error && open.length === 0 && closed.length === 0) return null;
 
   return (
     <div>

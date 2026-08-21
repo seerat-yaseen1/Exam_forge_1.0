@@ -27,8 +27,9 @@
  */
 
 import React, { useCallback, useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { X } from 'lucide-react';
+import { MoreHorizontal, Search, X } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
 // TABLE
@@ -156,6 +157,78 @@ export function Toolbar({
   );
 }
 
+/**
+ * The search box every list page needs.
+ *
+ * ── WHY IT IS TYPE-TO-FILTER AND NOT A SUBMIT ─────────────────────
+ * The lists it sits above are already in memory, so there is nothing to wait
+ * for — a Search button would add a step to a result the page could have
+ * shown on the first keystroke. What it does need is a way OUT: a filter with
+ * no visible clear control is the most common way someone concludes their
+ * data has disappeared, so the × appears as soon as there is anything to
+ * clear, and Escape does the same from the keyboard.
+ */
+export function SearchField({
+  value,
+  onChange,
+  placeholder = 'Search…',
+  label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  /** Names the field for a screen reader; no visible label in a toolbar. */
+  label: string;
+}) {
+  const id = useId();
+  return (
+    <div className="ef-toolbar__grow" style={{ position: 'relative' }}>
+      <label htmlFor={id} className="sr-only">
+        {label}
+      </label>
+      <Search
+        size={14}
+        strokeWidth={1.7}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          left: 11,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          color: 'var(--ef-text-muted)',
+          pointerEvents: 'none',
+        }}
+      />
+      <input
+        id={id}
+        type="search"
+        className="ef-input"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && value) {
+            e.preventDefault();
+            onChange('');
+          }
+        }}
+        style={{ paddingLeft: 33, paddingRight: value ? 34 : undefined }}
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Clear search"
+          className="ef-icon-btn"
+          style={{ position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28 }}
+        >
+          <X size={13} strokeWidth={1.8} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════════════════════════════
@@ -225,6 +298,154 @@ export function Tabs({
         );
       })}
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ROW MENU
+// ══════════════════════════════════════════════════════════════════
+
+export type RowAction = {
+  label: string;
+  icon?: React.ReactNode;
+  onSelect: () => void;
+  tone?: 'default' | 'danger';
+  disabled?: boolean;
+};
+
+/**
+ * The overflow menu at the end of a row.
+ *
+ * ── WHY NOT SIX ICON BUTTONS ──────────────────────────────────────
+ * Because six 13px glyphs in a row is a guessing game. Each one needs a
+ * tooltip to be understood, tooltips do not exist on a phone, and the two
+ * that matter (edit, disable) end up the same size and weight as the one
+ * that deletes an institute. Two named-on-hover buttons plus a menu of
+ * labelled items says what each thing does, in words, on every device.
+ *
+ * ── WHY IT IS IN A PORTAL ─────────────────────────────────────────
+ * `.ef-table-wrap` scrolls horizontally, and a scroll container clips its
+ * children in BOTH axes — an absolutely-positioned menu inside one gets cut
+ * off at the row. Fixed-positioning it onto the body sidesteps that; the
+ * cost is that it must close when anything scrolls underneath it, which is
+ * what the scroll listener is for.
+ */
+export function RowMenu({ actions, label = 'More actions' }: { actions: RowAction[]; label?: string }) {
+  const [open, setOpen] = React.useState(false);
+  const [at, setAt] = React.useState<{ top: number; right: number } | null>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+
+  /**
+   * Below the button if it fits, above it if it does not.
+   *
+   * Without the flip, the menu on the last row of a long list opens off the
+   * bottom of the screen — which on a phone is most rows, because the button
+   * is wherever your thumb reached. The height is estimated from the item
+   * count rather than measured, so the menu is positioned on its first paint
+   * instead of appearing in the wrong place and jumping.
+   */
+  const place = useCallback(() => {
+    const r = button.current?.getBoundingClientRect();
+    if (!r) return;
+    // A menu item is 34px with a mouse and 44px under a coarse pointer, where
+    // the touch-target rule in palette.css grows it.
+    const itemHeight = window.matchMedia?.('(pointer: coarse)').matches ? 44 : 34;
+    const height = actions.length * itemHeight + 12;
+    const room = window.innerHeight - r.bottom - 8;
+    const top = room >= height ? r.bottom + 6 : Math.max(8, r.top - height - 6);
+    setAt({ top, right: Math.max(8, window.innerWidth - r.right) });
+  }, [actions.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    place();
+
+    const onPointer = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!menu.current?.contains(t) && !button.current?.contains(t)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    /**
+     * A fixed menu does not move with its row, so it has to be told to.
+     *
+     * The obvious version of this closes the menu on any scroll. It looks
+     * right on a laptop and is unusable on a phone: opening a popover there
+     * routinely produces a scroll of its own (the address bar collapsing, the
+     * tap's own momentum), so the menu shut itself the instant it opened —
+     * reproducibly, under a touch-emulating browser. Following the button is
+     * both the fix and the better behaviour; it only closes once the button
+     * it belongs to has actually left the screen.
+     */
+    const follow = () => {
+      const r = button.current?.getBoundingClientRect();
+      if (!r || r.bottom < 0 || r.top > window.innerHeight) setOpen(false);
+      else place();
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    // `true` catches scrolls in any ancestor, including the table's own
+    // horizontal one.
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', follow, true);
+      window.removeEventListener('resize', follow);
+    };
+  }, [open, place]);
+
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        className="ef-icon-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <MoreHorizontal size={16} strokeWidth={1.8} />
+      </button>
+
+      {open &&
+        at &&
+        createPortal(
+          <motion.div
+            ref={menu}
+            role="menu"
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+            className="ef-menu"
+            style={{ position: 'fixed', top: at.top, right: at.right, zIndex: 60, minWidth: 196, padding: 5 }}
+          >
+            {actions.map((a) => (
+              <button
+                key={a.label}
+                type="button"
+                role="menuitem"
+                className="ef-menu-item"
+                data-tone={a.tone === 'danger' ? 'danger' : undefined}
+                disabled={a.disabled}
+                style={{ borderRadius: 'var(--ef-radius-sm)', opacity: a.disabled ? 0.5 : 1 }}
+                onClick={() => {
+                  setOpen(false);
+                  a.onSelect();
+                }}
+              >
+                {a.icon && <span style={{ display: 'inline-flex', flexShrink: 0 }}>{a.icon}</span>}
+                {a.label}
+              </button>
+            ))}
+          </motion.div>,
+          document.body,
+        )}
+    </>
   );
 }
 

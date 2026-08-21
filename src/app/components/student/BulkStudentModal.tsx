@@ -201,7 +201,6 @@ export function BulkStudentModal({ open, onClose, onCreated, instituteId, instit
             instituteId,
             role: 'Student',
             status: 'active',
-            firstLoginRequired: false,
             createdAt: now,
             updatedAt: now,
           };

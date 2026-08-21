@@ -168,7 +168,6 @@ export function StudentDashboardLayout() {
   // first. Wait for the answer before acting on it.
   if (loading) return <RouteFallback />;
   if (!session) return <Navigate to="/student/login" replace />;
-  if (session.firstLoginRequired) return <Navigate to="/student/change-password" replace />;
 
   // `startsWith` rather than equality: the roster and results pages live under
   // /student/assessments-adjacent paths, and a tab that unhighlights when the

@@ -243,7 +243,6 @@ function InstituteSheet({
             status: 'active',
             validityType,
             activeUntil: computedActiveUntil,
-            firstLoginRequired: false, // admin sets pwd via reset link
           },
         });
 

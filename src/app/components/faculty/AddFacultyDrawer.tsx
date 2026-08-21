@@ -18,7 +18,6 @@ export interface Faculty {
   email: string;
   role: 'Faculty';
   status: 'active' | 'disabled';
-  firstLoginRequired: boolean;
   // Optional permission fields (mirrors lib/firebaseService Faculty). Present
   // so FacultyTab can read/gate per-faculty toggles and the Phase-2 question-
   // rights editor without re-casting.
@@ -116,7 +115,6 @@ export function AddFacultyDrawer({ open, onClose, onCreated, instituteId, instit
           instituteId,
           role: 'Faculty',
           status,
-          firstLoginRequired: false,
           createdAt: now,
           updatedAt: now,
         },

@@ -190,7 +190,6 @@ export function BulkFacultyModal({
               instituteId,
               role: 'Faculty',
               status: 'active',
-              firstLoginRequired: false,
               createdAt: now,
               updatedAt: now,
             },

@@ -60,7 +60,6 @@ export function FacultyDashboardLayout() {
   // answer before acting on it.
   if (loading) return <RouteFallback />;
   if (!session) return <Navigate to="/faculty/login" replace />;
-  if (session.firstLoginRequired) return <Navigate to="/faculty/change-password" replace />;
 
   const nav: NavItem[] = [
     { to: '/faculty/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={15} strokeWidth={1.6} /> },

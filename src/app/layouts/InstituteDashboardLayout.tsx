@@ -78,7 +78,6 @@ export function InstituteDashboardLayout() {
   // Auth rehydration guard — see FacultyDashboardLayout for the full note.
   if (loading) return <RouteFallback />;
   if (!session) return <Navigate to="/institute/login" replace />;
-  if (session.firstLoginRequired) return <Navigate to="/institute/change-password" replace />;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

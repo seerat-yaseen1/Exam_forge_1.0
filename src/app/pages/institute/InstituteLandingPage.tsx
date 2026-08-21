@@ -58,6 +58,7 @@ import {
   attentionItems, summariseRoster,
   type AttentionItem, type AttentionTone,
 } from '../../../lib/rosterSummary';
+import { fetchRosterSignIn } from '../../../lib/rosterSignIn';
 import {
   Button, Chip, CopyChip, EmptyState, ErrorBanner, PageHeader, PageShell,
   SectionHeading, StatRow, StatTile,
@@ -159,11 +160,17 @@ function PersonCell({ name, email }: { name: string; email: string }) {
   );
 }
 
-function JoinedCell({ createdAt, firstLoginRequired }: { createdAt: string; firstLoginRequired: boolean }) {
+/**
+ * `neverSignedIn` is tri-state on purpose: true, false, or undefined for "not
+ * known yet". The badge renders only on true, so a roster that arrives before
+ * the Auth lookup shows no badge rather than a wrong one — and, unlike the
+ * profile flag this replaced, never claims someone HAS signed in.
+ */
+function JoinedCell({ createdAt, neverSignedIn }: { createdAt: string; neverSignedIn?: boolean }) {
   return (
     <span>
       <span className="ef-t-xs ef-muted block">{formatDate(createdAt)}</span>
-      {firstLoginRequired && (
+      {neverSignedIn && (
         <span className="ef-t-2xs block" style={{ color: 'var(--ef-warning)', marginTop: 2 }}>
           Never signed in
         </span>
@@ -172,7 +179,11 @@ function JoinedCell({ createdAt, firstLoginRequired }: { createdAt: string; firs
   );
 }
 
-const FACULTY_COLUMNS: Column<Faculty>[] = [
+// Factories rather than constants, because the "never signed in" badge now
+// depends on a set that arrives after the module does. The set is passed in
+// rather than read from a context so these stay ordinary data — the tables
+// below take columns, not providers.
+const facultyColumns = (neverSignedIn: Set<string> | null): Column<Faculty>[] => [
   {
     key: 'name',
     header: 'Faculty',
@@ -184,11 +195,11 @@ const FACULTY_COLUMNS: Column<Faculty>[] = [
     key: 'added',
     header: 'Added',
     width: 160,
-    cell: (f) => <JoinedCell createdAt={f.createdAt} firstLoginRequired={f.firstLoginRequired} />,
+    cell: (f) => <JoinedCell createdAt={f.createdAt} neverSignedIn={neverSignedIn?.has(f.id)} />,
   },
 ];
 
-const STUDENT_COLUMNS: Column<Student>[] = [
+const studentColumns = (neverSignedIn: Set<string> | null): Column<Student>[] => [
   {
     key: 'name',
     header: 'Student',
@@ -216,7 +227,7 @@ const STUDENT_COLUMNS: Column<Student>[] = [
     key: 'added',
     header: 'Added',
     width: 160,
-    cell: (s) => <JoinedCell createdAt={s.createdAt} firstLoginRequired={s.firstLoginRequired} />,
+    cell: (s) => <JoinedCell createdAt={s.createdAt} neverSignedIn={neverSignedIn?.has(s.id)} />,
   },
 ];
 
@@ -323,6 +334,12 @@ export function InstituteLandingPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [rosterError, setRosterError] = useState('');
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
+  // Who has never signed in, from Firebase Auth rather than from a Firestore
+  // flag nothing maintained. NULL UNTIL IT ANSWERS, and null is rendered as a
+  // dash: the bug this replaces was a confident 0 under the words "everyone
+  // has", so an unavailable answer must not look like a good one.
+  const [facultySignIn, setFacultySignIn] = useState<Set<string> | null>(null);
+  const [studentSignIn, setStudentSignIn] = useState<Set<string> | null>(null);
 
   const loadRosters = useCallback(
     async (isRefresh = false) => {
@@ -337,6 +354,19 @@ export function InstituteLandingPage() {
         setFaculty(f);
         setStudents(s);
         setSyncedAt(Date.now());
+
+        // Deliberately AFTER the rosters are on screen and deliberately not
+        // awaited into the same Promise.all: this is an Auth lookup over the
+        // whole roster, and making the page wait for it would slow the common
+        // case to complete a single tile. fetchRosterSignIn never throws, so
+        // a failure leaves both sets null and the tile shows a dash.
+        void Promise.all([
+          fetchRosterSignIn(instituteId, 'faculty'),
+          fetchRosterSignIn(instituteId, 'student'),
+        ]).then(([fac, stu]) => {
+          setFacultySignIn(fac?.neverSignedIn ?? null);
+          setStudentSignIn(stu?.neverSignedIn ?? null);
+        });
       } catch (e: any) {
         setRosterError(e?.message || 'Could not load your institute’s people.');
       } finally {
@@ -374,8 +404,13 @@ export function InstituteLandingPage() {
 
   // ── What it all adds up to ─────────────────────────────────────
 
-  const facultySummary  = useMemo(() => summariseRoster(faculty),  [faculty]);
-  const studentSummary  = useMemo(() => summariseRoster(students), [students]);
+  const facultySummary  = useMemo(() => summariseRoster(faculty,  facultySignIn), [faculty, facultySignIn]);
+  const studentSummary  = useMemo(() => summariseRoster(students, studentSignIn), [students, studentSignIn]);
+
+  // Memoised so the tables are not handed a new column array on every render;
+  // they rebuild only when the sign-in answer actually arrives.
+  const facultyCols = useMemo(() => facultyColumns(facultySignIn), [facultySignIn]);
+  const studentCols = useMemo(() => studentColumns(studentSignIn), [studentSignIn]);
   const daysLeft = useMemo(() => daysUntilExpiry(session?.activeUntil), [session?.activeUntil]);
 
   const needs = useMemo(
@@ -397,7 +432,11 @@ export function InstituteLandingPage() {
     tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const dormant = facultySummary.dormant + studentSummary.dormant;
+  // Null when either half has not answered — a partial total would be a
+  // smaller wrong number, not a better one.
+  const dormant = facultySummary.dormant === null || studentSummary.dormant === null
+    ? null
+    : facultySummary.dormant + studentSummary.dormant;
   const waiting = pendingCount + pendingDeletionCount;
 
   const tabs = [
@@ -482,13 +521,23 @@ export function InstituteLandingPage() {
               sub={rosterLoading ? 'loading' : `${studentSummary.active} can sign in`}
               hint="Everyone enrolled here, whatever their status."
             />
+            {/* A dash, not a zero, until the Auth lookup answers. The tile
+                this replaces was fed by a profile flag nothing ever set, so it
+                read 0 / "everyone has" for every institute forever — a
+                specific, confident, wrong answer to a question an admin acts
+                on. An unavailable answer must not be able to look like a
+                clean bill of health. */}
             <StatTile
               label="Never signed in"
-              value={rosterLoading ? '—' : dormant}
+              value={rosterLoading || dormant === null ? '—' : dormant}
               icon={<UserCheck size={13} strokeWidth={1.7} />}
-              tone={dormant > 0 ? 'warning' : undefined}
-              sub={dormant > 0 ? 'first password unused' : 'everyone has'}
-              hint="Accounts created but never used. Until someone signs in, their temporary password is still the only thing on the account."
+              tone={dormant !== null && dormant > 0 ? 'warning' : undefined}
+              sub={
+                rosterLoading ? 'loading'
+                  : dormant === null ? 'unavailable'
+                    : dormant > 0 ? 'account never used' : 'everyone has'
+              }
+              hint="Accounts created but never used, from their Firebase sign-in record. Until someone signs in, their setup link is still the only thing on the account."
             />
             <StatTile
               label="Waiting on you"
@@ -563,7 +612,7 @@ export function InstituteLandingPage() {
                   ) : (
                     <ReadOnlyRoster
                       rows={faculty}
-                      columns={FACULTY_COLUMNS}
+                      columns={facultyCols}
                       loading={rosterLoading}
                       icon={<Users size={28} strokeWidth={1.1} />}
                       emptyTitle="No faculty yet"
@@ -577,7 +626,7 @@ export function InstituteLandingPage() {
                   ) : (
                     <ReadOnlyRoster
                       rows={students}
-                      columns={STUDENT_COLUMNS}
+                      columns={studentCols}
                       loading={rosterLoading}
                       icon={<GraduationCap size={28} strokeWidth={1.1} />}
                       emptyTitle="No students yet"

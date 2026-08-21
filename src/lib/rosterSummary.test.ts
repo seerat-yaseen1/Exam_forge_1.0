@@ -7,9 +7,10 @@ import {
   type RosterSummary,
 } from './rosterSummary';
 
+let seq = 0;
 const member = (over: Partial<RosterMember> = {}): RosterMember => ({
+  id: `m${seq++}`,
   status: 'active',
-  firstLoginRequired: false,
   ...over,
 });
 
@@ -19,7 +20,7 @@ describe('summariseRoster', () => {
       member(),
       member(),
       member({ status: 'disabled' }),
-    ]);
+    ], new Set());
     expect(s).toEqual({ total: 3, active: 2, disabled: 1, dormant: 0 });
   });
 
@@ -27,14 +28,44 @@ describe('summariseRoster', () => {
     // A disabled account that was never used is still an unclaimed credential.
     // Reading "dormant" as "active and unused" would hide exactly the accounts
     // an admin is most likely to want to clean up.
-    const s = summariseRoster([
-      member({ firstLoginRequired: true }),
-      member({ status: 'disabled', firstLoginRequired: true }),
-      member(),
-    ]);
+    const never = member();
+    const neverAndDisabled = member({ status: 'disabled' });
+    const s = summariseRoster(
+      [never, neverAndDisabled, member()],
+      new Set([never.id, neverAndDisabled.id]),
+    );
     expect(s.dormant).toBe(2);
     expect(s.active).toBe(2);
     expect(s.disabled).toBe(1);
+  });
+
+  // ── The distinction the old flag could not make ──────────────────
+  // `dormant` used to come from `firstLoginRequired` on the profile, which no
+  // provisioning path ever set to true — so it was 0 for every institute,
+  // forever, under a tile reading "everyone has". The sign-in answer now
+  // arrives separately and can be absent, and absent must not read as zero.
+  it('reports dormant as NULL when the sign-in answer is unavailable', () => {
+    const s = summariseRoster([member(), member({ status: 'disabled' })]);
+    expect(s.dormant).toBeNull();
+    // The rest of the census does not depend on it and must still be right.
+    expect(s.total).toBe(2);
+    expect(s.active).toBe(1);
+    expect(s.disabled).toBe(1);
+  });
+
+  it('distinguishes "nobody has signed in" from "we do not know"', () => {
+    const roster = [member(), member()];
+    expect(summariseRoster(roster, new Set()).dormant).toBe(0);
+    expect(summariseRoster(roster, null).dormant).toBeNull();
+  });
+
+  it('ignores uids in the set that are not on this roster', () => {
+    // The two fetches are independent, so the set can name someone the roster
+    // no longer lists — a member deleted between the two calls. Counting them
+    // would inflate the tile above the roster's own total.
+    const m = member();
+    const s = summariseRoster([m], new Set([m.id, 'someone-else-entirely']));
+    expect(s.dormant).toBe(1);
   });
 
   it('summarises nothing as zeroes rather than throwing', () => {

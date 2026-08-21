@@ -36,8 +36,7 @@
 // The part worth getting right is the part that can be checked.
 
 import { sendPasswordResetEmail, updatePassword } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth } from './firebase';
 import { revokeOtherSessionsKeepCurrent } from './sessionSecurity';
 
 /** Shared so four screens cannot word one state four ways. */
@@ -100,14 +99,10 @@ export function resetRequestIsBenign(code: string | undefined): boolean {
  */
 export async function changeRolePassword(opts: {
   newPassword: string;
-  /** e.g. 'studentCredentials' */
-  credentialCollection: string;
-  /** The credential document id — the role's own id, not the Auth uid. */
-  credentialDocId: string;
   /** Prefix for the one warning this can emit, e.g. '[StudentAuth]'. */
   logLabel: string;
 }): Promise<AuthOpResult> {
-  const { newPassword, credentialCollection, credentialDocId, logLabel } = opts;
+  const { newPassword, logLabel } = opts;
 
   const fbUser = auth.currentUser;
   if (!fbUser) return { success: false, error: 'Not authenticated.' };
@@ -118,29 +113,24 @@ export async function changeRolePassword(opts: {
   try {
     await updatePassword(fbUser, newPassword);
 
-    // BOOKKEEPING, NOT THE OPERATION — and it must not be able to fail the
-    // operation. This was the subtle part, and all three copies carried the
-    // same long comment explaining it: a bare `await` here reported "Failed to
-    // change password" AFTER the password had already changed, and skipped the
-    // session revocation below, which is the entire security point of the flow.
+    // GONE FROM HERE: a best-effort `updateDoc` clearing `firstLoginRequired`
+    // on the role's credential document, wrapped in its own try/catch so it
+    // could not fail the password change.
     //
-    // It rejects routinely: updateDoc REQUIRES the document to exist, and the
-    // credential collections are empty — createAuthUser stopped writing them
-    // when the plaintext password was removed. A not-found is also harmless,
-    // because every context reads the flag as `snap.exists() ? … : false`, so
-    // an absent document already means the state this write was reaching for.
-    try {
-      await updateDoc(doc(db, credentialCollection, credentialDocId), {
-        firstLoginRequired: false,
-      });
-    } catch (e) {
-      console.warn(`${logLabel} could not clear firstLoginRequired — the password change stands`, e);
-    }
+    // The care was warranted — a bare await there once reported "Failed to
+    // change password" after the password had already changed — but the write
+    // itself never did anything. `updateDoc` requires the document to exist
+    // and the credential collections were never written: createAuthUser
+    // stopped writing them when the plaintext password was removed, so every
+    // call took the catch branch and logged a warning. The flag it maintained
+    // was read as `snap.exists() ? … : false`, which is to say permanently
+    // false, so the forced-first-login route it gated was unreachable. All of
+    // it went out together — this is the last of it.
 
-    // The credential changed, so every other session holding the old one — or
-    // the provisioned one, on a first-login change — is signed out. Best
-    // effort: the password change has already succeeded. This device is
-    // re-authenticated inside the helper so it survives its own revocation.
+    // The credential changed, so every other session holding the old one is
+    // signed out. Best effort: the password change has already succeeded. This
+    // device is re-authenticated inside the helper so it survives its own
+    // revocation.
     await revokeOtherSessionsKeepCurrent(newPassword);
     return { success: true };
   } catch (err: unknown) {

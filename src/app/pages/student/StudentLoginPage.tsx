@@ -6,11 +6,7 @@ export function StudentLoginPage() {
   const navigate = useNavigate();
   const { session, login } = useStudentAuth();
 
-  if (session) {
-    return session.firstLoginRequired
-      ? <Navigate to="/student/change-password" replace />
-      : <Navigate to="/student/dashboard" replace />;
-  }
+  if (session) return <Navigate to="/student/dashboard" replace />;
 
   return (
     <SignIn
@@ -26,9 +22,7 @@ export function StudentLoginPage() {
       onSubmit={async ({ code, email, password }) => {
         const result = await login(code, email, password);
         if (!result.success) return result;
-        navigate(result.firstLoginRequired ? '/student/change-password' : '/student/dashboard', {
-          replace: true,
-        });
+        navigate('/student/dashboard', { replace: true });
         return { success: true };
       }}
     />

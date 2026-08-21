@@ -23,7 +23,6 @@ export interface StudentSession {
   email: string;
   role: 'Student';
   status: 'active' | 'disabled';
-  firstLoginRequired: boolean;
   instituteId: string;
   instituteName: string;
   instituteCode: string;
@@ -78,7 +77,7 @@ interface StudentAuthContextType {
     instituteCode: string,
     email: string,
     password: string
-  ) => Promise<{ success: boolean; error?: string; firstLoginRequired?: boolean }>;
+  ) => Promise<{ success: boolean; error?: string }>;
   changePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   requestPasswordReset: (
     instituteCode: string,
@@ -93,7 +92,6 @@ const StudentAuthContext = createContext<StudentAuthContextType | null>(null);
 interface BuildResult {
   session: StudentSession | null;
   reason?: 'not_student' | 'no_student_doc' | 'no_institute_doc' | 'disabled' | 'expired' | 'wrong_institute_code';
-  firstLoginRequired: boolean;
 }
 
 async function buildSessionFromAuthUser(
@@ -106,20 +104,19 @@ async function buildSessionFromAuthUser(
   const studentId = tokenResult.claims.studentId as string | undefined;
 
   if (role !== 'student' || !instituteId || !studentId) {
-    return { session: null, reason: 'not_student', firstLoginRequired: false };
+    return { session: null, reason: 'not_student' };
   }
 
-  const [stuSnap, instSnap, credSnap] = await Promise.all([
+  const [stuSnap, instSnap] = await Promise.all([
     getDoc(doc(db, 'students', studentId)),
     getDoc(doc(db, 'institutes', instituteId)),
-    getDoc(doc(db, 'studentCredentials', studentId)),
   ]);
 
   if (!stuSnap.exists()) {
-    return { session: null, reason: 'no_student_doc', firstLoginRequired: false };
+    return { session: null, reason: 'no_student_doc' };
   }
   if (!instSnap.exists()) {
-    return { session: null, reason: 'no_institute_doc', firstLoginRequired: false };
+    return { session: null, reason: 'no_institute_doc' };
   }
 
   const stu = stuSnap.data() as Record<string, unknown>;
@@ -129,7 +126,7 @@ async function buildSessionFromAuthUser(
     expectedInstituteCode &&
     String(inst.code ?? '').toUpperCase() !== expectedInstituteCode.toUpperCase()
   ) {
-    return { session: null, reason: 'wrong_institute_code', firstLoginRequired: false };
+    return { session: null, reason: 'wrong_institute_code' };
   }
   // Feature #15 — soft delete sets `lifecycleState`, NOT `status`. The two are
   // deliberately separate axes (a disabled person is still lifecycle-active),
@@ -139,12 +136,8 @@ async function buildSessionFromAuthUser(
   // checked here too.
   const denial = evaluateAccess(inst, stu);
   if (denial) {
-    return { session: null, reason: denial, firstLoginRequired: false };
+    return { session: null, reason: denial };
   }
-
-  const firstLoginRequired = credSnap.exists()
-    ? Boolean((credSnap.data() as { firstLoginRequired?: boolean }).firstLoginRequired)
-    : false;
 
   const session: StudentSession = {
     studentId,
@@ -152,7 +145,6 @@ async function buildSessionFromAuthUser(
     email: String(stu.email ?? fbUser.email ?? ''),
     role: 'Student',
     status: (stu.status as 'active' | 'disabled') ?? 'active',
-    firstLoginRequired,
     instituteId,
     instituteName: String(inst.name ?? ''),
     instituteCode: String(inst.code ?? ''),
@@ -166,7 +158,7 @@ async function buildSessionFromAuthUser(
     school: tagArray(stu.school),
   };
 
-  return { session, firstLoginRequired };
+  return { session };
 }
 
 export function StudentAuthProvider({ children }: { children: React.ReactNode }) {
@@ -212,13 +204,13 @@ export function StudentAuthProvider({ children }: { children: React.ReactNode })
       instituteCode: string,
       email: string,
       password: string
-    ): Promise<{ success: boolean; error?: string; firstLoginRequired?: boolean }> => {
+    ): Promise<{ success: boolean; error?: string }> => {
       try {
         const emailNorm = email.toLowerCase().trim();
         const codeNorm = instituteCode.toUpperCase().trim();
 
         const cred = await signInWithEmailAndPassword(auth, emailNorm, password);
-        const { session: built, firstLoginRequired, reason } = await buildSessionFromAuthUser(
+        const { session: built, reason } = await buildSessionFromAuthUser(
           cred.user,
           codeNorm
         );
@@ -244,7 +236,7 @@ export function StudentAuthProvider({ children }: { children: React.ReactNode })
         }
 
         setSession(built);
-        return { success: true, firstLoginRequired };
+        return { success: true };
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code;
         if (
@@ -267,20 +259,10 @@ export function StudentAuthProvider({ children }: { children: React.ReactNode })
   const changePassword = useCallback(
     async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
       if (!session) return { success: false, error: 'Not authenticated.' };
-      // The operation is identical for all three roles — only the credential
-      // document differs (audit F-8 stage 2). lib/roleAuth owns the sequence,
-      // including the bookkeeping-must-not-fail-the-operation subtlety that was
-      // written out three times; this context owns its own session shape.
-      const res = await changeRolePassword({
-        newPassword,
-        credentialCollection: 'studentCredentials',
-        credentialDocId: session.studentId,
-        logLabel: '[StudentAuth]',
-      });
-      if (res.success) {
-        setSession((prev) => (prev ? { ...prev, firstLoginRequired: false } : null));
-      }
-      return res;
+      // The operation is identical for all three roles (audit F-8 stage 2);
+      // lib/roleAuth owns the sequence, including the session revocation that
+      // is the security point of it.
+      return changeRolePassword({ newPassword, logLabel: '[StudentAuth]' });
     },
     [session]
   );

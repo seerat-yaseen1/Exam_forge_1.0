@@ -273,33 +273,31 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // instituteCredentials — only holds firstLoginRequired + migration
-    // metadata post-migration. Read: webOwner + the institute itself (the
-    // auth context's own per-doc get). Was signedIn() — cross-tenant
-    // metadata leak.
+    // instituteCredentials — legacy migration metadata only. Read: webOwner +
+    // the institute itself. Was signedIn() — cross-tenant metadata leak.
+    //
+    // NOTHING IN THE APP TOUCHES THIS COLLECTION ANY MORE. It held
+    // `firstLoginRequired`, which gated a forced first-login password change —
+    // a flow that could not run: createAuthUser never created these
+    // documents, so every auth context read the flag as
+    // `snap.exists() ? … : false` and got false forever. The flow, the flag
+    // and the client's credential accessors are all gone.
+    //
+    // The COLLECTION is not, and neither is this rule: real documents from
+    // before the Firebase Auth migration still exist, and a match block
+    // deleted is a match block that falls through to no rule at all. Read
+    // access stays scoped so the leak that H1 closed stays closed.
     match /instituteCredentials/{instituteId} {
       allow read:   if isWebOwner() || isInstituteSelf(instituteId);
       allow create: if isWebOwner();
       // H1 (audit 2026-08-06): the identical unwhitelisted shape as
-      // institutes:161 sat here, on a credentials collection. Unlike that one
-      // this collection DOES have a legitimate institute-role write, so it
-      // gets a real whitelist rather than a lock.
-      //
-      // `firstLoginRequired` is the whole list. InstituteAuthContext:220 is
-      // the only institute-role writer in the codebase — it clears the flag
-      // after a successful forced password change — and it is the only field
-      // that write touches. The `password`/`email` fields still declared on
-      // the InstituteCredentials type are vestigial: nothing reads this
-      // document for authentication (getInstituteCredentials has zero callers
-      // platform-wide), so leaving them writable bought nothing and let an
-      // admin scribble over their own migration metadata.
-      //
-      // hasOnly() gates top-level keys, same mechanism as the attempts
-      // whitelists at :680 and :717.
-      allow update: if isWebOwner()
-                       || (isInstituteSelf(instituteId)
-                           && request.resource.data.diff(resource.data)
-                                .affectedKeys().hasOnly(['firstLoginRequired']));
+      // institutes:161 sat here, on a credentials collection. It had one
+      // legitimate institute-role write then — clearing `firstLoginRequired`
+      // after a forced password change — so it got a whitelist rather than a
+      // lock. That writer is gone with the flow it served, which leaves the
+      // whitelist describing a write nobody makes, so the clause becomes the
+      // lock the sibling collections already have.
+      allow update: if isWebOwner();
       // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
       // removal now goes through the deleteAuthUser / purgeEntity callables,
       // which enforce the deletion-rights ceiling, write the audit row and
@@ -333,7 +331,7 @@ service cloud.firestore {
     // Writers:
     //   • webOwner  — anywhere
     //   • institute — only for faculty whose instituteId matches caller's claim
-    //   • faculty   — self-update only (e.g. flipping firstLoginRequired=false)
+    //   • faculty   — no self-write remains (the firstLoginRequired flow is gone)
     //
     // Credentials docs don't carry instituteId, so we resolve the parent
     // faculty doc via get() to authorise institute-admin writes. This adds one
@@ -380,8 +378,12 @@ service cloud.firestore {
                             exists(/databases/$(database)/documents/faculty/$(facultyId))
                             && isInstituteOf(get(/databases/$(database)/documents/faculty/$(facultyId)).data.instituteId)
                           );
+      // SELF-WRITE REMOVED. This existed for one caller: the auth context
+      // clearing `firstLoginRequired` after a forced first-login password
+      // change. That flow could never run — these documents were never created,
+      // so the flag read false forever — and it has been removed along with
+      // the flag, which leaves this clause granting a write nobody makes.
       allow update: if isWebOwner()
-                       || isFacultySelf(facultyId)
                        || (
                             exists(/databases/$(database)/documents/faculty/$(facultyId))
                             && isInstituteOf(get(/databases/$(database)/documents/faculty/$(facultyId)).data.instituteId)
@@ -460,8 +462,12 @@ service cloud.firestore {
                                      && request.auth.token.instituteId == get(/databases/$(database)/documents/students/$(studentId)).data.instituteId)
                                )
                           );
+      // SELF-WRITE REMOVED. This existed for one caller: the auth context
+      // clearing `firstLoginRequired` after a forced first-login password
+      // change. That flow could never run — these documents were never created,
+      // so the flag read false forever — and it has been removed along with
+      // the flag, which leaves this clause granting a write nobody makes.
       allow update: if isWebOwner()
-                       || isStudentSelf(studentId)
                        || (
                             exists(/databases/$(database)/documents/students/$(studentId))
                             && (

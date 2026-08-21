@@ -161,7 +161,6 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
         instituteId,
         role: 'student',
         status,
-        firstLoginRequired: false,
         createdAt: now,
         updatedAt: now,
       };

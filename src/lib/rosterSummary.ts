@@ -17,17 +17,28 @@
  * would get subtly wrong. A provisioned account that has never been used is
  * not disabled and not active-in-any-useful-sense: it is a credential sitting
  * in someone's inbox, and a term's worth of them is a real operational
- * problem the admin currently cannot see at all. Counting it is one line —
- * agreeing on what it MEANS, across two rosters and three surfaces, is the
- * part worth pinning down in one tested place.
+ * problem. Counting it is one line — agreeing on what it MEANS, across two
+ * rosters and three surfaces, is the part worth pinning down in one tested
+ * place.
+ *
+ * ── WHERE "NEVER SIGNED IN" COMES FROM, AND WHY IT MOVED ──────────
+ * It used to be `firstLoginRequired` on the profile document, and it was
+ * wrong everywhere it appeared. Nothing ever set that field to true — every
+ * provisioning path writes `false` at creation, because provisioning emails a
+ * reset link rather than a password anyone types — so `dormant` was 0 for
+ * every institute, always, under a tile that said "everyone has".
+ *
+ * The set now comes from Firebase Auth's `metadata.lastSignInTime`, via
+ * lib/rosterSignIn. That arrives on its own schedule, later than the roster
+ * and sometimes not at all, which is why `dormant` is nullable below.
  */
 
 // ── Rosters ───────────────────────────────────────────────────────
 
-/** The only two fields either roster is summarised on. */
+/** The only fields either roster is summarised on. */
 export type RosterMember = {
+  id: string;
   status: 'active' | 'disabled';
-  firstLoginRequired: boolean;
 };
 
 export type RosterSummary = {
@@ -35,27 +46,45 @@ export type RosterSummary = {
   active: number;
   disabled: number;
   /**
-   * Provisioned, never used.
+   * Provisioned, never used — or NULL when we do not yet know.
+   *
+   * Nullable on purpose, and callers must render the null as a dash rather
+   * than a zero. The sign-in state is a second, slower fetch that can fail;
+   * showing 0 while it is in flight or after it failed reproduces exactly the
+   * bug this replaced, which was a confident 0 under the words "everyone has".
    *
    * Counted regardless of status, because a disabled account that was never
    * signed into is still an unclaimed credential — disabling it is what the
    * admin might want to do, not evidence that they already did.
    */
-  dormant: number;
+  dormant: number | null;
 };
 
-export const EMPTY_ROSTER: RosterSummary = { total: 0, active: 0, disabled: 0, dormant: 0 };
+export const EMPTY_ROSTER: RosterSummary = { total: 0, active: 0, disabled: 0, dormant: null };
 
-export function summariseRoster(members: RosterMember[]): RosterSummary {
+/**
+ * @param neverSignedIn uids with no Auth sign-in on record, or null while that
+ *   answer is unavailable. Null propagates to `dormant` rather than counting
+ *   as "nobody".
+ */
+export function summariseRoster(
+  members: RosterMember[],
+  neverSignedIn: ReadonlySet<string> | null = null,
+): RosterSummary {
   let active = 0;
   let disabled = 0;
   let dormant = 0;
   for (const m of members) {
     if (m.status === 'disabled') disabled += 1;
     else active += 1;
-    if (m.firstLoginRequired) dormant += 1;
+    if (neverSignedIn?.has(m.id)) dormant += 1;
   }
-  return { total: members.length, active, disabled, dormant };
+  return {
+    total: members.length,
+    active,
+    disabled,
+    dormant: neverSignedIn ? dormant : null,
+  };
 }
 
 // ── The band across the top ───────────────────────────────────────
@@ -147,18 +176,22 @@ export function attentionItems({
     });
   }
 
-  if (faculty.dormant > 0) {
+  // `> 0` on a nullable, which reads as a no-op guard but is the whole point:
+  // null means the sign-in lookup has not answered, and an item that cannot
+  // state a real number does not belong on a band whose purpose is telling an
+  // admin what needs them. Absent is honest; "0 never signed in" was not.
+  if (faculty.dormant !== null && faculty.dormant > 0) {
     items.push({
       key: 'faculty-dormant',
       tone: 'accent',
       count: faculty.dormant,
       label: `${plural(faculty.dormant, 'faculty member', 'faculty members')} never signed in`,
-      hint: 'Their first-login password is still unused. Check the invitation reached them.',
+      hint: 'Their account is provisioned but unused. Check the setup email reached them.',
       tab: 'faculties',
     });
   }
 
-  if (students.dormant > 0) {
+  if (students.dormant !== null && students.dormant > 0) {
     items.push({
       key: 'student-dormant',
       tone: 'accent',

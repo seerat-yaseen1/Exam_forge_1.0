@@ -6,11 +6,7 @@ export function InstituteLoginPage() {
   const navigate = useNavigate();
   const { session, login } = useInstituteAuth();
 
-  if (session) {
-    return session.firstLoginRequired
-      ? <Navigate to="/institute/change-password" replace />
-      : <Navigate to="/institute/dashboard" replace />;
-  }
+  if (session) return <Navigate to="/institute/dashboard" replace />;
 
   return (
     <SignIn
@@ -25,9 +21,7 @@ export function InstituteLoginPage() {
       onSubmit={async ({ email, password }) => {
         const result = await login(email, password);
         if (!result.success) return result;
-        navigate(result.firstLoginRequired ? '/institute/change-password' : '/institute/dashboard', {
-          replace: true,
-        });
+        navigate('/institute/dashboard', { replace: true });
         return { success: true };
       }}
     />

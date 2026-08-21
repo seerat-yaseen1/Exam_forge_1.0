@@ -46,7 +46,6 @@ const AssessmentRosterPage = lazy(() => import('./pages/AssessmentRosterPage').t
 const ReportsInboxPage = lazy(() => import('./pages/ReportsInboxPage').then((m) => ({ default: m.ReportsInboxPage })));
 const InstituteDetailPage = lazy(() => import('./pages/InstituteDetailPage').then((m) => ({ default: m.InstituteDetailPage })));
 const InstituteLoginPage = lazy(() => import('./pages/institute/InstituteLoginPage').then((m) => ({ default: m.InstituteLoginPage })));
-const InstituteChangePasswordPage = lazy(() => import('./pages/institute/InstituteChangePasswordPage').then((m) => ({ default: m.InstituteChangePasswordPage })));
 const InstituteForgotPasswordPage = lazy(() => import('./pages/institute/InstituteForgotPasswordPage').then((m) => ({ default: m.InstituteForgotPasswordPage })));
 const InstituteLandingPage = lazy(() => import('./pages/institute/InstituteLandingPage').then((m) => ({ default: m.InstituteLandingPage })));
 const InstituteProfilePage = lazy(() => import('./pages/institute/InstituteProfilePage').then((m) => ({ default: m.InstituteProfilePage })));
@@ -56,7 +55,6 @@ const InstituteAssignmentsPage = lazy(() => import('./pages/institute/InstituteA
 const InstituteAssessmentRosterPage = lazy(() => import('./pages/institute/InstituteAssessmentRosterPage').then((m) => ({ default: m.InstituteAssessmentRosterPage })));
 const InstituteReportsInboxPage = lazy(() => import('./pages/institute/InstituteReportsInboxPage').then((m) => ({ default: m.InstituteReportsInboxPage })));
 const FacultyLoginPage = lazy(() => import('./pages/faculty/FacultyLoginPage').then((m) => ({ default: m.FacultyLoginPage })));
-const FacultyChangePasswordPage = lazy(() => import('./pages/faculty/FacultyChangePasswordPage').then((m) => ({ default: m.FacultyChangePasswordPage })));
 const FacultyForgotPasswordPage = lazy(() => import('./pages/faculty/FacultyForgotPasswordPage').then((m) => ({ default: m.FacultyForgotPasswordPage })));
 const FacultyLandingPage = lazy(() => import('./pages/faculty/FacultyLandingPage').then((m) => ({ default: m.FacultyLandingPage })));
 const FacultyProfilePage = lazy(() => import('./pages/faculty/FacultyProfilePage').then((m) => ({ default: m.FacultyProfilePage })));
@@ -66,7 +64,6 @@ const FacultyAssignmentsPage = lazy(() => import('./pages/faculty/FacultyAssignm
 const FacultyAssessmentRosterPage = lazy(() => import('./pages/faculty/FacultyAssessmentRosterPage').then((m) => ({ default: m.FacultyAssessmentRosterPage })));
 const FacultyReportsInboxPage = lazy(() => import('./pages/faculty/FacultyReportsInboxPage').then((m) => ({ default: m.FacultyReportsInboxPage })));
 const StudentLoginPage = lazy(() => import('./pages/student/StudentLoginPage').then((m) => ({ default: m.StudentLoginPage })));
-const StudentChangePasswordPage = lazy(() => import('./pages/student/StudentChangePasswordPage').then((m) => ({ default: m.StudentChangePasswordPage })));
 const StudentForgotPasswordPage = lazy(() => import('./pages/student/StudentForgotPasswordPage').then((m) => ({ default: m.StudentForgotPasswordPage })));
 const StudentLandingPage = lazy(() => import('./pages/student/StudentLandingPage').then((m) => ({ default: m.StudentLandingPage })));
 const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage').then((m) => ({ default: m.StudentProfilePage })));
@@ -122,7 +119,6 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/institute/login" replace /> },
           { path: 'login',           element: <InstituteLoginPage /> },
-          { path: 'change-password', element: <InstituteChangePasswordPage /> },
           { path: 'forgot-password', element: <InstituteForgotPasswordPage /> },
           { path: 'reset-password',  element: <ResetPasswordActionPage role="institute" /> },
           {
@@ -148,7 +144,6 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/faculty/login" replace /> },
           { path: 'login',            element: <FacultyLoginPage /> },
-          { path: 'change-password',  element: <FacultyChangePasswordPage /> },
           { path: 'forgot-password',  element: <FacultyForgotPasswordPage /> },
           { path: 'reset-password',   element: <ResetPasswordActionPage role="faculty" /> },
           {
@@ -174,7 +169,6 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/student/login" replace /> },
           { path: 'login',            element: <StudentLoginPage /> },
-          { path: 'change-password',  element: <StudentChangePasswordPage /> },
           { path: 'forgot-password',  element: <StudentForgotPasswordPage /> },
           { path: 'reset-password',   element: <ResetPasswordActionPage role="student" /> },
           // ── Exam routes (outside dashboard layout — full page takeover) ──

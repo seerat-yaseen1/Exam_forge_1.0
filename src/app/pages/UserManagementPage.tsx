@@ -53,6 +53,7 @@ import { TrashPanel } from '../components/TrashPanel';
 import { SubjectRequestsInbox } from '../components/SubjectRequestsInbox';
 import { ErasurePolicyPanel } from '../components/ErasurePolicyPanel';
 import { daysUntilExpiry } from '../../lib/instituteValidity';
+import { restoreInstituteAccess, setAccountStatus } from '../../lib/accountAccess';
 import { HEALTH_LABEL, HEALTH_TONE, expiryPhrase, healthOf } from '../../lib/fleetOverview';
 import { formatClock, formatDate } from '../../lib/dateFormat';
 import {
@@ -211,6 +212,10 @@ function InstituteSheet({
           activeUntil: computedActiveUntil,
           updatedAt: now,
         });
+        // This form can move `activeUntil` too, so a lapsed tenant can be
+        // renewed from here as well as from the extend sheet. Same reconcile,
+        // same best-effort posture — see handleExtend.
+        await restoreInstituteAccess(editing!.id);
         const updated = await getInstitute(editing!.id);
         if (updated) onSaved(updated, false);
       } else {
@@ -411,6 +416,13 @@ function ExtendValiditySheet({
         activeUntil: computeActiveUntil(validityType, activeUntil),
         updatedAt: new Date().toISOString(),
       });
+      // Put the tenant's people back now rather than at the next sweep. When
+      // the window closed, every faculty member and student was disabled and
+      // marked with why; this asks the server to reverse exactly those, and
+      // nobody an administrator had disabled individually. Best-effort — the
+      // extension is already saved and the hourly sweep reaches the same state
+      // on its own, so a failure here is a delay, not a lost renewal.
+      await restoreInstituteAccess(institute.id);
       const updated = await getInstitute(institute.id);
       if (updated) onExtended(updated);
     } catch (e: any) {
@@ -682,7 +694,17 @@ export function UserManagementPage() {
       const current = await getInstitute(institute.id);
       if (!current) throw new Error('Institute not found');
       const next = current.status === 'active' ? 'disabled' : 'active';
-      await updateInstitute(institute.id, { status: next, updatedAt: new Date().toISOString() });
+
+      // Through the callable, NOT updateInstitute. The bare updateDoc that was
+      // here is the one named in firestore.rules' C1 comment: it moved a
+      // Firestore field and nothing else — no updateUser({disabled}), no
+      // revokeRefreshTokens — while `status` is read nowhere in the rules. A
+      // disabled institute's admin therefore kept a valid token carrying
+      // role:'institute' and its instituteId, and every session already open
+      // across the whole tenant carried on working indefinitely. Disabling a
+      // tenant only ever changed what its login screen said.
+      await setAccountStatus({ role: 'institute', uid: institute.id, status: next });
+
       const updated = await getInstitute(institute.id);
       if (updated) {
         setInstitutes((prev) => prev.map((i) => (i.id === institute.id ? updated : i)));

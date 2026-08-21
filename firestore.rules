@@ -96,6 +96,43 @@ service cloud.firestore {
       return val is string && val.size() > 0;
     }
 
+    // ── Account access is not a client's to change ───────────────────────────
+    //
+    // `status` is the switch that says whether a person may use this platform,
+    // and until now moving it was an ordinary Firestore write: StudentTab and
+    // FacultyTab flipped it with a full-document `set`, and UserManagementPage
+    // did the same for an institute. That write was the WHOLE of what
+    // "disable" did. Firebase Auth was never told and refresh tokens were
+    // never revoked — and this file reads `status` nowhere, so a disabled
+    // account kept a valid token carrying its role and instituteId and every
+    // rule below kept passing for it. Disabling somebody changed what the
+    // login screen said and nothing else.
+    //
+    // Disabling now goes through the setAccountStatus callable, which sets
+    // `disabled` on the Auth user and revokes its refresh tokens as well as
+    // writing this field. That endpoint uses the Admin SDK and so is not
+    // subject to these rules; this guard is what stops a client — or a fourth
+    // copy of the old code — from moving the field on its own and putting the
+    // two halves back out of step.
+    //
+    // ONLY A CHANGE IS BLOCKED. `diff().affectedKeys()` lists keys whose value
+    // actually differs, so the many legitimate writes that carry `status`
+    // along unchanged — every full-document `set` in the admin surfaces — pass
+    // untouched. `create` is unaffected: a new record legitimately arrives
+    // carrying its initial status, and createAuthUser mints the Auth account
+    // to match.
+    //
+    // `accessSuspendedReason` / `accessSuspendedAt` / `accessSweepState` are
+    // the expiry sweep's own bookkeeping: they record that an account was
+    // switched off because its TENANT went off, which is what lets renewal
+    // reinstate exactly those and not the people an administrator disabled
+    // individually. A client able to forge them could have itself restored by
+    // the next sweep.
+    function accessFieldsUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['status', 'accessSuspendedReason', 'accessSuspendedAt', 'accessSweepState']);
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // webowners/{uid}
@@ -217,7 +254,16 @@ service cloud.firestore {
       // three auth contexts only getDoc it. lifecycleService goes through
       // callables. Institute self-service, if it is ever wanted, belongs in a
       // callable that can re-check the lifecycle it is subject to.
-      allow update: if isWebOwner();
+      //
+      // accessFieldsUntouched applies even to the Web Owner, and that is not
+      // distrust of them: the bare `updateInstitute(id, {status})` this rule
+      // used to permit is exactly what made disabling a tenant cosmetic. The
+      // Web Owner's own console now calls setAccountStatus, which switches the
+      // Auth account off, revokes its sessions and cascades to the institute's
+      // faculty and students. Leaving the direct write available would leave
+      // the cosmetic version available too, from a console, indistinguishable
+      // afterwards from the real one.
+      allow update: if isWebOwner() && accessFieldsUntouched();
       // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
       // removal now goes through the deleteAuthUser / purgeEntity callables,
       // which enforce the deletion-rights ceiling, write the audit row and
@@ -303,8 +349,13 @@ service cloud.firestore {
       // N4: isFacultySelf removed from update — no client code self-writes
       // the profile doc (contexts write facultyCredentials only), and the
       // clause let any faculty member set canCreateStudents on themselves.
-      allow update: if isWebOwner()
-                       || isInstituteOf(resource.data.instituteId);
+      //
+      // accessFieldsUntouched: switching a faculty member off goes through the
+      // setAccountStatus callable, which revokes their sessions as well as
+      // writing the field. See the helper.
+      allow update: if (isWebOwner()
+                        || isInstituteOf(resource.data.instituteId))
+                       && accessFieldsUntouched();
       // LOCKED (Feature #15, Phase 6b). Client deletes are gone: every
       // removal now goes through the deleteAuthUser / purgeEntity callables,
       // which enforce the deletion-rights ceiling, write the audit row and
@@ -363,10 +414,17 @@ service cloud.firestore {
                        || isInstituteOf(request.resource.data.instituteId)
                        || (role() == 'faculty'
                            && request.auth.token.instituteId == request.resource.data.instituteId);
-      allow update: if isWebOwner()
-                       || isInstituteOf(resource.data.instituteId)
-                       || (role() == 'faculty'
-                           && request.auth.token.instituteId == resource.data.instituteId);
+      // accessFieldsUntouched closes what the N4 note below describes from the
+      // other direction. N4 removed isStudentSelf so a student could not flip
+      // their OWN status; this stops the remaining principals moving it by a
+      // bare write, because a write is not what disabling a student has to do.
+      // It also removes an authority nothing in the product grants: this rule
+      // let any faculty member disable any student in their institute.
+      allow update: if (isWebOwner()
+                        || isInstituteOf(resource.data.instituteId)
+                        || (role() == 'faculty'
+                            && request.auth.token.instituteId == resource.data.instituteId))
+                       && accessFieldsUntouched();
       // N4: isStudentSelf removed from update — no client code self-writes
       // the profile doc (contexts write studentCredentials only), and the
       // clause let a disabled student flip their own status back to active.

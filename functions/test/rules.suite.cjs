@@ -138,12 +138,33 @@ async function R01() {
     () => require('firebase/firestore').deleteDoc(doc(me, 'institutes/inst_1')));
 
   // The other half: the Web Owner must still be able to govern.
-  await allowed('the Web Owner can still disable an institute',
-    () => updateDoc(doc(asWebOwner(), 'institutes/inst_1'), { status: 'disabled' }));
-  await allowed('and can still set the ceiling',
+  await allowed('the Web Owner can still set the ceiling',
     () => updateDoc(doc(asWebOwner(), 'institutes/inst_1'), {
       questionRightsCeiling: { create: { allowed: true, modes: ['direct'] } },
     }));
+  await allowed('and can still extend validity',
+    () => updateDoc(doc(asWebOwner(), 'institutes/inst_1'), { activeUntil: '2099-01-01' }));
+  await allowed('and can still rename',
+    () => updateDoc(doc(asWebOwner(), 'institutes/inst_1'), { name: 'Renamed by owner' }));
+
+  // CHANGED, deliberately: this assertion used to read "the Web Owner can
+  // still disable an institute" and permit a bare `{ status: 'disabled' }`.
+  //
+  // That write was the whole of what disabling did, and it did not disable
+  // anything. It never touched Firebase Auth and never revoked a refresh
+  // token, and `status` is read NOWHERE in firestore.rules — so the tenant's
+  // admin kept a valid token carrying role:'institute' and its instituteId,
+  // and every session already open across the tenant carried on working. The
+  // rule's own C1 comment says exactly this, two paragraphs above the clause
+  // this suite was asserting.
+  //
+  // Disabling now goes through the setAccountStatus callable, which disables
+  // the Auth user, revokes its tokens and cascades to the institute's faculty
+  // and students. Leaving the direct write permitted would leave the cosmetic
+  // version permitted too — from a console, and indistinguishable afterwards
+  // from the real one. Same shape as R-10: the axis is callable-only.
+  await denied('the Web Owner cannot disable an institute by a bare write — that is setAccountStatus\'s job',
+    () => updateDoc(doc(asWebOwner(), 'institutes/inst_1'), { status: 'disabled' }));
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -738,6 +759,122 @@ async function R10() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// R-11 · account access is callable-only, on all three collections
+//
+// The bug: switching an account off was a bare Firestore write. StudentTab
+// and FacultyTab flipped `status: 'disabled'` with a full-document set, and
+// UserManagementPage did the same for an institute — and that write was the
+// whole of it. Firebase Auth was never told, refresh tokens were never
+// revoked, and `status` appears NOWHERE in firestore.rules, so a disabled
+// account kept a token carrying its role and instituteId and every rule in
+// the file kept passing for it. Sessions here never expire, so that access
+// was indefinite: disabling a student mid-exam did not stop them sitting it.
+//
+// setAccountStatus now owns the decision, because only the server can disable
+// the Auth user and revoke its tokens alongside the field. accessFieldsUntouched()
+// is what stops a client — or a fourth copy of the old code — from moving the
+// field on its own and putting the two halves back out of step.
+//
+// The BOTH-DIRECTIONS half matters as much as the denials. The guard uses
+// affectedKeys(), which lists only keys whose value actually CHANGED, so
+// every legitimate full-document write that carries an unchanged `status`
+// along must still pass. A guard that broke those would be reverted within
+// the day, and reverted is not safer.
+// ═══════════════════════════════════════════════════════════════════
+async function R11() {
+  await seed(async (db) => {
+    await setDoc(doc(db, 'institutes/inst_1'), {
+      id: 'inst_1', name: 'Test Institute', status: 'active', activeUntil: '',
+    });
+    await setDoc(doc(db, 'students/stu_1'), {
+      id: 'stu_1', instituteId: 'inst_1', name: 'Test Student', status: 'active',
+    });
+    // A genuinely disabled fixture, because the guard is on the CHANGE. The
+    // re-enable assertion below needs a document that is actually off —
+    // writing 'active' over 'active' changes no key, so affectedKeys() does
+    // not list it and the rule correctly lets it through. Asserting against
+    // stu_1 would have been a no-op write dressed up as a denial test.
+    await setDoc(doc(db, 'students/stu_off'), {
+      id: 'stu_off', instituteId: 'inst_1', name: 'Disabled Student', status: 'disabled',
+      accessSuspendedReason: 'instituteSuspended',
+    });
+    await setDoc(doc(db, 'faculty/fac_1'), {
+      id: 'fac_1', instituteId: 'inst_1', name: 'Test Faculty', status: 'active',
+    });
+  });
+
+  const wo = asWebOwner();
+  const inst = asInstitute('inst_1');
+  const fac = asFaculty('fac_1', 'inst_1');
+
+  // ── Nobody may move `status` by writing it ──
+  await denied('the institute admin cannot disable its own student',
+    () => updateDoc(doc(inst, 'students/stu_1'), { status: 'disabled' }));
+  await denied('the Web Owner cannot disable a student either',
+    () => updateDoc(doc(wo, 'students/stu_1'), { status: 'disabled' }));
+  // This one removes an authority nothing in the product ever offered: the
+  // old rule let ANY faculty member disable ANY student in their institute,
+  // and there is no surface for it anywhere in src/.
+  await denied('a faculty member cannot disable a student in their institute',
+    () => updateDoc(doc(fac, 'students/stu_1'), { status: 'disabled' }));
+  await denied('the institute admin cannot disable its own faculty',
+    () => updateDoc(doc(inst, 'faculty/fac_1'), { status: 'disabled' }));
+
+  // Re-ENABLING is the same field and the same rule, and it is the more
+  // dangerous direction: a guard written as "cannot disable" would leave
+  // switching an account back ON wide open. Against the disabled fixture, so
+  // the write is a real change rather than a no-op.
+  await denied('nor re-enable a disabled one — the guard is on the field, not the direction',
+    () => updateDoc(doc(inst, 'students/stu_off'), { status: 'active' }));
+  await denied('nor clear the suspension marker to escape the next sweep',
+    () => updateDoc(doc(inst, 'students/stu_off'), { accessSuspendedReason: 'cleared' }));
+
+  // ── Nor forge the sweep's bookkeeping ──
+  // accessSuspendedReason is what tells the tenant sweep an account was
+  // switched off because its INSTITUTE went off, and so should come back when
+  // the institute does. A client able to write it could have itself restored
+  // by the next sweep.
+  await denied('cannot forge the suspension marker',
+    () => updateDoc(doc(inst, 'students/stu_1'), { accessSuspendedReason: 'instituteSuspended' }));
+  await denied('cannot forge the sweep state on its own institute',
+    () => updateDoc(doc(inst, 'institutes/inst_1'), { accessSweepState: 'active' }));
+  await denied('the Web Owner cannot forge it either',
+    () => updateDoc(doc(wo, 'institutes/inst_1'), { accessSweepState: 'active' }));
+
+  // ── Smuggling: a legitimate edit carrying a status change with it ──
+  await denied('cannot smuggle a disable inside an otherwise-legal rename',
+    () => updateDoc(doc(inst, 'students/stu_1'), {
+      name: 'Renamed', status: 'disabled', updatedAt: '2026-08-21T11:00:00.000Z',
+    }));
+
+  // ── The other direction: ordinary writes must still work ──
+  await allowed('the institute admin can still rename its student',
+    () => updateDoc(doc(inst, 'students/stu_1'), { name: 'Renamed Student' }));
+  // THE NON-REGRESSION THAT MATTERS. Every admin surface writes whole
+  // documents, so if the guard tripped on a status that merely appears in the
+  // payload rather than one that changes, it would break ordinary editing
+  // everywhere and be reverted — and reverted is not safer. affectedKeys()
+  // lists changed keys only, which is what makes this pass.
+  await allowed('a full-document set carrying an UNCHANGED status still passes',
+    () => setDoc(doc(inst, 'students/stu_1'), {
+      id: 'stu_1', instituteId: 'inst_1', name: 'Rewritten', status: 'active',
+      updatedAt: '2026-08-21T11:00:00.000Z',
+    }));
+  await allowed('and the same for a disabled record that stays disabled',
+    () => setDoc(doc(inst, 'students/stu_off'), {
+      id: 'stu_off', instituteId: 'inst_1', name: 'Renamed While Off', status: 'disabled',
+      accessSuspendedReason: 'instituteSuspended',
+      updatedAt: '2026-08-21T11:00:00.000Z',
+    }));
+  await allowed('and the same for faculty',
+    () => updateDoc(doc(inst, 'faculty/fac_1'), { name: 'Renamed Faculty' }));
+
+  // Tenancy still applies underneath the new guard.
+  await denied('another institute cannot touch this student at all',
+    () => updateDoc(doc(asInstitute('inst_2'), 'students/stu_1'), { name: 'Hostile' }));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['R-01', 'C1 — an institute cannot rewrite its own governance document', R01],
   ['R-02', 'H1 — instituteCredentials is whitelisted, both directions', R02],
@@ -750,6 +887,7 @@ const SCENARIOS = [
   ['R-06', 'questionGroups — the stimulus is bank content, not public', R06],
   ['R-07', 'webowners — self-read by uid, without leaking the directory', R07],
   ['R-10', 'academic hierarchy — the lifecycle axis is callable-only', R10],
+  ['R-11', 'account access — status and the sweep markers are callable-only', R11],
 ];
 
 (async () => {

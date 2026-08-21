@@ -98,8 +98,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Confirm this signed-in user is actually a Web Owner. Firebase Auth
         // is shared across roles once Phases 3-5 land, so the role custom
         // claim is the source of truth.
+        //
+        // STRICT, not truthy. This read `claims.role && claims.role !== 'webOwner'`,
+        // which admits a token carrying NO role claim at all — the one case
+        // where the source of truth has said nothing. The other three contexts
+        // have always been strict (`role !== 'student'`, and so on); this was
+        // the odd one out, and it was the odd one out on the account that
+        // administers every institute on the platform. See the login callback
+        // below for what the truthy version actually produced.
         const tokenResult = await fbUser.getIdTokenResult(true);
-        if (tokenResult.claims.role && tokenResult.claims.role !== 'webOwner') {
+        if (tokenResult.claims.role !== 'webOwner') {
           setUser(null);
           setLoading(false);
           return;
@@ -122,9 +130,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const emailNorm = email.toLowerCase().trim();
         const cred = await signInWithEmailAndPassword(auth, emailNorm, password);
         const tokenResult = await cred.user.getIdTokenResult(true);
-        if (tokenResult.claims.role && tokenResult.claims.role !== 'webOwner') {
+        const claimedRole = tokenResult.claims.role;
+        // STRICT — see the onAuthStateChanged handler above. Under the previous
+        // truthy form a token with NO role claim fell through to
+        // `return { success: true }`, and what the person actually got was:
+        // LoginPage navigates to /dashboard → DashboardLayout waits on
+        // `loading` → loadProfile finds no webowners/{uid} → setUser(null) →
+        // the guard bounces to /login. A correct password, a successful
+        // sign-in, and a silent return to the form with nothing said. The two
+        // claimless shapes are now separated so each gets a true answer.
+        if (claimedRole !== 'webOwner') {
           await signOut(auth);
-          return { success: false, error: 'This account is not a Web Owner account.' };
+          return {
+            success: false,
+            error: claimedRole
+              ? 'This account is not a Web Owner account.'
+              // Distinct message on purpose: the password was right and the
+              // account is real, so "not a Web Owner account" would send
+              // someone to try the other three doors, where it also fails.
+              // This state is an account whose custom claim was never set —
+              // recoverable only with Admin SDK access, via
+              // scripts/grant-webowner-claim.ts.
+              : 'This account is missing its role assignment. Contact your platform administrator.',
+          };
         }
         return { success: true };
       } catch (err: unknown) {

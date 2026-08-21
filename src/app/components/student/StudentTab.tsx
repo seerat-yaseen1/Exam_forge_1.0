@@ -10,8 +10,8 @@ import { BulkStudentModal } from './BulkStudentModal';
 import {
   getStudentsByInstitute,
   getStudent,
-  setStudent
 } from '../../../lib/firebaseService';
+import { setAccountStatus } from '../../../lib/accountAccess';
 import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
@@ -91,6 +91,12 @@ export function StudentTab({ instituteId, instituteName }: Props) {
   const [deletingId, setDeletingId]         = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading]   = useState(false);
   const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null);
+  // Switching an account off can now genuinely fail — the account is
+  // soft-deleted, the institute has expired, the Auth user could not be
+  // revoked — and those refusals are the point of the change. The old bare
+  // updateDoc had nothing to report, so its catch block logged to the console
+  // and the row simply stopped spinning.
+  const [statusError, setStatusError]       = useState('');
   const [resendingId, setResendingId]       = useState<string | null>(null);
 
   const [emailNotice, setEmailNotice] = useState<{ ok: boolean; message: string } | null>(null);
@@ -166,6 +172,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
 
   const handleToggleStatus = async (id: string) => {
     setStatusLoadingId(id);
+    setStatusError('');
     try {
       const data = await getStudent(id);
       // getStudent returns Student | null. The null case was unhandled, so a
@@ -176,14 +183,24 @@ export function StudentTab({ instituteId, instituteName }: Props) {
       if (!data) throw new Error('Student profile not found.');
       // `as const` keeps the union narrow; without it the ternary widens to
       // `string` and no longer satisfies Student['status'].
-      const updatedStudent = {
-        ...data,
-        status: (data.status === 'active' ? 'disabled' : 'active') as 'active' | 'disabled',
-      };
-      await setStudent(id, updatedStudent);
-      setStudents((prev) => prev.map((s) => s.id === id ? updatedStudent : s));
+      const next = (data.status === 'active' ? 'disabled' : 'active') as 'active' | 'disabled';
+
+      // Through the callable, NOT a direct write. `setStudent` only ever moved
+      // a Firestore field: it left the Firebase Auth account signed in and its
+      // refresh tokens valid, and firestore.rules never read `status`, so a
+      // disabled student kept working sessions and full data access for as
+      // long as they stayed signed in. setAccountStatus disables the Auth user
+      // and revokes its tokens as well as writing the field, and the rules now
+      // reject a client write that changes `status` at all — so this path is
+      // the only one, and the two halves cannot drift apart again.
+      await setAccountStatus({ role: 'student', uid: id, status: next });
+
+      setStudents((prev) => prev.map((s) => s.id === id ? { ...s, status: next } : s));
       setLastSynced(new Date());
-    } catch (e: any) { console.error(e); }
+    } catch (e: any) {
+      console.error(e);
+      setStatusError(e?.message ?? 'Could not change that student’s status.');
+    }
     finally { setStatusLoadingId(null); }
   };
 
@@ -409,6 +426,21 @@ export function StudentTab({ instituteId, instituteName }: Props) {
           <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{fetchError}</p>
           <button onClick={() => fetch_()} className="ml-auto text-xs"
             style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>Retry</button>
+        </div>
+      )}
+
+      {/* Status-change refusal. Same shape as the fetch error, dismissed
+          rather than retried: the reasons this fails are states someone has to
+          resolve elsewhere, not transient failures worth pressing again. */}
+      {statusError && (
+        <div className="flex items-center gap-2 px-4 py-3 mb-4" role="alert"
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+          <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+          <p className="text-xs flex-1" style={{ color: 'var(--ef-danger)' }}>{statusError}</p>
+          <button onClick={() => setStatusError('')} style={{ color: 'var(--ef-text-muted)' }}
+            aria-label="Dismiss">
+            <X size={11} strokeWidth={1.5} />
+          </button>
         </div>
       )}
 

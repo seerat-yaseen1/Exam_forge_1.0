@@ -395,6 +395,29 @@
     font-size: 10.5px;
   }
 
+  /* A chip that does something — CopyChip is the only one so far. A <button>
+     does not inherit the page's font, and under `pointer: coarse` it grows to
+     the 44px touch target, so the padding is set to make that height look
+     deliberate rather than like a stretched pill. */
+  button.ef-chip {
+    padding: 6px 11px;
+    border-style: solid;
+    font-family: inherit;
+    transition:
+      border-color 160ms ease,
+      color 160ms ease,
+      background-color 160ms ease;
+  }
+
+  button.ef-chip:hover {
+    border-color: var(--ef-border-strong);
+    color: var(--ef-ink);
+  }
+
+  button.ef-chip:active {
+    background: var(--ef-track);
+  }
+
   /* ── Navigation ───────────────────────────────────────────────── */
 
   .ef-nav-link {

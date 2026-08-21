@@ -138,6 +138,19 @@ export function formatDayMonthTime(iso: unknown): string {
 }
 
 /**
+ * `09:30` — the clock alone, for "updated at" lines.
+ *
+ * A freshness stamp is read against the reader's own sense of now, so the day
+ * is noise: a console that says "Updated 21 Aug, 09:30" makes you work out
+ * that 21 Aug is today. Screens that need the date have formatDateTime.
+ */
+export function formatClock(iso: unknown): string {
+  const d = parsed(iso);
+  if (!d) return UNKNOWN_DATE_LABEL;
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
  * Clip a long string for a table cell.
  *
  * Four copies, byte-identical, in QuestionBankCore, the two role question

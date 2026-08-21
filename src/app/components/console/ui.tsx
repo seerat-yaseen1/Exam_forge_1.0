@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Check, Copy, Loader2, RefreshCw } from 'lucide-react';
 import type { Theme } from '../../../lib/themes';
 
 // ══════════════════════════════════════════════════════════════════
@@ -96,23 +96,34 @@ export function SectionHeading({
   count,
   action,
   hint,
+  description,
 }: {
   label: string;
   count?: number;
   action?: React.ReactNode;
+  /** A clarification for the count, as a tooltip. Not shown as text. */
   hint?: string;
+  /** One line under the heading, always visible. For a rule the reader needs. */
+  description?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 mb-3.5">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className="ef-eyebrow">{label}</span>
-        {count !== undefined && (
-          <span className="ef-chip ef-chip--sm" title={hint}>
-            {count}
-          </span>
-        )}
+    <div className="mb-3.5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="ef-eyebrow">{label}</span>
+          {count !== undefined && (
+            <span className="ef-chip ef-chip--sm" title={hint}>
+              {count}
+            </span>
+          )}
+        </div>
+        {action}
       </div>
-      {action}
+      {description && (
+        <p className="ef-t-xs ef-muted" style={{ marginTop: 6, maxWidth: '64ch' }}>
+          {description}
+        </p>
+      )}
     </div>
   );
 }
@@ -214,6 +225,77 @@ export function Chip({
       {icon}
       {children}
     </span>
+  );
+}
+
+/**
+ * A short value that exists to be sent to someone — an institute code, an
+ * exam code, an ID.
+ *
+ * ── WHY IT IS A BUTTON AND NOT TEXT ───────────────────────────────
+ * These are read off the screen and typed into a message. Selecting six
+ * monospace characters with a mouse without catching the label beside them is
+ * fiddly on a laptop and genuinely hard on a phone, so every admin who has
+ * ever shared an institute code has done it by squinting and retyping. One
+ * tap is the whole feature.
+ *
+ * The confirmation replaces the icon rather than appearing next to it: the
+ * control must not change width when it succeeds, or the thing under your
+ * cursor moves at the moment you are looking at it.
+ */
+export function CopyChip({
+  value,
+  label,
+  mono = true,
+}: {
+  value: string;
+  /** What is being copied, for the screen reader and the tooltip. */
+  label: string;
+  mono?: boolean;
+}) {
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      // Clipboard access can be refused (insecure origin, denied permission).
+      // Selecting the text still works, so there is nothing to report — an
+      // error toast here would be louder than the feature.
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={copied ? `${label} copied` : `Copy ${label.toLowerCase()}`}
+      aria-label={`Copy ${label.toLowerCase()}: ${value}`}
+      className="ef-chip"
+      data-tone={copied ? 'success' : undefined}
+      style={{
+        cursor: 'pointer',
+        fontFamily: mono ? 'ui-monospace, monospace' : undefined,
+        letterSpacing: mono ? '0.1em' : undefined,
+      }}
+    >
+      {value}
+      {copied ? (
+        <Check size={11} strokeWidth={2} />
+      ) : (
+        <Copy size={11} strokeWidth={1.7} style={{ opacity: 0.65 }} />
+      )}
+      <span className="sr-only" role="status">
+        {copied ? 'Copied' : ''}
+      </span>
+    </button>
   );
 }
 

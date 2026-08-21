@@ -215,21 +215,29 @@ export function QuestionSourceStep({
               />
 
               {multiSectionFixedPaper && (
-                <Notice tone="warning">
-                  A hand-picked paper with randomization off can only be built as a{' '}
-                  <strong>single section</strong> today — a fixed question is one specific
-                  instance, so it belongs to exactly one section, and the per-section
-                  assignment step that decides which is not built yet. Publish will refuse
-                  this combination. Turn Randomize back on, or reduce the paper to one
-                  section on the Sections stage.
+                <Notice tone="muted">
+                  This paper has {sections.length} sections, so each question you pick needs
+                  routing to one of them — a fixed question is a specific instance, not a
+                  reusable tag like a topic. Do that on the{' '}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('questions')}
+                    className="transition-opacity hover:opacity-70"
+                    style={{ color: 'var(--ef-ink)', textDecoration: 'underline', cursor: 'pointer' }}
+                  >
+                    Questions stage
+                  </button>
+                  , where you can filter this pool and assign in batches.
                 </Notice>
               )}
 
-              {/* Marks only appear once there is no matrix to carry them.
-                  While randomization is on, marks belong per rule on the
-                  Questions stage, and a second control here would be a
-                  second answer to the same question. */}
-              {!randomize && (
+              {/* Marks live wherever the section's contents are decided.
+                  With randomization on that is the rule matrix; with several
+                  sections it is the assignment panel, per section, because a
+                  paper split into a short-answer section and an essay section
+                  is not one where every question is worth the same. Only the
+                  single-section case has nowhere else to put it. */}
+              {!randomize && sections.length <= 1 && (
                 <div className="flex items-center gap-3">
                   <label className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
                     Marks per question

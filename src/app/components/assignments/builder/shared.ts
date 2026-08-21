@@ -3,7 +3,12 @@
  * assignments list and builder (Batch F1a: extracted verbatim from
  * AssignmentsPage.tsx; no logic changes).
  */
-import { type AssessmentStatus, type RuleKind } from '../../../../lib/assessmentService';
+import {
+  manualSectionLists,
+  type AssessmentStatus,
+  type QuestionSource,
+  type RuleKind,
+} from '../../../../lib/assessmentService';
 import { type ExecutionEngine } from '../../../../lib/itemTypes';
 import { type GroupKind } from '../../../../lib/questionBankService';
 
@@ -68,35 +73,39 @@ export function effectiveRules(rules: RuleDraft[], fixedPaper: boolean): RuleDra
  *
  * `manualMarks` still lives on the section draft, because what a question is
  * worth in this paper is a decision the author made and nothing else can
- * reconstruct.
+ * reconstruct — and it is PER SECTION, because a paper split into a short-answer
+ * section and an essay section is not one where every question is worth the
+ * same.
  *
- * Multi-section fixed papers land everything in the first section. That is not
- * the final behaviour — the spec wants the picks distributed across sections by
- * filter — and publish refuses the combination outright rather than shipping
- * this placeholder. It exists so the totals and the rail say something
- * coherent while the author is being told to fix it.
+ * Which questions land where comes from manualSectionLists, which is also what
+ * the assignment panel reads. One derivation, so the panel showing "12 in
+ * Section B" and the paper that gets published cannot disagree.
  */
 export function withEffectiveRules(
   sections: SectionDraft[],
-  opts: { fixedPaper: boolean; manualQuestionIds: string[] },
+  opts: { fixedPaper: boolean; source: QuestionSource },
 ): SectionDraft[] {
   if (!opts.fixedPaper) {
     return sections.map((s) => ({ ...s, rules: effectiveRules(s.rules, false) }));
   }
-  return sections.map((s, i) => ({
-    ...s,
-    rules: i === 0 && opts.manualQuestionIds.length > 0
-      ? [{
-          kind: 'manual' as const,
-          subject: '',
-          topic: '',
-          difficulty: 'easy' as Difficulty,
-          count: '',
-          marksPerQuestion: s.manualMarks || '1',
-          questionIds: opts.manualQuestionIds,
-        }]
-      : [],
-  }));
+  const lists = manualSectionLists(opts.source, sections.map((s) => s.id));
+  return sections.map((s) => {
+    const ids = lists[s.id] ?? [];
+    return {
+      ...s,
+      rules: ids.length > 0
+        ? [{
+            kind: 'manual' as const,
+            subject: '',
+            topic: '',
+            difficulty: 'easy' as Difficulty,
+            count: '',
+            marksPerQuestion: s.manualMarks || '1',
+            questionIds: ids,
+          }]
+        : [],
+    };
+  });
 }
 
 /**

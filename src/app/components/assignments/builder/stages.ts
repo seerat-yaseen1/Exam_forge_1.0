@@ -153,20 +153,34 @@ export function stageDef(id: BuilderStage): StageDef {
 /**
  * The stages this particular draft actually has.
  *
- * All of them, except in one arrangement: Manual Selection with randomization
- * OFF. There the author has already named every question on the paper, so
- * Topics and the per-cell question matrix have nothing left to decide —
- * the spec is explicit that the allocation step is "skipped entirely (not just
- * disabled/greyed out)", and it is right. A greyed-out stage still reads as
- * work outstanding, and an author who has finished picking their paper should
- * not be looking at two rail rows that will never apply to them.
+ * All of them, except under Manual Selection with randomization OFF, where the
+ * author has already named every question on the paper:
  *
- * Subjects stays. It is still how the paper is labelled and still narrows the
- * pool the manual picker offers.
+ *  • TOPICS always goes. Nothing there decides anything any more — topic and
+ *    difficulty come back off each question's own bank metadata for reporting,
+ *    and no re-tagging is asked for. The spec is explicit that the step is
+ *    "skipped entirely (not just disabled/greyed out)", and it is right: a
+ *    greyed-out stage still reads as work outstanding.
+ *
+ *  • QUESTIONS goes only when there is ONE section. Then there is genuinely
+ *    nothing to decide — every picked question can only go in the one place.
+ *    With several sections the stage stays, because the question it asks
+ *    ("what does each section contain?") is still live; only the SHAPE of the
+ *    answer changes, from a per-cell matrix to an assignment. Inventing a
+ *    separate stage for that would have split one question across two rail
+ *    rows depending on a toggle three stages earlier.
+ *
+ * Subjects stays throughout. It is still how the paper is labelled and still
+ * narrows the pool the manual picker offers.
  */
-export function visibleBuilderStages(opts: { fixedPaper: boolean }): StageDef[] {
+export function visibleBuilderStages(opts: {
+  fixedPaper: boolean;
+  sectionCount: number;
+}): StageDef[] {
   if (!opts.fixedPaper) return [...BUILDER_STAGES];
-  return BUILDER_STAGES.filter((s) => s.id !== 'topics' && s.id !== 'questions');
+  const drop = new Set<BuilderStage>(['topics']);
+  if (opts.sectionCount <= 1) drop.add('questions');
+  return BUILDER_STAGES.filter((s) => !drop.has(s.id));
 }
 
 /**

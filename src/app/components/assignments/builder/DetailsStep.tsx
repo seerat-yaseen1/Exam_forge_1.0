@@ -4,11 +4,11 @@
  * security tier and SEB. (Batch F1d: extracted verbatim from
  * AssignmentsPage.tsx; no logic changes.)
  */
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { X, Loader2, ClipboardList, Clock, Calendar, AlertTriangle, CheckCircle2, FileText, Timer, Award, ChevronRight, AlertCircle, Shuffle, BarChart2, BookOpen, Shield, Upload, Smartphone, Tablet } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
-import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, sanitizeQuestionSource, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection, type AssessmentGradingConfig, type GradingPolicy, type PenaltyType, type QuestionSelectionRule, type QuestionSource } from '../../../../lib/assessmentService';
+import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, sanitizeQuestionSource, unassignedManualIds, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection, type AssessmentGradingConfig, type GradingPolicy, type PenaltyType, type QuestionSelectionRule, type QuestionSource } from '../../../../lib/assessmentService';
 import { deriveShowResultsTo, deriveAllowReviewTo, DEFAULT_SHOW_RESULTS_TO, DEFAULT_ALLOW_REVIEW_TO, type VisibilityAudience } from '../../../../lib/visibility';
 import { AudienceSelector } from '../AudienceSelector';
 import { type Question, type QuestionGroup } from '../../../../lib/questionBankService';
@@ -21,6 +21,7 @@ import { StageHeading, LockedNotice } from './StageHeading';
 import { CapabilityChoice } from './CapabilityChoice';
 import { nextStageOf, type BuilderStage, type StageDef } from './stages';
 import { RuleBuilderPanel } from './topicPickers';
+import { ManualAssignmentPanel } from './ManualAssignmentPanel';
 import { InstitutePicker, StudentPicker } from './targetPickers';
 
 // Prepare the grading policy for persistence:
@@ -93,7 +94,7 @@ export function DetailsStep({
   onSaveApi,
   onNavigate,
   mode, assessment, originalStatus, allQuestions, allGroups = [], sections, setSections, onBack, onSave,
-  effectiveSections, questionSource, anchorIds, fixedPaper,
+  effectiveSections, questionSource, anchorIds, fixedPaper, onAssignManual,
   title, description, subject, status,
   targetType, setTargetType,
   selectedInstituteIds, setSelectedInstituteIds,
@@ -123,6 +124,8 @@ export function DetailsStep({
   anchorIds: ReadonlySet<string>;
   /** Manual Selection with randomization off. */
   fixedPaper: boolean;
+  /** Route hand-picked questions to a section, or back to the pool with null. */
+  onAssignManual: (questionIds: string[], sectionId: string | null) => void;
   onBack: () => void;
   onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }, allocation: { mode: 'legacy' | 'rules'; nodeType: AllocationNodeType | ''; nodeIds: string[]; expectedVersion: number }) => Promise<void>;
   title: string;
@@ -392,6 +395,26 @@ export function DetailsStep({
   const mut = mutabilityFor(originalStatus);
   const lockReason = originalStatus === 'active' ? 'test is live' : 'test is closed';
 
+  // ── The hand-picked pool, for the assignment panel ───────────────
+  // In the author's PICKED order, not the bank's: a fixed paper is delivered
+  // in the order it was assembled, and a list that reordered itself under the
+  // author would make the thing they are arranging unrecognisable.
+  const qSubjectName = useCallback(
+    (q: Question) => (q.subjectId && taxonomyMaps.subjectNameById[q.subjectId]) || q.subject,
+    [taxonomyMaps],
+  );
+  const qTopicName = useCallback(
+    (q: Question) => (q.topicId && taxonomyMaps.topicNameById[q.topicId]) || q.topic,
+    [taxonomyMaps],
+  );
+  const manualPoolQuestions = useMemo(() => {
+    if (!fixedPaper) return [];
+    const byId = new Map(allQuestions.map((q) => [q.id, q]));
+    return (questionSource.manualQuestionIds ?? [])
+      .map((id) => byId.get(id))
+      .filter((q): q is Question => !!q && !q.isDeleted);
+  }, [fixedPaper, allQuestions, questionSource.manualQuestionIds]);
+
   const buildSections = (sectionDrafts: SectionDraft[]): AssessmentSection[] =>
     sectionDrafts.map((sec, idx) => {
       const breakMins = parseInt(sec.breakAfterMinutes, 10);
@@ -505,18 +528,6 @@ export function DetailsStep({
     if (targetStatus === 'active') {
       const errors: string[] = [];
 
-      // A hand-picked paper across several sections needs each question routed
-      // to exactly one of them — a fixed question is one specific instance, not
-      // a reusable tag — and the per-section assignment step that does the
-      // routing is not built yet. Refused outright rather than published as
-      // "everything in section A", which is not what anyone asked for.
-      if (fixedPaper && sections.length > 1) {
-        errors.push(
-          'Manual selection with randomization off supports a single section for now. '
-          + 'Turn Randomize back on, or reduce this paper to one section.',
-        );
-      }
-
       // Each section must request at least 1 question. A group rule drawing
       // "all" children has no knowable count yet, so it counts as live rather
       // than as zero — otherwise a section made entirely of DI sets would be
@@ -563,6 +574,21 @@ export function DetailsStep({
     // ── SOFT warnings (publish only, can be bypassed) — run LAST so hard errors surface first ──
     if (targetStatus === 'active' && !bypassSoftWarnings) {
       const warnings: string[] = [];
+
+      // Over-picking as a buffer and then leaving the surplus behind is a
+      // reasonable thing to do deliberately, so this is a nudge and not a
+      // refusal — the spec is explicit about that. It still has to be SAID:
+      // silently dropping questions the author hand-picked is the one outcome
+      // nobody would guess at.
+      const stranded = unassignedManualIds(questionSource, sections.map((s) => s.id));
+      if (stranded.length > 0) {
+        warnings.push(
+          `${stranded.length} hand-picked question${stranded.length === 1 ? '' : 's'} `
+          + `${stranded.length === 1 ? 'has' : 'have'} not been assigned to a section and `
+          + `${stranded.length === 1 ? 'will' : 'will'} not appear on the paper.`,
+        );
+      }
+
       if (!startDate) {
         warnings.push('You\'re publishing with "Start immediately" — students will be able to begin as soon as the assessment is saved.');
       }
@@ -1519,8 +1545,26 @@ export function DetailsStep({
           on the same screen, so an author scrolled past schedule, grading and
           the entire security block to reach the thing they had come to do. It
           is its own stage now — and the "Sections" stage next to it is the
-          section STRUCTURE, which is a genuinely different job. */}
-      {stage === 'questions' && (
+          section STRUCTURE, which is a genuinely different job.
+
+          TWO SHAPES, ONE QUESTION. "What does each section contain?" is live
+          whether the paper draws at random or was hand-picked; only the answer
+          differs — a per-cell matrix, or an assignment of named questions.
+          Both live on this stage rather than in two rail rows that appear and
+          disappear with a toggle set three stages earlier. */}
+      {stage === 'questions' && fixedPaper ? (
+      <ManualAssignmentPanel
+        questions={manualPoolQuestions}
+        sections={sections}
+        assignments={questionSource.manualAssignments ?? {}}
+        onAssign={onAssignManual}
+        onMarksChange={(sid, marks) => setSections((prev) =>
+          prev.map((s) => (s.id === sid ? { ...s, manualMarks: marks } : s)))}
+        locked={!mut.sections}
+        qSubject={qSubjectName}
+        qTopic={qTopicName}
+      />
+      ) : stage === 'questions' && (
       <RuleBuilderPanel
         sections={sections}
         activeSectionIdx={activeSectionIdx}

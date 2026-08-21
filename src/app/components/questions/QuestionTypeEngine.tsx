@@ -392,7 +392,7 @@ function MCQEngine({
       {variant === 'fillblank' && (
         <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
           Use{' '}
-          <code style={{ fontFamily: 'monospace', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2 }}>___</code>
+          <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2 }}>___</code>
           {' '}in the stem to mark the blank. Options below are answer candidates.
         </p>
       )}

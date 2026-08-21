@@ -331,7 +331,7 @@ function ReviewQuestion({
                     // scrolls sideways instead. Everything else keeps wrapping.
                     whiteSpace: isCode && submission ? 'pre' : 'pre-wrap',
                     ...(isCode && submission
-                      ? { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                      ? { fontFamily: 'var(--font-mono)',
                           overflowX: 'auto' as const, maxHeight: '50vh', overflowY: 'auto' as const }
                       : {}),
                   }}
@@ -1064,7 +1064,7 @@ export function ExamResultsPage() {
             <div className="flex items-center justify-between pt-4"
               style={{ borderTop: '1px solid var(--ef-border)' }}>
               <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                Attempt ID: <span style={{ fontFamily: 'monospace' }}>{attempt.id}</span>
+                Attempt ID: <span style={{ fontFamily: 'var(--font-mono)' }}>{attempt.id}</span>
               </p>
               <button
                 onClick={() => navigate('/student/assessments')}

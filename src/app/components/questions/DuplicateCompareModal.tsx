@@ -88,7 +88,7 @@ export function DuplicateCompareModal({ row, pool, allRows, onClose }: Props) {
             <div style={{ flex: 1 }} />
             {matchedId && (
               <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                Matched ID: <code style={{ fontFamily: 'monospace', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2 }}>{matchedId}</code>
+                Matched ID: <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2 }}>{matchedId}</code>
               </span>
             )}
           </div>

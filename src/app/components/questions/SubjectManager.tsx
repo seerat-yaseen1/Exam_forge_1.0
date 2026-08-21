@@ -371,7 +371,7 @@ function MergeModal({
               {canPreview && (
                 <div className="mb-5">
                   <label className="block text-xs mb-1.5" style={{ color: 'var(--ef-text-subtle)' }}>
-                    Type <code style={{ fontFamily: 'monospace', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2, letterSpacing: '0.08em' }}>MERGE</code> to confirm
+                    Type <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--ef-border-subtle)', padding: '1px 5px', borderRadius: 2, letterSpacing: '0.08em' }}>MERGE</code> to confirm
                   </label>
                   <input
                     type="text"

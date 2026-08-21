@@ -170,7 +170,7 @@ export function CourseDrawer({ open, editing, editingRaw, ancestry, instituteId,
                   style={{
                     border: `1px solid ${errors.code ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
                     borderRadius: 2, background: 'var(--ef-canvas-raised)', color: 'var(--ef-ink)',
-                    fontFamily: 'monospace', letterSpacing: '0.06em',
+                    fontFamily: 'var(--font-mono)', letterSpacing: '0.06em',
                   }}
                   onFocus={(e) => (e.currentTarget.style.borderColor = errors.code ? 'var(--ef-danger-border)' : 'var(--ef-ink)')}
                   onBlur={(e) => (e.currentTarget.style.borderColor = errors.code ? 'var(--ef-danger-border)' : 'var(--ef-border)')}

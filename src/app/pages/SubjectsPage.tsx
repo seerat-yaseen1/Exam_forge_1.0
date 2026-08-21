@@ -774,7 +774,7 @@ function SlugFormSheet({
           disabled={busy}
           placeholder={example}
           autoFocus
-          style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.06em' }}
+          style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
           hint={
             <span style={{ color: id && !idValid ? 'var(--ef-danger)' : undefined }}>
               {SLUG_FORMAT} — for example {example}

@@ -194,7 +194,7 @@ export function SignIn({
               }}
               disabled={busy}
               placeholder="e.g. A3B7C2"
-              style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.16em' }}
+              style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.16em' }}
             />
           )}
 
@@ -339,7 +339,7 @@ export function ForgotPassword({
                     }}
                     disabled={busy}
                     placeholder="e.g. A3B7C2"
-                    style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.16em' }}
+                    style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.16em' }}
                   />
                 )}
 
@@ -486,7 +486,7 @@ export function SetPassword({
                   }}
                   disabled={busy}
                   placeholder={`${CODE_LENGTH} characters`}
-                  style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.14em' }}
+                  style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.14em' }}
                   hint={
                     code.length === CODE_LENGTH ? (
                       <span style={{ color: 'var(--ef-success)' }}>Code looks right</span>

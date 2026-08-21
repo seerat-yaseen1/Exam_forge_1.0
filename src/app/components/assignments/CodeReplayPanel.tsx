@@ -288,7 +288,7 @@ export function CodeReplayPanel({
         style={{
           background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2,
           color: broken ? 'var(--ef-text-muted)' : 'var(--ef-ink)', lineHeight: 1.55, margin: 0,
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+          fontFamily: 'var(--font-mono)',
           overflowX: 'auto', minHeight: 80, maxHeight: '40vh', overflowY: 'auto',
         }}>
         {frame ? frame.doc : ''}

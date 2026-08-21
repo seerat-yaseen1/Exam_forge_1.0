@@ -218,7 +218,7 @@ export function SEBSettingsPage() {
                       <KeyRound size={14} strokeWidth={1.7} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
                       <p
                         className="ef-t-sm ef-ink truncate"
-                        style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.02em' }}
+                        style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}
                       >
                         {revealed.has(key) ? key : maskKey(key)}
                       </p>
@@ -270,7 +270,7 @@ export function SEBSettingsPage() {
                     aria-label="Config key"
                     spellCheck={false}
                     style={{
-                      fontFamily: 'ui-monospace, monospace',
+                      fontFamily: 'var(--font-mono)',
                       borderColor: inputError ? 'var(--ef-danger-border)' : undefined,
                     }}
                   />

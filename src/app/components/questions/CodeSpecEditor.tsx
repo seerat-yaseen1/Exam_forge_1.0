@@ -41,7 +41,7 @@ interface CodeSpecEditorProps {
 }
 
 const FIELD = 'w-full text-sm rounded border px-2 py-1.5';
-const MONO: React.CSSProperties = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' };
+const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' };
 
 export function CodeSpecEditor({ spec, tests, onSpecChange, onTestsChange }: CodeSpecEditorProps) {
   const issues = useMemo(() => validateCodeQuestion(spec, tests), [spec, tests]);

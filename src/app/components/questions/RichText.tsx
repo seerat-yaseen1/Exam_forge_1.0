@@ -106,7 +106,7 @@ function parse(raw: string): Segment[] {
 // what make a snippet readable; colour is a nice-to-have that can come with the
 // editor work in Stage B.
 
-const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+const MONO = 'var(--font-mono)';
 
 // ── KaTeX renderer ─────────────────────────────────────────────────────────────
 
@@ -129,7 +129,7 @@ function renderKatex(formula: string, display: boolean): string {
       strict: 'ignore',
     });
   } catch {
-    return `<span style="color:var(--ef-danger);font-family:monospace">${escapeHtml(formula)}</span>`;
+    return `<span style="color:var(--ef-danger);font-family:var(--font-mono)">${escapeHtml(formula)}</span>`;
   }
 }
 

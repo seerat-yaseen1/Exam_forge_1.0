@@ -308,7 +308,7 @@ function TwoFactor() {
                         setError('');
                       }}
                       placeholder="000000"
-                      style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.3em', fontSize: 16 }}
+                      style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.3em', fontSize: 16 }}
                     />
                   </div>
                   <Button variant="primary" onClick={confirm} loading={loading} disabled={loading}>

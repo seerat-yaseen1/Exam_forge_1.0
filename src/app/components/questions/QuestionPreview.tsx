@@ -301,7 +301,7 @@ function CodePreview({
     borderRadius: 2, padding: '8px 10px',
   };
   const mono: React.CSSProperties = {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--font-mono)',
     fontSize: 12, whiteSpace: 'pre', overflowX: 'auto', display: 'block',
     color: 'var(--ef-ink)', lineHeight: 1.6,
   };

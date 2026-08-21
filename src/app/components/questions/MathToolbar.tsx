@@ -81,7 +81,7 @@ function MathPopover({ onInsert, onClose }: MathPopoverProps) {
           style={{
             border: '1px solid var(--ef-border)', borderRadius: 2,
             background: 'var(--ef-canvas-raised)', color: 'var(--ef-ink)',
-            fontFamily: 'monospace', fontSize: 13,
+            fontFamily: 'var(--font-mono)', fontSize: 13,
           }}
         />
       </div>

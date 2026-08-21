@@ -124,7 +124,7 @@ function Step1({ onNext }: { onNext: () => void }) {
             </div>
             <div className="space-y-1 mb-3">
               {c.cols.map((col) => (
-                <p key={col} className="text-xs" style={{ color: 'var(--ef-text-muted)', fontFamily: 'monospace', fontSize: 12 }}>{col}</p>
+                <p key={col} className="text-xs" style={{ color: 'var(--ef-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{col}</p>
               ))}
             </div>
             <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>{c.note}</p>
@@ -136,7 +136,7 @@ function Step1({ onNext }: { onNext: () => void }) {
       <div className="flex items-start gap-2.5 px-3 py-3 mb-6" style={{ background: 'var(--ef-warning-bg)', border: '1px solid var(--ef-warning-border)', borderRadius: 2 }}>
         <Info size={13} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 1 }} />
         <p className="text-xs" style={{ color: 'var(--ef-warning-strong)', lineHeight: 1.7 }}>
-          Images cannot be embedded in the spreadsheet. Use the <code style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.05)', padding: '1px 4px', borderRadius: 2 }}>_image_url</code> columns to attach pre-hosted image links (must start with https://). Questions without images can have image URLs added later via the single-question editor.
+          Images cannot be embedded in the spreadsheet. Use the <code style={{ fontFamily: 'var(--font-mono)', background: 'rgba(0,0,0,0.05)', padding: '1px 4px', borderRadius: 2 }}>_image_url</code> columns to attach pre-hosted image links (must start with https://). Questions without images can have image URLs added later via the single-question editor.
         </p>
       </div>
 
@@ -392,7 +392,7 @@ function RowCard({
             <div key={i} className="flex items-start gap-2 mb-1.5">
               <AlertCircle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-danger)', flexShrink: 0, marginTop: 2 }} />
               <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>
-                <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{e.field}</span>: {e.message}
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{e.field}</span>: {e.message}
               </p>
             </div>
           ))}
@@ -400,7 +400,7 @@ function RowCard({
             <div key={i} className="flex items-start gap-2 mb-1.5">
               <AlertTriangle size={11} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 2 }} />
               <p className="text-xs" style={{ color: 'var(--ef-warning-strong)' }}>
-                <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{w.field}</span>: {w.message}
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{w.field}</span>: {w.message}
               </p>
             </div>
           ))}

@@ -1,120 +1,22 @@
 /**
- * InstituteAssignmentsPage
+ * The institute admin's view of live exams.
  *
- * Institute Admin view: shows all non-draft assessments assigned to their
- * institute (or all students). Gated by canAdminManageExamRosters.
+ * Everything visible is RosterBrowser, shared with the faculty console. What
+ * is institute about this page is the query — own assessments plus published
+ * ones assigned to this institute or to everybody — and the fact that drafts
+ * never appear here at all: a draft belongs to whoever is still writing it.
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  ClipboardList, ChevronRight, Loader2, Calendar, Clock,
-  Users, BookOpen, Layers, Search, Users2,
-} from 'lucide-react';
+import { ClipboardList } from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
-import { formatDayMonth as formatDateShort } from '../../../lib/dateFormat';
 import {
   getAssessmentsVisibleToInstitute,
-  statusColor,
-  describeAssignment,
   type Assessment,
-  type AssessmentStatus,
 } from '../../../lib/assessmentService';
-
-// ── Helpers ───────────────────────────────────────────────────────
-
-function statusLabel(s: AssessmentStatus): string {
-  return s === 'draft' ? 'Draft' : s === 'active' ? 'Active' : 'Closed';
-}
-
-// ── Assessment card ───────────────────────────────────────────────
-
-function AssessmentCard({
-  assessment, onClick,
-}: {
-  assessment: Assessment;
-  onClick: () => void;
-}) {
-  const sc = statusColor(assessment.status);
-  const sectionCount = assessment.sections?.length ?? 0;
-  const questionCount = assessment.sections
-    ? assessment.sections.reduce((s, sec) => s + sec.questions.length, 0)
-    : assessment.questions.length;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -1 }}
-      onClick={onClick}
-      className="cursor-pointer"
-      style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3, padding: '18px 20px' }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)';
-        (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-text-muted)';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-        (e.currentTarget as HTMLElement).style.borderColor = 'var(--ef-border)';
-      }}
-    >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs" style={{ color: 'var(--ef-ink)', lineHeight: 1.5 }}>{assessment.title}</p>
-          {assessment.subject && (
-            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{assessment.subject}</p>
-          )}
-        </div>
-        <span className="text-xs px-2 py-0.5 flex-shrink-0"
-          style={{ background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, borderRadius: 2 }}>
-          {statusLabel(assessment.status)}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-3 flex-wrap">
-        {sectionCount > 0 && (
-          <div className="flex items-center gap-1">
-            <Layers size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{sectionCount} section{sectionCount !== 1 ? 's' : ''}</span>
-          </div>
-        )}
-        {questionCount > 0 && (
-          <div className="flex items-center gap-1">
-            <BookOpen size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{questionCount} question{questionCount !== 1 ? 's' : ''}</span>
-          </div>
-        )}
-        <div className="flex items-center gap-1">
-          <Users size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{describeAssignment(assessment)}</span>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
-        <div className="flex items-center gap-3">
-          {assessment.startDate && (
-            <div className="flex items-center gap-1">
-              <Calendar size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{formatDateShort(assessment.startDate)}</span>
-            </div>
-          )}
-          {assessment.endDate && (
-            <div className="flex items-center gap-1">
-              <Clock size={10} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>ends {formatDateShort(assessment.endDate)}</span>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-1" style={{ color: 'var(--ef-text-muted)' }}>
-          <span className="text-xs">View roster</span>
-          <ChevronRight size={11} strokeWidth={1.5} />
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ── Main page ─────────────────────────────────────────────────────
+import { RosterBrowser } from '../../components/assignments/RosterBrowser';
+import { ErrorBanner, PageHeader, PageShell, StatRow, StatTile } from '../../components/console/ui';
 
 export function InstituteAssignmentsPage() {
   const navigate = useNavigate();
@@ -126,112 +28,80 @@ export function InstituteAssignmentsPage() {
   }
 
   const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [search, setSearch]           = useState('');
-  const [filterStatus, setFilterStatus] = useState<AssessmentStatus | 'all'>('active');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!session) return;
+  const instituteId = session.instituteId;
+
+  const load = () => {
     setLoading(true);
-    getAssessmentsVisibleToInstitute(session.instituteId)
+    setError('');
+    getAssessmentsVisibleToInstitute(instituteId)
       .then((all) => {
         // Server queries already scope to: own assessments + published ones
-        // assigned to this institute (or to all). Keep the dashboard view to
-        // published items only (own drafts are edited elsewhere).
+        // assigned to this institute (or to all). Keep this view to published
+        // items only — own drafts are edited elsewhere.
         const relevant = all.filter((a) => a.status !== 'draft');
         relevant.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setAssessments(relevant);
       })
-      .catch(console.error)
+      .catch((e) => setError(e?.message ?? 'Could not load your assessments.'))
       .finally(() => setLoading(false));
-  }, [session]);
+  };
 
-  const filtered = assessments.filter((a) => {
-    const matchSearch = !search ||
-      a.title.toLowerCase().includes(search.toLowerCase()) ||
-      (a.subject ?? '').toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === 'all' || a.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
+  useEffect(load, [instituteId]);
 
-  const statusTabs: Array<{ value: AssessmentStatus | 'all'; label: string }> = [
-    { value: 'active', label: 'Active' },
-    { value: 'all',    label: 'All' },
-    { value: 'closed', label: 'Closed' },
-  ];
+  const active = assessments.filter((a) => a.status === 'active').length;
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--ef-canvas)' }}>
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 24px' }}>
+    <PageShell>
+      <PageHeader
+        eyebrow={
+          <>
+            <span className="ef-eyebrow-dot" />
+            Institute admin
+          </>
+        }
+        title="Exam rosters"
+        subtitle="Every assessment your students can sit. Open one to watch it live — who has started, who has handed in, and who needs a session released."
+      />
 
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>INSTITUTE ADMIN · ASSIGNMENTS</p>
-            <h1 className="text-sm" style={{ color: 'var(--ef-ink)' }}>Exam Rosters</h1>
-            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
-              Monitor live student sessions and manage exam access for your institute.
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-            style={{ background: 'var(--ef-border-subtle)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}>
-            <Users2 size={11} strokeWidth={1.5} />
-            {assessments.length} assessments
-          </div>
+      {error && (
+        <div className="mb-5">
+          <ErrorBanner message={error} onRetry={load} />
         </div>
+      )}
 
-        {/* Search + filter */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="flex items-center gap-2 flex-1 px-3 py-2"
-            style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-            <Search size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search assessments…" className="flex-1 text-xs outline-none bg-transparent"
-              style={{ color: 'var(--ef-ink)' }} />
-          </div>
-          <div className="flex items-center gap-1">
-            {statusTabs.map((tab) => (
-              <button key={tab.value} onClick={() => setFilterStatus(tab.value)}
-                className="text-xs px-3 py-1.5 transition-colors"
-                style={{
-                  borderRadius: 2,
-                  background: filterStatus === tab.value ? 'var(--ef-ink)' : 'transparent',
-                  color: filterStatus === tab.value ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
-                  border: filterStatus === tab.value ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
-                  cursor: 'pointer',
-                }}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* List */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-            <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Loading…</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <ClipboardList size={24} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
-            <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-              {search || filterStatus !== 'all' ? 'No assessments match your filters.' : 'No active assessments assigned to your institute.'}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <AnimatePresence>
-              {filtered.map((a) => (
-                <AssessmentCard
-                  key={a.id}
-                  assessment={a}
-                  onClick={() => navigate(`/institute/assignments/${a.id}/roster`)}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+      <div style={{ marginBottom: 26 }}>
+        <StatRow>
+          <StatTile
+            label="Running now"
+            value={loading ? '—' : active}
+            icon={<ClipboardList size={13} strokeWidth={1.7} />}
+            tone={active > 0 ? 'success' : undefined}
+            sub={active > 0 ? 'open to students' : 'nothing live'}
+            hint="Assessments inside their window. These are the ones with a roster worth watching."
+          />
+          <StatTile
+            label="Assigned to you"
+            value={loading ? '—' : assessments.length}
+            icon={<ClipboardList size={13} strokeWidth={1.7} />}
+            sub="published, all time"
+            hint="Everything published to this institute, whether it has run yet or not."
+          />
+        </StatRow>
       </div>
-    </div>
+
+      <RosterBrowser
+        assessments={assessments}
+        loading={loading}
+        statuses={['all', 'active', 'closed']}
+        initialStatus="active"
+        onOpen={(a) => navigate(`/institute/assignments/${a.id}/roster`)}
+        blockedReason={() => null}
+        emptyTitle="Nothing assigned yet"
+        emptyBody="When the platform or one of your faculty publishes an assessment to this institute, it appears here with a live roster."
+      />
+    </PageShell>
   );
 }

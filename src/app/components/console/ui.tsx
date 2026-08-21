@@ -253,6 +253,83 @@ export function Button({
   );
 }
 
+/**
+ * A switch, for a setting that takes effect the moment you flip it.
+ *
+ * ── WHY A SWITCH AND NOT A CHECKBOX ───────────────────────────────
+ * A checkbox is a value in a form you are going to submit. These are not:
+ * each one writes immediately, which is the distinction the two controls
+ * carry. Built on `role="switch"` so a screen reader says "on"/"off" rather
+ * than "checked", which is the same distinction said out loud.
+ *
+ * ── THE LOCKED STATE SAYS WHY ─────────────────────────────────────
+ * Several of these depend on another: faculty cannot be allowed to create
+ * students at an institute whose admin cannot. A greyed-out switch with no
+ * explanation is read as a bug; `lockedBecause` replaces the description
+ * with the sentence that unlocks it.
+ */
+export function Toggle({
+  label,
+  description,
+  checked,
+  onChange,
+  busy = false,
+  lockedBecause,
+  icon,
+}: {
+  label: string;
+  description?: React.ReactNode;
+  checked: boolean;
+  onChange: () => void;
+  busy?: boolean;
+  /** Present ⇒ the switch is unavailable, and this says what would free it. */
+  lockedBecause?: string;
+  icon?: React.ReactNode;
+}) {
+  const locked = !!lockedBecause;
+  return (
+    <div
+      className="ef-toggle-row flex items-start justify-between gap-4"
+      data-locked={locked ? '' : undefined}
+    >
+      <div className="flex items-start gap-2.5 min-w-0">
+        {icon && (
+          <span
+            style={{ color: checked && !locked ? 'var(--ef-success)' : 'var(--ef-text-muted)', display: 'flex', marginTop: 1 }}
+          >
+            {icon}
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="ef-t-sm ef-ink" style={{ fontWeight: 500 }}>
+            {label}
+          </p>
+          {(lockedBecause || description) && (
+            <p className="ef-t-xs ef-muted" style={{ marginTop: 3, lineHeight: 'var(--ef-leading-relaxed)' }}>
+              {lockedBecause ?? description}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={busy || locked}
+        onClick={onChange}
+        className="ef-switch"
+        data-on={checked ? '' : undefined}
+      >
+        <span className="ef-switch__knob">
+          {busy && <Loader2 size={9} strokeWidth={2.4} className="animate-spin" />}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export type ChipTone = 'muted' | 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'solid';
 
 export function Chip({

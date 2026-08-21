@@ -515,6 +515,67 @@
     background: var(--ef-canvas-raised);
   }
 
+  /* ── Switch ───────────────────────────────────────────────────────
+     A track and a knob, both from tokens, so it follows the theme like
+     everything else. Deliberately larger than it needs to be on a mouse:
+     it is the control most likely to be flipped on a phone by an admin who
+     is not at their desk, and the whole row is not the target — the switch
+     is. */
+
+  .ef-toggle-row {
+    padding: 14px var(--ef-pad-card);
+  }
+
+  .ef-toggle-row + .ef-toggle-row {
+    border-top: 1px solid var(--ef-border-subtle);
+  }
+
+  .ef-toggle-row[data-locked] {
+    opacity: 0.62;
+  }
+
+  .ef-switch {
+    position: relative;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    width: 40px;
+    height: 24px;
+    padding: 2px;
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius-pill);
+    background: var(--ef-track);
+    cursor: pointer;
+    transition: background-color 200ms ease, border-color 200ms ease;
+  }
+
+  .ef-switch[data-on] {
+    background: var(--ef-success);
+    border-color: var(--ef-success);
+  }
+
+  .ef-switch:disabled {
+    cursor: not-allowed;
+  }
+
+  .ef-switch__knob {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--ef-surface);
+    color: var(--ef-text-muted);
+    box-shadow: var(--ef-shadow-sm);
+    transform: translateX(0);
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ef-switch[data-on] .ef-switch__knob {
+    transform: translateX(16px);
+  }
+
   /* ── Disclosure ───────────────────────────────────────────────────
      A card that is a closed section until it is opened. The chevron rotates
      rather than swapping glyphs, so the control reads as the same object in

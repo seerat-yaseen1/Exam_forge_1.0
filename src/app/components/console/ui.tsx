@@ -407,7 +407,7 @@ export function CopyChip({
       data-tone={copied ? 'success' : undefined}
       style={{
         cursor: 'pointer',
-        fontFamily: mono ? 'ui-monospace, monospace' : undefined,
+        fontFamily: mono ? 'var(--font-mono)' : undefined,
         letterSpacing: mono ? '0.1em' : undefined,
       }}
     >

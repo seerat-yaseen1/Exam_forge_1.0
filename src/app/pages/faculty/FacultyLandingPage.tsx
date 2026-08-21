@@ -195,7 +195,7 @@ export function FacultyLandingPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <Chip tone="accent">Faculty</Chip>
           <Chip>{session.instituteName}</Chip>
-          <span className="ef-t-xs ef-muted" style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.08em' }}>
+          <span className="ef-t-xs ef-muted" style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>
             {session.instituteCode}
           </span>
         </div>

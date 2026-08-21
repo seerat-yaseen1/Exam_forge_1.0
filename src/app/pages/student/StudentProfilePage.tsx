@@ -58,7 +58,7 @@ function Detail({
           style={{
             fontSize: 14,
             color: 'var(--ef-ink)',
-            fontFamily: mono ? 'ui-monospace, monospace' : undefined,
+            fontFamily: mono ? 'var(--font-mono)' : undefined,
             letterSpacing: mono ? '0.1em' : undefined,
           }}
         >

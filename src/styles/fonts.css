@@ -7,7 +7,47 @@
 */
 
 :root {
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  /*
+    Interface face.
+
+    Was Inter, which is an excellent typeface and the reason it is on roughly
+    every SaaS product shipped since 2018 — including, by now, the ones this
+    platform sits next to in a procurement comparison. Nothing is wrong with
+    it; it just no longer says anything.
+
+    Geist is drawn for interfaces at exactly the sizes this console lives at,
+    and two of its properties are load-bearing here rather than aesthetic:
+
+      TABULAR FIGURES. Marks, timers, question counts, section totals and the
+      running tallies in the assignment panel are all numbers that CHANGE in
+      place. Proportional digits make them jitter as they update — a 90-second
+      question timer visibly reflowing every tick. Much of the app already asks
+      for `tabular-nums`; Geist's numerals are built for it.
+
+      SMALL-SIZE CLARITY. Open apertures and a tall x-height, so the 12px tier
+      below body — chips, counts, the metadata line under a question stem —
+      stays readable rather than merely present.
+
+    It keeps Inter's neutrality, which matters for a face that has to disappear
+    behind an exam: a candidate should be reading the question, not the type.
+  */
+  --font-sans: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+
+  /*
+    Monospace.
+
+    Question ids, bulk-upload column names, LaTeX source, the MERGE
+    confirmation, the code editor's gutters. Two dozen call sites asked for
+    bare `monospace` or an ad-hoc `ui-monospace, …` stack, which resolves to
+    whatever the operating system happens to have — Menlo on a Mac, Consolas
+    on Windows, and Courier on a machine with neither, which looks broken next
+    to any modern interface face.
+
+    Geist Mono is metrically related to the sans, so a mono chip sitting inline
+    in a sentence lines up with it instead of floating.
+  */
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+    'Liberation Mono', monospace;
 
   /*
     Display face — page titles, large figures, the greeting on the student

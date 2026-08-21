@@ -484,7 +484,7 @@
 
   /* An id, shown as the monospace token it is. */
   .ef-mono-chip {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-mono);
     letter-spacing: 0.06em;
     font-size: 12px;
   }
@@ -1560,4 +1560,19 @@
     min-width: 0;   /* or a wide table stretches the flex parent instead of scrolling */
   }
 
+}
+
+/*
+  ── The code editor's face ──────────────────────────────────────────────────
+  CodeMirror ships its own font stack inside its theme, so a coding question's
+  editor was the one surface in the product still rendering in whatever mono
+  the operating system happened to supply — Courier on a machine with nothing
+  better, while every id chip and LaTeX snippet beside it had moved on.
+
+  Targeted at `.cm-scroller` rather than `.cm-editor`, which is what CodeMirror
+  documents: the scroller is the element the content and the gutters both
+  inherit from, so the line numbers stay aligned with the lines they number.
+*/
+.cm-editor .cm-scroller {
+  font-family: var(--font-mono);
 }

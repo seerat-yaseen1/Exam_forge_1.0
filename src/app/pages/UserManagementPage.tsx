@@ -322,7 +322,7 @@ function InstituteSheet({
             value={editing!.code}
             readOnly
             hint="Generated once, at creation. Staff and students type it to sign in, so it can never change."
-            style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.16em' }}
+            style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.16em' }}
           />
         ) : (
           <p
@@ -785,7 +785,7 @@ export function UserManagementPage() {
               </span>
               <span
                 className="ef-t-xs ef-muted block"
-                style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.12em' }}
+                style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.12em' }}
               >
                 {i.code}
               </span>

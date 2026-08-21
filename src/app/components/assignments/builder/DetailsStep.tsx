@@ -1352,7 +1352,7 @@ export function DetailsStep({
                             style={{
                               border: `1px solid ${sebKeysError ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
                               borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
-                              fontFamily: 'ui-monospace, monospace', outline: 'none', resize: 'vertical',
+                              fontFamily: 'var(--font-mono)', outline: 'none', resize: 'vertical',
                             }}
                           />
                           {sebKeysError && (

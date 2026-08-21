@@ -114,7 +114,7 @@ function SecondFactor({
             disabled={busy}
             placeholder="000000"
             style={{
-              fontFamily: 'ui-monospace, monospace',
+              fontFamily: 'var(--font-mono)',
               letterSpacing: '0.4em',
               fontSize: 18,
               textAlign: 'center',

@@ -196,7 +196,7 @@ function DeviceRefusalPanel({
           </p>
           <p
             className="text-xs break-all"
-            style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.6, fontFamily: 'ui-monospace, monospace' }}
+            style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}
           >
             {examUrl}
           </p>

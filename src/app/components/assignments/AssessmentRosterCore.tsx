@@ -1630,7 +1630,7 @@ function ResponseViewer({
                         style={{
                           background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)',
                           borderRadius: 2, color: 'var(--ef-ink)', lineHeight: 1.55,
-                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                          fontFamily: 'var(--font-mono)',
                           margin: 0, overflowX: 'auto', maxHeight: '40vh', overflowY: 'auto',
                         }}>
                         {submission.source}
@@ -1703,7 +1703,7 @@ function ResponseViewer({
                             style={{
                               background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)',
                               borderRadius: 2, color: 'var(--ef-text-muted)', lineHeight: 1.5,
-                              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                              fontFamily: 'var(--font-mono)',
                               wordBreak: 'break-word',
                             }}>
                             {verdict.failureReason}
@@ -1729,7 +1729,7 @@ function ResponseViewer({
                             style={{
                               background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)',
                               borderRadius: 2, color: 'var(--ef-danger)', lineHeight: 1.5, margin: 0,
-                              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                              fontFamily: 'var(--font-mono)',
                               overflowX: 'auto', maxHeight: '20vh', overflowY: 'auto',
                             }}>
                             {verdict.compileMessage}

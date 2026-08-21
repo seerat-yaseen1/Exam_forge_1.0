@@ -436,7 +436,7 @@ export function StudentLandingPage() {
             {session.status === 'active' ? 'Active' : 'Disabled'}
           </Chip>
           <Chip>{session.instituteName}</Chip>
-          <span style={{ fontSize: 13, color: 'var(--ef-text-muted)', fontFamily: 'ui-monospace, monospace' }}>
+          <span style={{ fontSize: 13, color: 'var(--ef-text-muted)', fontFamily: 'var(--font-mono)' }}>
             {session.email}
           </span>
         </div>

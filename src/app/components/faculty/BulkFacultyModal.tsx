@@ -395,7 +395,7 @@ export function BulkFacultyModal({
                         <td className="px-4 py-2.5">
                           <p className="text-xs" style={{
                             color: row.valid ? 'var(--ef-text-subtle)' : 'var(--ef-danger)',
-                            fontFamily: row.valid ? 'monospace' : 'inherit',
+                            fontFamily: row.valid ? 'var(--font-mono)' : 'inherit',
                           }}>
                             {row.email || <span style={{ color: 'var(--ef-text-muted)' }}>—</span>}
                           </p>
@@ -515,7 +515,7 @@ export function BulkFacultyModal({
                           <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{r.name}</p>
                         </td>
                         <td className="px-4 py-2.5">
-                          <p className="text-xs" style={{ color: 'var(--ef-text-subtle)', fontFamily: 'monospace' }}>{r.email}</p>
+                          <p className="text-xs" style={{ color: 'var(--ef-text-subtle)', fontFamily: 'var(--font-mono)' }}>{r.email}</p>
                         </td>
                         <td className="px-4 py-2.5">
                           {r.success ? (

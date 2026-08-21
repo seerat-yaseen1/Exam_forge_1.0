@@ -843,7 +843,7 @@ export function Fact({
       <div className="ef-fact__label">{label}</div>
       <div
         className="ef-fact__value"
-        style={mono ? { fontFamily: 'ui-monospace, monospace', letterSpacing: '0.06em' } : undefined}
+        style={mono ? { fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' } : undefined}
       >
         {value}
       </div>

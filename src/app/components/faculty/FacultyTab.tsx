@@ -26,11 +26,11 @@ import { BulkFacultyModal } from './BulkFacultyModal';
 import {
   getFacultyByInstitute,
   getFaculty,
-  setFaculty,
   setFacultySchoolsPermission,
   setFacultyCreateStudentsPermission,
   setFacultyManageRostersPermission,
 } from '../../../lib/firebaseService';
+import { setAccountStatus } from '../../../lib/accountAccess';
 import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
@@ -121,6 +121,12 @@ export function FacultyTab({
   // Set when the server reports live owned assessments; the second click confirms.
   const [liveOwnedCount, setLiveOwnedCount] = useState<number | null>(null);
   const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null);
+  // Switching an account off can now genuinely fail — the account is
+  // soft-deleted, the institute has expired, the Auth user could not be
+  // revoked — and those refusals are the point of the change. The old bare
+  // updateDoc had nothing to report, so its catch block logged to the console
+  // and the row simply stopped spinning.
+  const [statusError, setStatusError] = useState('');
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [schoolsPermLoadingId, setSchoolsPermLoadingId] = useState<string | null>(null);
   const [createStudentsPermLoadingId, setCreateStudentsPermLoadingId] = useState<string | null>(null);
@@ -190,23 +196,31 @@ export function FacultyTab({
 
   const handleToggleStatus = async (id: string) => {
     setStatusLoadingId(id);
+    setStatusError('');
     try {
       const faculty = await getFaculty(id);
       if (!faculty) throw new Error('Faculty not found');
-      
+
       const newStatus = faculty.status === 'active' ? 'disabled' : 'active';
-      const updated: Faculty = {
-        ...faculty,
-        status: newStatus,
-        updatedAt: new Date().toISOString(),
-      };
-      
-      await setFaculty(id, updated);
-      setFaculties((prev) => prev.map((f) => f.id === id ? updated : f));
+
+      // Through the callable, NOT a direct write. `setFaculty` only ever moved
+      // a Firestore field: it left the Firebase Auth account signed in and its
+      // refresh tokens valid, and firestore.rules never read `status`, so a
+      // disabled faculty member kept working sessions and full data access —
+      // including over their institute's question banks and assessments — for
+      // as long as they stayed signed in. setAccountStatus disables the Auth
+      // user and revokes its tokens as well as writing the field, and the
+      // rules now reject a client write that changes `status` at all.
+      await setAccountStatus({ role: 'faculty', uid: id, status: newStatus });
+
+      setFaculties((prev) => prev.map((f) => (
+        f.id === id ? { ...f, status: newStatus, updatedAt: new Date().toISOString() } : f
+      )));
       setLastSynced(new Date());
-    } catch (e: any) { 
+    } catch (e: any) {
       console.error('Toggle status failed:', e);
-    } finally { 
+      setStatusError(e?.message ?? 'Could not change that faculty member’s status.');
+    } finally {
       setStatusLoadingId(null);
     }
   };
@@ -488,6 +502,21 @@ export function FacultyTab({
           style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
           <Inbox size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
           <p className="text-xs" style={{ color: 'var(--ef-success-strong)' }}>{requestNotice}</p>
+        </div>
+      )}
+
+      {/* Status-change refusal. Dismissed rather than retried: the reasons this
+          fails are states someone has to resolve elsewhere — a deleted account,
+          a lapsed institute — not transient failures worth pressing again. */}
+      {statusError && (
+        <div className="flex items-center gap-2 px-4 py-3 mb-4" role="alert"
+          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
+          <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
+          <p className="text-xs flex-1" style={{ color: 'var(--ef-danger)' }}>{statusError}</p>
+          <button onClick={() => setStatusError('')} style={{ color: 'var(--ef-text-muted)' }}
+            aria-label="Dismiss">
+            <X size={11} strokeWidth={1.5} />
+          </button>
         </div>
       )}
 

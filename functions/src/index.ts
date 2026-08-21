@@ -433,13 +433,20 @@ export const createAuthUser = onCall<CreateAuthUserData>(
     // ── 4. Create Firebase Auth user
     const auth = getAuth();
     let uid: string;
+    // The drawers offer an "Initial status" of active or disabled, and that
+    // choice has to reach Firebase Auth or it is decorative — a student
+    // created as disabled used to get a fully working Auth account, because
+    // `status` is a Firestore field and nothing read it when minting the user.
+    // Same rule as setAccountStatus below: the profile field and the Auth
+    // account say the same thing, always.
+    const createDisabled = String(profile.status ?? 'active') === 'disabled';
     try {
       const userRecord = await auth.createUser({
         email,
         password,
         displayName: String(profile.name),
         emailVerified: false,
-        disabled: false,
+        disabled: createDisabled,
       });
       uid = userRecord.uid;
     } catch (err: unknown) {
@@ -598,20 +605,52 @@ function assertInstituteActiveS(snap: FirebaseFirestore.DocumentSnapshot): void 
       'This institute account has been deleted. Contact your platform administrator.',
     );
   }
-  // Stored as an ISO string, like every other date on this document. An
-  // absent or unparseable value means NO expiry rather than an expired one —
-  // matching the client gate, which treats '' as unbounded, and keeping
-  // institutes provisioned before the field existed working.
-  const activeUntil = snap.get('activeUntil');
-  if (typeof activeUntil === 'string' && activeUntil !== '') {
-    const until = Date.parse(activeUntil);
-    if (!Number.isNaN(until) && until < Date.now()) {
-      throw new HttpsError(
-        'permission-denied',
-        "This institute's access period has expired. Contact your platform administrator.",
-      );
-    }
+  if (hasExpiredS(snap.get('activeUntil'))) {
+    throw new HttpsError(
+      'permission-denied',
+      "This institute's access period has expired. Contact your platform administrator.",
+    );
   }
+}
+
+/**
+ * Server twin of `expiryInstant` in src/lib/instituteValidity.ts.
+ * KEEP IN SYNC — the two decide the same fact for the same tenant, and a
+ * divergence means the login screen and the enforcement sweep disagree about
+ * whether an institute is still paid up.
+ *
+ * ── THE DATE-ONLY SHAPE IS THE ONE THAT MATTERS ───────────────────
+ *
+ * `computeActiveUntil` ends with `.toISOString().split('T')[0]`, so what is
+ * actually stored on these documents is a bare `YYYY-MM-DD`. Date.parse reads
+ * that as UTC midnight at the START of the named day, so the check here — and
+ * the identical one on the client — treated the tenant as expired for the
+ * whole of the date the Web Owner had picked. An institute sold access "until
+ * 21 September" could not sign in on 21 September.
+ *
+ * A date-only bound therefore means the END of that day. Values carrying an
+ * explicit time are a precise instant and are left exactly as they were.
+ *
+ * Absent, empty and unparseable all mean NO expiry rather than an expired one
+ * — keeping institutes provisioned before the field existed working, and
+ * refusing to lock a tenant out over a malformed string.
+ */
+const DATE_ONLY_S = /^\d{4}-\d{2}-\d{2}$/;
+
+function expiryInstantS(activeUntil: unknown): number | null {
+  const trimmed = String(activeUntil ?? '').trim();
+  if (trimmed === '') return null;
+  // An impossible date ('2026-13-45') matches the pattern and still parses to
+  // NaN, landing on the same "no expiry" answer as any other unparseable value.
+  const t = DATE_ONLY_S.test(trimmed)
+    ? Date.parse(`${trimmed}T23:59:59.999Z`)
+    : Date.parse(trimmed);
+  return Number.isFinite(t) ? t : null;
+}
+
+function hasExpiredS(activeUntil: unknown, now: number = Date.now()): boolean {
+  const t = expiryInstantS(activeUntil);
+  return t !== null && t < now;
 }
 
 /**
@@ -13251,6 +13290,667 @@ export const revokeSessions = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
     await getAuth().revokeRefreshTokens(request.auth.uid);
     return { ok: true, revokedAt: new Date().toISOString() };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
+// ACCOUNT ACCESS — making "disabled" mean disabled
+// ══════════════════════════════════════════════════════════════════
+//
+// ── WHAT WAS WRONG ────────────────────────────────────────────────
+//
+// Switching an account off was a bare Firestore write. StudentTab and
+// FacultyTab flipped `status: 'disabled'` with a full-document `set`, and
+// UserManagementPage did the same for an institute. None of the three touched
+// Firebase Auth, and `firestore.rules` reads `status` NOWHERE — the string
+// does not appear in that file outside comments and one unrelated
+// field-whitelist. So the entire effect of disabling somebody was that the
+// login screen would refuse them the next time they visited it.
+//
+// Concretely, before this: a student disabled mid-morning kept a working
+// session for as long as they left the tab open — indefinitely, because
+// sessions here never expire — and their ID token still carried
+// role:'student', studentId and instituteId, so every rule in the file kept
+// passing for direct SDK calls. Disabling a student who was cheating did not
+// stop them sitting the exam they were cheating in.
+//
+// The three client gates (evaluateAccess, via the auth contexts) are a
+// courtesy that shapes the UI. They run on the candidate's machine. They were
+// never the boundary, and the audit comment on institutes/{id} in
+// firestore.rules has said so since C1.
+//
+// ── WHAT REPLACES IT ──────────────────────────────────────────────
+//
+// One callable that owns the whole decision, so the Firestore field and the
+// Firebase Auth account can never disagree. Disabling now:
+//
+//   1. sets `disabled: true` on the Auth user   → no new sign-in, no refresh
+//   2. revokes every refresh token              → live sessions cannot renew
+//   3. writes `status: 'disabled'` on the profile
+//
+// The client is no longer permitted to do step 3 on its own: `statusUntouched()`
+// in firestore.rules rejects any client write that CHANGES `status` on
+// students, faculty or institutes, so this endpoint is the only way through
+// and the two halves cannot drift apart again.
+//
+// ── THE HOUR THAT REMAINS, STATED PLAINLY ─────────────────────────
+//
+// An ID token already minted stays valid until it expires, up to one hour,
+// and Cloud Firestore rules do not check token revocation (Realtime Database
+// and Cloud Storage do; Firestore would need an auth_time comparison against
+// a stored revocation stamp in every rule). So a session open at the moment
+// of disabling can keep reading and writing for up to an hour, and then stops
+// dead — it cannot refresh.
+//
+// That is the same posture soft delete has always had (performAccountSoftDelete
+// disables the Auth user and accepts the same window), and it is a bounded
+// hour against what it replaces, which was forever. Closing it completely
+// means an auth_time check in every rule, which costs a document read on the
+// exam hot path — see assertInstituteActiveS for why that trade is refused
+// there.
+
+type StatusRole = 'institute' | 'faculty' | 'student';
+
+const STATUS_ROLES: StatusRole[] = ['institute', 'faculty', 'student'];
+
+/**
+ * Marks a member switched off because their TENANT went off, rather than by
+ * someone deciding about them personally.
+ *
+ * The distinction is what makes reinstatement safe. Without it, bringing a
+ * renewed institute back would sweep every account inside it to `active` —
+ * including the faculty member an administrator disabled in March for reasons
+ * that have not changed. Only accounts carrying this marker come back, and
+ * setAccountStatus deletes it whenever a person makes the call by hand, so a
+ * manual decision always outranks the sweep.
+ */
+const SUSPENDED_BY_TENANT = 'instituteSuspended';
+
+/**
+ * Make an account's Auth state match a decision that has just been taken.
+ *
+ * ORDER MATTERS WHEN DISABLING. `updateUser({disabled})` first, then revoke:
+ * disabling stops the next refresh, revoking invalidates the refresh tokens
+ * that already exist. Doing only the first leaves a token that a client may
+ * still present until it expires; doing only the second lets the account sign
+ * in again from scratch with its password. Both, in that order, is what
+ * "switched off" means.
+ *
+ * A missing Auth user is not an error. Profile documents outlive their Auth
+ * users — a purge that half-completed, a record migrated in from before the
+ * Auth wiring — and refusing to update the profile because the account it
+ * points at is already gone would leave the row unmanageable forever.
+ */
+async function applyAuthAccess(uid: string, enabled: boolean): Promise<void> {
+  const auth = getAuth();
+  try {
+    await auth.updateUser(uid, { disabled: !enabled });
+    if (!enabled) await auth.revokeRefreshTokens(uid);
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === 'auth/user-not-found') {
+      console.warn(`[accountAccess] no Auth user for ${uid} — profile updated regardless`);
+      return;
+    }
+    throw err;
+  }
+}
+
+interface SetAccountStatusData {
+  role: StatusRole;
+  uid: string;
+  status: 'active' | 'disabled';
+}
+
+export const setAccountStatus = onCall<SetAccountStatusData>(
+  // Longer than the 60s default because disabling an institute cascades to its
+  // members. The cascade is budgeted well inside this (TENANT_CALLABLE_BUDGET_MS)
+  // and hands whatever it does not finish to the hourly sweep, so the ceiling
+  // is headroom rather than something a normal call approaches.
+  { ...CALLABLE_BASE, timeoutSeconds: 120 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+    const { role, uid, status } = request.data || ({} as SetAccountStatusData);
+    if (!STATUS_ROLES.includes(role)) {
+      throw new HttpsError('invalid-argument', 'role must be institute, faculty or student.');
+    }
+    if (typeof uid !== 'string' || !uid) {
+      throw new HttpsError('invalid-argument', 'uid is required.');
+    }
+    if (status !== 'active' && status !== 'disabled') {
+      throw new HttpsError('invalid-argument', "status must be 'active' or 'disabled'.");
+    }
+
+    const db = getFirestore();
+    const actor = actorFrom(request);
+    const profileRef = db.collection(COLLECTION_BY_ROLE[role]).doc(uid);
+    const snap = await profileRef.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Account not found.');
+
+    // ── AuthZ ─────────────────────────────────────────────────────
+    // Deliberately narrower than firestore.rules was. Faculty could update
+    // student documents under the old rule, which meant any faculty member
+    // could disable any student in their institute; nothing in the product
+    // offers that, so it is not carried forward here. Turning a tenant off
+    // stays a Web Owner act — an institute able to switch itself back on is
+    // the self-reinstatement escalation C1 closed.
+    if (actor.actorRole !== 'webOwner') {
+      const targetInstituteId =
+        role === 'institute' ? uid : ((snap.get('instituteId') as string) ?? null);
+      const governs =
+        actor.actorRole === 'institute'
+        && role !== 'institute'
+        && !!actor.instituteId
+        && actor.instituteId === targetInstituteId;
+      if (!governs) throw new HttpsError('permission-denied', 'Insufficient permissions.');
+    }
+
+    // A soft-deleted record is the deletion system's to manage. Re-enabling
+    // one here would hand sign-in back to an account someone deleted, without
+    // the restore path's audit row or its lifecycle bookkeeping.
+    if (snap.get('lifecycleState') === 'softDeleted') {
+      throw new HttpsError(
+        'failed-precondition',
+        'This account is deleted. Restore it from Deleted accounts first.',
+      );
+    }
+
+    // Re-enabling a member of an expired or disabled tenant would produce an
+    // account that is active on paper and refused at the door — and, worse,
+    // one whose Auth user we had just switched back on. The tenant comes back
+    // first; the cascade below then sweeps its members.
+    if (status === 'active' && role !== 'institute') {
+      const instituteId = (snap.get('instituteId') as string) ?? null;
+      const instSnap = instituteId
+        ? await db.collection('institutes').doc(instituteId).get()
+        : null;
+      if (!instSnap?.exists) {
+        throw new HttpsError('failed-precondition', 'This account has no live institute.');
+      }
+      assertInstituteActiveS(instSnap);
+    }
+
+    // Same rule one level up, and it has to be checked HERE rather than left
+    // to the cascade. Without it, enabling a lapsed tenant would succeed, the
+    // reconcile immediately behind it would find the window still closed, and
+    // it would switch the institute straight back off — a success message
+    // followed by a row that flips back, with nothing said about why.
+    if (status === 'active' && role === 'institute' && hasExpiredS(snap.get('activeUntil'))) {
+      throw new HttpsError(
+        'failed-precondition',
+        "This institute's access period has expired. Extend its validity to restore access.",
+      );
+    }
+
+    // Auth FIRST when switching off, so a failure here cannot leave a profile
+    // marked disabled while the account it names still signs in. The reverse
+    // order on the way back on, for the same reason read the other way round.
+    if (status === 'disabled') {
+      try {
+        await applyAuthAccess(uid, false);
+      } catch (err) {
+        console.error('[setAccountStatus] could not disable auth user', uid, err);
+        throw new HttpsError('internal', 'Could not revoke sign-in for this account.');
+      }
+    }
+
+    await profileRef.update({
+      status,
+      // Clearing the marker matters: a person re-enabling an account by hand
+      // is overriding the sweep, and leaving the flag set would let the next
+      // renewal "restore" an account nobody had suspended.
+      accessSuspendedReason: FieldValue.delete(),
+      accessSuspendedAt: FieldValue.delete(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    if (status === 'active') {
+      try {
+        await applyAuthAccess(uid, true);
+      } catch (err) {
+        console.error('[setAccountStatus] could not re-enable auth user', uid, err);
+        throw new HttpsError('internal', 'Could not restore sign-in for this account.');
+      }
+    }
+
+    // SWITCHING A TENANT OFF SWITCHES ITS PEOPLE OFF. The client gate has
+    // always read it that way — evaluateAccess refuses a member whose
+    // institute is disabled — so stopping at the admin's own account would
+    // leave every faculty member and student of a disabled institute holding
+    // a working session, which is the same hole one level down.
+    //
+    // Shared with the expiry sweep rather than written twice: an institute is
+    // off because it was disabled or because its window closed, and the two
+    // must not be able to disagree about what that does to the people inside.
+    let cascade: { changed: number; finished: boolean } | null = null;
+    if (role === 'institute') {
+      // Re-read: the reconcile decides from `status`, `activeUntil` and the
+      // sweep marker, and the update above has just changed two of those.
+      const fresh = await profileRef.get();
+      const result = await reconcileInstituteAccess(db, fresh, Date.now() + TENANT_CALLABLE_BUDGET_MS);
+      cascade = { changed: result.changed, finished: result.finished };
+    }
+
+    console.info(
+      `[setAccountStatus] ${role}/${uid} → ${status} by ${actor.actorRole}/${actor.actorUid}`
+      + (cascade ? ` cascade=${cascade.changed} finished=${cascade.finished}` : ''),
+    );
+    return { ok: true, status, cascade };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
+// TENANT ACCESS — an institute going off takes its people with it
+// ══════════════════════════════════════════════════════════════════
+//
+// Two ways a tenant goes off, treated as one throughout: a Web Owner disabled
+// it, or its `activeUntil` window closed. The client gate has always collapsed
+// them — evaluateAccess refuses a member whose institute is disabled OR
+// expired, without distinguishing — so enforcing them separately here is how
+// the two halves would drift apart.
+//
+// `activeUntil` is how a Web Owner sells a fixed access period, and until now
+// it was enforced in exactly two places: the login screens, and
+// assertInstituteActiveS on the four administrative callables that happened to
+// have the institute document in hand already. Neither reaches a session that
+// is already open, and neither reaches a student sitting an exam.
+//
+// So an institute whose access period ended kept every one of its faculty and
+// students working normally, indefinitely, as long as they did not sign out.
+// The commercial gate was a label.
+//
+// This sweep makes the lapse real: at the moment the window closes, every
+// member of the tenant is switched off through the same path a person would
+// use, and marked with WHY, so renewal can put back exactly the accounts the
+// lapse took and nothing else.
+//
+// ── WHY MARK, RATHER THAN JUST DISABLE ────────────────────────────
+//
+// Renewal has to be able to distinguish "off because the institute lapsed"
+// from "off because an administrator switched this person off in March".
+// Without the marker, restoring a renewed tenant would silently reinstate
+// every individually-disabled account inside it. `accessSuspendedReason`
+// carries that distinction, and setAccountStatus deletes it whenever a person
+// makes the decision by hand — a manual override outranks the sweep.
+
+/** Members are paged rather than loaded whole; institutes run to thousands. */
+const TENANT_PAGE_SIZE = 400;
+/** Auth writes are the slow part. Enough concurrency to matter, not enough to throttle. */
+const TENANT_CONCURRENCY = 12;
+/** Leaves headroom inside the sweep's 540s timeout to finish the institute in progress. */
+const TENANT_SWEEP_BUDGET_MS = 7 * 60 * 1000;
+/**
+ * The slice a CALLABLE may do inline before handing the rest to the sweep.
+ *
+ * A Web Owner disabling a tenant of ten thousand students cannot wait for ten
+ * thousand Auth writes, and a callable that tried would hit its own timeout
+ * and report failure for work that had largely succeeded. The part that must
+ * be immediate — the institute admin's own account — is already done before
+ * the cascade starts; the members are best-effort here and guaranteed by the
+ * sweep, which is why that runs hourly rather than nightly.
+ */
+const TENANT_CALLABLE_BUDGET_MS = 45 * 1000;
+
+async function mapWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+}
+
+/**
+ * Switch every member of one institute on or off.
+ *
+ * RESUMABLE BY CONSTRUCTION. Each document is compared against the state it is
+ * being moved to and skipped if it is already there, so a run that exhausts
+ * its budget half way costs the next run some reads and no duplicated Auth
+ * writes. That is why paging by document snapshot is enough and no cursor is
+ * persisted anywhere.
+ *
+ * ── ORDER, AND WHY IT DIFFERS BY DIRECTION ────────────────────────
+ *
+ * Switching OFF: Auth first. A failure then leaves an account that still signs
+ * in and whose profile still says `active` — visibly untouched, and retried on
+ * the next run. Writing the profile first would leave one marked disabled
+ * while the account it names still worked, which is precisely the split this
+ * whole change exists to remove.
+ *
+ * Switching ON: profile first. A failure then leaves an account marked active
+ * that cannot sign in — locked out, but not let in. The other order would
+ * re-enable a Firebase Auth account while its profile still read `disabled`,
+ * and since these rules do not gate on `status`, that account would have full
+ * data access with nothing on the record saying it should.
+ *
+ * Never touches a soft-deleted record. Those are disabled already, and
+ * re-enabling one on renewal would resurrect an account someone deleted.
+ */
+async function sweepInstituteMembers(
+  db: FirebaseFirestore.Firestore,
+  instituteId: string,
+  direction: 'suspend' | 'restore',
+  deadline: number,
+): Promise<{ changed: number; finished: boolean }> {
+  let changed = 0;
+  let failed = 0;
+
+  for (const collection of ['faculty', 'students']) {
+    let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+    for (;;) {
+      if (Date.now() > deadline) return { changed, finished: false };
+
+      let query = db.collection(collection)
+        .where('instituteId', '==', instituteId)
+        .orderBy('__name__')
+        .limit(TENANT_PAGE_SIZE);
+      // The snapshot rather than its id: `startAfter` resolves a snapshot
+      // against the query's own ordering, where a bare string would have to be
+      // interpreted as a document path.
+      if (cursor) query = query.startAfter(cursor);
+
+      const page = await query.get();
+      if (page.empty) break;
+      cursor = page.docs[page.docs.length - 1];
+
+      const targets = page.docs.filter((doc) => {
+        if (doc.get('lifecycleState') === 'softDeleted') return false;
+        return direction === 'suspend'
+          // Already off — by the sweep or by an administrator — is already
+          // where we want it, and re-disabling would waste an Auth write.
+          ? doc.get('status') !== 'disabled'
+          // Only what THIS sweep switched off comes back. An account an
+          // administrator disabled stays disabled through a renewal.
+          : doc.get('accessSuspendedReason') === SUSPENDED_BY_TENANT;
+      });
+
+      await mapWithConcurrency(targets, TENANT_CONCURRENCY, async (doc) => {
+        try {
+          if (direction === 'suspend') {
+            await applyAuthAccess(doc.id, false);
+            await doc.ref.update({
+              status: 'disabled',
+              accessSuspendedReason: SUSPENDED_BY_TENANT,
+              accessSuspendedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          } else {
+            await doc.ref.update({
+              status: 'active',
+              accessSuspendedReason: FieldValue.delete(),
+              accessSuspendedAt: FieldValue.delete(),
+              updatedAt: new Date().toISOString(),
+            });
+            try {
+              await applyAuthAccess(doc.id, true);
+            } catch (err) {
+              // The marker is what makes this member visible to the next run,
+              // and it has just been cleared. Put it back, or this account is
+              // stranded: disabled in Auth, `active` on paper, and matching no
+              // filter that would ever look at it again.
+              await doc.ref.update({
+                status: 'disabled',
+                accessSuspendedReason: SUSPENDED_BY_TENANT,
+                accessSuspendedAt: new Date().toISOString(),
+              });
+              throw err;
+            }
+          }
+          changed++;
+        } catch (err) {
+          // One member failing must not abandon the rest of the tenant. It is
+          // counted rather than swallowed: a pass with any failure is reported
+          // unfinished, which withholds the `accessSweepState` marker and so
+          // brings the next run back to try again.
+          failed++;
+          console.error(`[tenantAccess] ${direction} failed for ${collection}/${doc.id}`, err);
+        }
+      });
+
+      if (page.size < TENANT_PAGE_SIZE) break;
+    }
+  }
+
+  // A pass that could not move every member it found is not a finished pass,
+  // whatever the reason. Reporting otherwise would stamp the sweep marker and
+  // put this institute on the cheap path, where nothing looks at its members
+  // again until the tenant's state next changes.
+  return { changed, finished: failed === 0 };
+}
+
+/**
+ * The institute admin's own account, which is the institute document's uid.
+ *
+ * Kept separate from the member sweep because the shapes differ: there is no
+ * `instituteId` field to query on, and the institute's own `status` is the Web
+ * Owner's own switch. A tenant that lapsed AND was disabled by hand must not
+ * come back to `active` when the invoice is paid — so only a document this
+ * sweep marked is restored, exactly as for members.
+ */
+async function sweepInstituteAdmin(
+  instSnap: FirebaseFirestore.DocumentSnapshot,
+  direction: 'suspend' | 'restore',
+): Promise<boolean> {
+  const suspendedByUs = instSnap.get('accessSuspendedReason') === SUSPENDED_BY_TENANT;
+  if (direction === 'suspend') {
+    // Already off: either a Web Owner disabled it (setAccountStatus has
+    // already revoked the Auth account) or a previous run got here first.
+    if (instSnap.get('status') === 'disabled') return false;
+    await applyAuthAccess(instSnap.id, false);
+    await instSnap.ref.update({
+      status: 'disabled',
+      accessSuspendedReason: SUSPENDED_BY_TENANT,
+      accessSuspendedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    return true;
+  }
+  if (!suspendedByUs) return false;
+  await instSnap.ref.update({
+    status: 'active',
+    accessSuspendedReason: FieldValue.delete(),
+    accessSuspendedAt: FieldValue.delete(),
+    updatedAt: new Date().toISOString(),
+  });
+  try {
+    await applyAuthAccess(instSnap.id, true);
+  } catch (err) {
+    // The marker is what makes this institute recognisable as ours to restore,
+    // and it has just been cleared. Put it back, or the tenant is stranded:
+    // disabled in Auth, `active` on paper, and no longer matching the one
+    // condition under which anything would look at it again.
+    await instSnap.ref.update({
+      status: 'disabled',
+      accessSuspendedReason: SUSPENDED_BY_TENANT,
+      accessSuspendedAt: new Date().toISOString(),
+    });
+    throw err;
+  }
+  return true;
+}
+
+/**
+ * Bring one institute's people into line with whether the tenant is on.
+ *
+ * ── WHAT "OFF" MEANS ──────────────────────────────────────────────
+ *
+ * Two things, deliberately treated as one: a Web Owner disabled the institute,
+ * or its `activeUntil` window closed. The client gate has always collapsed
+ * them — evaluateAccess refuses a member whose institute is disabled OR
+ * expired, without distinguishing — so enforcing them differently on the
+ * server is how the two halves would drift apart.
+ *
+ * ── THE CHEAP PATH IS THE COMMON ONE ──────────────────────────────
+ *
+ * `accessSweepState` records the state the members were last swept INTO, and
+ * is written only when a sweep ran to completion. When it already matches
+ * where the tenant is, this returns without reading a single member document
+ * — which is every institute on almost every run. Without it, an hourly sweep
+ * would page every student of every tenant to discover there was nothing to
+ * do.
+ *
+ * A partial run leaves the marker unwritten, so the next run resumes. That is
+ * safe because both directions are idempotent per document: each member is
+ * compared against the state it is being moved to and skipped if already
+ * there.
+ *
+ * Shared by the hourly sweep, the manual reconcile and setAccountStatus, so a
+ * Web Owner disabling a tenant and a window closing on its own reach exactly
+ * the same place by exactly the same code.
+ */
+async function reconcileInstituteAccess(
+  db: FirebaseFirestore.Firestore,
+  instSnap: FirebaseFirestore.DocumentSnapshot,
+  deadline: number,
+): Promise<{ direction: 'suspend' | 'restore' | 'none'; changed: number; finished: boolean }> {
+  // A deleted tenant belongs to the deletion system, not to this one. Its
+  // members are already disabled, and restoring one here would hand sign-in
+  // back to an account someone deleted.
+  if (instSnap.get('lifecycleState') === 'softDeleted') {
+    return { direction: 'none', changed: 0, finished: true };
+  }
+
+  // WHOSE `disabled` IS THIS? The suspend path writes `status: 'disabled'` on
+  // the institute document itself, so reading that field back naively makes
+  // the sweep's own output an input: a lapsed tenant would be permanently off,
+  // because extending its validity would clear the expiry while leaving behind
+  // the `disabled` the sweep had written — and that alone would keep tenantOff
+  // true forever. Renewal would never restore anybody.
+  //
+  // The marker is what separates the two. A `disabled` this sweep wrote is not
+  // a decision, it is the record of one already accounted for here; a
+  // `disabled` with no marker is a person's decision and does count. That
+  // asymmetry is also what makes a manual disable outrank a renewal: extending
+  // the validity of a tenant a Web Owner had switched off by hand leaves it
+  // switched off, which is the right answer.
+  const suspendedByUs = instSnap.get('accessSuspendedReason') === SUSPENDED_BY_TENANT;
+  const disabledByPerson = instSnap.get('status') === 'disabled' && !suspendedByUs;
+  const tenantOff = disabledByPerson || hasExpiredS(instSnap.get('activeUntil'));
+
+  const desired = tenantOff ? 'suspended' : 'active';
+  const swept = instSnap.get('accessSweepState');
+  if (swept === desired) {
+    return { direction: 'none', changed: 0, finished: true };
+  }
+
+  // FIRST RUN ON A HEALTHY TENANT IS FREE. An institute that has never been
+  // swept and is not off has nothing to restore: SUSPENDED_BY_TENANT is
+  // written only by the code below, so before it has ever run there are no
+  // markers to find. Without this, deploying would page every student of every
+  // tenant on the first run to discover exactly that.
+  if (swept === undefined && !tenantOff) {
+    await instSnap.ref.update({ accessSweepState: 'active' });
+    return { direction: 'none', changed: 0, finished: true };
+  }
+
+  const direction = tenantOff ? 'suspend' : 'restore';
+  const adminChanged = await sweepInstituteAdmin(instSnap, direction);
+  const members = await sweepInstituteMembers(db, instSnap.id, direction, deadline);
+
+  // Only on a complete pass. A marker written after a partial sweep would tell
+  // every later run there was nothing left to do, stranding whichever members
+  // the budget did not reach.
+  if (members.finished) {
+    await instSnap.ref.update({ accessSweepState: desired });
+  }
+
+  return {
+    direction,
+    changed: members.changed + (adminChanged ? 1 : 0),
+    finished: members.finished,
+  };
+}
+
+/**
+ * HOURLY, not nightly, and the cadence is doing two jobs.
+ *
+ * It bounds how long an expiry goes unenforced: a window that closes at 14:00
+ * is acted on by 15:00, rather than at the following 02:00. And it is the
+ * backstop for whatever a callable's cascade could not finish inline — a Web
+ * Owner disabling a tenant of ten thousand students gets the admin account off
+ * immediately and the members within the hour, instead of within the day.
+ *
+ * Hourly is affordable because of `accessSweepState`: an institute already in
+ * the state it should be in costs one field comparison and no member reads at
+ * all, so the steady-state run is a single collection read of `institutes`.
+ */
+export const scheduledEnforceTenantAccess = onSchedule(
+  { schedule: 'every 60 minutes', timeZone: 'Etc/UTC', region: 'us-central1', timeoutSeconds: 540 },
+  async () => {
+    const db = getFirestore();
+    const deadline = Date.now() + TENANT_SWEEP_BUDGET_MS;
+
+    // Read every institute rather than querying on `activeUntil`. There are
+    // tens to hundreds of tenants on this platform, the field is a string in
+    // two different shapes, and expiry is decided by hasExpiredS rather than by
+    // a comparison Firestore can index. One whole-collection read an hour is
+    // cheaper than the index and the shape migration it would take to avoid it.
+    const institutes = await db.collection('institutes').get();
+
+    let suspended = 0;
+    let restored = 0;
+    let incomplete = 0;
+
+    for (const instSnap of institutes.docs) {
+      if (Date.now() > deadline) {
+        console.warn('[tenantAccess] budget exhausted — remaining institutes wait for the next run');
+        incomplete++;
+        break;
+      }
+      try {
+        const result = await reconcileInstituteAccess(db, instSnap, deadline);
+        if (result.direction === 'suspend' && result.changed > 0) suspended++;
+        if (result.direction === 'restore' && result.changed > 0) restored++;
+        if (!result.finished) incomplete++;
+      } catch (err) {
+        console.error(`[tenantAccess] institute ${instSnap.id} failed`, err);
+      }
+    }
+
+    console.log(
+      `[tenantAccess] examined=${institutes.size} suspended=${suspended}`
+      + ` restored=${restored} incomplete=${incomplete}`,
+    );
+  },
+);
+
+/**
+ * Bring one institute back the moment its validity is extended.
+ *
+ * Called by the Web Owner's edit and extend sheets after they write a new
+ * `activeUntil`. The hourly sweep reaches the same state on its own — this
+ * exists so a customer who has just renewed is not locked out for up to an
+ * hour afterwards.
+ */
+export const restoreInstituteAccess = onCall<{ instituteId: string }>(
+  CALLABLE_BASE,
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+    if ((request.auth.token.role as string) !== 'webOwner') {
+      throw new HttpsError('permission-denied', 'Web Owner only.');
+    }
+    const { instituteId } = request.data || ({} as { instituteId: string });
+    if (typeof instituteId !== 'string' || !instituteId) {
+      throw new HttpsError('invalid-argument', 'instituteId is required.');
+    }
+
+    const db = getFirestore();
+    const snap = await db.collection('institutes').doc(instituteId).get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Institute not found.');
+
+    const result = await reconcileInstituteAccess(db, snap, Date.now() + TENANT_CALLABLE_BUDGET_MS);
+    console.info(
+      `[tenantAccess] manual reconcile ${instituteId}`
+      + ` direction=${result.direction} changed=${result.changed} finished=${result.finished}`,
+    );
+    return { ok: true, ...result };
   },
 );
 

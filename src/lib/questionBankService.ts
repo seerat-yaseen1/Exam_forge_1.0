@@ -1665,11 +1665,23 @@ export function questionTypeBadge(engine: QuestionEngine, variant: QuestionVaria
   return itemTypeForQuestion(engine, variant)?.badge ?? '—';
 }
 
-/** Colour token for difficulty badge. */
+/**
+ * Colour tokens for a difficulty badge.
+ *
+ * Easy and medium used to be literal hex — `#F0FBF4` on `#C3E8CE`, and
+ * `#FFFBF0` on `#F0DFA0`. Those are pale mint and pale cream, which is
+ * exactly right on the light palette they were sampled from and unreadable
+ * on any of the dark ones: near-white text-adjacent fills that stayed put
+ * while everything around them went dark. Hard was already tokenised, which
+ * is how the row ended up with two badges that followed the theme and one
+ * that did not.
+ */
 export function difficultyColor(d: Difficulty): { bg: string; text: string; border: string } {
-  if (d === 'easy')   return { bg: '#F0FBF4', text: 'var(--ef-success)', border: '#C3E8CE' };
-  if (d === 'hard')   return { bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)' };
-  return                     { bg: '#FFFBF0', text: 'var(--ef-warning-strong)', border: '#F0DFA0' };
+  if (d === 'easy')
+    return { bg: 'var(--ef-success-bg)', text: 'var(--ef-success)', border: 'var(--ef-success-border)' };
+  if (d === 'hard')
+    return { bg: 'var(--ef-danger-bg)', text: 'var(--ef-danger)', border: 'var(--ef-danger-border)' };
+  return { bg: 'var(--ef-warning-bg)', text: 'var(--ef-warning)', border: 'var(--ef-warning-border)' };
 }
 
 // ══════════════════════════════════════════════════════════════════

@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, Check, ChevronRight, Copy, Loader2, RefreshCw } from 'lucide-react';
 import type { Theme } from '../../../lib/themes';
 
@@ -484,6 +484,49 @@ export function EmptyState({
       </p>
       {action && <div className="mt-5">{action}</div>}
     </Card>
+  );
+}
+
+/**
+ * The line that confirms something happened, then leaves.
+ *
+ * Bottom-centre rather than top-right: the action that produced it was
+ * somewhere in the page, and a confirmation that appears in the far corner
+ * is one the eye has to go looking for. Dismissal is the caller's — a toast
+ * that owns its own timer cannot be extended by the next event.
+ */
+export function Toast({ message, tone = 'ink' }: { message: React.ReactNode; tone?: 'ink' | 'success' | 'danger' }) {
+  return (
+    <AnimatePresence>
+      {message && (
+        <motion.div
+          role="status"
+          aria-live="polite"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 14 }}
+          transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed z-50"
+          style={{
+            left: 16,
+            right: 16,
+            bottom: 'calc(20px + env(safe-area-inset-bottom))',
+            maxWidth: 440,
+            marginInline: 'auto',
+            padding: '11px 16px',
+            textAlign: 'center',
+            fontSize: 'var(--ef-text-sm)',
+            borderRadius: 'var(--ef-radius)',
+            boxShadow: 'var(--ef-shadow-lg)',
+            background:
+              tone === 'success' ? 'var(--ef-success)' : tone === 'danger' ? 'var(--ef-danger)' : 'var(--ef-ink)',
+            color: 'var(--ef-surface)',
+          }}
+        >
+          {message}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

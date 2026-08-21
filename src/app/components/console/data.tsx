@@ -229,6 +229,49 @@ export function SearchField({
   );
 }
 
+/**
+ * A wrapping row of filter chips, for a dimension with more values than a
+ * segmented control can hold.
+ *
+ * `Segmented` is right for three or four mutually exclusive views. Question
+ * types are a registry that grows, and the old pages rendered them as a row
+ * of hand-styled buttons that repainted their own border, background and
+ * text colour inline — three colours × two states × two pages.
+ */
+export function FilterChips<T extends string>({
+  value,
+  onChange,
+  options,
+  label,
+}: {
+  value: T;
+  onChange: (value: T) => void;
+  options: Array<{ value: T; label: React.ReactNode; tone?: string }>;
+  label: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex items-center gap-1.5 flex-wrap">
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={o.value || '_all'}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            className="ef-chip"
+            data-tone={on ? (o.tone ?? 'solid') : undefined}
+            style={{ cursor: 'pointer' }}
+            onClick={() => onChange(o.value)}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════════════════════════════
@@ -470,6 +513,7 @@ export function Sheet({
   footer,
   variant = 'side',
   labelledBy,
+  flush = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -480,6 +524,14 @@ export function Sheet({
   /** `side` for a detail panel beside a list; `centre` for a decision. */
   variant?: 'side' | 'centre';
   labelledBy?: string;
+  /**
+   * Hand the body over to the child, padding and scrolling included.
+   *
+   * For content that already owns a full-height layout — the question
+   * editor is a scroll region with its own pinned footer. Nested inside a
+   * padded, scrolling body it gets two scrollbars and double the inset.
+   */
+  flush?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -594,7 +646,7 @@ export function Sheet({
               </div>
             )}
 
-            <div className="ef-sheet__body">{children}</div>
+            <div className={`ef-sheet__body ${flush ? 'ef-sheet__body--flush' : ''}`}>{children}</div>
 
             {footer && <div className="ef-sheet__foot">{footer}</div>}
           </motion.div>

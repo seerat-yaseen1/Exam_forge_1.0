@@ -1093,6 +1093,13 @@
     flex: 1;
   }
 
+  /* The child owns the inset and the scrolling. For a panel whose content is
+     already a full-height layout with its own pinned footer. */
+  .ef-sheet__body--flush {
+    padding: 0;
+    overflow: hidden;
+  }
+
   .ef-sheet__foot {
     display: flex;
     align-items: center;

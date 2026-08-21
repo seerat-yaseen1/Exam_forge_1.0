@@ -576,6 +576,16 @@
     transform: translateX(16px);
   }
 
+  /* A whole row that is a link. The hover is the surface, not an underline:
+     an underline on a two-line block draws a line under half of it. */
+  .ef-report-row {
+    transition: background-color 160ms ease;
+  }
+
+  .ef-report-row:hover {
+    background: var(--ef-canvas-raised);
+  }
+
   /* ── Disclosure ───────────────────────────────────────────────────
      A card that is a closed section until it is opened. The chevron rotates
      rather than swapping glyphs, so the control reads as the same object in
@@ -738,6 +748,13 @@
   .ef-input[type='search']::-webkit-search-decoration {
     -webkit-appearance: none;
     appearance: none;
+  }
+
+  /* The show/hide control inside a password field. */
+  @media (pointer: coarse) {
+    .ef-reveal {
+      min-width: var(--ef-touch);
+    }
   }
 
   /* ── Theme swatches ───────────────────────────────────────────── */
@@ -1414,6 +1431,17 @@
     color: var(--ef-ink);
     text-decoration: none;
     border-radius: var(--ef-radius-sm);
+  }
+
+  /* On a phone the wordmark is hidden and the mark alone is left, which made
+     the whole link 22px wide — a 22×44 target, narrower than a fingertip. The
+     inline padding gives it a real hit area without moving the mark, since
+     the negative margin pulls the box back to where it was. */
+  @media (pointer: coarse) {
+    .ef-brand {
+      padding-inline: 11px;
+      margin-inline: -11px;
+    }
   }
 
   .ef-brand__word {

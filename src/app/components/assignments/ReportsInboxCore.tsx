@@ -9,7 +9,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Flag, Loader2, AlertTriangle, ChevronRight } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Flag } from 'lucide-react';
+import {
+  Card, EmptyState, ErrorBanner, LoadingBlock, PageHeader, PageShell, StatRow, StatTile,
+} from '../console/ui';
+import { FilterChips, Toolbar } from '../console/data';
 import {
   listAllReports,
   listReportsByInstitute,
@@ -51,9 +55,11 @@ interface Props {
   scope: Scope;
   /** Build the URL to the per-assessment roster (Reports tab). */
   rosterPathFor: (assessmentId: string) => string;
+  /** Which console this is, for the page eyebrow. */
+  role: string;
 }
 
-export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
+export function ReportsInboxCore({ scope, rosterPathFor, role }: Props) {
   const [loading, setLoading]   = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [reports, setReports]   = useState<QuestionReport[]>([]);
@@ -103,109 +109,133 @@ export function ReportsInboxCore({ scope, rosterPathFor }: Props) {
       .sort((a, b) => b.reports.length - a.reports.length);
   }, [filtered]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 size={16} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-      </div>
-    );
-  }
-  if (errorMsg) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-2">
-        <AlertTriangle size={16} strokeWidth={1} style={{ color: 'var(--ef-danger)' }} />
-        <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{errorMsg}</p>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%', padding: '24px' }}>
-      <div className="flex items-center gap-3 mb-5">
-        <Flag size={14} strokeWidth={1.5} style={{ color: 'var(--ef-ink)' }} />
-        <p className="text-xs" style={{ color: 'var(--ef-ink)', letterSpacing: '0.08em' }}>QUESTION REPORTS</p>
-        <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)' }}>
-          {counts.open} open · {counts.fixed} fixed · {counts.dismissed} dismissed
-        </span>
-      </div>
+    <PageShell>
+      <PageHeader
+        eyebrow={
+          <>
+            <span className="ef-eyebrow-dot" />
+            {role}
+          </>
+        }
+        title="Reported questions"
+        subtitle="Candidates flagging a question mid-exam. Grouped by the assessment they were sitting, because a question that is wrong is wrong for everyone in that room — and fixing it is one decision, not twelve."
+      />
 
-      <div className="flex items-center gap-1 mb-4">
-        {(['open', 'reviewed', 'fixed', 'dismissed', 'all'] as const).map((tab) => {
-          const isActive = filter === tab;
-          const count = tab === 'all' ? counts.all : counts[tab];
-          return (
-            <button key={tab} onClick={() => setFilter(tab)}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-              style={{
-                borderRadius: 2, cursor: 'pointer',
-                background: isActive ? 'var(--ef-ink)' : 'transparent',
-                color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
-                border: isActive ? '1px solid var(--ef-ink)' : '1px solid var(--ef-border)',
-              }}>
-              {tab === 'all' ? 'All' : STATUS_LABEL[tab]}
-              <span style={{
-                background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--ef-border-subtle)',
-                color: isActive ? 'var(--ef-surface)' : 'var(--ef-text-muted)',
-                borderRadius: 2, padding: '0 4px', fontSize: 10,
-              }}>{count}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {byAssessment.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3"
-          style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
-          <Flag size={20} strokeWidth={1} style={{ color: 'var(--ef-text-muted)' }} />
-          <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-            No reports {filter !== 'all' ? `with status "${STATUS_LABEL[filter]}"` : 'visible to you'}.
-          </p>
-        </div>
+      {loading ? (
+        <LoadingBlock label="Loading reports…" rows={3} />
+      ) : errorMsg ? (
+        <ErrorBanner message={errorMsg} />
       ) : (
-        <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
-          {byAssessment.map((entry, idx) => {
-            const reasonCounts = entry.reports.reduce<Record<ReportReason, number>>((acc, r) => {
-              acc[r.reason] = (acc[r.reason] ?? 0) + 1;
-              return acc;
-            }, {} as Record<ReportReason, number>);
-            return (
-              <Link key={entry.assessmentId} to={rosterPathFor(entry.assessmentId)}
-                className="flex items-start gap-3 px-5 py-4"
-                style={{
-                  borderTop: idx === 0 ? 'none' : '1px solid var(--ef-border-subtle)',
-                  textDecoration: 'none',
-                }}>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{entry.title}</p>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                      {entry.reports.length} report{entry.reports.length !== 1 ? 's' : ''}
+        <>
+          <div style={{ marginBottom: 26 }}>
+            <StatRow>
+              <StatTile
+                label="Open"
+                value={counts.open}
+                icon={<Flag size={13} strokeWidth={1.7} />}
+                tone={counts.open > 0 ? 'warning' : undefined}
+                sub={counts.open > 0 ? 'awaiting a decision' : 'nothing waiting'}
+                hint="Reports nobody has ruled on yet. These are the ones with a candidate on the other end."
+              />
+              <StatTile
+                label="Fixed"
+                value={counts.fixed}
+                icon={<CheckCircle2 size={13} strokeWidth={1.7} />}
+                sub="question corrected"
+                hint="The report was right and the question was changed."
+              />
+              <StatTile
+                label="Dismissed"
+                value={counts.dismissed}
+                sub="no change needed"
+                hint="Reviewed and found not to be a problem."
+              />
+              <StatTile
+                label="All reports"
+                value={counts.all}
+                sub="all time"
+                hint="Everything visible to you, at any status."
+              />
+            </StatRow>
+          </div>
+
+          <Toolbar>
+            <FilterChips
+              label="Report status"
+              value={filter}
+              onChange={(f) => setFilter(f as ReportStatus | 'all')}
+              options={(['open', 'reviewed', 'fixed', 'dismissed', 'all'] as const).map((tab) => ({
+                value: tab,
+                label: `${tab === 'all' ? 'All' : STATUS_LABEL[tab]} ${tab === 'all' ? counts.all : counts[tab]}`,
+              }))}
+            />
+          </Toolbar>
+
+          {byAssessment.length === 0 ? (
+            <EmptyState
+              icon={<Flag size={28} strokeWidth={1.1} />}
+              title={filter === 'open' ? 'Nothing to rule on' : 'No reports here'}
+              body={
+                filter === 'all'
+                  ? 'No candidate has flagged a question in anything visible to you.'
+                  : `No report currently has the status "${STATUS_LABEL[filter as ReportStatus]}".`
+              }
+            />
+          ) : (
+            <Card padded={false}>
+              {byAssessment.map((entry, idx) => {
+                const reasonCounts = entry.reports.reduce<Record<ReportReason, number>>((acc, r) => {
+                  acc[r.reason] = (acc[r.reason] ?? 0) + 1;
+                  return acc;
+                }, {} as Record<ReportReason, number>);
+                const open = entry.reports.filter((r) => r.status === 'open').length;
+                return (
+                  <Link
+                    key={entry.assessmentId}
+                    to={rosterPathFor(entry.assessmentId)}
+                    className="ef-report-row flex items-center gap-3"
+                    style={{
+                      padding: '14px var(--ef-pad-card)',
+                      borderTop: idx === 0 ? 'none' : '1px solid var(--ef-border-subtle)',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <span className="flex-1 min-w-0">
+                      <span className="ef-t-sm ef-ink block" style={{ fontWeight: 500 }}>
+                        {entry.title}
+                      </span>
+                      <span className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
+                        <span className="ef-t-xs ef-muted">
+                          {entry.reports.length} report{entry.reports.length === 1 ? '' : 's'}
+                        </span>
+                        {Object.entries(reasonCounts).map(([reason, count]) => (
+                          <span key={reason} className="ef-chip ef-chip--sm">
+                            {REASON_LABEL[reason as ReportReason]} · {count}
+                          </span>
+                        ))}
+                        {open > 0 && (
+                          <span
+                            className="ef-chip ef-chip--sm"
+                            style={{
+                              background: STATUS_COLOR.open.bg,
+                              borderColor: STATUS_COLOR.open.border,
+                              color: STATUS_COLOR.open.text,
+                            }}
+                          >
+                            {open} open
+                          </span>
+                        )}
+                      </span>
                     </span>
-                    {Object.entries(reasonCounts).map(([reason, count]) => (
-                      <span key={reason} className="text-xs px-2 py-0.5"
-                        style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)' }}>
-                        {REASON_LABEL[reason as ReportReason]} · {count}
-                      </span>
-                    ))}
-                    {entry.reports.some((r) => r.status === 'open') && (
-                      <span className="text-xs px-2 py-0.5"
-                        style={{
-                          background: STATUS_COLOR.open.bg,
-                          border: `1px solid ${STATUS_COLOR.open.border}`,
-                          color: STATUS_COLOR.open.text,
-                          borderRadius: 2,
-                        }}>
-                        {entry.reports.filter((r) => r.status === 'open').length} open
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ChevronRight size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', marginTop: 4 }} />
-              </Link>
-            );
-          })}
-        </div>
+                    <ChevronRight size={16} strokeWidth={1.7} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
+                  </Link>
+                );
+              })}
+            </Card>
+          )}
+        </>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -65,8 +65,8 @@ function SkeletonRow() {
       <td className="px-5 py-4" style={{ width: 36 }} />
       {[32, 14, 16, 24, 0].map((w, i) => (
         <td key={i} className="px-5 py-4">
-          {w > 0 && <div className="h-3 rounded mb-1" style={{ width: `${w * 4}px`, background: '#EEECEA', animation: 'pulse 1.5s ease-in-out infinite' }} />}
-          {i < 2 && <div className="h-2.5 w-16 rounded mt-1" style={{ background: '#F3F2EF', animation: 'pulse 1.5s ease-in-out infinite' }} />}
+          {w > 0 && <div className="h-3 rounded mb-1" style={{ width: `${w * 4}px`, background: 'var(--ef-track)', animation: 'pulse 1.5s ease-in-out infinite' }} />}
+          {i < 2 && <div className="h-2.5 w-16 rounded mt-1" style={{ background: 'var(--ef-border-subtle)', animation: 'pulse 1.5s ease-in-out infinite' }} />}
         </td>
       ))}
     </tr>
@@ -542,7 +542,7 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                     <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
                       style={student.status === 'active'
                         ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
-                        : { background: '#F5F5F3', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+                        : { background: 'var(--ef-track)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                       <span style={{
                         width: 5, height: 5, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
                         background: student.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',

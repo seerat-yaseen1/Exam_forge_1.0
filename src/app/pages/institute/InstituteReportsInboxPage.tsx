@@ -10,6 +10,7 @@ export function InstituteReportsInboxPage() {
   return (
     <ReportsInboxCore
       scope={{ kind: 'institute', instituteId: session.instituteId }}
+      role="Institute admin"
       rosterPathFor={(id) => `/institute/assignments/${id}/roster`}
     />
   );

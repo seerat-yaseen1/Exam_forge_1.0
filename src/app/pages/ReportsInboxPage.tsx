@@ -8,6 +8,7 @@ export function ReportsInboxPage() {
   return (
     <ReportsInboxCore
       scope={{ kind: 'web_owner' }}
+      role="Web owner"
       rosterPathFor={(id) => `/dashboard/assignments/${id}/roster`}
     />
   );

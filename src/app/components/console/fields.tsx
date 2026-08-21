@@ -113,7 +113,7 @@ export function PasswordField({ label, hint, footer, id, ...rest }: PasswordFiel
           id={fieldId}
           type={visible ? 'text' : 'password'}
           className="ef-input"
-          style={{ paddingRight: 40 }}
+          style={{ paddingRight: 44 }}
           {...rest}
         />
         <button
@@ -124,7 +124,10 @@ export function PasswordField({ label, hint, footer, id, ...rest }: PasswordFiel
           tabIndex={-1}
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? 'Hide password' : 'Show password'}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
+          // `ef-reveal` widens it to a real target under a coarse pointer.
+          // The global touch rule sets a min-HEIGHT only, which left this one
+          // 22px wide — tall enough and too narrow to hit.
+          className="ef-reveal absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
           style={{
             background: 'transparent',
             border: 0,

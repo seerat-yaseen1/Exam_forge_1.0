@@ -87,7 +87,7 @@ function TagInput({
       >
         {tags.map((t, i) => (
           <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5"
-            style={{ background: '#EEECEA', color: '#2C2C2A', borderRadius: 2 }}>
+            style={{ background: 'var(--ef-track)', color: 'var(--ef-ink)', borderRadius: 2 }}>
             {t}
             <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(i); }}
               style={{ color: 'var(--ef-text-muted)', lineHeight: 1 }}>
@@ -267,7 +267,7 @@ export function AddStudentDrawer({ open, onClose, onCreated, instituteId, instit
                 <div className="flex items-center gap-2 px-3 py-2.5"
                   style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
                   <span className="text-xs px-2 py-0.5"
-                    style={{ background: '#EEECEA', color: 'var(--ef-text-subtle)', borderRadius: 2, letterSpacing: '0.04em' }}>
+                    style={{ background: 'var(--ef-track)', color: 'var(--ef-text-subtle)', borderRadius: 2, letterSpacing: '0.04em' }}>
                     Student
                   </span>
                   <span className="text-xs ml-auto" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>FIXED</span>

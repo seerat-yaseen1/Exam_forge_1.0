@@ -11,8 +11,8 @@
  */
 
 import React from 'react';
-import { motion } from 'motion/react';
-import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { AlertTriangle, Check, ChevronRight, Copy, Loader2, RefreshCw } from 'lucide-react';
 import type { Theme } from '../../../lib/themes';
 
 // ══════════════════════════════════════════════════════════════════
@@ -96,23 +96,34 @@ export function SectionHeading({
   count,
   action,
   hint,
+  description,
 }: {
   label: string;
   count?: number;
   action?: React.ReactNode;
+  /** A clarification for the count, as a tooltip. Not shown as text. */
   hint?: string;
+  /** One line under the heading, always visible. For a rule the reader needs. */
+  description?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 mb-3.5">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className="ef-eyebrow">{label}</span>
-        {count !== undefined && (
-          <span className="ef-chip ef-chip--sm" title={hint}>
-            {count}
-          </span>
-        )}
+    <div className="mb-3.5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="ef-eyebrow">{label}</span>
+          {count !== undefined && (
+            <span className="ef-chip ef-chip--sm" title={hint}>
+              {count}
+            </span>
+          )}
+        </div>
+        {action}
       </div>
-      {action}
+      {description && (
+        <p className="ef-t-xs ef-muted" style={{ marginTop: 6, maxWidth: '64ch' }}>
+          {description}
+        </p>
+      )}
     </div>
   );
 }
@@ -146,6 +157,54 @@ export function Card({
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * A section that is closed until asked for.
+ *
+ * ── WHAT IT IS FOR ────────────────────────────────────────────────
+ * Controls that are important but consulted rarely — an erasure policy, a
+ * trash can, an audit log. Left expanded they push the page's actual subject
+ * below the fold and get skimmed past daily until they are invisible; hidden
+ * behind a route they are forgotten entirely. Closed-but-named is the
+ * position that survives both: the reader sees that it exists and what it is,
+ * and pays for it only when they want it.
+ *
+ * Built on <details>, so it works before hydration, is findable by the
+ * browser's own in-page search, and needs no state.
+ */
+export function Disclosure({
+  label,
+  description,
+  icon,
+  defaultOpen = false,
+  children,
+}: {
+  label: string;
+  description?: React.ReactNode;
+  icon?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="ef-disclosure" open={defaultOpen}>
+      <summary className="ef-disclosure__summary">
+        <ChevronRight size={14} strokeWidth={1.8} className="ef-disclosure__chevron" aria-hidden="true" />
+        {icon && <span style={{ display: 'flex', color: 'var(--ef-text-muted)' }}>{icon}</span>}
+        <span style={{ minWidth: 0 }}>
+          <span className="ef-t-sm ef-ink block" style={{ fontWeight: 500 }}>
+            {label}
+          </span>
+          {description && (
+            <span className="ef-t-xs ef-muted block" style={{ marginTop: 2 }}>
+              {description}
+            </span>
+          )}
+        </span>
+      </summary>
+      <div className="ef-disclosure__body">{children}</div>
+    </details>
   );
 }
 
@@ -194,6 +253,83 @@ export function Button({
   );
 }
 
+/**
+ * A switch, for a setting that takes effect the moment you flip it.
+ *
+ * ── WHY A SWITCH AND NOT A CHECKBOX ───────────────────────────────
+ * A checkbox is a value in a form you are going to submit. These are not:
+ * each one writes immediately, which is the distinction the two controls
+ * carry. Built on `role="switch"` so a screen reader says "on"/"off" rather
+ * than "checked", which is the same distinction said out loud.
+ *
+ * ── THE LOCKED STATE SAYS WHY ─────────────────────────────────────
+ * Several of these depend on another: faculty cannot be allowed to create
+ * students at an institute whose admin cannot. A greyed-out switch with no
+ * explanation is read as a bug; `lockedBecause` replaces the description
+ * with the sentence that unlocks it.
+ */
+export function Toggle({
+  label,
+  description,
+  checked,
+  onChange,
+  busy = false,
+  lockedBecause,
+  icon,
+}: {
+  label: string;
+  description?: React.ReactNode;
+  checked: boolean;
+  onChange: () => void;
+  busy?: boolean;
+  /** Present ⇒ the switch is unavailable, and this says what would free it. */
+  lockedBecause?: string;
+  icon?: React.ReactNode;
+}) {
+  const locked = !!lockedBecause;
+  return (
+    <div
+      className="ef-toggle-row flex items-start justify-between gap-4"
+      data-locked={locked ? '' : undefined}
+    >
+      <div className="flex items-start gap-2.5 min-w-0">
+        {icon && (
+          <span
+            style={{ color: checked && !locked ? 'var(--ef-success)' : 'var(--ef-text-muted)', display: 'flex', marginTop: 1 }}
+          >
+            {icon}
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="ef-t-sm ef-ink" style={{ fontWeight: 500 }}>
+            {label}
+          </p>
+          {(lockedBecause || description) && (
+            <p className="ef-t-xs ef-muted" style={{ marginTop: 3, lineHeight: 'var(--ef-leading-relaxed)' }}>
+              {lockedBecause ?? description}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={busy || locked}
+        onClick={onChange}
+        className="ef-switch"
+        data-on={checked ? '' : undefined}
+      >
+        <span className="ef-switch__knob">
+          {busy && <Loader2 size={9} strokeWidth={2.4} className="animate-spin" />}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export type ChipTone = 'muted' | 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'solid';
 
 export function Chip({
@@ -214,6 +350,77 @@ export function Chip({
       {icon}
       {children}
     </span>
+  );
+}
+
+/**
+ * A short value that exists to be sent to someone — an institute code, an
+ * exam code, an ID.
+ *
+ * ── WHY IT IS A BUTTON AND NOT TEXT ───────────────────────────────
+ * These are read off the screen and typed into a message. Selecting six
+ * monospace characters with a mouse without catching the label beside them is
+ * fiddly on a laptop and genuinely hard on a phone, so every admin who has
+ * ever shared an institute code has done it by squinting and retyping. One
+ * tap is the whole feature.
+ *
+ * The confirmation replaces the icon rather than appearing next to it: the
+ * control must not change width when it succeeds, or the thing under your
+ * cursor moves at the moment you are looking at it.
+ */
+export function CopyChip({
+  value,
+  label,
+  mono = true,
+}: {
+  value: string;
+  /** What is being copied, for the screen reader and the tooltip. */
+  label: string;
+  mono?: boolean;
+}) {
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      // Clipboard access can be refused (insecure origin, denied permission).
+      // Selecting the text still works, so there is nothing to report — an
+      // error toast here would be louder than the feature.
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={copied ? `${label} copied` : `Copy ${label.toLowerCase()}`}
+      aria-label={`Copy ${label.toLowerCase()}: ${value}`}
+      className="ef-chip"
+      data-tone={copied ? 'success' : undefined}
+      style={{
+        cursor: 'pointer',
+        fontFamily: mono ? 'ui-monospace, monospace' : undefined,
+        letterSpacing: mono ? '0.1em' : undefined,
+      }}
+    >
+      {value}
+      {copied ? (
+        <Check size={11} strokeWidth={2} />
+      ) : (
+        <Copy size={11} strokeWidth={1.7} style={{ opacity: 0.65 }} />
+      )}
+      <span className="sr-only" role="status">
+        {copied ? 'Copied' : ''}
+      </span>
+    </button>
   );
 }
 
@@ -355,6 +562,77 @@ export function EmptyState({
       {action && <div className="mt-5">{action}</div>}
     </Card>
   );
+}
+
+/**
+ * The line that confirms something happened, then leaves.
+ *
+ * Bottom-centre rather than top-right: the action that produced it was
+ * somewhere in the page, and a confirmation that appears in the far corner
+ * is one the eye has to go looking for. Dismissal is the caller's — a toast
+ * that owns its own timer cannot be extended by the next event.
+ */
+export function Toast({ message, tone = 'ink' }: { message: React.ReactNode; tone?: 'ink' | 'success' | 'danger' }) {
+  return (
+    <AnimatePresence>
+      {message && (
+        <motion.div
+          role="status"
+          aria-live="polite"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 14 }}
+          transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed z-50"
+          style={{
+            left: 16,
+            right: 16,
+            bottom: 'calc(20px + env(safe-area-inset-bottom))',
+            maxWidth: 440,
+            marginInline: 'auto',
+            padding: '11px 16px',
+            textAlign: 'center',
+            fontSize: 'var(--ef-text-sm)',
+            borderRadius: 'var(--ef-radius)',
+            boxShadow: 'var(--ef-shadow-lg)',
+            background:
+              tone === 'success' ? 'var(--ef-success)' : tone === 'danger' ? 'var(--ef-danger)' : 'var(--ef-ink)',
+            color: 'var(--ef-surface)',
+          }}
+        >
+          {message}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/**
+ * A toast and the function that raises it, so a page does not carry the
+ * timer, the state and the element in three places.
+ *
+ * Returns the element rather than rendering into a portal, because where a
+ * page puts its confirmations is the page's business — and a provider at the
+ * app root would be a lot of machinery for a line of text.
+ */
+export function useToast() {
+  const [notice, setNotice] = React.useState<{ text: string; tone: 'ink' | 'success' | 'danger' } | null>(null);
+
+  React.useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const say = React.useCallback((text: string, tone: 'ink' | 'success' | 'danger' = 'ink') => {
+    setNotice({ text, tone });
+  }, []);
+
+  return {
+    say,
+    /** Render this once, anywhere in the page. */
+    toast: <Toast message={notice?.text ?? ''} tone={notice?.tone} />,
+  };
 }
 
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {

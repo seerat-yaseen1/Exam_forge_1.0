@@ -1975,7 +1975,10 @@ export function statusColor(status: AssessmentStatus): {
     case 'active':
       return { bg: 'var(--ef-success-bg)', text: 'var(--ef-success-strong)', border: 'var(--ef-success-border)' };
     case 'closed':
-      return { bg: '#F5F5F5', text: 'var(--ef-text-muted)', border: 'var(--ef-border-muted)' };
+      // `#F5F5F5` here was the last literal in this function: a light grey
+      // that stayed light on every dark theme, so a closed assessment's chip
+      // was the one white rectangle in an otherwise dark row.
+      return { bg: 'var(--ef-track)', text: 'var(--ef-text-muted)', border: 'var(--ef-border-muted)' };
   }
 }
 

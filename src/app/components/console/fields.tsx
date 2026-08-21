@@ -1,12 +1,13 @@
 /**
- * Form fields for the student's four credential screens.
+ * Form fields for every credential screen in the product.
  *
  * Login, first-login change, reset and the security page each carried their own
  * copy of the same `inputStyle` object, the same pair of focus/blur handlers
- * that repainted the border by hand, and — in three of them — the same
- * `StrengthBar`. Four copies of a control is four places for a theme token to
- * be missed, and the hand-rolled focus handling meant `:focus-visible` never
- * applied to any of them.
+ * that repainted the border by hand, and — in most of them — the same
+ * `StrengthBar`. Written once per screen, per role, that came to sixteen
+ * copies of one text field: sixteen places for a theme token to be missed,
+ * and the hand-rolled focus handling meant `:focus-visible` never applied to
+ * any of them.
  *
  * The styling now lives in `.ef-input` (styles/console.css). These components
  * are what is left once it does: a label, a field, and the one piece of real
@@ -46,6 +47,46 @@ export function Field({ label, hint, id, className = '', ...rest }: FieldProps) 
   );
 }
 
+// ── Labelled select ───────────────────────────────────────────────
+
+/**
+ * A `<select>`, not a custom listbox.
+ *
+ * The native control gets the platform's own picker on a phone — a
+ * full-height wheel that beats any div a web app can build at that size —
+ * and it is already themed: palette.css styles `select` alongside the text
+ * inputs, so the two match without this component doing anything.
+ */
+export function SelectField({
+  label,
+  hint,
+  id,
+  children,
+  ...rest
+}: React.SelectHTMLAttributes<HTMLSelectElement> & { label: string; hint?: React.ReactNode }) {
+  const generated = useId();
+  const fieldId = id ?? generated;
+  return (
+    <div>
+      <label
+        htmlFor={fieldId}
+        className="block mb-2"
+        style={{ fontSize: 11.5, color: 'var(--ef-text-subtle)', letterSpacing: '0.04em' }}
+      >
+        {label}
+      </label>
+      <select id={fieldId} style={{ width: '100%' }} {...rest}>
+        {children}
+      </select>
+      {hint && (
+        <p className="mt-1.5" style={{ fontSize: 11, color: 'var(--ef-text-muted)' }}>
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Password, with a reveal toggle ────────────────────────────────
 
 type PasswordFieldProps = Omit<FieldProps, 'type'> & {
@@ -72,7 +113,7 @@ export function PasswordField({ label, hint, footer, id, ...rest }: PasswordFiel
           id={fieldId}
           type={visible ? 'text' : 'password'}
           className="ef-input"
-          style={{ paddingRight: 40 }}
+          style={{ paddingRight: 44 }}
           {...rest}
         />
         <button
@@ -83,7 +124,10 @@ export function PasswordField({ label, hint, footer, id, ...rest }: PasswordFiel
           tabIndex={-1}
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? 'Hide password' : 'Show password'}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
+          // `ef-reveal` widens it to a real target under a coarse pointer.
+          // The global touch rule sets a min-HEIGHT only, which left this one
+          // 22px wide — tall enough and too narrow to hit.
+          className="ef-reveal absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
           style={{
             background: 'transparent',
             border: 0,

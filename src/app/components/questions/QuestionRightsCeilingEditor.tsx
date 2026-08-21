@@ -6,7 +6,8 @@
 // here; the server re-clamps on every write.
 
 import { useState } from 'react';
-import { Loader2, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
+import { Button, Card, Toggle } from '../console/ui';
 import {
   setInstituteQuestionRightsCeiling,
   type QuestionRightsCeiling,
@@ -74,90 +75,66 @@ export function QuestionRightsCeilingEditor({
 
   return (
     <div>
-      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-        The maximum question rights this institute may hold, and — per right — the modes it may grant to its faculty.
-        Everything is off by default. The institute admin can grant faculty rights only at or below this ceiling.
+      <p className="ef-t-sm ef-muted" style={{ marginBottom: 14, lineHeight: 'var(--ef-leading-relaxed)' }}>
+        The most this institute may hold, and — per right — the modes it may pass on to its
+        faculty. Everything is off by default: the institute admin can grant a faculty member
+        a right only at or below this line.
       </p>
 
-      {RIGHT_NAMES.map((r) => {
-        const c = ceiling[r];
-        return (
-          <div
-            key={r}
-            className="px-3 py-3 md:px-4 mb-2"
-            style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{RIGHT_LABEL[r]}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{RIGHT_HINT[r]}</p>
-              </div>
-              <button
-                onClick={() => toggleAllowed(r)}
-                disabled={saving}
-                className="flex items-center gap-2 text-xs px-3 py-1.5 transition-all select-none flex-shrink-0"
-                style={{
-                  border: `1px solid ${c.allowed ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
-                  borderRadius: 2,
-                  background: c.allowed ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
-                  color: c.allowed ? 'var(--ef-success)' : 'var(--ef-text-muted)',
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                }}
-              >
-                <span style={{
-                  display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-                  background: c.allowed ? 'var(--ef-success)' : 'var(--ef-track)',
-                  alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
-                  justifyContent: c.allowed ? 'flex-end' : 'flex-start',
-                }}>
-                  <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: 'var(--ef-surface)' }} />
-                </span>
-                {c.allowed ? 'Allowed' : 'Off'}
-              </button>
+      <Card padded={false} style={{ marginBottom: 16 }}>
+        {RIGHT_NAMES.map((r) => {
+          const c = ceiling[r];
+          return (
+            <div key={r}>
+              <Toggle
+                label={RIGHT_LABEL[r]}
+                description={RIGHT_HINT[r]}
+                checked={c.allowed}
+                busy={saving}
+                onChange={() => toggleAllowed(r)}
+              />
+              {/* Grantable modes — only meaningful when the right is allowed. */}
+              {c.allowed && (
+                <div
+                  className="flex items-center gap-2 flex-wrap"
+                  style={{ padding: '0 var(--ef-pad-card) 14px' }}
+                >
+                  <span className="ef-t-xs ef-muted">Faculty may be granted this as:</span>
+                  {(['direct', 'request'] as QuestionRightMode[]).map((mode) => {
+                    const on = c.modes.includes(mode);
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        className="ef-chip"
+                        data-tone={on ? 'success' : undefined}
+                        aria-pressed={on}
+                        disabled={saving}
+                        onClick={() => toggleMode(r, mode)}
+                        style={{ cursor: saving ? 'not-allowed' : 'pointer' }}
+                        title={
+                          mode === 'request'
+                            ? 'The faculty member raises a request; the institute admin approves it.'
+                            : 'The faculty member acts immediately.'
+                        }
+                      >
+                        {mode === 'direct' ? 'Direct' : 'By approval'}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+          );
+        })}
+      </Card>
 
-            {/* Grantable modes — only meaningful when the right is allowed */}
-            {c.allowed && (
-              <div className="flex items-center gap-2 mt-3 pl-0.5">
-                <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Grantable to faculty as:</span>
-                {(['direct', 'request'] as QuestionRightMode[]).map((mode) => {
-                  const on = c.modes.includes(mode);
-                  return (
-                    <button
-                      key={mode}
-                      onClick={() => toggleMode(r, mode)}
-                      disabled={saving}
-                      className="text-xs px-2.5 py-1 transition-all select-none"
-                      style={{
-                        border: `1px solid ${on ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
-                        borderRadius: 2,
-                        background: on ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
-                        color: on ? 'var(--ef-success)' : 'var(--ef-text-muted)',
-                        cursor: saving ? 'not-allowed' : 'pointer',
-                      }}
-                      title={mode === 'request' ? 'Request mode requires the approval workflow (coming in a later phase)' : undefined}
-                    >
-                      {mode === 'direct' ? 'Direct' : 'Request'}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      <div className="flex items-center gap-3 mt-4">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-80"
-          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}
-        >
-          {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} strokeWidth={2} />}
+      <div className="flex items-center gap-3">
+        <Button variant="primary" onClick={save} loading={saving}>
+          {!saving && <Check size={13} strokeWidth={2} />}
           Save ceiling
-        </button>
-        {saved && <span className="text-xs" style={{ color: 'var(--ef-success)' }}>Saved.</span>}
+        </Button>
+        {saved && <span className="ef-t-sm" style={{ color: 'var(--ef-success)' }}>Saved.</span>}
       </div>
     </div>
   );

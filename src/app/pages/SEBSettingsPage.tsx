@@ -19,13 +19,14 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router';
-import { motion } from 'motion/react';
 import { formatDateTime } from '../../lib/dateFormat';
 import {
-  Shield, Loader2, AlertTriangle, Plus, Trash2, Eye, EyeOff,
-  CheckCircle2, ArrowRight, KeyRound, Upload, FileDown,
+  Plus, Trash2, Eye, EyeOff, CheckCircle2, KeyRound, Upload, FileDown, Loader2,
 } from 'lucide-react';
+import {
+  Button, Card, EmptyState, ErrorBanner, LoadingBlock, PageHeader, PageShell,
+  SectionHeading,
+} from '../components/console/ui';
 import {
   getSEBSettings,
   setSEBSettings,
@@ -43,7 +44,6 @@ function maskKey(key: string): string {
 }
 
 export function SEBSettingsPage() {
-  const navigate = useNavigate();
 
   const [settings, setSettings] = useState<SEBPlatformSettings | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -146,191 +146,200 @@ export function SEBSettingsPage() {
   }, []);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-      className="px-8 py-10"
-      style={{ maxWidth: 800, margin: '0 auto' }}
-    >
-      {/* Header */}
-      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
-        <div className="flex items-center gap-2 mb-2">
-          <Shield size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />
-          <p className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>
-            PLATFORM SECURITY
-          </p>
-        </div>
-        <h1 className="text-2xl font-light mb-1" style={{ color: 'var(--ef-ink)', letterSpacing: '0.01em' }}>
-          Safe Exam Browser
-        </h1>
-        <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-          Config Keys accepted by SEB verification. A key is the checksum of a .seb
-          config's settings — it identifies exactly one unmodified configuration.
-        </p>
-      </div>
+    <PageShell narrow>
+      <PageHeader
+        eyebrow={
+          <>
+            <span className="ef-eyebrow-dot" />
+            Platform security
+          </>
+        }
+        title="Safe Exam Browser"
+        subtitle="The Config Keys SEB verification accepts. A key is the checksum of one .seb config's settings — it identifies exactly one unmodified configuration, on any SEB build or operating system."
+      />
 
       {/* Authority note — Stage 4 (Batch 2): this document IS the source of
           truth; SEB_CONFIG_KEYS on Vercel is only an emergency fallback. */}
-      <div className="flex items-start gap-3 px-4 py-3 mb-6"
-        style={{ background: 'var(--ef-success-bg)', border: '1px solid var(--ef-success-border)', borderRadius: 2 }}>
-        <CheckCircle2 size={13} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0, marginTop: 1 }} />
-        <p className="text-xs" style={{ color: 'var(--ef-success-strong)', lineHeight: 1.6 }}>
-          <strong>This page is authoritative.</strong> Verification reads these keys
-          directly (cached briefly — changes are live within ~2 minutes, no redeploy).
-          The SEB_CONFIG_KEYS environment variable on Vercel now serves only as an
-          emergency fallback if this document is unreachable — keep one known-good key
-          in it. Per-exam key overrides, when set in the assessment builder, take
-          precedence over this list for that exam.
-        </p>
+      <div
+        className="flex items-start gap-3"
+        style={{
+          padding: '12px 14px',
+          marginBottom: 26,
+          background: 'var(--ef-success-bg)',
+          border: '1px solid var(--ef-success-border)',
+          borderRadius: 'var(--ef-radius-sm)',
+        }}
+      >
+        <CheckCircle2 size={15} strokeWidth={1.7} style={{ color: 'var(--ef-success)', flexShrink: 0, marginTop: 1 }} />
+        <div>
+          <p className="ef-t-sm ef-ink" style={{ fontWeight: 500 }}>
+            This page is authoritative
+          </p>
+          <p className="ef-t-xs ef-muted" style={{ marginTop: 3, lineHeight: 'var(--ef-leading-relaxed)' }}>
+            Verification reads these keys directly — changes are live within about two
+            minutes, with no redeploy. The SEB_CONFIG_KEYS environment variable on Vercel
+            is now only an emergency fallback if this document is unreachable, so keep one
+            known-good key in it. A per-exam override set in the assessment builder takes
+            precedence over this list for that exam.
+          </p>
+        </div>
       </div>
 
-      {loading && (
-        <div className="flex flex-col items-center py-24">
-          <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-          <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)' }}>Loading SEB settings…</p>
-        </div>
-      )}
+      {loading && <LoadingBlock label="Loading SEB settings…" rows={2} />}
 
-      {!loading && loadError && (
-        <div className="flex items-center gap-3 px-4 py-3"
-          style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
-          <AlertTriangle size={13} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
-          <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{loadError}</p>
-        </div>
-      )}
+      {!loading && loadError && <ErrorBanner message={loadError} />}
 
       {!loading && !loadError && settings && (
-        <>
-          {/* Key list */}
-          <div className="mb-8">
-            <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-              ACTIVE CONFIG KEYS ({settings.configKeys.length})
-            </p>
+        <div className="flex flex-col" style={{ gap: 30 }}>
+          <section>
+            <SectionHeading
+              label="Active config keys"
+              count={settings.configKeys.length}
+              description={
+                settings.updatedAt ? `Last changed ${formatDateTime(settings.updatedAt)}.` : undefined
+              }
+            />
 
-            {settings.configKeys.length === 0 && (
-              <div className="px-4 py-6 text-center"
-                style={{ background: 'var(--ef-canvas-raised)', border: '1px dashed var(--ef-border)', borderRadius: 2 }}>
-                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                  No Config Keys yet. Add the key shown in the SEB Config Tool for your
-                  exam configuration.
-                </p>
-              </div>
+            {settings.configKeys.length === 0 ? (
+              <EmptyState
+                icon={<KeyRound size={28} strokeWidth={1.1} />}
+                title="No keys yet"
+                body="Until there is at least one key here, SEB verification has nothing to check against. Add the Config Key shown in the SEB Config Tool for your exam configuration."
+              />
+            ) : (
+              <Card padded={false}>
+                {settings.configKeys.map((key) => (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between gap-3"
+                    style={{ padding: '12px var(--ef-pad-card)', borderBottom: '1px solid var(--ef-border-subtle)' }}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <KeyRound size={14} strokeWidth={1.7} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
+                      <p
+                        className="ef-t-sm ef-ink truncate"
+                        style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: '0.02em' }}
+                      >
+                        {revealed.has(key) ? key : maskKey(key)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        className="ef-icon-btn"
+                        onClick={() => toggleReveal(key)}
+                        aria-label={revealed.has(key) ? 'Hide this key' : 'Show this key in full'}
+                        title={revealed.has(key) ? 'Hide' : 'Show in full'}
+                      >
+                        {revealed.has(key) ? <EyeOff size={15} strokeWidth={1.7} /> : <Eye size={15} strokeWidth={1.7} />}
+                      </button>
+                      {/* Two presses to remove. A key removed by accident locks
+                          every student out of every SEB exam until it is put
+                          back, and the second press is cheaper than that. */}
+                      <Button
+                        size="sm"
+                        variant={armedRemove === key ? 'danger' : 'secondary'}
+                        onClick={() => handleRemove(key)}
+                        disabled={saving}
+                      >
+                        <Trash2 size={12} strokeWidth={1.7} />
+                        {armedRemove === key ? 'Confirm' : 'Remove'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </Card>
             )}
+          </section>
 
-            <div className="space-y-2">
-              {settings.configKeys.map((key) => (
-                <div key={key} className="flex items-center justify-between gap-3 px-4 py-3"
-                  style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <KeyRound size={12} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
-                    <p className="text-xs truncate" style={{ color: 'var(--ef-ink)', fontFamily: 'ui-monospace, monospace' }}>
-                      {revealed.has(key) ? key : maskKey(key)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => toggleReveal(key)}
-                      className="p-1.5"
-                      style={{ color: 'var(--ef-text-muted)', cursor: 'pointer', background: 'none', border: 'none' }}
-                      aria-label={revealed.has(key) ? 'Hide key' : 'Reveal key'}
-                    >
-                      {revealed.has(key) ? <EyeOff size={13} strokeWidth={1.5} /> : <Eye size={13} strokeWidth={1.5} />}
-                    </button>
-                    <button
-                      onClick={() => handleRemove(key)}
-                      disabled={saving}
-                      className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-                      style={{
-                        color: armedRemove === key ? 'var(--ef-surface)' : 'var(--ef-danger)',
-                        background: armedRemove === key ? 'var(--ef-danger)' : 'var(--ef-surface)',
-                        border: '1px solid var(--ef-danger-border)',
-                        borderRadius: 2,
-                        cursor: saving ? 'wait' : 'pointer',
-                      }}
-                    >
-                      <Trash2 size={11} strokeWidth={1.5} />
-                      {armedRemove === key ? 'Confirm remove' : 'Remove'}
-                    </button>
-                  </div>
+          <section>
+            <SectionHeading
+              label="Add a config key"
+              description={'SEB Config Tool → Exam tab → "Use Browser & Config Keys" → copy the Config Key, not the Browser Exam Key.'}
+            />
+            <Card>
+              <div className="flex items-end gap-2 flex-wrap">
+                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                  <input
+                    type="text"
+                    className="ef-input"
+                    value={newKey}
+                    onChange={(e) => { setNewKey(e.target.value); setInputError(''); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+                    placeholder="64 hexadecimal characters"
+                    aria-label="Config key"
+                    spellCheck={false}
+                    style={{
+                      fontFamily: 'ui-monospace, monospace',
+                      borderColor: inputError ? 'var(--ef-danger-border)' : undefined,
+                    }}
+                  />
                 </div>
-              ))}
-            </div>
+                <Button
+                  variant="primary"
+                  onClick={handleAdd}
+                  disabled={saving || !newKey.trim()}
+                  loading={saving}
+                >
+                  {!saving && <Plus size={13} strokeWidth={1.9} />}
+                  Add key
+                </Button>
+              </div>
+              {inputError && (
+                <p className="ef-t-sm" role="alert" style={{ color: 'var(--ef-danger)', marginTop: 10 }}>
+                  {inputError}
+                </p>
+              )}
+            </Card>
+          </section>
 
-            {settings.updatedAt && (
-              <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)' }}>
-                Last updated {formatDateTime(settings.updatedAt)}
-              </p>
-            )}
-          </div>
-
-          {/* Platform .seb file (Stage 4b) */}
-          <div className="mb-8">
-            <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-              PLATFORM .SEB FILE
-            </p>
-            <div className="px-4 py-4"
-              style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
+          <section>
+            <SectionHeading
+              label="Platform .seb file"
+              description="The file students download from the briefing gate. Every SEB exam using the platform keys offers it automatically."
+            />
+            <Card>
               {fileInfo.configFileUrl ? (
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <FileDown size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)', flexShrink: 0 }} />
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <FileDown size={15} strokeWidth={1.7} style={{ color: 'var(--ef-success)', flexShrink: 0 }} />
                     <div className="min-w-0">
-                      <a href={fileInfo.configFileUrl}
-                        className="text-xs truncate block"
-                        style={{ color: 'var(--ef-ink)', textDecoration: 'underline' }}>
+                      <a href={fileInfo.configFileUrl} className="ef-t-sm ef-ink truncate block">
                         {fileInfo.fileName || 'platform.seb'}
                       </a>
                       {fileInfo.updatedAt && (
-                        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                          Uploaded {formatDateTime(fileInfo.updatedAt)}
-                        </p>
+                        <p className="ef-t-xs ef-muted">Uploaded {formatDateTime(fileInfo.updatedAt)}</p>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={fileBusy}
-                      className="flex items-center gap-1.5 text-xs px-3 py-1.5"
-                      style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: fileBusy ? 'wait' : 'pointer' }}
-                    >
-                      {fileBusy ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} strokeWidth={1.5} />}
+                    <Button size="sm" onClick={() => fileInputRef.current?.click()} loading={fileBusy}>
+                      {!fileBusy && <Upload size={12} strokeWidth={1.7} />}
                       Replace
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={armedFileRemove ? 'danger' : 'secondary'}
                       onClick={handleFileRemove}
                       disabled={fileBusy}
-                      className="text-xs px-3 py-1.5"
-                      style={{
-                        color: armedFileRemove ? 'var(--ef-surface)' : 'var(--ef-danger)',
-                        background: armedFileRemove ? 'var(--ef-danger)' : 'var(--ef-surface)',
-                        border: '1px solid var(--ef-danger-border)', borderRadius: 2,
-                        cursor: fileBusy ? 'wait' : 'pointer',
-                      }}
                     >
                       {armedFileRemove ? 'Confirm remove' : 'Remove'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-                    No platform .seb file yet. Upload the file saved by the Config Tool —
-                    every SEB exam using the platform keys will offer it on the briefing
-                    gate automatically.
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <p className="ef-t-sm ef-muted" style={{ flex: '1 1 240px', lineHeight: 'var(--ef-leading-relaxed)' }}>
+                    No platform file yet. Upload the one the Config Tool saved, and students
+                    will be offered it on the briefing gate.
                   </p>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={fileBusy}
-                    className="flex items-center gap-1.5 text-xs px-4 py-2 flex-shrink-0"
-                    style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: fileBusy ? 'wait' : 'pointer' }}
-                  >
-                    {fileBusy ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} strokeWidth={1.5} />}
+                  <Button variant="primary" onClick={() => fileInputRef.current?.click()} loading={fileBusy}>
+                    {!fileBusy && <Upload size={13} strokeWidth={1.7} />}
                     Upload .seb
-                  </button>
+                  </Button>
                 </div>
               )}
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -338,88 +347,39 @@ export function SEBSettingsPage() {
                 className="hidden"
                 onChange={(e) => handleFileChosen(e.target.files?.[0] ?? null)}
               />
+
               {fileError && (
-                <p className="text-xs mt-2" style={{ color: 'var(--ef-danger)' }}>{fileError}</p>
-              )}
-              <p className="text-xs mt-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
-                Rotating? Upload the new file AND add its Config Key above in the same
-                sitting — the file and the key must always describe the same configuration.
-              </p>
-            </div>
-          </div>
-
-          {/* Add key */}
-          <div className="mb-8">
-            <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-              ADD A CONFIG KEY
-            </p>
-            <div className="px-4 py-4"
-              style={{ background: 'var(--ef-canvas-raised)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={newKey}
-                  onChange={(e) => { setNewKey(e.target.value); setInputError(''); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
-                  placeholder="64-character Config Key from the SEB Config Tool"
-                  spellCheck={false}
-                  className="flex-1 text-xs px-3 py-2"
-                  style={{
-                    border: `1px solid ${inputError ? 'var(--ef-danger-border)' : 'var(--ef-border)'}`,
-                    borderRadius: 2, background: 'var(--ef-surface)', color: 'var(--ef-ink)',
-                    fontFamily: 'ui-monospace, monospace', outline: 'none',
-                  }}
-                />
-                <button
-                  onClick={handleAdd}
-                  disabled={saving || !newKey.trim()}
-                  className="flex items-center gap-1.5 text-xs px-4 py-2 flex-shrink-0"
-                  style={{
-                    background: saving || !newKey.trim() ? 'var(--ef-track)' : 'var(--ef-ink)',
-                    color: 'var(--ef-surface)', borderRadius: 2,
-                    cursor: saving || !newKey.trim() ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {saving ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} strokeWidth={1.5} />}
-                  Add key
-                </button>
-              </div>
-              {inputError && (
-                <p className="text-xs mt-2" style={{ color: 'var(--ef-danger)' }}>{inputError}</p>
-              )}
-              <p className="text-xs mt-2" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.5 }}>
-                SEB Config Tool → Exam tab → "Use Browser &amp; Config Keys" → copy the
-                <strong> Config Key</strong> (not the Browser Exam Key).
-              </p>
-            </div>
-          </div>
-
-          {/* Rotation checklist */}
-          <div className="mb-8">
-            <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>
-              ROTATING A CONFIGURATION
-            </p>
-            <div className="px-4 py-4"
-              style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-              <p className="text-xs mb-3" style={{ color: 'var(--ef-text-subtle)', lineHeight: 1.7 }}>
-                Any edit to the .seb file (including setting the quit URL) produces a new
-                Config Key. Rotate with an overlap so no student is locked out mid-transition:
-                first add the new key here (both keys are now accepted), mirror the change
-                into the Vercel env, distribute the new .seb file to students, and only then
-                remove the old key. Between high-stake sittings, rotating the config is what
-                invalidates any key that may have leaked from a previous sitting.
-              </p>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={12} strokeWidth={1.5} style={{ color: 'var(--ef-success-strong)' }} />
-                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                  Multiple keys valid at once is by design — it is the overlap window.
+                <p className="ef-t-sm" role="alert" style={{ color: 'var(--ef-danger)', marginTop: 10 }}>
+                  {fileError}
                 </p>
-              </div>
-            </div>
-          </div>
+              )}
 
-        </>
+              <p className="ef-t-xs ef-muted" style={{ marginTop: 14, lineHeight: 'var(--ef-leading-relaxed)' }}>
+                Rotating? Upload the new file and add its Config Key in the same sitting. The
+                file and the key have to describe the same configuration, or students get a
+                file that verification will reject.
+              </p>
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeading label="Rotating a configuration" />
+            <Card variant="inset">
+              <p className="ef-t-sm ef-muted" style={{ lineHeight: 'var(--ef-leading-relaxed)' }}>
+                Any edit to the .seb file — including setting the quit URL — produces a new
+                Config Key. Rotate with an overlap so nobody is locked out mid-transition:
+                add the new key here first, so both are accepted; distribute the new file;
+                and only then remove the old key. Between high-stakes sittings, rotating the
+                config is what invalidates a key that may have leaked from an earlier one.
+              </p>
+              <p className="ef-t-xs ef-muted inline-flex items-center gap-2" style={{ marginTop: 12 }}>
+                <CheckCircle2 size={13} strokeWidth={1.7} style={{ color: 'var(--ef-success)' }} />
+                Several keys valid at once is by design. That is the overlap window.
+              </p>
+            </Card>
+          </section>
+        </div>
       )}
-    </motion.div>
+    </PageShell>
   );
 }

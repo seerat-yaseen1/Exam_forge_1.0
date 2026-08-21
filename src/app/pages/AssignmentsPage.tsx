@@ -56,8 +56,11 @@ import {
   type Difficulty, type RuleDraft, type SectionDraft, type FieldMutability,
 } from '../components/assignments/builder/shared';
 import {
-  StatusBadgeChip, StatPill, SkeletonRow, FilterBar, EmptyState,
+  StatusBadgeChip, SkeletonRow, FilterBar, EmptyState,
 } from '../components/assignments/list/ListChrome';
+import {
+  Button, Card, PageHeader, PageShell, StatRow, StatTile, Toast,
+} from '../components/console/ui';
 import { AssessmentRow } from '../components/assignments/list/AssessmentRow';
 import {
   DuplicateModal, DeleteModal, PreviewModal, SourcePickerModal,
@@ -94,6 +97,14 @@ export function AssignmentsPage() {
   const [duplicating, setDuplicating] = useState(false);
   // Post-duplicate feedback (hierarchy re-resolution result, or failure).
   const [duplicateNotice, setDuplicateNotice] = useState<{ tone: 'info' | 'warn'; text: string } | null>(null);
+  // The notice used to be a dismissible banner above the list. As a toast it
+  // has to clear itself — a warning about a duplicate that never goes away
+  // becomes part of the page's furniture and stops being read.
+  useEffect(() => {
+    if (!duplicateNotice) return;
+    const t = setTimeout(() => setDuplicateNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [duplicateNotice]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -241,109 +252,140 @@ export function AssignmentsPage() {
 
   return (
     <>
-      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="px-4 py-6 md:px-8 md:py-10" style={{ maxWidth: 1120, margin: '0 auto' }}>
+      <PageShell>
+        <PageHeader
+          eyebrow={
+            <>
+              <span className="ef-eyebrow-dot" />
+              Web owner
+            </>
+          }
+          title="Assessments"
+          subtitle="A paper, plus who sits it and when. Everything here is built by the platform and published to institutes or straight to students."
+          actions={
+            <>
+              {/* ── Two ways in ──
+                  Duplicating an exam was already the fastest way to build a
+                  new one — structure, rules, grading policy and security tier
+                  all come across — but it lived behind an unlabelled icon at
+                  the end of a row, so only authors who went looking found it.
+                  Most exams are a variant of last term's, and a builder whose
+                  only visible entry point is a blank form makes every one of
+                  those start from nothing.
 
-        {/* Header */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-8"
-          style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
-          <div>
-            <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>WEB OWNER</p>
-            <h1 className="text-base" style={{ color: 'var(--ef-ink)' }}>Assessments</h1>
-            <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
-              Create and manage assessments for institutes and students.
-            </p>
-          </div>
-          {/* ── Two ways in ──
-              Duplicating an exam was already the fastest way to build a new
-              one — the structure, the rules, the grading policy and the
-              security tier all come across — but it lived behind an unlabelled
-              icon at the end of a row, so it was only ever found by authors who
-              went looking. Most exams are a variant of last term's, and a
-              builder whose only visible entry point is a blank form makes
-              every one of those start from nothing.
+                  Create stays primary. This is the shortcut, not the default. */}
+              {assessments.length > 0 && (
+                <Button size="sm" onClick={() => setPickingSource(true)}>
+                  <Copy size={12} strokeWidth={1.7} />
+                  Start from existing
+                </Button>
+              )}
+              <Button size="sm" variant="primary" onClick={openCreate}>
+                <Plus size={12} strokeWidth={1.9} />
+                Create assessment
+              </Button>
+            </>
+          }
+        />
 
-              Create stays primary. This is the shortcut, not the default. */}
-          <div className="flex items-center gap-2 self-start md:mt-1">
-            {assessments.length > 0 && (
-              <button onClick={() => setPickingSource(true)}
-                className="flex items-center justify-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-70"
-                style={{ background: 'var(--ef-surface)', color: 'var(--ef-text-subtle)', border: '1px solid var(--ef-border)', borderRadius: 2, letterSpacing: '0.03em' }}>
-                <Copy size={12} strokeWidth={1.5} /> Start from existing
-              </button>
-            )}
-            <button onClick={openCreate}
-              className="flex items-center justify-center gap-1.5 text-xs px-4 py-2.5 transition-opacity hover:opacity-80"
-              style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, letterSpacing: '0.03em' }}>
-              <Plus size={12} strokeWidth={2} /> Create Assessment
-            </button>
-          </div>
+        <div style={{ marginBottom: 26 }}>
+          <StatRow>
+            <StatTile
+              label="All assessments"
+              value={loading ? '—' : assessments.length}
+              icon={<ClipboardList size={13} strokeWidth={1.7} />}
+              sub="built by the platform"
+              hint="Everything not deleted, at any status."
+            />
+            <StatTile
+              label="Drafts"
+              value={loading ? '—' : draftCount}
+              icon={<FileText size={13} strokeWidth={1.7} />}
+              tone={draftCount > 0 ? 'warning' : undefined}
+              sub={draftCount > 0 ? 'not published' : 'none waiting'}
+              hint="Invisible to students until published."
+            />
+            <StatTile
+              label="Active"
+              value={loading ? '—' : activeCount}
+              icon={<Target size={13} strokeWidth={1.7} />}
+              tone={activeCount > 0 ? 'success' : undefined}
+              sub={activeCount > 0 ? 'open to students' : 'nothing live'}
+              hint="Published and inside its window."
+            />
+            <StatTile
+              label="Closed"
+              value={loading ? '—' : closedCount}
+              icon={<Clock size={13} strokeWidth={1.7} />}
+              sub="finished"
+              hint="Past their window, or closed by hand. Results and rosters stay readable."
+            />
+          </StatRow>
         </div>
 
-        {/* Duplicate outcome notice */}
-        {duplicateNotice && (
-          <div className="flex items-start gap-2 px-3 py-2.5 mb-5"
-            style={{
-              background: duplicateNotice.tone === 'warn' ? 'var(--ef-warning-bg)' : 'var(--ef-canvas)',
-              border: `1px solid ${duplicateNotice.tone === 'warn' ? 'var(--ef-warning-border)' : 'var(--ef-border)'}`,
-              borderRadius: 2,
-            }}>
-            <p className="text-xs flex-1" style={{ color: duplicateNotice.tone === 'warn' ? 'var(--ef-warning-strong)' : 'var(--ef-text-subtle)', lineHeight: 1.6 }}>
-              {duplicateNotice.text}
-            </p>
-            <button onClick={() => setDuplicateNotice(null)}
-              className="text-xs transition-opacity hover:opacity-60"
-              style={{ color: 'var(--ef-text-muted)' }}>Dismiss</button>
-          </div>
+        <FilterBar
+          search={search}
+          setSearch={setSearch}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+        />
+
+        {loading ? (
+          <Card padded={false}>
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </Card>
+        ) : filtered.length === 0 ? (
+          <EmptyState filtered={!!(search || statusFilter)} onAdd={openCreate} />
+        ) : (
+          <Card padded={false}>
+            <div
+              className="hidden md:flex items-center gap-4"
+              style={{
+                padding: '9px var(--ef-pad-card)',
+                background: 'var(--ef-canvas-raised)',
+                borderBottom: '1px solid var(--ef-border-subtle)',
+              }}
+            >
+              <span className="ef-t-2xs ef-muted flex-shrink-0" style={{ width: 64, letterSpacing: 'var(--ef-tracking-eyebrow)', textTransform: 'uppercase' }}>Status</span>
+              <span className="ef-t-2xs ef-muted flex-1" style={{ letterSpacing: 'var(--ef-tracking-eyebrow)', textTransform: 'uppercase' }}>Assessment</span>
+              <span className="ef-t-2xs ef-muted flex-shrink-0 text-right" style={{ minWidth: 148, letterSpacing: 'var(--ef-tracking-eyebrow)', textTransform: 'uppercase' }}>Window</span>
+              <span className="flex-shrink-0" style={{ width: 80 }} />
+            </div>
+            {filtered.map((a) => (
+              <AssessmentRow
+                key={a.id}
+                assessment={a}
+                onPreview={() => setPreviewAssessment(a)}
+                onPatched={(patch) => setAssessments((prev) => prev.map((x) => (x.id === a.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } as Assessment : x)))}
+                onOpenLegacyEditor={() => openEdit(a)}
+                onDelete={() => setDeleteTarget(a)}
+                onDuplicate={() => setDuplicateTarget(a)}
+                onRoster={() => navigate(`/dashboard/assignments/${a.id}/roster`)}
+              />
+            ))}
+          </Card>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-          <StatPill icon={<ClipboardList size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />} label="Total Assessments" value={loading ? '…' : String(assessments.length)} />
-          <StatPill icon={<FileText size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />} label="Drafts" value={loading ? '…' : String(draftCount)} />
-          <StatPill icon={<Target size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />} label="Active" value={loading ? '…' : String(activeCount)} />
-          <StatPill icon={<Clock size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)' }} />} label="Closed" value={loading ? '…' : String(closedCount)} />
-        </div>
+        {!loading && filtered.length > 0 && (search || statusFilter) && (
+          <p className="ef-t-xs ef-muted" style={{ marginTop: 12 }}>
+            Showing {filtered.length} of {assessments.length}.{' '}
+            <button
+              type="button"
+              onClick={() => { setSearch(''); setStatusFilter(''); }}
+              style={{ background: 'none', border: 0, padding: 0, color: 'var(--ef-accent)', cursor: 'pointer', font: 'inherit' }}
+            >
+              Clear filters
+            </button>
+          </p>
+        )}
 
-        {/* List */}
-        <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderRadius: 3 }}>
-          <FilterBar search={search} setSearch={setSearch} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />
-          {!loading && filtered.length > 0 && (
-            <div className="hidden md:flex items-center gap-4 px-5 py-2" style={{ background: 'var(--ef-canvas-raised)', borderBottom: '1px solid var(--ef-border-subtle)' }}>
-              <div className="flex-shrink-0 w-16"><span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>STATUS</span></div>
-              <div className="flex-1"><span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>ASSESSMENT</span></div>
-              <div className="flex-shrink-0 text-right" style={{ minWidth: 148 }}><span className="text-xs" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em' }}>DATE RANGE</span></div>
-              <div className="flex-shrink-0 w-20" />
-            </div>
-          )}
-          {loading && <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>}
-          {!loading && filtered.map((a) => (
-            <AssessmentRow key={a.id} assessment={a}
-              onPreview={() => setPreviewAssessment(a)}
-              onPatched={(patch) => setAssessments((prev) => prev.map((x) => (x.id === a.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } as Assessment : x)))}
-              onOpenLegacyEditor={() => openEdit(a)}
-              onDelete={() => setDeleteTarget(a)}
-              onDuplicate={() => setDuplicateTarget(a)}
-              onRoster={() => navigate(`/dashboard/assignments/${a.id}/roster`)} />
-          ))}
-          {!loading && filtered.length === 0 && <EmptyState filtered={!!(search || statusFilter)} onAdd={openCreate} />}
-          {!loading && filtered.length > 0 && (
-            <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--ef-border-subtle)' }}>
-              <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-                {filtered.length} {filtered.length === 1 ? 'assessment' : 'assessments'}
-                {(search || statusFilter) && ' matching filters'}
-              </span>
-              {(search || statusFilter) && (
-                <button onClick={() => { setSearch(''); setStatusFilter(''); }}
-                  className="text-xs transition-opacity hover:opacity-60" style={{ color: 'var(--ef-text-muted)' }}>
-                  Clear filters
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </motion.div>
+        <Toast
+          message={duplicateNotice?.text ?? ''}
+          tone={duplicateNotice?.tone === 'warn' ? 'danger' : 'ink'}
+        />
+      </PageShell>
 
       {/* Full-page panel */}
       <AnimatePresence>

@@ -1,6 +1,36 @@
-import React, { useState, useCallback, useEffect } from 'react';
+/**
+ * The institute admin's console home.
+ *
+ * ── WHAT IT REPLACED ──────────────────────────────────────────────
+ * A tab bar. Four tabs and nothing above them, so the only way to learn
+ * anything about your own institute was to open each tab and count by eye —
+ * every visit, for an answer that was usually "nothing has changed". Two of
+ * those tabs held near-identical hand-rolled tables (a 4-column faculty one
+ * and a 5-column student one) that between them repeated the same status
+ * pill, the same date cell and the same empty state twice.
+ *
+ * ── WHAT IT LEADS WITH ────────────────────────────────────────────
+ * The census, then the exceptions, then the tabs — the same reading order as
+ * the Web Owner's overview one level up, so moving between the two consoles
+ * does not mean relearning where to look. `rosterSummary.ts` decides what
+ * counts as an exception and in what order; this file only draws it.
+ *
+ * ── THE POLLING THAT IS GONE ──────────────────────────────────────
+ * Both old tables re-read their entire collection every five seconds, behind
+ * a pinging green dot and the line "Data refreshes automatically every 5
+ * seconds". An institute roster changes when an admin adds someone — roughly
+ * never, in five-second terms — so that was a per-minute cost in Firestore
+ * reads to animate a dot. It now loads once, again when you come back to the
+ * tab, and whenever you ask; the header says how fresh it is, which is the
+ * thing the dot was pretending to tell you.
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, GraduationCap, School, Loader2, AlertTriangle, Lock, Inbox } from 'lucide-react';
+import {
+  CheckCircle2, ChevronRight, Clock, GraduationCap, Inbox, Lock,
+  RefreshCw, School, UserCheck, Users,
+} from 'lucide-react';
 import { useInstituteAuth } from '../../context/InstituteAuthContext';
 import {
   getFacultyByInstitute,
@@ -22,385 +52,231 @@ import { getPendingDeletionRequestCount } from '../../../lib/deletionRequestServ
 import { getPendingRequestCount } from '../../../lib/questionRequestService';
 import { FacultyTab } from '../../components/faculty/FacultyTab';
 import { StudentTab } from '../../components/student/StudentTab';
-import { formatDate } from '../../../lib/dateFormat';
-
-// ── Types ─────────────────────────────────────────────────────────
+import { formatClock, formatDate } from '../../../lib/dateFormat';
+import { daysUntilExpiry, NO_EXPIRY_LABEL } from '../../../lib/instituteValidity';
+import {
+  attentionItems, summariseRoster,
+  type AttentionItem, type AttentionTone,
+} from '../../../lib/rosterSummary';
+import {
+  Button, Chip, CopyChip, EmptyState, ErrorBanner, PageHeader, PageShell,
+  SectionHeading, StatRow, StatTile,
+} from '../../components/console/ui';
+import { Avatar, DataTable, Tabs, TableSkeleton, type Column } from '../../components/console/data';
 
 type Tab = 'faculties' | 'students' | 'schools' | 'approvals';
 
-// ── Helpers ───────────────────────────────────────────────────────
+const TONE_COLOUR: Record<AttentionTone, string> = {
+  danger: 'var(--ef-danger)',
+  warning: 'var(--ef-warning)',
+  accent: 'var(--ef-accent)',
+};
 
+// ══════════════════════════════════════════════════════════════════
+// THE BAND OF THINGS WAITING ON YOU
+// ══════════════════════════════════════════════════════════════════
 
-function formatSyncAge(d: Date) {
-  const s = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (s < 10) return 'just now';
-  if (s < 60) return `${s}s ago`;
-  return `${Math.floor(s / 60)}m ago`;
-}
+function AttentionRow({ item, onOpen }: { item: AttentionItem; onOpen: () => void }) {
+  const colour = TONE_COLOUR[item.tone];
+  const actionable = item.tab !== null;
 
-// ── Faculty list ──────────────────────────────────────────────────
-
-function FacultyList({ instituteId }: { instituteId: string }) {
-  const [faculties, setFaculties]     = useState<Faculty[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState('');
-  const [lastSynced, setLastSynced]   = useState<Date | null>(null);
-  const [syncDisplay, setSyncDisplay] = useState('');
-
-  const fetch_ = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const data = await getFacultyByInstitute(instituteId);
-      setFaculties(data);
-      setLastSynced(new Date());
-      setError('');
-    } catch (e: any) {
-      if (!silent) setError(e.message);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [instituteId]);
-
-  useEffect(() => {
-    fetch_();
-    const poll = setInterval(() => fetch_(true), 5000);
-    return () => clearInterval(poll);
-  }, [fetch_]);
-
-  useEffect(() => {
-    if (!lastSynced) return;
-    setSyncDisplay(formatSyncAge(lastSynced));
-    const t = setInterval(() => setSyncDisplay(formatSyncAge(lastSynced)), 1000);
-    return () => clearInterval(t);
-  }, [lastSynced]);
-
-  const active   = faculties.filter((f) => f.status === 'active').length;
-  const disabled = faculties.filter((f) => f.status === 'disabled').length;
-
-  // ── Loading skeleton ──
-  if (loading) {
-    return (
-      <div className="py-12 flex flex-col items-center gap-3">
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Loading faculty…</p>
-      </div>
-    );
-  }
-
-  // ── Error ──
-  if (error) {
-    return (
-      <div className="mx-6 mt-6 flex items-center gap-2 px-4 py-3"
-        style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
-        <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
-        <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</p>
-        <button onClick={() => fetch_()} className="ml-auto text-xs"
-          style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  // ── Empty ──
-  if (faculties.length === 0) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="flex flex-col items-center justify-center py-24"
-      >
-        <Users size={28} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
-        <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>
-          No faculty registered
-        </p>
-        <p className="text-xs mt-1.5" style={{ color: 'var(--ef-border-muted)', maxWidth: 260, textAlign: 'center', lineHeight: 1.6 }}>
-          Faculty accounts are provisioned by the platform administrator.
-        </p>
-      </motion.div>
-    );
-  }
-
-  // ── Table ──
-  return (
-    <div className="px-0">
-      {/* Stats + sync strip */}
-      <div className="flex items-center gap-3 px-5 py-3"
-        style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}>
-        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-          {faculties.length} {faculties.length === 1 ? 'member' : 'members'}
+  const body = (
+    <>
+      <span
+        className="ef-card-rail self-stretch"
+        style={{
+          background: colour,
+          marginLeft: 'calc(var(--ef-pad-card) * -1)',
+          marginBlock: 'calc(var(--ef-pad-card) * -1)',
+        }}
+      />
+      {item.count !== undefined && (
+        <span
+          className="ef-display ef-nums flex-shrink-0 text-center"
+          style={{ fontSize: 26, lineHeight: 1, color: colour, minWidth: 34 }}
+        >
+          {item.count}
         </span>
-        <span style={{ color: 'var(--ef-border)' }}>·</span>
-        <span className="text-xs" style={{ color: 'var(--ef-success)' }}>{active} active</span>
-        {disabled > 0 && (
-          <>
-            <span style={{ color: 'var(--ef-border)' }}>·</span>
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{disabled} disabled</span>
-          </>
-        )}
-        {/* Live indicator */}
-        {lastSynced && (
-          <div className="flex items-center gap-1.5 ml-auto select-none">
-            <div className="relative w-2 h-2 flex items-center justify-center">
-              <span className="absolute inline-flex w-2 h-2 rounded-full opacity-60"
-                style={{ background: 'var(--ef-success)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
-              <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-success)' }} />
-            </div>
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{syncDisplay}</span>
-          </div>
-        )}
-      </div>
+      )}
+      <span className="flex-1 min-w-0">
+        <span className="ef-t-md ef-ink block" style={{ fontWeight: 500 }}>
+          {item.label}
+        </span>
+        <span className="ef-t-xs ef-muted block" style={{ marginTop: 3, lineHeight: 'var(--ef-leading-relaxed)' }}>
+          {item.hint}
+        </span>
+      </span>
+      {actionable && (
+        <ChevronRight size={16} strokeWidth={1.7} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />
+      )}
+    </>
+  );
 
-      <table className="w-full" style={{ borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}>
-            {['FACULTY', 'ROLE', 'STATUS', 'REGISTERED'].map((col, i) => (
-              <th key={i} className="text-left px-5 py-3 text-xs"
-                style={{
-                  color: 'var(--ef-text-muted)', letterSpacing: '0.08em', fontWeight: 400,
-                  width: i === 0 ? '40%' : i === 1 ? '16%' : i === 2 ? '16%' : '28%',
-                }}>
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {faculties.map((faculty) => (
-            <motion.tr key={faculty.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-              {/* Name + email */}
-              <td className="px-5 py-3.5">
-                <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.4 }}>{faculty.name}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{faculty.email}</p>
-              </td>
+  const style = { padding: 'var(--ef-pad-card)' } as const;
 
-              {/* Role */}
-              <td className="px-5 py-3.5">
-                <span className="inline-block text-xs px-2 py-0.5"
-                  style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-subtle)', borderRadius: 2, letterSpacing: '0.03em' }}>
-                  Faculty
-                </span>
-              </td>
-
-              {/* Status */}
-              <td className="px-5 py-3.5">
-                <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
-                  style={faculty.status === 'active'
-                    ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
-                    : { background: 'var(--ef-canvas-raised)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-                  <span style={{
-                    width: 5, height: 5, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
-                    background: faculty.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
-                  }} />
-                  {faculty.status === 'active' ? 'Active' : 'Disabled'}
-                </span>
-              </td>
-
-              {/* Created date */}
-              <td className="px-5 py-3.5">
-                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{formatDate(faculty.createdAt)}</p>
-                {faculty.firstLoginRequired && (
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', fontStyle: 'italic' }}>
-                    Awaiting first login
-                  </p>
-                )}
-              </td>
-            </motion.tr>
-          ))}
-        </tbody>
-      </table>
-
-      <p className="text-xs px-5 py-3" style={{ color: 'var(--ef-text-muted)', borderTop: '1px solid var(--ef-border-subtle)' }}>
-        Data refreshes automatically every 5 seconds.
-      </p>
+  // A row that cannot be acted on here is not a button. Renewal is the Web
+  // Owner's to do, and a chevron that goes nowhere is worse than no chevron.
+  return actionable ? (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="ef-card ef-card--interactive flex items-center gap-3.5 text-left w-full"
+      style={style}
+    >
+      {body}
+    </button>
+  ) : (
+    <div className="ef-card flex items-center gap-3.5" style={style}>
+      {body}
     </div>
   );
 }
 
-// ── Student list ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// THE READ-ONLY ROSTERS
+// ══════════════════════════════════════════════════════════════════
 
-function StudentList({ instituteId }: { instituteId: string }) {
-  const [students, setStudents]       = useState<Student[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState('');
-  const [lastSynced, setLastSynced]   = useState<Date | null>(null);
-  const [syncDisplay, setSyncDisplay] = useState('');
-
-  const fetch_ = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const data = await getStudentsByInstitute(instituteId);
-      setStudents(data);
-      setLastSynced(new Date());
-      setError('');
-    } catch (e: any) {
-      if (!silent) setError(e.message);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [instituteId]);
-
-  useEffect(() => {
-    fetch_();
-    const poll = setInterval(() => fetch_(true), 5000);
-    return () => clearInterval(poll);
-  }, [fetch_]);
-
-  useEffect(() => {
-    if (!lastSynced) return;
-    setSyncDisplay(formatSyncAge(lastSynced));
-    const t = setInterval(() => setSyncDisplay(formatSyncAge(lastSynced)), 1000);
-    return () => clearInterval(t);
-  }, [lastSynced]);
-
-  const active   = students.filter((s) => s.status === 'active').length;
-  const disabled = students.filter((s) => s.status === 'disabled').length;
-
-  if (loading) {
-    return (
-      <div className="py-12 flex flex-col items-center gap-3">
-        <Loader2 size={20} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-        <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>Loading students…</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="mx-6 mt-6 flex items-center gap-2 px-4 py-3"
-        style={{ background: 'var(--ef-danger-bg)', border: '1px solid var(--ef-danger-border)', borderRadius: 2 }}>
-        <AlertTriangle size={12} strokeWidth={1.5} style={{ color: 'var(--ef-danger)' }} />
-        <p className="text-xs" style={{ color: 'var(--ef-danger)' }}>{error}</p>
-        <button onClick={() => fetch_()} className="ml-auto text-xs"
-          style={{ color: 'var(--ef-danger)', textDecoration: 'underline' }}>Retry</button>
-      </div>
-    );
-  }
-
-  if (students.length === 0) {
-    return (
-      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="flex flex-col items-center justify-center py-24">
-        <GraduationCap size={28} strokeWidth={1} style={{ color: 'var(--ef-border-muted)' }} />
-        <p className="text-xs mt-4" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.06em' }}>No students enrolled</p>
-        <p className="text-xs mt-1.5" style={{ color: 'var(--ef-border-muted)', maxWidth: 260, textAlign: 'center', lineHeight: 1.6 }}>
-          Student accounts are provisioned by the platform administrator.
-        </p>
-      </motion.div>
-    );
-  }
-
+function StatusChip({ status }: { status: 'active' | 'disabled' }) {
   return (
-    <div>
-      {/* Stats + sync */}
-      <div className="flex items-center gap-3 px-5 py-3"
-        style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}>
-        <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>
-          {students.length} {students.length === 1 ? 'student' : 'students'}
-        </span>
-        <span style={{ color: 'var(--ef-border)' }}>·</span>
-        <span className="text-xs" style={{ color: 'var(--ef-success)' }}>{active} active</span>
-        {disabled > 0 && (
-          <>
-            <span style={{ color: 'var(--ef-border)' }}>·</span>
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{disabled} disabled</span>
-          </>
-        )}
-        {lastSynced && (
-          <div className="flex items-center gap-1.5 ml-auto select-none">
-            <div className="relative w-2 h-2 flex items-center justify-center">
-              <span className="absolute inline-flex w-2 h-2 rounded-full opacity-60"
-                style={{ background: 'var(--ef-success)', animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite' }} />
-              <span className="relative inline-flex w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ef-success)' }} />
-            </div>
-            <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{syncDisplay}</span>
-          </div>
-        )}
-      </div>
-
-      <table className="w-full" style={{ borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--ef-border-subtle)', background: 'var(--ef-canvas-raised)' }}>
-            {['STUDENT', 'ROLE', 'STATUS', 'PROGRAM', 'REGISTERED'].map((col, i) => (
-              <th key={i} className="text-left px-5 py-3 text-xs"
-                style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.08em', fontWeight: 400 }}>
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {students.map((student) => (
-            <motion.tr key={student.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              style={{ borderBottom: '1px solid var(--ef-border-subtle)' }}>
-              <td className="px-5 py-3.5">
-                <p className="text-sm" style={{ color: 'var(--ef-ink)', lineHeight: 1.4 }}>{student.name}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{student.email}</p>
-              </td>
-              <td className="px-5 py-3.5">
-                <span className="inline-block text-xs px-2 py-0.5"
-                  style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-subtle)', borderRadius: 2 }}>Student</span>
-              </td>
-              <td className="px-5 py-3.5">
-                <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5"
-                  style={student.status === 'active'
-                    ? { background: 'var(--ef-success-bg-alt)', color: 'var(--ef-success)', border: '1px solid var(--ef-success-border-alt)', borderRadius: 2 }
-                    : { background: 'var(--ef-canvas-raised)', color: 'var(--ef-text-muted)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-                  <span style={{
-                    width: 5, height: 5, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
-                    background: student.status === 'active' ? 'var(--ef-success)' : 'var(--ef-text-muted)',
-                  }} />
-                  {student.status === 'active' ? 'Active' : 'Disabled'}
-                </span>
-              </td>
-              <td className="px-5 py-3.5">
-                {student.program?.length ? (
-                  <div className="flex flex-wrap gap-1">
-                    {student.program.map((p, i) => (
-                      <span key={i} className="text-xs px-1.5 py-0.5"
-                        style={{ background: 'var(--ef-border-subtle)', color: 'var(--ef-text-subtle)', borderRadius: 2 }}>{p}</span>
-                    ))}
-                  </div>
-                ) : (
-                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>—</span>
-                )}
-              </td>
-              <td className="px-5 py-3.5">
-                <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{formatDate(student.createdAt)}</p>
-                {student.firstLoginRequired && (
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', fontStyle: 'italic' }}>Awaiting first login</p>
-                )}
-              </td>
-            </motion.tr>
-          ))}
-        </tbody>
-      </table>
-
-      <p className="text-xs px-5 py-3" style={{ color: 'var(--ef-text-muted)', borderTop: '1px solid var(--ef-border-subtle)' }}>
-        Data refreshes automatically every 5 seconds.
-      </p>
-    </div>
+    <Chip small tone={status === 'active' ? 'success' : 'muted'}>
+      {status === 'active' ? 'Active' : 'Disabled'}
+    </Chip>
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────
+/** Name, email and avatar — the identity cell both rosters share. */
+function PersonCell({ name, email }: { name: string; email: string }) {
+  return (
+    <span className="flex items-center gap-2.5 min-w-0">
+      <Avatar name={name} size={30} muted />
+      <span className="min-w-0">
+        <span className="ef-t-sm ef-ink block truncate" style={{ fontWeight: 500 }}>
+          {name}
+        </span>
+        <span className="ef-t-xs ef-muted block truncate">{email}</span>
+      </span>
+    </span>
+  );
+}
+
+function JoinedCell({ createdAt, firstLoginRequired }: { createdAt: string; firstLoginRequired: boolean }) {
+  return (
+    <span>
+      <span className="ef-t-xs ef-muted block">{formatDate(createdAt)}</span>
+      {firstLoginRequired && (
+        <span className="ef-t-2xs block" style={{ color: 'var(--ef-warning)', marginTop: 2 }}>
+          Never signed in
+        </span>
+      )}
+    </span>
+  );
+}
+
+const FACULTY_COLUMNS: Column<Faculty>[] = [
+  {
+    key: 'name',
+    header: 'Faculty',
+    primary: true,
+    cell: (f) => <PersonCell name={f.name} email={f.email} />,
+  },
+  { key: 'status', header: 'Status', width: 120, cell: (f) => <StatusChip status={f.status} /> },
+  {
+    key: 'added',
+    header: 'Added',
+    width: 160,
+    cell: (f) => <JoinedCell createdAt={f.createdAt} firstLoginRequired={f.firstLoginRequired} />,
+  },
+];
+
+const STUDENT_COLUMNS: Column<Student>[] = [
+  {
+    key: 'name',
+    header: 'Student',
+    primary: true,
+    cell: (s) => <PersonCell name={s.name} email={s.email} />,
+  },
+  { key: 'status', header: 'Status', width: 120, cell: (s) => <StatusChip status={s.status} /> },
+  {
+    key: 'program',
+    header: 'Programme',
+    cell: (s) =>
+      s.program?.length ? (
+        <span className="flex flex-wrap gap-1">
+          {s.program.map((p) => (
+            <Chip key={p} small>
+              {p}
+            </Chip>
+          ))}
+        </span>
+      ) : (
+        <span className="ef-muted">—</span>
+      ),
+  },
+  {
+    key: 'added',
+    header: 'Added',
+    width: 160,
+    cell: (s) => <JoinedCell createdAt={s.createdAt} firstLoginRequired={s.firstLoginRequired} />,
+  },
+];
+
+/**
+ * The view an admin gets when they may look but not touch.
+ *
+ * Whether it appears at all is the institute's `canAdminCreate*` flag, so the
+ * empty state has to explain the shape of the world rather than offer an
+ * "Add" button that would not work.
+ */
+function ReadOnlyRoster<T extends { id: string }>({
+  rows,
+  columns,
+  loading,
+  icon,
+  emptyTitle,
+  emptyBody,
+}: {
+  rows: T[];
+  columns: Column<T>[];
+  loading: boolean;
+  icon: React.ReactNode;
+  emptyTitle: string;
+  emptyBody: string;
+}) {
+  if (loading) return <TableSkeleton rows={4} columns={columns.length} />;
+  return (
+    <DataTable
+      columns={columns}
+      rows={rows}
+      rowKey={(row) => row.id}
+      empty={<EmptyState icon={icon} title={emptyTitle} body={emptyBody} />}
+    />
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PAGE
+// ══════════════════════════════════════════════════════════════════
 
 export function InstituteLandingPage() {
-  const { session }   = useInstituteAuth();
+  const { session } = useInstituteAuth();
+  const instituteId = session?.instituteId;
+
   const [activeTab, setActiveTab] = useState<Tab>('faculties');
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   // Live permissions — re-fetched on mount so they reflect Web Owner changes
   const [canManageSchools,     setCanManageSchools]     = useState(session?.schoolsManagementEnabled  ?? false);
   const [canCreateFaculty,     setCanCreateFaculty]     = useState(session?.canAdminCreateFaculty     ?? false);
   const [canCreateStudents,    setCanCreateStudents]    = useState(session?.canAdminCreateStudents    ?? false);
   const [facultyCanCreateStud, setFacultyCanCreateStud] = useState(session?.facultyCanCreateStudents  ?? false);
-  const [canCreateQuestions,   setCanCreateQuestions]   = useState(session?.canAdminCreateQuestions   ?? false);
   const [questionCeiling, setQuestionCeiling] = useState<QuestionRightsCeiling | undefined>(undefined);
   // Feature #15 Phase 3 — drives the per-faculty deletion-rights editor.
   const [deletionCeiling, setDeletionCeiling] = useState<DeletionRightsCeiling | undefined>(undefined);
+  const [permissionLoading, setPermissionLoading] = useState(true);
+
   const [pendingCount, setPendingCount] = useState(0);
+  const [pendingDeletionCount, setPendingDeletionCount] = useState(0);
+
   // The approvals inbox is relevant only when the ceiling permits at least one
   // right to be granted to faculty in REQUEST mode.
   const requestModeEnabled = RIGHT_NAMES.some((r) => grantableModes(questionCeiling, r).includes('request'));
@@ -417,255 +293,382 @@ export function InstituteLandingPage() {
   // holds the trash. Deleted records need a home regardless of whether any
   // request mode is configured; gating it on requests would make recovery
   // unreachable for exactly the institutes that delete directly.
-  const approvalsTabEnabled = true;
   const hasApprovalSections = requestModeEnabled || deletionRequestModeEnabled;
-  const [pendingDeletionCount, setPendingDeletionCount] = useState(0);
-  const [permissionLoading, setPermissionLoading] = useState(false);
 
   useEffect(() => {
-    if (!session?.instituteId) return;
+    if (!instituteId) return;
     setPermissionLoading(true);
-    getInstitute(session.instituteId)
+    getInstitute(instituteId)
       .then((inst) => {
         if (inst) {
           setCanManageSchools(inst.schoolsManagementEnabled   ?? false);
           setCanCreateFaculty(inst.canAdminCreateFaculty      ?? false);
           setCanCreateStudents(inst.canAdminCreateStudents    ?? false);
           setFacultyCanCreateStud(inst.facultyCanCreateStudents ?? false);
-          setCanCreateQuestions(inst.canAdminCreateQuestions  ?? false);
           setQuestionCeiling(inst.questionRightsCeiling);
           setDeletionCeiling(inst.deletionRightsCeiling);
         }
       })
       .finally(() => setPermissionLoading(false));
-  }, [session?.instituteId]);
+  }, [instituteId]);
+
+  // ── The rosters ────────────────────────────────────────────────
+  // Fetched here rather than inside each tab because the summary above the
+  // tabs needs both of them, and because two components polling the same two
+  // collections was the old design's whole problem.
+
+  const [faculty, setFaculty] = useState<Faculty[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [rosterLoading, setRosterLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [rosterError, setRosterError] = useState('');
+  const [syncedAt, setSyncedAt] = useState<number | null>(null);
+
+  const loadRosters = useCallback(
+    async (isRefresh = false) => {
+      if (!instituteId) return;
+      if (isRefresh) setRefreshing(true);
+      setRosterError('');
+      try {
+        const [f, s] = await Promise.all([
+          getFacultyByInstitute(instituteId),
+          getStudentsByInstitute(instituteId),
+        ]);
+        setFaculty(f);
+        setStudents(s);
+        setSyncedAt(Date.now());
+      } catch (e: any) {
+        setRosterError(e?.message || 'Could not load your institute’s people.');
+      } finally {
+        setRosterLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [instituteId],
+  );
+
+  useEffect(() => {
+    loadRosters();
+  }, [loadRosters]);
+
+  // Coming back to the tab is the moment the numbers are most likely to be
+  // stale and most likely to be looked at, which is why it is the one
+  // automatic refresh worth having.
+  useEffect(() => {
+    const onFocus = () => loadRosters(true);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [loadRosters]);
 
   // Pending-request count for the Approvals tab badge (only when relevant).
   useEffect(() => {
-    if (!session?.instituteId || !requestModeEnabled) { setPendingCount(0); return; }
-    getPendingRequestCount(session.instituteId).then(setPendingCount).catch(() => {});
-  }, [session?.instituteId, requestModeEnabled]);
+    if (!instituteId || !requestModeEnabled) { setPendingCount(0); return; }
+    getPendingRequestCount(instituteId).then(setPendingCount).catch(() => {});
+  }, [instituteId, requestModeEnabled]);
 
   // Pending DELETION requests for the same badge (Feature #15 Phase 4b).
   useEffect(() => {
-    if (!session?.instituteId || !deletionRequestModeEnabled) { setPendingDeletionCount(0); return; }
-    getPendingDeletionRequestCount(session.instituteId).then(setPendingDeletionCount).catch(() => {});
-  }, [session?.instituteId, deletionRequestModeEnabled]);
+    if (!instituteId || !deletionRequestModeEnabled) { setPendingDeletionCount(0); return; }
+    getPendingDeletionRequestCount(instituteId).then(setPendingDeletionCount).catch(() => {});
+  }, [instituteId, deletionRequestModeEnabled]);
 
-  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: 'faculties', label: 'Faculty',  icon: <Users size={12} strokeWidth={1.5} /> },
-    { key: 'students',  label: 'Students', icon: <GraduationCap size={12} strokeWidth={1.5} /> },
-    { key: 'schools',   label: 'Schools',  icon: <School size={12} strokeWidth={1.5} /> },
-    ...(approvalsTabEnabled
-      ? [{
-          key: 'approvals' as Tab,
-          label: hasApprovalSections ? 'Approvals & Trash' : 'Trash',
-          icon: <Inbox size={12} strokeWidth={1.5} />,
-        }]
-      : []),
+  // ── What it all adds up to ─────────────────────────────────────
+
+  const facultySummary  = useMemo(() => summariseRoster(faculty),  [faculty]);
+  const studentSummary  = useMemo(() => summariseRoster(students), [students]);
+  const daysLeft = useMemo(() => daysUntilExpiry(session?.activeUntil), [session?.activeUntil]);
+
+  const needs = useMemo(
+    () =>
+      rosterLoading
+        ? []
+        : attentionItems({
+            faculty: facultySummary,
+            students: studentSummary,
+            pendingQuestions: pendingCount,
+            pendingDeletions: pendingDeletionCount,
+            daysUntilExpiry: daysLeft,
+          }),
+    [rosterLoading, facultySummary, studentSummary, pendingCount, pendingDeletionCount, daysLeft],
+  );
+
+  const openTab = (tab: Tab) => {
+    setActiveTab(tab);
+    tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const dormant = facultySummary.dormant + studentSummary.dormant;
+  const waiting = pendingCount + pendingDeletionCount;
+
+  const tabs = [
+    { key: 'faculties', label: 'Faculty',  icon: <Users size={13} strokeWidth={1.7} />,         count: rosterLoading ? undefined : facultySummary.total },
+    { key: 'students',  label: 'Students', icon: <GraduationCap size={13} strokeWidth={1.7} />, count: rosterLoading ? undefined : studentSummary.total },
+    { key: 'schools',   label: 'Schools',  icon: canManageSchools ? <School size={13} strokeWidth={1.7} /> : <Lock size={13} strokeWidth={1.7} /> },
+    {
+      key: 'approvals',
+      label: hasApprovalSections ? 'Approvals & trash' : 'Trash',
+      icon: <Inbox size={13} strokeWidth={1.7} />,
+      count: waiting || undefined,
+    },
   ];
 
+  if (!instituteId) return null;
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="px-8 py-10"
-      style={{ maxWidth: 960, margin: '0 auto' }}
-    >
-      {/* Page header */}
-      <div className="mb-8" style={{ borderBottom: '1px solid var(--ef-border)', paddingBottom: 20 }}>
-        <p className="text-xs mb-1" style={{ color: 'var(--ef-text-muted)', letterSpacing: '0.1em' }}>INSTITUTE ADMIN</p>
-        <h1 className="text-base" style={{ color: 'var(--ef-ink)' }}>{session?.instituteName}</h1>
-        <p className="text-xs mt-1" style={{ color: 'var(--ef-text-muted)' }}>
-          Institute ID:&nbsp;
-          <span style={{ fontFamily: 'monospace', letterSpacing: '0.1em', color: 'var(--ef-text-muted)' }}>
-            {session?.instituteCode}
-          </span>
-        </p>
-      </div>
-
-      {/* Tab bar */}
-      <div className="flex items-center gap-0" style={{ borderBottom: '1px solid var(--ef-border)' }}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          return (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className="relative flex items-center gap-1.5 px-5 py-3 text-xs transition-colors select-none"
-              style={{
-                color: isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)',
-                background: 'transparent', letterSpacing: '0.04em',
-                fontWeight: isActive ? 500 : 400,
-              }}
-              onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-subtle)'; }}
-              onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'var(--ef-text-muted)'; }}
-            >
-              <span style={{ color: isActive ? 'var(--ef-ink)' : 'var(--ef-text-muted)' }}>{tab.icon}</span>
-              {tab.label}
-              {/* Schools tab: show lock badge when view-only */}
-              {tab.key === 'schools' && !permissionLoading && !canManageSchools && (
-                <span className="ml-0.5" style={{ color: 'var(--ef-text-muted)' }}>
-                  <Lock size={9} strokeWidth={1.5} />
-                </span>
-              )}
-              {/* Approvals tab: pending-count badge */}
-              {tab.key === 'approvals' && (pendingCount + pendingDeletionCount) > 0 && (
-                <span
-                  className="ml-1 inline-flex items-center justify-center"
-                  style={{ minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: 'var(--ef-warning-strong)', color: 'var(--ef-surface)', fontSize: 10, lineHeight: 1 }}
-                >
-                  {pendingCount + pendingDeletionCount}
-                </span>
-              )}
-              {isActive && (
-                <motion.div layoutId="tab-underline"
-                  className="absolute bottom-0 left-0 right-0"
-                  style={{ height: 1.5, background: 'var(--ef-ink)' }}
-                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tab content */}
-      <div style={{ background: 'var(--ef-surface)', border: '1px solid var(--ef-border)', borderTop: 'none', minHeight: 320 }}>
-        <AnimatePresence mode="wait">
-
-          {/* Faculty tab — if permitted, uses the full FacultyTab (with add/bulk).
-              Otherwise shows the read-only FacultyList */}
-          {activeTab === 'faculties' && session?.instituteId && (
-            <motion.div key="faculties" className="p-5"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}>
-              {canCreateFaculty ? (
-                <FacultyTab
-                  instituteId={session.instituteId}
-                  instituteName={session.instituteName}
-                  instituteSchoolsEnabled={canManageSchools}
-                  instituteFacultyCreateStudentsEnabled={facultyCanCreateStud}
-                  questionRightsCeiling={questionCeiling}
-                  deletionRightsCeiling={deletionCeiling}
-                />
-              ) : (
-                <FacultyList instituteId={session.instituteId} />
-              )}
-            </motion.div>
+    <PageShell>
+      <PageHeader
+        eyebrow={
+          <>
+            <span className="ef-eyebrow-dot" />
+            Institute admin
+          </>
+        }
+        title={session?.instituteName ?? 'Your institute'}
+        subtitle={
+          rosterLoading
+            ? 'Counting everyone at your institute…'
+            : needs.length === 0
+              ? `${facultySummary.total + studentSummary.total} ${facultySummary.total + studentSummary.total === 1 ? 'account' : 'accounts'} in good order. Nothing is waiting on you.`
+              : `${needs.length} ${needs.length === 1 ? 'thing needs' : 'things need'} your attention.`
+        }
+        actions={
+          <Button size="sm" onClick={() => loadRosters(true)} disabled={rosterLoading || refreshing}>
+            <RefreshCw size={12} strokeWidth={1.7} className={refreshing ? 'animate-spin' : ''} />
+            Refresh
+          </Button>
+        }
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <CopyChip value={session?.instituteCode ?? ''} label="Institute code" />
+          <Chip
+            small
+            tone={daysLeft === null ? 'muted' : daysLeft <= 0 ? 'danger' : daysLeft <= 30 ? 'warning' : 'muted'}
+            icon={<Clock size={11} strokeWidth={1.7} />}
+            title={session?.activeUntil ? `Access until ${formatDate(session.activeUntil)}` : undefined}
+          >
+            {daysLeft === null
+              ? NO_EXPIRY_LABEL
+              : daysLeft <= 0
+                ? 'Access expired'
+                : `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} of access left`}
+          </Chip>
+          {syncedAt && (
+            <span className="ef-t-2xs ef-muted">Updated {formatClock(new Date(syncedAt).toISOString())}</span>
           )}
+        </div>
+      </PageHeader>
 
-          {/* Students tab — if permitted, uses the full StudentTab (with add/bulk).
-              Otherwise shows the read-only StudentList */}
-          {activeTab === 'students' && session?.instituteId && (
-            <motion.div key="students" className="p-5"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}>
-              {canCreateStudents ? (
-                <StudentTab
-                  instituteId={session.instituteId}
-                  instituteName={session.instituteName}
-                />
-              ) : (
-                <StudentList instituteId={session.instituteId} />
-              )}
-            </motion.div>
-          )}
+      {rosterError && (
+        <div className="mb-6">
+          <ErrorBanner message={rosterError} onRetry={() => loadRosters(true)} />
+        </div>
+      )}
 
-          {activeTab === 'schools' && session?.instituteId && (
-            <motion.div key="schools"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="px-6 py-6"
-            >
-              {/* Permission notice — shown when management is not enabled */}
-              {!permissionLoading && !canManageSchools && (
+      <div className="flex flex-col" style={{ gap: 30 }}>
+        <section>
+          <SectionHeading label="Your institute" />
+          <StatRow>
+            <StatTile
+              label="Faculty"
+              value={rosterLoading ? '—' : facultySummary.total}
+              icon={<Users size={13} strokeWidth={1.7} />}
+              sub={rosterLoading ? 'loading' : `${facultySummary.active} can sign in`}
+              hint="Everyone with a faculty account at this institute."
+            />
+            <StatTile
+              label="Students"
+              value={rosterLoading ? '—' : studentSummary.total}
+              icon={<GraduationCap size={13} strokeWidth={1.7} />}
+              sub={rosterLoading ? 'loading' : `${studentSummary.active} can sign in`}
+              hint="Everyone enrolled here, whatever their status."
+            />
+            <StatTile
+              label="Never signed in"
+              value={rosterLoading ? '—' : dormant}
+              icon={<UserCheck size={13} strokeWidth={1.7} />}
+              tone={dormant > 0 ? 'warning' : undefined}
+              sub={dormant > 0 ? 'first password unused' : 'everyone has'}
+              hint="Accounts created but never used. Until someone signs in, their temporary password is still the only thing on the account."
+            />
+            <StatTile
+              label="Waiting on you"
+              value={rosterLoading ? '—' : waiting}
+              icon={<Inbox size={13} strokeWidth={1.7} />}
+              tone={waiting > 0 ? 'warning' : undefined}
+              sub={waiting > 0 ? 'needs a decision' : 'nothing pending'}
+              hint="Question and deletion requests from your faculty."
+            />
+          </StatRow>
+        </section>
+
+        <section>
+          <SectionHeading
+            label="Needs a decision"
+            count={rosterLoading ? undefined : needs.length || undefined}
+            hint="Most urgent first."
+          />
+          {rosterLoading ? (
+            <TableSkeleton rows={2} columns={2} />
+          ) : needs.length === 0 ? (
+            <EmptyState
+              icon={<CheckCircle2 size={28} strokeWidth={1.1} />}
+              title="Nothing needs you"
+              body="Every account here has been signed into, none is disabled, and no requests are pending. This list fills itself when that changes."
+            />
+          ) : (
+            <div className="flex flex-col" style={{ gap: 'var(--ef-gap)' }}>
+              {needs.map((item, i) => (
                 <motion.div
-                  initial={{ opacity: 0, y: -4 }}
+                  key={item.key}
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex items-start gap-2.5 px-4 py-3 mb-6"
-                  style={{
-                    background: 'var(--ef-warning-bg)',
-                    border: '1px solid var(--ef-warning-border)',
-                    borderRadius: 2,
-                  }}
+                  transition={{ duration: 0.24, delay: Math.min(i, 5) * 0.04, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  <Lock size={12} strokeWidth={1.5} style={{ color: 'var(--ef-warning-strong)', flexShrink: 0, marginTop: 1 }} />
-                  <div>
-                    <p className="text-xs" style={{ color: 'var(--ef-warning-strong)', lineHeight: 1.6 }}>
-                      <strong>View only.</strong> Schools management has not been enabled for this institute. 
-                      Contact your platform administrator to enable editing.
-                    </p>
-                  </div>
+                  <AttentionRow item={item} onOpen={() => item.tab && openTab(item.tab)} />
                 </motion.div>
-              )}
-
-              {permissionLoading ? (
-                <div className="flex items-center justify-center py-16">
-                  <Loader2 size={18} strokeWidth={1} className="animate-spin" style={{ color: 'var(--ef-text-muted)' }} />
-                </div>
-              ) : (
-                <SchoolsTab
-                  instituteId={session.instituteId}
-                  instituteName={session.instituteName}
-                  readOnly={!canManageSchools}
-                />
-              )}
-            </motion.div>
+              ))}
+            </div>
           )}
+        </section>
 
-          {activeTab === 'approvals' && session?.instituteId && approvalsTabEnabled && (
-            <motion.div key="approvals" className="p-5"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}>
-              {requestModeEnabled && (
-                <ApprovalsInbox
-                  instituteId={session.instituteId}
-                  onPendingCountChange={setPendingCount}
-                />
-              )}
-              {/* Feature #15 Phase 4b — deletion requests share the Approvals
-                  tab rather than getting a competing surface: an admin should
-                  have one place to look for things awaiting them. */}
-              {deletionRequestModeEnabled && (
-                <div className={requestModeEnabled ? 'mt-6 pt-5' : ''}
-                  style={requestModeEnabled ? { borderTop: '1px solid var(--ef-border)' } : undefined}>
-                  <p className="text-xs mb-3" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>
-                    DELETION REQUESTS
-                  </p>
-                  <DeletionApprovalsInbox
-                    viewerRole="institute"
-                    instituteId={session.instituteId}
-                    onResolved={() => {
-                      getPendingDeletionRequestCount(session.instituteId!)
-                        .then(setPendingDeletionCount).catch(() => {});
-                    }}
-                  />
-                </div>
-              )}
+        <section ref={tabsRef} style={{ scrollMarginTop: 80 }}>
+          <Tabs
+            items={tabs}
+            active={activeTab}
+            onChange={(k) => setActiveTab(k as Tab)}
+            label="Institute records"
+          />
 
-              {/* Feature #15 Phase 6a — the institute's own trash. Restore
-                  only: permanent deletion stays with the Web Owner. */}
-              <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--ef-border)' }}>
-                <p className="text-xs mb-3" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>
-                  RECENTLY DELETED
-                </p>
-                <TrashPanel instituteId={session.instituteId} />
-              </div>
+          <div style={{ marginTop: 'var(--ef-gap)' }}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16 }}
+              >
+                {/* Faculty — the full editor when this institute may create
+                    accounts, the read-only roster otherwise. */}
+                {activeTab === 'faculties' &&
+                  (canCreateFaculty ? (
+                    <FacultyTab
+                      instituteId={instituteId}
+                      instituteName={session!.instituteName}
+                      instituteSchoolsEnabled={canManageSchools}
+                      instituteFacultyCreateStudentsEnabled={facultyCanCreateStud}
+                      questionRightsCeiling={questionCeiling}
+                      deletionRightsCeiling={deletionCeiling}
+                    />
+                  ) : (
+                    <ReadOnlyRoster
+                      rows={faculty}
+                      columns={FACULTY_COLUMNS}
+                      loading={rosterLoading}
+                      icon={<Users size={28} strokeWidth={1.1} />}
+                      emptyTitle="No faculty yet"
+                      emptyBody="Faculty accounts for this institute are created by the platform administrator. Once they exist they appear here."
+                    />
+                  ))}
 
-              {/* Feature #15 Phase 7b — this institute's access & erasure
-                  requests. It is the controller for its own students, so its
-                  requests land here even though the Web Owner executes any
-                  erasure. */}
-              <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--ef-border)' }}>
-                <p className="text-xs mb-3" style={{ color: 'var(--ef-ink)', letterSpacing: '0.06em' }}>
-                  DATA REQUESTS
-                </p>
-                <SubjectRequestsInbox instituteId={session.instituteId} />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                {activeTab === 'students' &&
+                  (canCreateStudents ? (
+                    <StudentTab instituteId={instituteId} instituteName={session!.instituteName} />
+                  ) : (
+                    <ReadOnlyRoster
+                      rows={students}
+                      columns={STUDENT_COLUMNS}
+                      loading={rosterLoading}
+                      icon={<GraduationCap size={28} strokeWidth={1.1} />}
+                      emptyTitle="No students yet"
+                      emptyBody="Student accounts for this institute are created by the platform administrator. Once they exist they appear here."
+                    />
+                  ))}
+
+                {activeTab === 'schools' && (
+                  <>
+                    {!permissionLoading && !canManageSchools && (
+                      <div
+                        className="flex items-start gap-2.5 mb-5"
+                        style={{
+                          padding: '12px 14px',
+                          background: 'var(--ef-warning-bg)',
+                          border: '1px solid var(--ef-warning-border)',
+                          borderRadius: 'var(--ef-radius-sm)',
+                        }}
+                      >
+                        <Lock size={14} strokeWidth={1.7} style={{ color: 'var(--ef-warning)', flexShrink: 0, marginTop: 1 }} />
+                        <p className="ef-t-sm" style={{ color: 'var(--ef-warning)', lineHeight: 'var(--ef-leading-relaxed)' }}>
+                          <strong style={{ fontWeight: 600 }}>View only.</strong> Schools management is not
+                          enabled for this institute — you can see the structure but not change it. Your
+                          platform administrator can turn editing on.
+                        </p>
+                      </div>
+                    )}
+                    {permissionLoading ? (
+                      <TableSkeleton rows={3} columns={3} />
+                    ) : (
+                      <SchoolsTab
+                        instituteId={instituteId}
+                        instituteName={session!.instituteName}
+                        readOnly={!canManageSchools}
+                      />
+                    )}
+                  </>
+                )}
+
+                {activeTab === 'approvals' && (
+                  <div className="flex flex-col" style={{ gap: 28 }}>
+                    {requestModeEnabled && (
+                      <div>
+                        <SectionHeading label="Question requests" count={pendingCount || undefined} />
+                        <ApprovalsInbox instituteId={instituteId} onPendingCountChange={setPendingCount} />
+                      </div>
+                    )}
+
+                    {/* Feature #15 Phase 4b — deletion requests share this tab
+                        rather than getting a competing surface: an admin should
+                        have one place to look for things awaiting them. */}
+                    {deletionRequestModeEnabled && (
+                      <div>
+                        <SectionHeading label="Deletion requests" count={pendingDeletionCount || undefined} />
+                        <DeletionApprovalsInbox
+                          viewerRole="institute"
+                          instituteId={instituteId}
+                          onResolved={() => {
+                            getPendingDeletionRequestCount(instituteId)
+                              .then(setPendingDeletionCount).catch(() => {});
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Feature #15 Phase 6a — the institute's own trash.
+                        Restore only: permanent deletion stays with the Web
+                        Owner. */}
+                    <div>
+                      <SectionHeading
+                        label="Recently deleted"
+                        description="You can restore anything here. Permanent deletion stays with the platform administrator, so nothing is lost by mistake."
+                      />
+                      <TrashPanel instituteId={instituteId} />
+                    </div>
+
+                    {/* Feature #15 Phase 7b — this institute's access & erasure
+                        requests. It is the controller for its own students, so
+                        its requests land here even though the Web Owner
+                        executes any erasure. */}
+                    <div>
+                      <SectionHeading label="Data requests" />
+                      <SubjectRequestsInbox instituteId={instituteId} />
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </section>
       </div>
-    </motion.div>
+    </PageShell>
   );
 }

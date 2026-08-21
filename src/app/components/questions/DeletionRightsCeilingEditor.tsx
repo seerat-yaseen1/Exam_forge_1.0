@@ -22,7 +22,8 @@
 // deletionRights.ts header.
 
 import { useState } from 'react';
-import { Loader2, Check, ArrowUpFromLine } from 'lucide-react';
+import { Check, ArrowUpFromLine } from 'lucide-react';
+import { Button, Card, Toggle } from '../console/ui';
 import {
   setInstituteDeletionRightsCeiling,
   setInstituteContentTransferRight,
@@ -122,176 +123,127 @@ export function DeletionRightsCeilingEditor({
     }
   };
 
-  const pill = (on: boolean) => ({
-    border: `1px solid ${on ? 'var(--ef-success-border-alt)' : 'var(--ef-border)'}`,
-    borderRadius: 2,
-    background: on ? 'var(--ef-success-bg-alt)' : 'var(--ef-surface)',
-    color: on ? 'var(--ef-success)' : 'var(--ef-text-muted)',
-    cursor: saving ? ('not-allowed' as const) : ('pointer' as const),
-  });
+  /** A choose-one or toggle-many chip inside an expanded resource row. */
+  const modeChip = (on: boolean, label: string, title: string, onClick: () => void, key: string) => (
+    <button
+      key={key}
+      type="button"
+      className="ef-chip"
+      data-tone={on ? 'success' : undefined}
+      aria-pressed={on}
+      disabled={saving}
+      onClick={onClick}
+      title={title}
+      style={{ cursor: saving ? 'not-allowed' : 'pointer' }}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div>
-      <p className="text-xs mb-3" style={{ color: 'var(--ef-text-muted)', lineHeight: 1.6 }}>
-        The maximum deletion rights this institute may hold. Per resource: whether
-        the institute may delete it, how the institute itself acts, and which modes
-        it may grant to faculty. Everything is off by default. Deletions are
-        reversible until permanently removed.
+      <p className="ef-t-sm ef-muted" style={{ marginBottom: 14, lineHeight: 'var(--ef-leading-relaxed)' }}>
+        The most this institute may delete. Per kind of record: whether it may be deleted at
+        all, how the institute itself acts, and what it may pass on to faculty. Everything is
+        off by default, and every deletion stays reversible until it is permanently removed.
       </p>
 
-      {editable.map((r) => {
-        const c = ceiling[r];
-        return (
+      <Card padded={false} style={{ marginBottom: 16 }}>
+        {editable.map((r) => {
+          const c = ceiling[r];
+          return (
+            <div key={r}>
+              <Toggle
+                label={resourceLabel(r)}
+                description={RESOURCE_HINT[r]}
+                checked={c.allowed}
+                busy={saving}
+                onChange={() => toggleAllowed(r)}
+              />
+
+              {c.allowed && (
+                <div className="flex flex-col gap-2.5" style={{ padding: '0 var(--ef-pad-card) 14px' }}>
+                  {/* How the INSTITUTE ADMIN itself acts */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="ef-t-xs ef-muted" style={{ minWidth: 104 }}>
+                      The institute:
+                    </span>
+                    {(['direct', 'request'] as DeletionMode[]).map((mode) =>
+                      modeChip(
+                        (c.selfMode ?? 'direct') === mode,
+                        mode === 'direct' ? 'Deletes directly' : 'Asks you first',
+                        mode === 'request'
+                          ? 'The institute admin raises a request to the Web Owner instead of deleting.'
+                          : 'The institute admin deletes without approval.',
+                        () => setSelfMode(r, mode),
+                        `self-${mode}`,
+                      ),
+                    )}
+                  </div>
+
+                  {/* What it may grant ONWARD to faculty */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="ef-t-xs ef-muted" style={{ minWidth: 104 }}>
+                      Faculty may:
+                    </span>
+                    {(['direct', 'request'] as DeletionMode[]).map((mode) =>
+                      modeChip(
+                        c.modes.includes(mode),
+                        mode === 'direct' ? 'Delete directly' : 'Ask the admin',
+                        mode === 'request'
+                          ? 'Faculty raise a request to the institute admin.'
+                          : 'Faculty delete without approval.',
+                        () => toggleGrantMode(r, mode),
+                        `grant-${mode}`,
+                      ),
+                    )}
+                    <span className="ef-t-xs" style={{ color: 'var(--ef-border-strong)' }}>
+                      or neither, and only the institute may
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Web-owner-only resources shown as locked, so their absence is explained. */}
+        {reserved.map((r) => (
           <div
             key={r}
-            className="px-3 py-3 md:px-4 mb-2"
-            style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}
+            className="ef-toggle-row flex items-start justify-between gap-4"
+            data-locked=""
           >
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>{resourceLabel(r)}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{RESOURCE_HINT[r]}</p>
-              </div>
-              <button
-                onClick={() => toggleAllowed(r)}
-                disabled={saving}
-                className="flex items-center gap-2 text-xs px-3 py-1.5 transition-all select-none flex-shrink-0"
-                style={pill(c.allowed)}
-              >
-                <span style={{
-                  display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-                  background: c.allowed ? 'var(--ef-success)' : 'var(--ef-track)',
-                  alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
-                  justifyContent: c.allowed ? 'flex-end' : 'flex-start',
-                }}>
-                  <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: 'var(--ef-surface)' }} />
-                </span>
-                {c.allowed ? 'Allowed' : 'Off'}
-              </button>
+            <div className="min-w-0">
+              <p className="ef-t-sm ef-ink" style={{ fontWeight: 500 }}>{resourceLabel(r)}</p>
+              <p className="ef-t-xs ef-muted" style={{ marginTop: 3, lineHeight: 'var(--ef-leading-relaxed)' }}>
+                {RESOURCE_HINT[r]}
+              </p>
             </div>
-
-            {c.allowed && (
-              <div className="mt-3 pl-0.5 flex flex-col gap-2.5">
-                {/* How the INSTITUTE ADMIN itself acts */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', minWidth: 96 }}>
-                    Institute acts:
-                  </span>
-                  {(['direct', 'request'] as DeletionMode[]).map((mode) => {
-                    const on = (c.selfMode ?? 'direct') === mode;
-                    return (
-                      <button
-                        key={mode}
-                        onClick={() => setSelfMode(r, mode)}
-                        disabled={saving}
-                        className="text-xs px-2.5 py-1 transition-all select-none"
-                        style={pill(on)}
-                        title={mode === 'request'
-                          ? 'The institute admin raises a request to the Web Owner instead of deleting directly.'
-                          : 'The institute admin deletes without approval.'}
-                      >
-                        {mode === 'direct' ? 'Directly' : 'Request Web Owner'}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* What it may grant ONWARD to faculty */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs" style={{ color: 'var(--ef-text-muted)', minWidth: 96 }}>
-                    Grant faculty:
-                  </span>
-                  {(['direct', 'request'] as DeletionMode[]).map((mode) => {
-                    const on = c.modes.includes(mode);
-                    return (
-                      <button
-                        key={mode}
-                        onClick={() => toggleGrantMode(r, mode)}
-                        disabled={saving}
-                        className="text-xs px-2.5 py-1 transition-all select-none"
-                        style={pill(on)}
-                        title={mode === 'request'
-                          ? 'Faculty raise a request to the institute admin.'
-                          : 'Faculty delete without approval.'}
-                      >
-                        {mode === 'direct' ? 'Direct' : 'Request'}
-                      </button>
-                    );
-                  })}
-                  <span className="text-xs" style={{ color: 'var(--ef-border-muted)' }}>
-                    (or neither — institute-only)
-                  </span>
-                </div>
-              </div>
-            )}
+            <span className="ef-chip ef-chip--sm flex-shrink-0">Yours only</span>
           </div>
-        );
-      })}
-
-      {/* Web-owner-only resources shown as locked, so their absence is explained */}
-      {reserved.map((r) => (
-        <div
-          key={r}
-          className="px-3 py-2.5 md:px-4 mb-2 flex items-center justify-between gap-3"
-          style={{ background: 'var(--ef-canvas-raised)', border: '1px dashed var(--ef-border-muted)', borderRadius: 2, opacity: 0.85 }}
-        >
-          <div className="min-w-0">
-            <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{resourceLabel(r)}</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>{RESOURCE_HINT[r]}</p>
-          </div>
-          <span className="text-xs px-2.5 py-1 flex-shrink-0"
-            style={{ border: '1px solid var(--ef-border)', borderRadius: 2, color: 'var(--ef-text-muted)', background: 'var(--ef-surface)' }}>
-            Web Owner only
-          </span>
-        </div>
-      ))}
+        ))}
+      </Card>
 
       {/* Content-transfer capability — separate from the ceiling because it is
           exercised while ACTIVE, not a deletion mode. */}
-      <div className="px-3 py-3 md:px-4 mb-2 mt-3"
-        style={{ background: 'var(--ef-canvas)', border: '1px solid var(--ef-border)', borderRadius: 2 }}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 flex items-start gap-2">
-            <ArrowUpFromLine size={13} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', marginTop: 1, flexShrink: 0 }} />
-            <div>
-              <p className="text-xs" style={{ color: 'var(--ef-ink)' }}>Transfer content to Web Owner</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)' }}>
-                Let this institute hand its questions and banks up to you before it
-                is deleted. Exercised while the institute is active; otherwise its
-                content is wiped with the tenant.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => { setSaved(false); setTransfer((t) => ({ allowed: !t.allowed })); }}
-            disabled={saving}
-            className="flex items-center gap-2 text-xs px-3 py-1.5 transition-all select-none flex-shrink-0"
-            style={pill(transfer.allowed)}
-          >
-            <span style={{
-              display: 'inline-flex', width: 28, height: 16, borderRadius: 8,
-              background: transfer.allowed ? 'var(--ef-success)' : 'var(--ef-track)',
-              alignItems: 'center', padding: '0 2px', transition: 'background 0.2s',
-              justifyContent: transfer.allowed ? 'flex-end' : 'flex-start',
-            }}>
-              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: 'var(--ef-surface)' }} />
-            </span>
-            {transfer.allowed ? 'Allowed' : 'Off'}
-          </button>
-        </div>
-      </div>
+      <Card padded={false} style={{ marginBottom: 16 }}>
+        <Toggle
+          label="Hand content up to you before deletion"
+          description="Lets this institute transfer its questions and banks to the platform while it is still active. Without it, that content is wiped along with the tenant."
+          icon={<ArrowUpFromLine size={14} strokeWidth={1.7} />}
+          checked={transfer.allowed}
+          busy={saving}
+          onChange={() => { setSaved(false); setTransfer((t) => ({ allowed: !t.allowed })); }}
+        />
+      </Card>
 
-      <div className="flex items-center gap-3 mt-4">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="flex items-center gap-1.5 text-xs px-4 py-2 transition-opacity hover:opacity-80"
-          style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: saving ? 'not-allowed' : 'pointer' }}
-        >
-          {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} strokeWidth={2} />}
+      <div className="flex items-center gap-3">
+        <Button variant="primary" onClick={save} loading={saving}>
+          {!saving && <Check size={13} strokeWidth={2} />}
           Save ceiling
-        </button>
-        {saved && <span className="text-xs" style={{ color: 'var(--ef-success)' }}>Saved.</span>}
+        </Button>
+        {saved && <span className="ef-t-sm" style={{ color: 'var(--ef-success)' }}>Saved.</span>}
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ import {
 } from '../../../../lib/itemTypes';
 import { makeSectionId, SECTION_LETTERS, defaultSectionName, mutabilityFor, type SectionDraft } from './shared';
 import { Field, SectionLabel, inputStyle } from './controls';
-import { BUILDER_STAGES, type BuilderStage } from './stages';
+import { nextStageOf, type BuilderStage } from './stages';
 import { StageHeading, LockedNotice } from './StageHeading';
 import { SectionTopicPicker, SubjectPickerPhase, TopicPickerPhase } from './topicPickers';
 
@@ -255,7 +255,7 @@ export function SetupStep({
 
 
   /** The stage after this one, for the forward affordance below. */
-  const nextStage = BUILDER_STAGES[BUILDER_STAGES.findIndex((x) => x.id === stage) + 1] ?? null;
+  const nextStage = nextStageOf(stage);
 
   return (
     <motion.div

@@ -19,7 +19,7 @@ import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, comp
 import { Field, SectionLabel, selectStyle, ScheduleWindow, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle, PenaltyInput } from './controls';
 import { StageHeading, LockedNotice } from './StageHeading';
 import { CapabilityChoice } from './CapabilityChoice';
-import type { BuilderStage } from './stages';
+import { nextStageOf, type BuilderStage } from './stages';
 import { RuleBuilderPanel } from './topicPickers';
 import { InstitutePicker, StudentPicker } from './targetPickers';
 
@@ -754,6 +754,12 @@ export function DetailsStep({
   // Displayed in the input box (read-only while Auto is on).
   const overallLimitDisplay = overallAuto ? String(autoOverallLimit) : overallTimeLimit;
 
+  /** Where "Continue" goes from whichever stage is on screen. Read from the
+   *  stage list rather than named inline — Security no longer sits beside
+   *  Schedule and Grading, and a hardcoded ladder would have kept sending
+   *  authors to the stage that used to follow. */
+  const settingsNextStage = nextStageOf(stage);
+
   return (
     <div className="flex flex-col">
       {!allocationPhase ? (
@@ -1446,13 +1452,13 @@ export function DetailsStep({
             {/* Forward affordance for the settings stages — AFTER both column
                 groups, so it follows the content on every one of them rather
                 than leading on the stage whose block happens to render last. */}
-            {(stage === 'schedule' || stage === 'grading' || stage === 'security') && (
+            {(stage === 'schedule' || stage === 'grading' || stage === 'security') && settingsNextStage && (
               <div className="flex items-center justify-end mt-8">
                 <button
-                  onClick={() => onNavigate(stage === 'schedule' ? 'grading' : stage === 'grading' ? 'security' : 'allocation')}
+                  onClick={() => onNavigate(settingsNextStage.id)}
                   className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
                   style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
-                  Continue to {stage === 'schedule' ? 'Grading' : stage === 'grading' ? 'Security' : 'Allocation'}
+                  Continue to {settingsNextStage.label}
                   <ChevronRight size={12} strokeWidth={2} />
                 </button>
               </div>
@@ -1496,12 +1502,12 @@ export function DetailsStep({
           with its own top border pinned by mt-8 — which, now that the save bar
           is workspace chrome pinned below it, collided with it and clipped the
           button in half. Inline, in the scroll flow, like every other stage. */}
-      {stage === 'questions' && (
+      {stage === 'questions' && settingsNextStage && (
         <div className="flex items-center justify-end px-12 py-6">
-          <button onClick={() => onNavigate('schedule')}
+          <button onClick={() => onNavigate(settingsNextStage.id)}
             className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
             style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
-            Continue to Schedule <ChevronRight size={12} strokeWidth={2} />
+            Continue to {settingsNextStage.label} <ChevronRight size={12} strokeWidth={2} />
           </button>
         </div>
       )}

@@ -17,9 +17,9 @@ import { AllocationPanelCore } from '../allocation/AllocationPanelCore';
 import { emptyAllocationDraft, getAllocation, type AllocationDraft, type AllocationNodeType } from '../../../../lib/allocationService';
 import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, computeAutoOverallLimit, sumSectionsAndBreaksMinutes, draftIsLive, draftQuestionCount, DEFAULT_OVERALL_GRACE_SECONDS, type SectionDraft } from './shared';
 import { Field, SectionLabel, selectStyle, ScheduleWindow, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle, PenaltyInput } from './controls';
-import { StageHeading, LockedNotice } from './StageHeading';
+import { StageHeading, LockedNotice, StageContinue } from './StageHeading';
 import { CapabilityChoice } from './CapabilityChoice';
-import { nextStageOf, type BuilderStage, type StageDef } from './stages';
+import { nextStageOf, sectionIsComplete, type BuilderStage, type StageDef, type StageLock } from './stages';
 import { RuleBuilderPanel } from './topicPickers';
 import { ManualAssignmentPanel } from './ManualAssignmentPanel';
 import { InstitutePicker, StudentPicker } from './targetPickers';
@@ -94,7 +94,7 @@ export function DetailsStep({
   onSaveApi,
   onNavigate,
   mode, assessment, originalStatus, allQuestions, allGroups = [], sections, setSections, onBack, onSave,
-  effectiveSections, questionSource, anchorIds, fixedPaper, onAssignManual,
+  effectiveSections, questionSource, anchorIds, fixedPaper, onAssignManual, lockFor,
   title, description, subject, status,
   targetType, setTargetType,
   selectedInstituteIds, setSelectedInstituteIds,
@@ -174,6 +174,8 @@ export function DetailsStep({
   onSaveApi?: (api: { save: (status?: AssessmentStatus) => void; saving: boolean }) => void;
   /** Move the workspace to another stage — the forward affordances below. */
   onNavigate: (s: BuilderStage) => void;
+  /** Whether a stage can be opened yet — the Continue button reads it. */
+  lockFor: (id: BuilderStage) => StageLock;
 }) {
   const [startDate, setStartDate] = useState(toDateTimeLocal(assessment?.startDate));
   const [endDate, setEndDate] = useState(toDateTimeLocal(assessment?.endDate));
@@ -528,6 +530,24 @@ export function DetailsStep({
     if (targetStatus === 'active') {
       const errors: string[] = [];
 
+      // ── The stages the rail calls required ────────────────────────
+      //
+      // These two were claims nobody checked. The rail said Basics was
+      // required and showed "Title needed"; publish never looked, so an
+      // assessment could go out with no title at all. Same for section names.
+      // The rail, the stage lock and this validator now read the same
+      // predicates — see stages.ts — so a paper that looks finished in the
+      // rail is one that will actually publish.
+      if (!title.trim()) {
+        errors.push('Give this assessment a title before publishing it.');
+      }
+      const unnamed = sections.filter((s) => !sectionIsComplete(s)).length;
+      if (unnamed > 0) {
+        errors.push(
+          `${unnamed} section${unnamed === 1 ? '' : 's'} still ${unnamed === 1 ? 'has' : 'have'} no name.`,
+        );
+      }
+
       // Each section must request at least 1 question. A group rule drawing
       // "all" children has no knowable count yet, so it counts as live rather
       // than as zero — otherwise a section made entirely of DI sets would be
@@ -831,6 +851,7 @@ export function DetailsStep({
    *  Schedule and Grading, and a hardcoded ladder would have kept sending
    *  authors to the stage that used to follow. */
   const settingsNextStage = nextStageOf(stage, stages);
+  const nextLock = settingsNextStage ? lockFor(settingsNextStage.id) : { open: true as const };
 
   return (
     <div className="flex flex-col">
@@ -1524,15 +1545,9 @@ export function DetailsStep({
             {/* Forward affordance for the settings stages — AFTER both column
                 groups, so it follows the content on every one of them rather
                 than leading on the stage whose block happens to render last. */}
-            {(stage === 'schedule' || stage === 'grading' || stage === 'security') && settingsNextStage && (
-              <div className="flex items-center justify-end mt-8">
-                <button
-                  onClick={() => onNavigate(settingsNextStage.id)}
-                  className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-                  style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
-                  Continue to {settingsNextStage.label}
-                  <ChevronRight size={12} strokeWidth={2} />
-                </button>
+            {(stage === 'schedule' || stage === 'grading' || stage === 'security') && (
+              <div className="mt-8">
+                <StageContinue next={settingsNextStage} lock={nextLock} onNavigate={onNavigate} />
               </div>
             )}
 
@@ -1592,13 +1607,9 @@ export function DetailsStep({
           with its own top border pinned by mt-8 — which, now that the save bar
           is workspace chrome pinned below it, collided with it and clipped the
           button in half. Inline, in the scroll flow, like every other stage. */}
-      {stage === 'questions' && settingsNextStage && (
-        <div className="flex items-center justify-end px-12 py-6">
-          <button onClick={() => onNavigate(settingsNextStage.id)}
-            className="flex items-center gap-1.5 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-            style={{ background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2, cursor: 'pointer' }}>
-            Continue to {settingsNextStage.label} <ChevronRight size={12} strokeWidth={2} />
-          </button>
+      {stage === 'questions' && (
+        <div className="px-12 py-6">
+          <StageContinue next={settingsNextStage} lock={nextLock} onNavigate={onNavigate} />
         </div>
       )}
 

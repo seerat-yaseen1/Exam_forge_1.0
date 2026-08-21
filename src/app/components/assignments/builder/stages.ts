@@ -71,7 +71,22 @@ export type StageDef = {
   /** One line, shown under the stage heading. Says what the stage is FOR. */
   blurb: string;
   owner: StageOwner;
-  /** Stages that must be satisfied before a publish will succeed. */
+  /**
+   * Must be satisfied before a publish will succeed — and, while an assessment
+   * is being created, before the stages after it open.
+   *
+   * This flag was decorative for most of its life: it was set on every stage
+   * and read by nothing, while the rail's warnings came from stageStatus's own
+   * switch and the publish path enforced a third, smaller set. The three
+   * disagreed, and the gap was not academic — an assessment could be published
+   * with no title at all, because "required" here and "Title needed" in the
+   * rail were both claims nobody checked.
+   *
+   * It is now the ONE answer. stageStatus reports against it, the publish
+   * validator enforces it, and stageLock gates on it. A stage marked required
+   * must have a completeness rule in stageStatus, and that rule is what
+   * publish refuses on.
+   */
   required: boolean;
 };
 
@@ -115,13 +130,21 @@ export const BUILDER_STAGES: readonly StageDef[] = [
     id: 'questionSource', label: 'Question Source', owner: 'source', required: false,
     blurb: 'Where this paper may draw from — everything you can see, named banks, or questions you pick yourself.',
   },
+  // Subjects and Topics are NARROWING TOOLS, not requirements, and marking
+  // them required was a claim nothing backed. An empty pool means "no
+  // narrowing" at every single consumer — the section picker, the rule
+  // builder's cell list, the resolver — so an author who skips both draws
+  // from their whole visible bank and publishes a perfectly valid exam. The
+  // publish path never checked them either. Requiring them would make "use
+  // everything I have" a five-click detour through two screens that exist to
+  // subtract.
   {
-    id: 'subjects', label: 'Subjects', owner: 'setup', required: true,
-    blurb: 'The subjects this paper may draw from. Narrowing here narrows every later choice.',
+    id: 'subjects', label: 'Subjects', owner: 'setup', required: false,
+    blurb: 'Narrow this paper to particular subjects. Skip it to draw from every subject you can see.',
   },
   {
-    id: 'topics', label: 'Topics', owner: 'setup', required: true,
-    blurb: 'Which topics within those subjects are in scope.',
+    id: 'topics', label: 'Topics', owner: 'setup', required: false,
+    blurb: 'Narrow further to particular topics. Skip it to draw from every topic in the chosen subjects.',
   },
   {
     id: 'sections', label: 'Sections', owner: 'setup', required: true,
@@ -183,6 +206,87 @@ export function visibleBuilderStages(opts: {
   return BUILDER_STAGES.filter((s) => !drop.has(s.id));
 }
 
+// ══════════════════════════════════════════════════════════════════
+// STAGE LOCKING
+// ══════════════════════════════════════════════════════════════════
+//
+// While an assessment is being CREATED, a stage opens once every required
+// stage before it is done. Three gates fall out of the required set — Basics
+// unlocks the middle of the flow, Sections unlocks Questions, Questions
+// unlocks the settings and allocation at the end — and the optional stages
+// never block anything, which is the whole reason there are three gates and
+// not nine.
+//
+// ── WHY THIS IS NOT THE WIZARD COMING BACK ────────────────────────
+// The header of this file argues at length against the three-step wizard the
+// rail replaced, and that argument still holds. Two things keep this from
+// being the same mistake:
+//
+//   It applies to CREATION ONLY. The wizard's worst failure was editing — it
+//   insists on a beginning for something already finished, so changing a
+//   deadline on a live exam meant walking six screens. A saved assessment is
+//   freely navigable, always.
+//
+//   Unlocking is PERMANENT for the session. Completeness is re-derived from
+//   the draft on every keystroke, so a rule that only looked forward would
+//   re-lock eight stages the moment an author cleared the title to retype it.
+//   The caller holds the set of stages that have ever opened and never
+//   removes from it; see AssessmentPanel.
+//
+// Backwards navigation is never gated, and neither is saving a draft. An
+// author must always be able to leave with their work.
+
+export type StageLock =
+  | { open: true }
+  /** Shut, the required stage holding it shut, and what would open it. */
+  | { open: false; blockedBy: StageDef; reason: string };
+
+const OPEN: StageLock = { open: true };
+
+export function stageLock(
+  id: BuilderStage,
+  opts: {
+    /** The visible stages, in order — locks are computed over what the rail shows. */
+    stages: readonly StageDef[];
+    statusFor: (id: BuilderStage) => StageStatus;
+    /** Stages that have already opened this session. Never shrinks. */
+    unlocked: ReadonlySet<BuilderStage>;
+    /** False for an edit, or once the draft has been saved: nothing is gated. */
+    gated: boolean;
+  },
+): StageLock {
+  if (!opts.gated) return OPEN;
+  if (opts.unlocked.has(id)) return OPEN;
+
+  const i = opts.stages.findIndex((s) => s.id === id);
+  // A stage the rail is not showing cannot be reasoned about; treating it as
+  // open is the harmless direction, since nothing can navigate to it either.
+  if (i === -1) return OPEN;
+
+  for (const before of opts.stages.slice(0, i)) {
+    if (!before.required) continue;
+    const status = opts.statusFor(before.id);
+    if (status.state !== 'done') {
+      return {
+        open: false,
+        blockedBy: before,
+        reason: status.blocker ?? `Finish ${before.label} to continue`,
+      };
+    }
+  }
+  return OPEN;
+}
+
+/** Every stage that is open right now — what the caller folds into its set. */
+export function openStages(opts: {
+  stages: readonly StageDef[];
+  statusFor: (id: BuilderStage) => StageStatus;
+  unlocked: ReadonlySet<BuilderStage>;
+  gated: boolean;
+}): BuilderStage[] {
+  return opts.stages.filter((s) => stageLock(s.id, opts).open).map((s) => s.id);
+}
+
 /**
  * The stage before / after this one, or null at either end.
  *
@@ -231,6 +335,15 @@ export type StageStatus = {
   state: StageState;
   /** Short, shown beside the label. A count, not a sentence. */
   detail?: string;
+  /**
+   * What to DO about it, as an imperative — shown on the Continue button of
+   * whichever stage this one is blocking.
+   *
+   * Lives here rather than in the lock because it is the other half of the
+   * completeness rule: whoever decides a stage is unfinished is the only one
+   * who knows what would finish it. Required stages set it when 'todo'.
+   */
+  blocker?: string;
 };
 
 /**
@@ -265,12 +378,26 @@ export function sectionIsAnswerable(s: SectionDraft): boolean {
   return known >= 1 || s.rules.some((r) => draftQuestionCount(r) === null);
 }
 
+/**
+ * Is this section SET UP — does it have an identity?
+ *
+ * A name, and nothing else. Not a time limit: an untimed section is a real
+ * thing the data model supports and documents (`timeLimit: undefined` = no
+ * per-section limit), and demanding one to call the stage finished would make
+ * every author invent a number to get past a gate. It stays on the stage as a
+ * field worth filling, not as a condition of progress.
+ *
+ * Not whether it draws any questions either — that is the Questions stage's
+ * business, and reporting the same shortfall on two rows teaches authors to
+ * read neither.
+ *
+ * This used to demand all three and was called by nothing, which is how the
+ * rail came to show "1 incomplete" on a section the publish path was perfectly
+ * happy to ship. It is now the shared predicate: the rail, the lock and the
+ * publish validator all ask this one question.
+ */
 export function sectionIsComplete(s: SectionDraft): boolean {
-  return (
-    s.name.trim().length > 0
-    && parseInt(s.timeLimit, 10) >= 1
-    && sectionIsAnswerable(s)
-  );
+  return s.name.trim().length > 0;
 }
 
 export function stageStatus(id: BuilderStage, d: DraftShape): StageStatus {
@@ -278,38 +405,52 @@ export function stageStatus(id: BuilderStage, d: DraftShape): StageStatus {
     case 'basics':
       return d.title.trim()
         ? { state: 'done' }
-        : { state: 'todo', detail: 'Title needed' };
+        : { state: 'todo', detail: 'Title needed', blocker: 'Add a title to continue' };
 
+    // Optional, so never 'todo'. An empty pool is not an unfinished decision,
+    // it is the widest possible answer — "every subject I can see" — and an
+    // amber dot on a stage the author has correctly skipped is the fastest way
+    // to teach them that the dots mean nothing.
     case 'subjects':
       return d.subjectPool.length > 0
         ? { state: 'done', detail: String(d.subjectPool.length) }
-        : { state: 'todo' };
+        : { state: 'neutral', detail: 'All' };
 
     case 'topics':
       return d.topicPool.length > 0
         ? { state: 'done', detail: String(d.topicPool.length) }
-        : { state: 'todo' };
+        : { state: 'neutral', detail: 'All' };
 
-    // Structure only — a section is "set up" once it has a name and a clock.
-    // Whether it draws any questions is the next stage's business, and
-    // reporting that shortfall here would put the same warning on two rows.
+    // Structure only — a section is "set up" once it has a name. Whether it
+    // draws any questions is the next stage's business, and reporting that
+    // shortfall here would put the same warning on two rows.
     case 'sections': {
       const n = d.sections.length;
-      if (n === 0) return { state: 'todo' };
-      const unnamed = d.sections.filter(
-        (s) => !s.name.trim() || !(parseInt(s.timeLimit, 10) >= 1),
-      ).length;
+      if (n === 0) return { state: 'todo', blocker: 'Add a section to continue' };
+      const unnamed = d.sections.filter((s) => !sectionIsComplete(s)).length;
       return unnamed === 0
         ? { state: 'done', detail: String(n) }
-        : { state: 'todo', detail: `${unnamed} incomplete` };
+        : {
+            state: 'todo',
+            detail: `${unnamed} unnamed`,
+            blocker: `Name ${unnamed === 1 ? 'the unnamed section' : 'every section'} to continue`,
+          };
     }
 
     case 'questions': {
-      if (d.sections.length === 0) return { state: 'todo' };
+      if (d.sections.length === 0) {
+        return { state: 'todo', blocker: 'Add a section to continue' };
+      }
       const empty = d.sections.filter((s) => !sectionIsAnswerable(s)).length;
       return empty === 0
         ? { state: 'done' }
-        : { state: 'todo', detail: `${empty} empty` };
+        : {
+            state: 'todo',
+            detail: `${empty} empty`,
+            blocker: empty === 1
+              ? 'Give the empty section at least one question to continue'
+              : 'Give every section at least one question to continue',
+          };
     }
 
     // ── Question Source ──────────────────────────────────────────

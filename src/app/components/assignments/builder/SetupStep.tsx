@@ -5,7 +5,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, CheckCircle2, Timer, ChevronRight, Layers, BookOpen, Lock } from 'lucide-react';
+import { Plus, X, Timer, ChevronRight, BookOpen } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
 import { type Assessment, type AssessmentStatus } from '../../../../lib/assessmentService';
 import { type Question } from '../../../../lib/questionBankService';
@@ -20,8 +20,8 @@ import {
 } from '../../../../lib/itemTypes';
 import { makeSectionId, SECTION_LETTERS, defaultSectionName, mutabilityFor, type SectionDraft } from './shared';
 import { Field, SectionLabel, inputStyle } from './controls';
-import { nextStageOf, type BuilderStage, type StageDef } from './stages';
-import { StageHeading, LockedNotice } from './StageHeading';
+import { nextStageOf, type BuilderStage, type StageDef, type StageLock } from './stages';
+import { StageHeading, LockedNotice, StageContinue } from './StageHeading';
 import { SectionTopicPicker, SubjectPickerPhase, TopicPickerPhase } from './topicPickers';
 
 /**
@@ -47,7 +47,7 @@ export function SetupStep({
   title, setTitle, description, setDescription,
   subject, setSubject, status, setStatus,
   sections, setSections,
-  onNavigate, originalStatus,
+  onNavigate, lockFor, originalStatus,
   allQuestions,
   subjectPool, setSubjectPool,
   topicPool, setTopicPool,
@@ -63,6 +63,8 @@ export function SetupStep({
    *  affordances, which stay because a first-time author following the flow
    *  should not have to find the rail to advance. */
   onNavigate: (s: BuilderStage) => void;
+  /** Whether a stage can be opened yet — the Continue button reads it. */
+  lockFor: (id: BuilderStage) => StageLock;
   originalStatus?: AssessmentStatus;
   /**
    * The bank AFTER the question source has been applied — never the raw one.
@@ -89,7 +91,6 @@ export function SetupStep({
   /** The stages this draft has, for the Continue affordance. */
   stages: readonly StageDef[];
 }) {
-  const [titleError, setTitleError] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const mut = mutabilityFor(originalStatus);
 
@@ -264,6 +265,7 @@ export function SetupStep({
 
   /** The stage after this one, for the forward affordance below. */
   const nextStage = nextStageOf(stage, stages);
+  const nextLock = nextStage ? lockFor(nextStage.id) : { open: true as const };
 
   return (
     <motion.div
@@ -291,11 +293,15 @@ export function SetupStep({
               <Field label="Title" required>
                 <input
                   type="text" value={title}
-                  onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setTitleError(false); }}
-                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px', borderColor: titleError ? 'var(--ef-danger-border)' : 'var(--ef-border)', background: titleError ? 'var(--ef-danger-bg)' : 'var(--ef-surface)' }}
+                  onChange={(e) => setTitle(e.target.value)}
+                  style={{ ...inputStyle, fontSize: 13, padding: '9px 12px' }}
                   placeholder="e.g., Midterm Exam — Mathematics" autoFocus
                 />
-                {titleError && <p className="text-xs mt-1" style={{ color: 'var(--ef-danger)' }}>Title is required</p>}
+                {/* The red "Title is required" that used to sit here could
+                    never render: the state behind it was only ever set to
+                    false. Its job belongs to the Continue button below, which
+                    says what is missing in the place the author is heading,
+                    and to the publish validator, which now actually checks. */}
               </Field>
 
               <Field label="Subject" hint="(optional)">
@@ -679,18 +685,9 @@ export function SetupStep({
             not finished is what made the old wizard feel like a form to be got
             through; the rail already reports what is outstanding, and nothing
             is lost by letting them look ahead and come back. */}
-        {nextStage && (
-          <div className="mt-10 flex items-center justify-end">
-            <button onClick={() => onNavigate(nextStage.id)}
-              className="flex items-center gap-2 text-xs px-5 py-2.5 transition-opacity hover:opacity-80"
-              style={{
-                background: 'var(--ef-ink)', color: 'var(--ef-surface)', borderRadius: 2,
-                cursor: 'pointer', letterSpacing: '0.03em',
-              }}>
-              Continue to {nextStage.label} <ChevronRight size={12} strokeWidth={2} />
-            </button>
-          </div>
-        )}
+        <div className="mt-10">
+          <StageContinue next={nextStage} lock={nextLock} onNavigate={onNavigate} />
+        </div>
       </div>
     </motion.div>
   );

@@ -14,11 +14,12 @@
  * the author reads the rail top to bottom and ends on the answer.
  */
 
-import { CheckCircle2, Circle, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Circle, AlertCircle, Lock } from 'lucide-react';
 import {
   type BuilderStage,
   type PaperTotals,
   type StageDef,
+  type StageLock,
   type StageStatus,
 } from './stages';
 
@@ -26,6 +27,7 @@ export function StageRail({
   stages,
   current,
   statusFor,
+  lockFor,
   totals,
   onSelect,
 }: {
@@ -35,6 +37,8 @@ export function StageRail({
   stages: readonly StageDef[];
   current: BuilderStage;
   statusFor: (id: BuilderStage) => StageStatus;
+  /** Whether a stage can be opened yet, and what is holding it shut. */
+  lockFor: (id: BuilderStage) => StageLock;
   totals: PaperTotals;
   onSelect: (id: BuilderStage) => void;
 }) {
@@ -51,11 +55,19 @@ export function StageRail({
       <div className="flex-1 overflow-y-auto py-4">
         {stages.map((stage) => {
           const status = statusFor(stage.id);
+          const lock = lockFor(stage.id);
           const isCurrent = current === stage.id;
           return (
             <button
               key={stage.id}
+              // A locked row is NOT inert. Clicking it goes to whatever is
+              // holding it shut, which is where the work is — a click that
+              // does nothing and says nothing is how an author concludes the
+              // builder is broken rather than that they have something left
+              // to do. The panel's navigator makes that redirect; see
+              // goToStage.
               onClick={() => onSelect(stage.id)}
+              title={lock.open ? undefined : `Finish ${lock.blockedBy.label} first`}
               className="w-full flex items-center gap-2.5 px-4 text-left transition-colors"
               style={{
                 minHeight: 38,
@@ -65,6 +77,7 @@ export function StageRail({
                 // a button among labels.
                 borderLeft: `2px solid ${isCurrent ? 'var(--ef-ink)' : 'transparent'}`,
                 cursor: 'pointer',
+                opacity: lock.open ? 1 : 0.45,
               }}
               onMouseEnter={(e) => {
                 if (!isCurrent) (e.currentTarget as HTMLElement).style.background = 'var(--ef-canvas-raised)';
@@ -73,14 +86,25 @@ export function StageRail({
                 if (!isCurrent) (e.currentTarget as HTMLElement).style.background = 'transparent';
               }}
             >
-              <StageMark status={status} />
+              {lock.open
+                ? <StageMark status={status} />
+                : <Lock size={11} strokeWidth={1.5} style={{ color: 'var(--ef-text-muted)', flexShrink: 0 }} />}
               <span
                 className="text-xs flex-1 truncate"
                 style={{ color: isCurrent ? 'var(--ef-ink)' : 'var(--ef-text-subtle)' }}
               >
                 {stage.label}
               </span>
-              {status.detail && (
+              {/* A locked row reports its BLOCKER, not its own emptiness.
+                  "0 topics" on a stage the author cannot reach yet answers a
+                  question nobody asked; "needs Basics" answers the one they
+                  are about to ask. */}
+              {!lock.open ? (
+                <span className="text-xs flex-shrink-0 truncate"
+                  style={{ color: 'var(--ef-text-muted)', maxWidth: 84 }}>
+                  needs {lock.blockedBy.label}
+                </span>
+              ) : status.detail && (
                 <span
                   className="text-xs flex-shrink-0"
                   style={{ color: status.state === 'todo' ? 'var(--ef-warning)' : 'var(--ef-text-muted)' }}

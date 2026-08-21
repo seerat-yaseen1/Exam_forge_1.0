@@ -14,7 +14,7 @@ import { makeSectionId, type RuleDraft, type SectionDraft } from './shared';
 import { SetupStep } from './SetupStep';
 import { DetailsStep } from './DetailsStep';
 import { StageRail } from './StageRail';
-import { paperTotals, stageDef, stageStatus, type BuilderStage } from './stages';
+import { paperTotals, prevStageOf, stageDef, stageStatus, type BuilderStage } from './stages';
 import { clearDraft, readDraft, stashDraft, type StashedDraft } from './draftStore';
 
 // ══════════════════════════════════════════════════════════════════
@@ -363,7 +363,10 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
               deliveryMode={deliveryMode} setDeliveryMode={setDeliveryMode}
               allocationPhase={stage === 'allocation'}
               onContinueToAllocation={() => setStage('allocation')}
-              onBackToRules={() => setStage('security')}
+              // The stage before Allocation, not a named one: this used to say
+              // 'security', which is now second in the flow — the back link
+              // would have thrown an author from the last stage to the second.
+              onBackToRules={() => setStage(prevStageOf('allocation')?.id ?? 'grading')}
             />
           </div>
         </div>

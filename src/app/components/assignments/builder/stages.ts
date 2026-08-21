@@ -35,15 +35,16 @@
 
 import { draftIsLive, draftQuestionCount, draftTotalMarks, type SectionDraft } from './shared';
 
+/** Listed in flow order, so the union reads as the rail does. */
 export type BuilderStage =
   | 'basics'
+  | 'security'
   | 'subjects'
   | 'topics'
   | 'sections'
   | 'questions'
   | 'schedule'
   | 'grading'
-  | 'security'
   | 'allocation';
 
 /**
@@ -71,11 +72,29 @@ export type StageDef = {
  * Order matters — it is the reading order of the rail and the order Next walks.
  * Grouped loosely as: what the exam IS, what it CONTAINS, how it BEHAVES, who
  * SITS it.
+ *
+ * ── WHY SECURITY SITS SECOND ──────────────────────────────────────
+ * It used to sit near the end, beside schedule and grading, on the theory that
+ * it is a setting like any other. It is not. How closely a sitting is
+ * invigilated is a decision about what KIND of assessment this is — a
+ * proctored end-of-term paper and an open-book practice quiz are different
+ * animals from the first question onward — and authors were making every
+ * content decision before being asked it. Answering it directly after Basics
+ * puts it where it actually belongs: with the paper's identity, before any of
+ * the work it colours.
+ *
+ * It stays optional. Second in the reading order is not the same as required;
+ * the defaults still publish a valid exam for an author who walks straight
+ * past it.
  */
 export const BUILDER_STAGES: readonly StageDef[] = [
   {
     id: 'basics', label: 'Basics', owner: 'setup', required: true,
     blurb: 'What this assessment is called, and what students are told about it.',
+  },
+  {
+    id: 'security', label: 'Security', owner: 'details', required: false,
+    blurb: 'How closely the sitting is invigilated, and what a student must have to enter.',
   },
   {
     id: 'subjects', label: 'Subjects', owner: 'setup', required: true,
@@ -102,10 +121,6 @@ export const BUILDER_STAGES: readonly StageDef[] = [
     blurb: 'How answers are marked — partial credit, negative marking, and the pass mark.',
   },
   {
-    id: 'security', label: 'Security', owner: 'details', required: false,
-    blurb: 'How closely the sitting is invigilated, and what a student must have to enter.',
-  },
-  {
     id: 'allocation', label: 'Allocation', owner: 'allocation', required: false,
     blurb: 'Who sits this paper.',
   },
@@ -114,6 +129,25 @@ export const BUILDER_STAGES: readonly StageDef[] = [
 export function stageDef(id: BuilderStage): StageDef {
   // The list is a closed literal union, so this cannot miss.
   return BUILDER_STAGES.find((s) => s.id === id)!;
+}
+
+/**
+ * The stage before / after this one, or null at either end.
+ *
+ * Every forward and back affordance in the builder reads the order from here
+ * rather than naming a destination inline. That is not tidiness: the "Continue
+ * to Grading → Security → Allocation" chain in DetailsStep was written as a
+ * hardcoded ladder, so moving Security in this list would have left three
+ * buttons pointing at stages that no longer follow each other, in a part of
+ * the UI that still looked entirely correct until an author clicked it.
+ */
+export function nextStageOf(id: BuilderStage): StageDef | null {
+  return BUILDER_STAGES[BUILDER_STAGES.findIndex((s) => s.id === id) + 1] ?? null;
+}
+
+export function prevStageOf(id: BuilderStage): StageDef | null {
+  const i = BUILDER_STAGES.findIndex((s) => s.id === id);
+  return i > 0 ? BUILDER_STAGES[i - 1] : null;
 }
 
 /**

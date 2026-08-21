@@ -232,16 +232,68 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
   // draw at publish, so it is excluded from the sum and the total is marked
   // approximate rather than reported as a confidently wrong number.
   const effectiveSections = useMemo(
-    () => withEffectiveRules(sections, {
-      fixedPaper,
-      manualQuestionIds: questionSource.manualQuestionIds ?? [],
-    }),
-    [sections, fixedPaper, questionSource.manualQuestionIds],
+    () => withEffectiveRules(sections, { fixedPaper, source: questionSource }),
+    [sections, fixedPaper, questionSource],
   );
   const totals = paperTotals(effectiveSections);
 
+  /**
+   * Route hand-picked questions to a section, or back to the pool with null.
+   *
+   * The map is rewritten wholesale rather than patched key by key, because a
+   * move is a delete and an insert and doing them as two updates leaves a
+   * frame in which a question is in two sections — the one state the map shape
+   * exists to make unrepresentable.
+   */
+  const assignManual = useCallback((questionIds: string[], sectionId: string | null) => {
+    setQuestionSource((prev) => {
+      const next = { ...(prev.manualAssignments ?? {}) };
+      for (const id of questionIds) {
+        if (sectionId) next[id] = sectionId;
+        else delete next[id];
+      }
+      return { ...prev, manualAssignments: next };
+    });
+  }, []);
+
+  /**
+   * Splitting a finished one-section paper keeps its questions where they were.
+   *
+   * A single-section hand-picked paper holds its questions IMPLICITLY — the
+   * assignment map is empty, because there was nothing to decide. Add a second
+   * section and, without this, every one of them becomes unassigned at once:
+   * a paper that said "40 questions" a moment ago says nothing, and the rail
+   * reports two empty sections. That is the commonest path through this
+   * feature, since every new assessment starts with one section.
+   *
+   * So the implicit arrangement is written down at the moment it stops being
+   * implicit. Only questions with no assignment are touched, so it cannot
+   * disturb work the author has already done, and it runs only on the actual
+   * 1 → many transition rather than on every section edit.
+   */
+  const soleSectionRef = useRef<string | null>(sections.length === 1 ? sections[0].id : null);
+  useEffect(() => {
+    const sole = sections.length === 1 ? sections[0]?.id ?? null : null;
+    const wasSole = soleSectionRef.current;
+    soleSectionRef.current = sole;
+    if (!fixedPaper || sole !== null || wasSole === null) return;
+
+    setQuestionSource((prev) => {
+      const assigned = prev.manualAssignments ?? {};
+      const seeded = { ...assigned };
+      let changed = false;
+      for (const id of prev.manualQuestionIds ?? []) {
+        if (!seeded[id]) { seeded[id] = wasSole; changed = true; }
+      }
+      return changed ? { ...prev, manualAssignments: seeded } : prev;
+    });
+  }, [sections, fixedPaper]);
+
   /** The stages THIS draft has. A hand-picked paper has no matrix to build. */
-  const stages = useMemo(() => visibleBuilderStages({ fixedPaper }), [fixedPaper]);
+  const stages = useMemo(
+    () => visibleBuilderStages({ fixedPaper, sectionCount: sections.length }),
+    [fixedPaper, sections.length],
+  );
 
   // An author on Topics who turns randomization off would otherwise be left
   // looking at a stage the rail no longer lists, with no way back except the
@@ -520,6 +572,7 @@ export function AssessmentPanel({ mode, assessment, allQuestions, allGroups = []
               questionSource={questionSource}
               anchorIds={anchors}
               fixedPaper={fixedPaper}
+              onAssignManual={assignManual}
               onBack={() => setStage('sections')} onSave={handleSave}
               title={title} description={description} subject={subject} status={status}
               targetType={targetType} setTargetType={setTargetType}

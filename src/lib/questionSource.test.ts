@@ -27,6 +27,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   anchorIdsInPool,
+  manualSectionLists,
   poolMode,
   poolRandomizes,
   questionsInPool,
@@ -34,6 +35,7 @@ import {
   resolveQuestionsForSections,
   ruleCell,
   sanitizeQuestionSource,
+  unassignedManualIds,
   validateSelectionRules,
   type AssessmentSection,
   type BankQuestion,
@@ -515,5 +517,174 @@ describe('validateSelectionRules — manual rules', () => {
     const { results } = validateSelectionRules([section('A', rules)], bank);
     const { flatQuestions } = resolveQuestionsForSections([section('A', rules)], bank);
     expect(results[0].available).toBe(flatQuestions.length);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// SECTION ASSIGNMENT (hand-picked papers, several sections)
+// ══════════════════════════════════════════════════════════════════
+//
+// The invariant under test throughout: a fixed question is ONE INSTANCE and
+// therefore lives in exactly one section. The storage shape — a
+// questionId → sectionId map — makes the double-assignment unrepresentable
+// rather than merely guarded, so what is left to defend is the edges: order,
+// deleted sections, and the transitions between one section and several.
+
+describe('manualSectionLists', () => {
+  const src = (over: Partial<QuestionSource> = {}): QuestionSource => ({
+    mode: 'manual',
+    randomize: false,
+    manualQuestionIds: ['q1', 'q2', 'q3', 'q4'],
+    ...over,
+  });
+
+  it('gives a single-section paper everything, ignoring the map entirely', () => {
+    // The spec skips the assignment step for one section, and this is where
+    // "entirely" is enforced: even a stale map from a time when the paper had
+    // three sections cannot strand a question.
+    const lists = manualSectionLists(
+      src({ manualAssignments: { q1: 'gone', q2: 'alsoGone' } }),
+      ['only'],
+    );
+    expect(lists.only).toEqual(['q1', 'q2', 'q3', 'q4']);
+    expect(unassignedManualIds(src({ manualAssignments: {} }), ['only'])).toEqual([]);
+  });
+
+  it('routes each question to its section, and leaves the rest unassigned', () => {
+    const source = src({ manualAssignments: { q1: 'A', q3: 'A', q2: 'B' } });
+    const lists = manualSectionLists(source, ['A', 'B']);
+    expect(lists).toEqual({ A: ['q1', 'q3'], B: ['q2'] });
+    expect(unassignedManualIds(source, ['A', 'B'])).toEqual(['q4']);
+  });
+
+  it('orders each section by the PICK order, not the map key order', () => {
+    // Object key order survives neither a Firestore round-trip nor a rewrite,
+    // and a fixed paper is delivered in the order it was assembled.
+    const source = src({ manualAssignments: { q4: 'A', q1: 'A', q3: 'A' } });
+    expect(manualSectionLists(source, ['A', 'B']).A).toEqual(['q1', 'q3', 'q4']);
+  });
+
+  it('returns a question whose section was deleted to the unassigned pool', () => {
+    // Visible and recoverable, rather than vanishing into a section that no
+    // longer exists.
+    const source = src({ manualAssignments: { q1: 'A', q2: 'deletedSection' } });
+    const lists = manualSectionLists(source, ['A', 'B']);
+    expect(lists.A).toEqual(['q1']);
+    expect(lists.B).toEqual([]);
+    expect(unassignedManualIds(source, ['A', 'B'])).toEqual(['q2', 'q3', 'q4']);
+  });
+
+  it('never places one question in two sections', () => {
+    // Unrepresentable by construction — the second write to a key replaces the
+    // first — so this asserts the shape is doing its job.
+    const source = src({ manualAssignments: { q1: 'A' } });
+    const after: QuestionSource = {
+      ...source,
+      manualAssignments: { ...source.manualAssignments, q1: 'B' },
+    };
+    const lists = manualSectionLists(after, ['A', 'B']);
+    expect(lists.A).toEqual([]);
+    expect(lists.B).toEqual(['q1']);
+    expect(Object.values(lists).flat().filter((id) => id === 'q1')).toHaveLength(1);
+  });
+
+  it('gives every section an entry, including the empty ones', () => {
+    // A section missing from the result would read as "no rules yet" rather
+    // than "empty", and the publish check needs to tell those apart.
+    const lists = manualSectionLists(src({ manualAssignments: { q1: 'A' } }), ['A', 'B', 'C']);
+    expect(Object.keys(lists).sort()).toEqual(['A', 'B', 'C']);
+    expect(lists.C).toEqual([]);
+  });
+});
+
+describe('sanitizeQuestionSource — assignments', () => {
+  it('keeps assignments for a fixed multi-section paper', () => {
+    expect(sanitizeQuestionSource({
+      mode: 'manual',
+      randomize: false,
+      manualQuestionIds: ['q1', 'q2'],
+      manualAssignments: { q1: 'A' },
+    })).toEqual({
+      mode: 'manual',
+      manualQuestionIds: ['q1', 'q2'],
+      randomize: false,
+      manualAssignments: { q1: 'A' },
+    });
+  });
+
+  it('drops assignments once the paper randomizes again', () => {
+    // They mean nothing to a randomized draw, and would come back as ghosts
+    // the next time randomization was turned off.
+    const out = sanitizeQuestionSource({
+      mode: 'manual',
+      randomize: true,
+      manualQuestionIds: ['q1'],
+      manualAssignments: { q1: 'A' },
+    })!;
+    expect(out.manualAssignments).toBeUndefined();
+  });
+
+  it('drops an assignment for a question no longer in the pool', () => {
+    // The author un-picked it; the pointer is to nothing.
+    const out = sanitizeQuestionSource({
+      mode: 'manual',
+      randomize: false,
+      manualQuestionIds: ['q1'],
+      manualAssignments: { q1: 'A', unpicked: 'B' },
+    })!;
+    expect(out.manualAssignments).toEqual({ q1: 'A' });
+  });
+
+  it('writes no assignments key at all when there are none', () => {
+    const out = sanitizeQuestionSource({
+      mode: 'manual', randomize: false, manualQuestionIds: ['q1'],
+    })!;
+    expect('manualAssignments' in out).toBe(false);
+  });
+});
+
+describe('resolveQuestionsForSections — an assigned hand-picked paper', () => {
+  it('delivers each section its own questions, in pick order, at its own marks', () => {
+    const bank = [q('q1'), q('q2'), q('q3')];
+    const source: QuestionSource = {
+      mode: 'manual',
+      randomize: false,
+      manualQuestionIds: ['q1', 'q2', 'q3'],
+      manualAssignments: { q1: 'B', q2: 'A', q3: 'B' },
+    };
+    const lists = manualSectionLists(source, ['A', 'B']);
+    const { sections } = resolveQuestionsForSections(
+      [
+        { id: 'A', name: 'A', questions: [], rules: [{ kind: 'manual', questionIds: lists.A, marksPerQuestion: 2 }] },
+        { id: 'B', name: 'B', questions: [], rules: [{ kind: 'manual', questionIds: lists.B, marksPerQuestion: 5 }] },
+      ],
+      bank,
+    );
+    expect(sections[0].questions.map((x) => x.questionId)).toEqual(['q2']);
+    expect(sections[0].questions.every((x) => x.marks === 2)).toBe(true);
+    expect(sections[1].questions.map((x) => x.questionId)).toEqual(['q1', 'q3']);
+    expect(sections[1].questions.every((x) => x.marks === 5)).toBe(true);
+  });
+
+  it('leaves unassigned picks off the paper entirely', () => {
+    // The publish path warns about this; the resolver simply must not invent a
+    // home for them.
+    const bank = [q('q1'), q('q2')];
+    const source: QuestionSource = {
+      mode: 'manual',
+      randomize: false,
+      manualQuestionIds: ['q1', 'q2'],
+      manualAssignments: { q1: 'A' },
+    };
+    const lists = manualSectionLists(source, ['A', 'B']);
+    const { flatQuestions } = resolveQuestionsForSections(
+      [
+        { id: 'A', name: 'A', questions: [], rules: [{ kind: 'manual', questionIds: lists.A, marksPerQuestion: 1 }] },
+        { id: 'B', name: 'B', questions: [], rules: [] },
+      ],
+      bank,
+    );
+    expect(flatQuestions.map((x) => x.questionId)).toEqual(['q1']);
+    expect(unassignedManualIds(source, ['A', 'B'])).toEqual(['q2']);
   });
 });

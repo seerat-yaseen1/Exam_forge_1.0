@@ -401,6 +401,23 @@ export type QuestionSource = {
   randomize?: boolean;
 
   /**
+   * mode 'manual', randomize off, more than one section: which section each
+   * hand-picked question sits in. questionId → sectionId.
+   *
+   * A MAP, not a list per section, and that choice is the invariant. A fixed
+   * question is one specific instance — unlike a subject or a topic, which are
+   * reusable tags — so it belongs to exactly one section. Per-section lists can
+   * represent the same id twice and would need a check every time either list
+   * is written; a map cannot represent it at all. The double-assignment bug is
+   * therefore not guarded against, it is unsayable.
+   *
+   * Ids absent from the map are unassigned, which is a legitimate resting state
+   * — an author may deliberately over-pick as a buffer — and is reported as a
+   * nudge at publish rather than refused.
+   */
+  manualAssignments?: Record<string, string>;
+
+  /**
    * Questions that must appear on the paper and never take part in a random
    * draw. Layered on top of whichever pool was chosen — not a fourth mode —
    * so an author can pool 'all', anchor three questions, and let the rest of
@@ -452,10 +469,22 @@ export function sanitizeQuestionSource(
 
   if (mode === 'manual') {
     const manualQuestionIds = [...new Set(source.manualQuestionIds ?? [])];
+    const randomize = source.randomize !== false;
+    // Assignments are meaningless once the paper randomizes again, and an
+    // assignment to a question no longer in the pool is a pointer to nothing.
+    // Both would come back as ghosts the next time the author turned
+    // randomization off.
+    const picked = new Set(manualQuestionIds);
+    const assignments = Object.fromEntries(
+      Object.entries(source.manualAssignments ?? {}).filter(([qid]) => picked.has(qid)),
+    );
     return {
       mode: 'manual',
       manualQuestionIds,
-      randomize: source.randomize !== false,
+      randomize,
+      ...(!randomize && Object.keys(assignments).length > 0
+        ? { manualAssignments: assignments }
+        : {}),
       ...(anchors.length > 0 ? { anchorQuestionIds: anchors } : {}),
     };
   }
@@ -511,6 +540,56 @@ export function questionsInPool<T extends { id: string }>(
 ): T[] {
   if (!poolIds) return [...questions];
   return questions.filter((q) => poolIds.has(q.id));
+}
+
+/**
+ * The hand-picked questions each section holds, in the author's picked order.
+ *
+ * ONE SECTION gets everything, without consulting the map. A single-section
+ * paper has nothing to distribute, so asking the author to assign forty
+ * questions to the only place they can go would be a step that exists purely
+ * to be completed — the spec is explicit that the allocation step is skipped
+ * entirely in that case, and this is where "entirely" is enforced rather than
+ * left to the UI to remember.
+ *
+ * Order comes from `manualQuestionIds`, never from the map's key order. The
+ * author picked in an order and a fixed paper is delivered in the order it was
+ * picked; object key order is an implementation detail of whatever last wrote
+ * the map, and after a round-trip through Firestore it is not even that.
+ */
+export function manualSectionLists(
+  source: QuestionSource | undefined,
+  sectionIds: readonly string[],
+): Record<string, string[]> {
+  const picked = source?.manualQuestionIds ?? [];
+  const out: Record<string, string[]> = {};
+  for (const id of sectionIds) out[id] = [];
+
+  if (sectionIds.length === 1) {
+    out[sectionIds[0]] = [...picked];
+    return out;
+  }
+
+  const assignments = source?.manualAssignments ?? {};
+  for (const qid of picked) {
+    const sid = assignments[qid];
+    // An assignment naming a section that has since been deleted drops the
+    // question back into the unassigned pool, where the author can see it,
+    // rather than into a section that no longer exists.
+    if (sid && out[sid]) out[sid].push(qid);
+  }
+  return out;
+}
+
+/** Picked questions no section has claimed. Empty for a single-section paper. */
+export function unassignedManualIds(
+  source: QuestionSource | undefined,
+  sectionIds: readonly string[],
+): string[] {
+  if (sectionIds.length <= 1) return [];
+  const lists = manualSectionLists(source, sectionIds);
+  const placed = new Set(Object.values(lists).flat());
+  return (source?.manualQuestionIds ?? []).filter((id) => !placed.has(id));
 }
 
 /**

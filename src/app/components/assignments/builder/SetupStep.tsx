@@ -20,7 +20,7 @@ import {
 } from '../../../../lib/itemTypes';
 import { makeSectionId, SECTION_LETTERS, defaultSectionName, mutabilityFor, type SectionDraft } from './shared';
 import { Field, SectionLabel, inputStyle } from './controls';
-import { nextStageOf, type BuilderStage } from './stages';
+import { nextStageOf, type BuilderStage, type StageDef } from './stages';
 import { StageHeading, LockedNotice } from './StageHeading';
 import { SectionTopicPicker, SubjectPickerPhase, TopicPickerPhase } from './topicPickers';
 
@@ -43,7 +43,7 @@ function sectionAcceptedTypeCount(engines: ExecutionEngine[]): number {
 }
 
 export function SetupStep({
-  stage,
+  stage, stages,
   title, setTitle, description, setDescription,
   subject, setSubject, status, setStatus,
   sections, setSections,
@@ -64,6 +64,12 @@ export function SetupStep({
    *  should not have to find the rail to advance. */
   onNavigate: (s: BuilderStage) => void;
   originalStatus?: AssessmentStatus;
+  /**
+   * The bank AFTER the question source has been applied — never the raw one.
+   * The subject and topic pickers derive both their lists and their counts
+   * from this array, so restricting it here is the entire mechanism behind
+   * "a chosen pool narrows every later choice".
+   */
   allQuestions: Question[];
   subjectPool: string[];
   setSubjectPool: React.Dispatch<React.SetStateAction<string[]>>;
@@ -80,6 +86,8 @@ export function SetupStep({
    * itself; the rail replaces both. See stages.ts.
    */
   stage: BuilderStage;
+  /** The stages this draft has, for the Continue affordance. */
+  stages: readonly StageDef[];
 }) {
   const [titleError, setTitleError] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
@@ -216,7 +224,7 @@ export function SetupStep({
   const addSection = () => {
     setSections((prev) => [
       ...prev,
-      { id: makeSectionId(), name: defaultSectionName(prev.length), timeLimit: '', questionTimeLimit: '', rules: [], assignedTopics: [], breakAfterMinutes: '', breakMandatory: false, engines: [] },
+      { id: makeSectionId(), name: defaultSectionName(prev.length), timeLimit: '', questionTimeLimit: '', rules: [], assignedTopics: [], breakAfterMinutes: '', breakMandatory: false, engines: [], manualMarks: '' },
     ]);
   };
 
@@ -255,7 +263,7 @@ export function SetupStep({
 
 
   /** The stage after this one, for the forward affordance below. */
-  const nextStage = nextStageOf(stage);
+  const nextStage = nextStageOf(stage, stages);
 
   return (
     <motion.div
@@ -317,7 +325,10 @@ export function SetupStep({
                 allQuestions={allQuestions}
                 selectedIds={subjectPool}
                 onToggle={toggleSubjectInPool}
-                onNext={() => onNavigate('topics')}
+                // Not 'topics' by name: a hand-picked paper has no topics
+                // stage, and this button would walk into a stage the rail no
+                // longer lists.
+                onNext={() => onNavigate(nextStage?.id ?? 'sections')}
                 loading={loadingSubjects}
                 subjectNameById={taxonomyMaps.subjectNameById}
                 topicNameById={taxonomyMaps.topicNameById}

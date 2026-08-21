@@ -25,10 +25,79 @@ export type RuleDraft = {
   /** '' or 'all' means every child of the drawn group. */
   questionsPerGroup?: string;
 
-  // ── Hand-picked selection (either kind) ───────────────────────────
+  // ── Hand-picked selection (topic / group kinds) ───────────────────
   fixedQuestionIds?: string[];
   fixedGroupIds?: string[];
+
+  /**
+   * Manual-rule payload (kind === 'manual'): the questions themselves, in the
+   * author's order. subject/topic/difficulty are carried but meaningless on
+   * this kind — a hand-built paper spans cells — and are written as '' so the
+   * draft shape stays one object rather than a union the whole builder would
+   * have to narrow.
+   */
+  questionIds?: string[];
 };
+
+/**
+ * The rules that COUNT, given how the paper is being built.
+ *
+ * `fixedPaper` is Manual Selection with Randomize off: the one arrangement in
+ * which the author's list IS the paper and no draw happens. In every other
+ * arrangement a manual rule is dormant, and in that one every topic and group
+ * rule is.
+ *
+ * Nothing is deleted on the switch. An author who builds a topic matrix, flips
+ * to a hand-picked paper and flips back ten seconds later still has their
+ * matrix — which is only true because the inactive kind is filtered out here
+ * rather than removed from the draft.
+ */
+export function effectiveRules(rules: RuleDraft[], fixedPaper: boolean): RuleDraft[] {
+  return rules.filter((r) => (r.kind === 'manual') === fixedPaper);
+}
+
+/**
+ * The sections as the paper will actually be built, given the question source.
+ *
+ * The manual rule is DERIVED here rather than stored on the section draft, and
+ * that is the whole design. A stored copy of the author's picks would be a
+ * second source of truth that has to be kept in step with the picker on every
+ * keystroke — add a question, remove one, switch modes, add a section — and
+ * every one of those is a chance for the paper to disagree with the pool the
+ * author is looking at. Deriving it means the two cannot drift.
+ *
+ * `manualMarks` still lives on the section draft, because what a question is
+ * worth in this paper is a decision the author made and nothing else can
+ * reconstruct.
+ *
+ * Multi-section fixed papers land everything in the first section. That is not
+ * the final behaviour — the spec wants the picks distributed across sections by
+ * filter — and publish refuses the combination outright rather than shipping
+ * this placeholder. It exists so the totals and the rail say something
+ * coherent while the author is being told to fix it.
+ */
+export function withEffectiveRules(
+  sections: SectionDraft[],
+  opts: { fixedPaper: boolean; manualQuestionIds: string[] },
+): SectionDraft[] {
+  if (!opts.fixedPaper) {
+    return sections.map((s) => ({ ...s, rules: effectiveRules(s.rules, false) }));
+  }
+  return sections.map((s, i) => ({
+    ...s,
+    rules: i === 0 && opts.manualQuestionIds.length > 0
+      ? [{
+          kind: 'manual' as const,
+          subject: '',
+          topic: '',
+          difficulty: 'easy' as Difficulty,
+          count: '',
+          marksPerQuestion: s.manualMarks || '1',
+          questionIds: opts.manualQuestionIds,
+        }]
+      : [],
+  }));
+}
 
 /**
  * How many questions a DRAFT rule contributes.
@@ -40,6 +109,7 @@ export type RuleDraft = {
  * itself — and so neither silently counts a group rule as zero.
  */
 export function draftQuestionCount(r: RuleDraft): number | null {
+  if (r.kind === 'manual') return r.questionIds?.length ?? 0;
   if (r.kind === 'group') {
     const groups = parseInt(r.groupCount ?? '', 10) || 0;
     const per = r.questionsPerGroup;
@@ -53,6 +123,7 @@ export function draftQuestionCount(r: RuleDraft): number | null {
 
 /** True when the rule asks for anything at all — the "is this row live?" test. */
 export function draftIsLive(r: RuleDraft): boolean {
+  if (r.kind === 'manual') return (r.questionIds?.length ?? 0) > 0;
   if (r.kind === 'group') return (parseInt(r.groupCount ?? '', 10) || 0) > 0;
   if (r.fixedQuestionIds && r.fixedQuestionIds.length > 0) return true;
   return (parseInt(r.count, 10) || 0) > 0;
@@ -80,6 +151,14 @@ export type SectionDraft = {
    * a new section and what every existing assessment loads as.
    */
   engines: ExecutionEngine[];
+
+  /**
+   * Marks per question for a hand-picked, non-randomized paper. '' = 1.
+   *
+   * The only part of a manual rule that is not derivable from the pool, so the
+   * only part stored — see withEffectiveRules.
+   */
+  manualMarks: string;
 };
 
 export function makeSectionId() {

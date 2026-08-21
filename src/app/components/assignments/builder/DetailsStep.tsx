@@ -8,7 +8,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'motion/react';
 import { X, Loader2, ClipboardList, Clock, Calendar, AlertTriangle, CheckCircle2, FileText, Timer, Award, ChevronRight, AlertCircle, Shuffle, BarChart2, BookOpen, Shield, Upload, Smartphone, Tablet } from 'lucide-react';
 import { type Student } from '../../../../lib/firebaseService';
-import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection, type AssessmentGradingConfig, type GradingPolicy, type PenaltyType, type QuestionSelectionRule } from '../../../../lib/assessmentService';
+import { createAssessment, resolveQuestionsForSections, validateSelectionRules, applyTierDefaults, getAssessmentSEBKeys, getSEBSettings, getSEBPublicInfo, sanitizeQuestionSource, type Assessment, type AssessmentDraft, type AssessmentStatus, type AssignmentTarget, type AssessmentSection, type AssessmentGradingConfig, type GradingPolicy, type PenaltyType, type QuestionSelectionRule, type QuestionSource } from '../../../../lib/assessmentService';
 import { deriveShowResultsTo, deriveAllowReviewTo, DEFAULT_SHOW_RESULTS_TO, DEFAULT_ALLOW_REVIEW_TO, type VisibilityAudience } from '../../../../lib/visibility';
 import { AudienceSelector } from '../AudienceSelector';
 import { type Question, type QuestionGroup } from '../../../../lib/questionBankService';
@@ -19,7 +19,7 @@ import { toDateTimeLocal, fromDateTimeLocal, formatDateTime, mutabilityFor, comp
 import { Field, SectionLabel, selectStyle, ScheduleWindow, StartScheduleControl, EndScheduleControl, LockedFieldWrapper, SettingsToggle, PenaltyInput } from './controls';
 import { StageHeading, LockedNotice } from './StageHeading';
 import { CapabilityChoice } from './CapabilityChoice';
-import { nextStageOf, type BuilderStage } from './stages';
+import { nextStageOf, type BuilderStage, type StageDef } from './stages';
 import { RuleBuilderPanel } from './topicPickers';
 import { InstitutePicker, StudentPicker } from './targetPickers';
 
@@ -89,10 +89,11 @@ function parsePositiveIntOrUndefined(raw: string): number | undefined {
 }
 
 export function DetailsStep({
-  stage,
+  stage, stages,
   onSaveApi,
   onNavigate,
   mode, assessment, originalStatus, allQuestions, allGroups = [], sections, setSections, onBack, onSave,
+  effectiveSections, questionSource, anchorIds, fixedPaper,
   title, description, subject, status,
   targetType, setTargetType,
   selectedInstituteIds, setSelectedInstituteIds,
@@ -104,11 +105,24 @@ export function DetailsStep({
   mode: 'create' | 'edit';
   assessment: Assessment | null;
   originalStatus?: AssessmentStatus;
+  /** The bank AFTER the question source has been applied — never the raw one.
+   *  Every availability count, the publish validator and the draw itself read
+   *  this array, which is what makes the pool restriction real rather than a
+   *  label on a screen. */
   allQuestions: Question[];
   /** Question groups visible to the author — the pool group rules draw from. */
   allGroups?: QuestionGroup[];
   sections: SectionDraft[];
   setSections: React.Dispatch<React.SetStateAction<SectionDraft[]>>;
+  /** The sections as the paper will be built — see withEffectiveRules. The
+   *  editable drafts above still round-trip everything the author typed; these
+   *  are what publish reads. */
+  effectiveSections: SectionDraft[];
+  questionSource: QuestionSource;
+  /** Pinned ids, already narrowed to the pool. */
+  anchorIds: ReadonlySet<string>;
+  /** Manual Selection with randomization off. */
+  fixedPaper: boolean;
   onBack: () => void;
   onSave: (draft: AssessmentDraft, seb: { keys: string[]; file: File | null; clearFile: boolean }, allocation: { mode: 'legacy' | 'rules'; nodeType: AllocationNodeType | ''; nodeIds: string[]; expectedVersion: number }) => Promise<void>;
   title: string;
@@ -139,6 +153,8 @@ export function DetailsStep({
    * them.
    */
   stage: BuilderStage;
+  /** The stages this draft has, for the Continue affordances. */
+  stages: readonly StageDef[];
   /**
    * Hands the save controls to the workspace.
    *
@@ -385,7 +401,13 @@ export function DetailsStep({
         assignedTopics: sec.assignedTopics,
         rules: sec.rules
           .filter(draftIsLive)
-          .map((r): QuestionSelectionRule => r.kind === 'group'
+          .map((r): QuestionSelectionRule => r.kind === 'manual'
+            ? {
+                kind: 'manual',
+                questionIds: r.questionIds ?? [],
+                marksPerQuestion: parseFloat(r.marksPerQuestion) || 1,
+              }
+            : r.kind === 'group'
             ? {
                 kind: 'group',
                 subject: r.subject,
@@ -474,17 +496,32 @@ export function DetailsStep({
       }
     }
 
-    const builtSections = buildSections(sections);
+    // The paper as it will actually be built: a dormant topic matrix left in
+    // place would publish a randomized paper the author thought they had
+    // hand-picked, which is the worst possible direction for this bug.
+    const builtSections = buildSections(effectiveSections);
 
     // ── HARD section/rule checks (publish only) — must run BEFORE soft warnings ──
     if (targetStatus === 'active') {
       const errors: string[] = [];
 
+      // A hand-picked paper across several sections needs each question routed
+      // to exactly one of them — a fixed question is one specific instance, not
+      // a reusable tag — and the per-section assignment step that does the
+      // routing is not built yet. Refused outright rather than published as
+      // "everything in section A", which is not what anyone asked for.
+      if (fixedPaper && sections.length > 1) {
+        errors.push(
+          'Manual selection with randomization off supports a single section for now. '
+          + 'Turn Randomize back on, or reduce this paper to one section.',
+        );
+      }
+
       // Each section must request at least 1 question. A group rule drawing
       // "all" children has no knowable count yet, so it counts as live rather
       // than as zero — otherwise a section made entirely of DI sets would be
       // rejected for being empty.
-      sections.forEach((s) => {
+      effectiveSections.forEach((s) => {
         const anyLive = s.rules.some(draftIsLive);
         const known = s.rules.reduce((sum, r) => sum + (draftQuestionCount(r) ?? 0), 0);
         if (!anyLive || (known < 1 && !s.rules.some((r) => draftQuestionCount(r) === null))) {
@@ -493,7 +530,7 @@ export function DetailsStep({
       });
 
       const { valid, results } = validateSelectionRules(
-        builtSections, allQuestions, taxonomyMaps, allGroups, deliveryMode,
+        builtSections, allQuestions, taxonomyMaps, allGroups, deliveryMode, anchorIds,
       );
       if (!valid) {
         results
@@ -501,8 +538,11 @@ export function DetailsStep({
           .forEach((r) => {
             // A blocked rule is a structural refusal, not a shortage — say so
             // instead of reporting an availability number that isn't the point.
+            // An anchor result belongs to the paper rather than to any one
+            // section and carries no section name; prefixing it with an empty
+            // one would read as a section called nothing.
             if (r.blocked) {
-              errors.push(`${r.sectionName}: ${r.blocked}`);
+              errors.push(r.sectionName ? `${r.sectionName}: ${r.blocked}` : r.blocked);
               return;
             }
             const unit = r.unit === 'groups' ? 'set' : 'question';
@@ -581,7 +621,9 @@ export function DetailsStep({
       let flatQuestions = builtSections.flatMap((s) => s.questions);
 
       if (targetStatus === 'active') {
-        const resolved = resolveQuestionsForSections(builtSections, allQuestions, taxonomyMaps, allGroups);
+        const resolved = resolveQuestionsForSections(
+          builtSections, allQuestions, taxonomyMaps, allGroups, anchorIds,
+        );
         finalSections = resolved.sections;
         flatQuestions = resolved.flatQuestions;
       }
@@ -597,6 +639,10 @@ export function DetailsStep({
         sections: finalSections,
         subjectPool: subjectPool.length > 0 ? subjectPool : undefined,
         topicPool: topicPool.length > 0 ? topicPool : undefined,
+        // Only the keys the chosen mode uses, and undefined for a plain 'all'
+        // pool — removeUndefined is shallow, so a nested undefined would reach
+        // Firestore and be rejected. See sanitizeQuestionSource.
+        questionSource: sanitizeQuestionSource(questionSource),
         assignedTo,
         startDate: startDate ? fromDateTimeLocal(startDate) : undefined,
         endDate: endDate ? fromDateTimeLocal(endDate) : undefined,
@@ -758,7 +804,7 @@ export function DetailsStep({
    *  stage list rather than named inline — Security no longer sits beside
    *  Schedule and Grading, and a hardcoded ladder would have kept sending
    *  authors to the stage that used to follow. */
-  const settingsNextStage = nextStageOf(stage);
+  const settingsNextStage = nextStageOf(stage, stages);
 
   return (
     <div className="flex flex-col">

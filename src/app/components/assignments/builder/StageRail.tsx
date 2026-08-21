@@ -16,18 +16,23 @@
 
 import { CheckCircle2, Circle, AlertCircle } from 'lucide-react';
 import {
-  BUILDER_STAGES,
   type BuilderStage,
   type PaperTotals,
+  type StageDef,
   type StageStatus,
 } from './stages';
 
 export function StageRail({
+  stages,
   current,
   statusFor,
   totals,
   onSelect,
 }: {
+  /** The stages THIS draft has — see visibleBuilderStages. Not always all of
+   *  them: a hand-picked, non-randomized paper has no topic or matrix work
+   *  left to do, and showing those rows would offer work that cannot exist. */
+  stages: readonly StageDef[];
   current: BuilderStage;
   statusFor: (id: BuilderStage) => StageStatus;
   totals: PaperTotals;
@@ -44,7 +49,7 @@ export function StageRail({
     >
       {/* ── Stages ── */}
       <div className="flex-1 overflow-y-auto py-4">
-        {BUILDER_STAGES.map((stage) => {
+        {stages.map((stage) => {
           const status = statusFor(stage.id);
           const isCurrent = current === stage.id;
           return (

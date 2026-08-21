@@ -33,12 +33,19 @@
  * about. It reports 'neutral' until that work lands.
  */
 
-import { draftIsLive, draftQuestionCount, draftTotalMarks, type SectionDraft } from './shared';
+import type { QuestionPoolMode } from '../../../../lib/assessmentService';
+import {
+  draftIsLive,
+  draftQuestionCount,
+  draftTotalMarks,
+  type SectionDraft,
+} from './shared';
 
 /** Listed in flow order, so the union reads as the rail does. */
 export type BuilderStage =
   | 'basics'
   | 'security'
+  | 'questionSource'
   | 'subjects'
   | 'topics'
   | 'sections'
@@ -56,7 +63,7 @@ export type BuilderStage =
  * unmounting it — which the old step 1 ↔ step 2 switch did — would silently
  * reset a deadline the author had already typed.
  */
-export type StageOwner = 'setup' | 'details' | 'allocation';
+export type StageOwner = 'setup' | 'source' | 'details' | 'allocation';
 
 export type StageDef = {
   id: BuilderStage;
@@ -86,6 +93,14 @@ export type StageDef = {
  * It stays optional. Second in the reading order is not the same as required;
  * the defaults still publish a valid exam for an author who walks straight
  * past it.
+ *
+ * ── WHY QUESTION SOURCE SITS BEFORE SUBJECTS ──────────────────────
+ * The spec numbered it after Subjects, and it cannot go there. Choosing a pool
+ * RESTRICTS which subjects and topics are worth offering — that is the whole
+ * point of the step — and a restriction cannot narrow a choice the author has
+ * already made two stages ago. Asked first, the dead end (pick a subject, pick
+ * its topics, build a matrix, discover at publish that the chosen bank has
+ * nothing in that cell) is unreachable rather than merely reported.
  */
 export const BUILDER_STAGES: readonly StageDef[] = [
   {
@@ -95,6 +110,10 @@ export const BUILDER_STAGES: readonly StageDef[] = [
   {
     id: 'security', label: 'Security', owner: 'details', required: false,
     blurb: 'How closely the sitting is invigilated, and what a student must have to enter.',
+  },
+  {
+    id: 'questionSource', label: 'Question Source', owner: 'source', required: false,
+    blurb: 'Where this paper may draw from — everything you can see, named banks, or questions you pick yourself.',
   },
   {
     id: 'subjects', label: 'Subjects', owner: 'setup', required: true,
@@ -132,6 +151,25 @@ export function stageDef(id: BuilderStage): StageDef {
 }
 
 /**
+ * The stages this particular draft actually has.
+ *
+ * All of them, except in one arrangement: Manual Selection with randomization
+ * OFF. There the author has already named every question on the paper, so
+ * Topics and the per-cell question matrix have nothing left to decide —
+ * the spec is explicit that the allocation step is "skipped entirely (not just
+ * disabled/greyed out)", and it is right. A greyed-out stage still reads as
+ * work outstanding, and an author who has finished picking their paper should
+ * not be looking at two rail rows that will never apply to them.
+ *
+ * Subjects stays. It is still how the paper is labelled and still narrows the
+ * pool the manual picker offers.
+ */
+export function visibleBuilderStages(opts: { fixedPaper: boolean }): StageDef[] {
+  if (!opts.fixedPaper) return [...BUILDER_STAGES];
+  return BUILDER_STAGES.filter((s) => s.id !== 'topics' && s.id !== 'questions');
+}
+
+/**
  * The stage before / after this one, or null at either end.
  *
  * Every forward and back affordance in the builder reads the order from here
@@ -140,14 +178,24 @@ export function stageDef(id: BuilderStage): StageDef {
  * hardcoded ladder, so moving Security in this list would have left three
  * buttons pointing at stages that no longer follow each other, in a part of
  * the UI that still looked entirely correct until an author clicked it.
+ *
+ * Pass the VISIBLE stages when a draft hides some, or Continue will walk into
+ * a stage the rail does not show.
  */
-export function nextStageOf(id: BuilderStage): StageDef | null {
-  return BUILDER_STAGES[BUILDER_STAGES.findIndex((s) => s.id === id) + 1] ?? null;
+export function nextStageOf(
+  id: BuilderStage,
+  stages: readonly StageDef[] = BUILDER_STAGES,
+): StageDef | null {
+  const i = stages.findIndex((s) => s.id === id);
+  return i === -1 ? null : stages[i + 1] ?? null;
 }
 
-export function prevStageOf(id: BuilderStage): StageDef | null {
-  const i = BUILDER_STAGES.findIndex((s) => s.id === id);
-  return i > 0 ? BUILDER_STAGES[i - 1] : null;
+export function prevStageOf(
+  id: BuilderStage,
+  stages: readonly StageDef[] = BUILDER_STAGES,
+): StageDef | null {
+  const i = stages.findIndex((s) => s.id === id);
+  return i > 0 ? stages[i - 1] : null;
 }
 
 /**
@@ -171,11 +219,22 @@ export type StageStatus = {
   detail?: string;
 };
 
+/**
+ * What the rail needs to know about the draft.
+ *
+ * `sections` are the EFFECTIVE sections — run them through withEffectiveRules
+ * first. A dormant topic matrix left in place would make an empty hand-picked
+ * section look full, and a dormant manual list would do the same in reverse.
+ */
 export type DraftShape = {
   title: string;
   subjectPool: string[];
   topicPool: string[];
   sections: SectionDraft[];
+  /** What the Question Source row itself has to report. `pending` covers the
+   *  moment before the bank list has loaded, when a bank-restricted pool looks
+   *  empty and is not. */
+  source: { mode: QuestionPoolMode; poolSize: number | null; anchors: number; pending: boolean };
 };
 
 /**
@@ -239,6 +298,42 @@ export function stageStatus(id: BuilderStage, d: DraftShape): StageStatus {
         : { state: 'todo', detail: `${empty} empty` };
     }
 
+    // ── Question Source ──────────────────────────────────────────
+    //
+    // Optional, because 'all' is a real answer and the commonest one — an
+    // author who never opens this stage draws from their whole bank, which is
+    // what the builder did before the stage existed.
+    //
+    // The exception is a pool the author DID narrow and then emptied: a bank
+    // mode with no banks ticked, or a manual mode with nothing picked, is a
+    // paper with nothing to draw from. That is not a default, it is a
+    // half-finished decision, and every later stage will be empty because of
+    // it — so it is worth the amber dot here rather than four mystifying ones
+    // downstream.
+    case 'questionSource': {
+      const { mode, poolSize, anchors, pending } = d.source;
+      const anchorDetail = anchors > 0 ? ` · ${anchors} pinned` : '';
+      if (mode === 'all') {
+        return anchors > 0
+          ? { state: 'neutral', detail: `All${anchorDetail}` }
+          : { state: 'neutral', detail: 'All' };
+      }
+      // Say nothing rather than something wrong: a bank pool reads as empty
+      // until the bank list arrives, and an amber "No banks" on a correctly
+      // configured assessment is a false alarm the author cannot act on.
+      if (pending) return { state: 'neutral' };
+      if (poolSize === 0) {
+        return {
+          state: 'todo',
+          detail: mode === 'banks' ? 'No banks' : 'Nothing picked',
+        };
+      }
+      return {
+        state: 'done',
+        detail: `${poolSize ?? 0} Q${anchorDetail}`,
+      };
+    }
+
     // Schedule, grading and security all have working defaults — an author who
     // never opens them still publishes a valid exam. Reporting them as 'todo'
     // would be crying wolf on three of eight stages and would teach the author
@@ -269,6 +364,7 @@ export type PaperTotals = {
   approximate: boolean;
 };
 
+/** Pass the EFFECTIVE sections — see DraftShape. */
 export function paperTotals(sections: SectionDraft[]): PaperTotals {
   const rules = sections.flatMap((s) => s.rules);
   return {

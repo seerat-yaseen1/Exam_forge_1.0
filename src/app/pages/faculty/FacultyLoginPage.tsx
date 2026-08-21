@@ -6,11 +6,7 @@ export function FacultyLoginPage() {
   const navigate = useNavigate();
   const { session, login } = useFacultyAuth();
 
-  if (session) {
-    return session.firstLoginRequired
-      ? <Navigate to="/faculty/change-password" replace />
-      : <Navigate to="/faculty/dashboard" replace />;
-  }
+  if (session) return <Navigate to="/faculty/dashboard" replace />;
 
   return (
     <SignIn
@@ -29,9 +25,7 @@ export function FacultyLoginPage() {
       onSubmit={async ({ code, email, password }) => {
         const result = await login(code, email, password);
         if (!result.success) return result;
-        navigate(result.firstLoginRequired ? '/faculty/change-password' : '/faculty/dashboard', {
-          replace: true,
-        });
+        navigate('/faculty/dashboard', { replace: true });
         return { success: true };
       }}
     />

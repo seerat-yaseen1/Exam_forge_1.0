@@ -12,6 +12,7 @@ import {
   getStudent,
 } from '../../../lib/firebaseService';
 import { setAccountStatus } from '../../../lib/accountAccess';
+import { fetchRosterSignIn } from '../../../lib/rosterSignIn';
 import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth, functions } from '../../../lib/firebase';
@@ -101,6 +102,11 @@ export function StudentTab({ instituteId, instituteName }: Props) {
 
   const [emailNotice, setEmailNotice] = useState<{ ok: boolean; message: string } | null>(null);
 
+  // Uids with no Firebase sign-in on record; null while unknown. Null is not
+  // "everyone has signed in" — the badge simply does not render, which is why
+  // this is a nullable Set rather than a plain one.
+  const [neverSignedIn, setNeverSignedIn] = useState<Set<string> | null>(null);
+
   // ── Selection (bulk delete) ──────────────────────────────────────
   // Ids only. Holding the records themselves would mean the selection and the
   // table could disagree after the 5s poll refreshes one and not the other.
@@ -123,6 +129,18 @@ export function StudentTab({ instituteId, instituteName }: Props) {
       setStudents(unique);
       setLastSynced(new Date());
       setFetchError('');
+
+      // NOT on the silent poll. This list re-reads itself every five seconds,
+      // and the sign-in lookup is a batched Firebase Auth call over the whole
+      // roster — riding the poll would turn a background refresh into a
+      // sustained Auth call every five seconds, for an answer that changes
+      // when somebody signs in for the very first time. Initial load and
+      // explicit refresh only.
+      if (!silent) {
+        void fetchRosterSignIn(instituteId, 'student').then((state) => {
+          setNeverSignedIn(state?.neverSignedIn ?? null);
+        });
+      }
     } catch (e: any) {
       if (!silent) setFetchError(e.message || 'Failed to load students');
     } finally {
@@ -601,7 +619,14 @@ export function StudentTab({ instituteId, instituteName }: Props) {
                   {/* Enrolled date */}
                   <td className="px-5 py-3.5">
                     <p className="text-xs" style={{ color: 'var(--ef-text-muted)' }}>{formatDate(student.createdAt)}</p>
-                    {student.firstLoginRequired && (
+                    {/* From the Firebase sign-in record, not the profile's
+                        `firstLoginRequired` — that flag was written `false` by
+                        every provisioning path and never set anywhere, so this
+                        badge could not render for anybody. Absent while the
+                        lookup is in flight, which is the honest default: it
+                        can now say "never signed in", but it never claims the
+                        opposite. */}
+                    {neverSignedIn?.has(student.id) && (
                       <p className="text-xs mt-0.5" style={{ color: 'var(--ef-text-muted)', fontStyle: 'italic' }}>Awaiting login</p>
                     )}
                   </td>

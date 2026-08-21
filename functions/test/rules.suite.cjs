@@ -168,13 +168,23 @@ async function R01() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// R-02 · H1 — instituteCredentials is whitelisted, not locked
+// R-02 · H1 — instituteCredentials is locked to its institute
 //
-// Unlike institutes, this collection HAS one legitimate institute-role write:
-// InstituteAuthContext clears firstLoginRequired after a forced password
-// change. So the fix was a whitelist, and a whitelist has two failure modes —
-// too narrow breaks the product, too wide is the hole again. Both directions
-// are asserted.
+// H1's fix was a WHITELIST rather than a lock, because this collection had one
+// legitimate institute-role write: InstituteAuthContext clearing
+// `firstLoginRequired` after a forced first-login password change.
+//
+// That flow never ran. createAuthUser never created these documents, so every
+// auth context read the flag as `snap.exists() ? … : false` — false, always —
+// and the route it gated was unreachable. The flow and the flag are gone, so
+// the one write the whitelist existed for is gone with them, and the clause is
+// now the same lock its sibling collections carry.
+//
+// The collection itself stays: pre-migration documents are real, and a match
+// block deleted is a match block that falls through to no rule at all. What
+// this scenario asserts is therefore unchanged in spirit — H1 was about an
+// institute not being able to scribble on its own credentials record, and it
+// still cannot, by a broader rule than before.
 // ═══════════════════════════════════════════════════════════════════
 async function R02() {
   await seed(async (db) => {
@@ -184,19 +194,24 @@ async function R02() {
   });
   const me = asInstitute('inst_1');
 
-  await allowed('CAN clear its own firstLoginRequired — the one legitimate write',
+  // CHANGED from `allowed`: this was "the one legitimate write", and there is
+  // no longer any client that makes it.
+  await denied('can no longer clear firstLoginRequired — the flow it served is gone',
     () => updateDoc(doc(me, 'instituteCredentials/inst_1'), { firstLoginRequired: false }));
 
   await denied('cannot rewrite the email on its credentials doc',
     () => updateDoc(doc(me, 'instituteCredentials/inst_1'), { email: 'attacker@example.com' }));
   await denied('cannot write a password field',
     () => updateDoc(doc(me, 'instituteCredentials/inst_1'), { password: 'hunter2' }));
-  await denied('cannot smuggle a second field alongside the allowed one',
-    () => updateDoc(doc(me, 'instituteCredentials/inst_1'), {
-      firstLoginRequired: false, email: 'attacker@example.com',
-    }));
   await denied('cannot add a field that was never on the document',
     () => updateDoc(doc(me, 'instituteCredentials/inst_1'), { isSuperAdmin: true }));
+
+  // Reading is still permitted and still scoped — that half of H1 is what
+  // stops the cross-tenant metadata leak, and R-03 asserts the other side.
+  await allowed('CAN still read its own credentials document',
+    () => getDoc(doc(me, 'instituteCredentials/inst_1')));
+  await allowed('and the Web Owner can still write it',
+    () => updateDoc(doc(asWebOwner(), 'instituteCredentials/inst_1'), { firstLoginRequired: false }));
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -877,7 +892,7 @@ async function R11() {
 // ═══════════════════════════════════════════════════════════════════
 const SCENARIOS = [
   ['R-01', 'C1 — an institute cannot rewrite its own governance document', R01],
-  ['R-02', 'H1 — instituteCredentials is whitelisted, both directions', R02],
+  ['R-02', 'H1 — instituteCredentials is locked to its institute', R02],
   ['R-03', 'the tenancy boundary around both collections', R03],
   ['R-04', 'attempts — answers writable, authority fields not', R04],
   ['R-08', 'attemptVerdicts — the candidate cannot read their own judging', R08],

@@ -29,7 +29,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { LogoMark } from '../PlatformLogo';
 import { AuthShell, Field, MatchNote, PasswordField, StrengthBar } from './fields';
@@ -390,8 +390,6 @@ export function SetPassword({
   intro,
   /** The 16-character code from the reset email; omitted for a first login. */
   withCode = false,
-  /** Shown above the form when this is a forced first-login change. */
-  notice,
   backTo,
   submitLabel,
   onSubmit,
@@ -401,7 +399,6 @@ export function SetPassword({
   audience: string;
   intro?: React.ReactNode;
   withCode?: boolean;
-  notice?: React.ReactNode;
   backTo?: string;
   submitLabel: string;
   onSubmit: (input: { code: string; password: string }) => Promise<{
@@ -468,8 +465,6 @@ export function SetPassword({
           </motion.div>
         ) : (
           <>
-            {notice}
-
             <p className="ef-eyebrow mb-1.5">{audience}</p>
             {intro && (
               <p className="ef-t-sm ef-muted mb-6" style={{ lineHeight: 'var(--ef-leading-normal)' }}>
@@ -645,27 +640,3 @@ export function AuthPending({ title, children }: { title: string; children?: Rea
   );
 }
 
-/** The banner above a forced first-login change. */
-export function FirstLoginNotice({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="flex items-start gap-3 mb-6"
-      style={{
-        padding: '12px 14px',
-        background: 'var(--ef-accent-soft)',
-        border: '1px solid var(--ef-accent-border)',
-        borderRadius: 'var(--ef-radius-sm)',
-      }}
-    >
-      <ShieldCheck size={15} strokeWidth={1.7} style={{ color: 'var(--ef-accent)', flexShrink: 0, marginTop: 1 }} />
-      <div>
-        <p className="ef-t-sm ef-ink" style={{ fontWeight: 500 }}>
-          Password change required
-        </p>
-        <p className="ef-t-xs ef-muted" style={{ marginTop: 4, lineHeight: 'var(--ef-leading-relaxed)' }}>
-          {children}
-        </p>
-      </div>
-    </div>
-  );
-}

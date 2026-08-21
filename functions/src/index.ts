@@ -13955,6 +13955,123 @@ export const restoreInstituteAccess = onCall<{ instituteId: string }>(
 );
 
 // ══════════════════════════════════════════════════════════════════
+// ROSTER SIGN-IN STATE — who has actually never signed in
+// ══════════════════════════════════════════════════════════════════
+//
+// ── THE DASHBOARD WAS LYING ───────────────────────────────────────
+//
+// The institute admin's landing page carries a "Never signed in" tile, and
+// both rosters carry a per-row badge, all fed by `firstLoginRequired` on the
+// profile document. Nothing ever set that field to true: every provisioning
+// path — AddStudentDrawer, AddFacultyDrawer, both bulk modals and the Web
+// Owner's institute form — writes `firstLoginRequired: false` at creation,
+// because provisioning generates a password nobody sees and emails a reset
+// link instead.
+//
+// So the tile read 0 for every institute, always, with the subtitle
+// "everyone has". Not a blank or a dash — a confident, specific, wrong
+// answer to "is anyone sitting on an unclaimed account?". Dead code is
+// merely confusing; this was a number an administrator could act on.
+//
+// ── THE SOURCE OF TRUTH IS FIREBASE AUTH ──────────────────────────
+//
+// `metadata.lastSignInTime` is set by Firebase itself on every sign-in. It
+// cannot drift from reality the way a Firestore flag maintained by whichever
+// code path remembered to clear it can, and it needs no migration: it is
+// already correct for every account that exists today, including the ones
+// created while the flag was broken.
+//
+// Read live rather than mirrored onto the profile. A mirror needs a writer,
+// and the only honest writer is a sign-in hook — Identity Platform blocking
+// functions, which this project does not use — or a client write on login,
+// which means letting a student write their own profile document, which is
+// the clause N4 deliberately removed. Reading it here costs a batched Auth
+// lookup on a dashboard load and owes nothing to anybody.
+//
+// Never-signed-in is `!lastSignInTime`. A user that Auth does not have is
+// omitted entirely rather than counted either way: a profile whose Auth user
+// is missing is a different problem, and guessing would put it in this total.
+
+/** getUsers takes at most 100 identifiers per call — an Admin SDK limit. */
+const SIGNIN_LOOKUP_CHUNK = 100;
+/**
+ * Ceiling on one answer, so a dashboard load cannot turn into a thousand Auth
+ * calls. Well above any real roster; `truncated` tells the client when it bit
+ * so the UI can decline to show a number rather than show a wrong one.
+ */
+const SIGNIN_ROSTER_CAP = 5000;
+
+export const getRosterSignInState = onCall<{
+  instituteId: string;
+  role: 'faculty' | 'student';
+}>(
+  { ...CALLABLE_BASE, timeoutSeconds: 120 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
+
+    const { instituteId, role } = request.data || ({} as { instituteId: string; role: 'faculty' | 'student' });
+    if (typeof instituteId !== 'string' || !instituteId) {
+      throw new HttpsError('invalid-argument', 'instituteId is required.');
+    }
+    if (role !== 'faculty' && role !== 'student') {
+      throw new HttpsError('invalid-argument', 'role must be faculty or student.');
+    }
+
+    // Web Owner sees any institute; an institute admin only its own. Faculty
+    // and students are not given a roster-wide view of who has signed in —
+    // that is an administrative fact about other people.
+    const actor = actorFrom(request);
+    if (actor.actorRole !== 'webOwner') {
+      if (actor.actorRole !== 'institute' || actor.instituteId !== instituteId) {
+        throw new HttpsError('permission-denied', 'Insufficient permissions.');
+      }
+    }
+
+    const db = getFirestore();
+    const collection = role === 'faculty' ? 'faculty' : 'students';
+
+    // Excludes soft-deleted records, which is what the rosters themselves
+    // show: a deleted account that never signed in is not something an
+    // administrator can act on, and counting it would inflate the tile with
+    // people who are no longer there.
+    const snap = await db.collection(collection)
+      .where('instituteId', '==', instituteId)
+      .limit(SIGNIN_ROSTER_CAP + 1)
+      .get();
+
+    const truncated = snap.size > SIGNIN_ROSTER_CAP;
+    const uids = snap.docs
+      .slice(0, SIGNIN_ROSTER_CAP)
+      .filter((d) => d.get('lifecycleState') !== 'softDeleted')
+      .map((d) => d.id);
+
+    const auth = getAuth();
+    const neverSignedIn: string[] = [];
+    let checked = 0;
+
+    for (let i = 0; i < uids.length; i += SIGNIN_LOOKUP_CHUNK) {
+      const chunk = uids.slice(i, i + SIGNIN_LOOKUP_CHUNK);
+      let result;
+      try {
+        result = await auth.getUsers(chunk.map((uid) => ({ uid })));
+      } catch (err) {
+        // One bad chunk must not fail the whole dashboard. The count comes
+        // back short, and `checked` is what tells the client that.
+        console.error('[rosterSignIn] getUsers failed for a chunk', err);
+        continue;
+      }
+      for (const user of result.users) {
+        checked++;
+        if (!user.metadata.lastSignInTime) neverSignedIn.push(user.uid);
+      }
+      // result.notFound is deliberately ignored — see the header.
+    }
+
+    return { neverSignedIn, checked, total: uids.length, truncated };
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════
 // CODING — the judging sweep
 // ══════════════════════════════════════════════════════════════════
 //

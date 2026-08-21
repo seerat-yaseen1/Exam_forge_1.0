@@ -26,7 +26,6 @@ export interface InstituteSession {
   instituteCode: string;
   adminName: string;
   adminEmail: string;
-  firstLoginRequired: boolean;
   status: 'active' | 'disabled';
   activeUntil: string;
   validityType: string;
@@ -47,7 +46,7 @@ interface InstituteAuthContextType {
   login: (
     email: string,
     password: string
-  ) => Promise<{ success: boolean; error?: string; firstLoginRequired?: boolean }>;
+  ) => Promise<{ success: boolean; error?: string }>;
   changePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   requestPasswordReset: (
     instituteCode: string
@@ -62,7 +61,7 @@ const InstituteAuthContext = createContext<InstituteAuthContextType | null>(null
 
 async function buildSessionFromAuthUser(
   fbUser: FirebaseUser
-): Promise<{ session: InstituteSession | null; firstLoginRequired: boolean; reason?: string }> {
+): Promise<{ session: InstituteSession | null; reason?: string }> {
   // forceRefresh: pull the latest custom claims rather than the cached ones —
   // necessary for accounts whose claims were set just moments before sign-in.
   const tokenResult = await fbUser.getIdTokenResult(true);
@@ -70,12 +69,12 @@ async function buildSessionFromAuthUser(
   const instituteId = tokenResult.claims.instituteId as string | undefined;
 
   if (role !== 'institute' || !instituteId) {
-    return { session: null, firstLoginRequired: false, reason: 'not_institute' };
+    return { session: null, reason: 'not_institute' };
   }
 
   const instSnap = await getDoc(doc(db, 'institutes', instituteId));
   if (!instSnap.exists()) {
-    return { session: null, firstLoginRequired: false, reason: 'no_institute_doc' };
+    return { session: null, reason: 'no_institute_doc' };
   }
   const inst = instSnap.data() as Record<string, unknown>;
 
@@ -90,14 +89,8 @@ async function buildSessionFromAuthUser(
   // No member document: an Institute Admin signs in AS the institute.
   const denial = evaluateAccess(inst, null);
   if (denial) {
-    return { session: null, firstLoginRequired: false, reason: denial };
+    return { session: null, reason: denial };
   }
-
-  // firstLoginRequired now lives on instituteCredentials/{instituteId}
-  const credSnap = await getDoc(doc(db, 'instituteCredentials', instituteId));
-  const firstLoginRequired = credSnap.exists()
-    ? Boolean((credSnap.data() as { firstLoginRequired?: boolean }).firstLoginRequired)
-    : false;
 
   const session: InstituteSession = {
     instituteId,
@@ -105,7 +98,6 @@ async function buildSessionFromAuthUser(
     instituteCode: String(inst.code ?? ''),
     adminName: String(inst.adminName ?? ''),
     adminEmail: String(inst.adminEmail ?? fbUser.email ?? ''),
-    firstLoginRequired,
     status: (inst.status as 'active' | 'disabled') ?? 'active',
     // Carried on the session for display (see instituteValidity's helpers).
     // The gate above no longer needs a local binding for it — evaluateAccess
@@ -122,7 +114,7 @@ async function buildSessionFromAuthUser(
     facultyCanManageExamRosters: Boolean(inst.facultyCanManageExamRosters ?? false),
   };
 
-  return { session, firstLoginRequired };
+  return { session };
 }
 
 export function InstituteAuthProvider({ children }: { children: React.ReactNode }) {
@@ -168,13 +160,11 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
     async (
       email: string,
       password: string
-    ): Promise<{ success: boolean; error?: string; firstLoginRequired?: boolean }> => {
+    ): Promise<{ success: boolean; error?: string }> => {
       try {
         const emailNorm = email.toLowerCase().trim();
         const cred = await signInWithEmailAndPassword(auth, emailNorm, password);
-        const { session: built, firstLoginRequired, reason } = await buildSessionFromAuthUser(
-          cred.user
-        );
+        const { session: built, reason } = await buildSessionFromAuthUser(cred.user);
 
         if (!built) {
           await signOut(auth);
@@ -194,7 +184,7 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
         }
 
         setSession(built);
-        return { success: true, firstLoginRequired };
+        return { success: true };
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code;
         if (
@@ -217,20 +207,10 @@ export function InstituteAuthProvider({ children }: { children: React.ReactNode 
   const changePassword = useCallback(
     async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
       if (!session) return { success: false, error: 'Not authenticated.' };
-      // The operation is identical for all three roles — only the credential
-      // document differs (audit F-8 stage 2). lib/roleAuth owns the sequence,
-      // including the bookkeeping-must-not-fail-the-operation subtlety that was
-      // written out three times; this context owns its own session shape.
-      const res = await changeRolePassword({
-        newPassword,
-        credentialCollection: 'instituteCredentials',
-        credentialDocId: session.instituteId,
-        logLabel: '[InstituteAuth]',
-      });
-      if (res.success) {
-        setSession((prev) => (prev ? { ...prev, firstLoginRequired: false } : null));
-      }
-      return res;
+      // The operation is identical for all three roles (audit F-8 stage 2);
+      // lib/roleAuth owns the sequence, including the session revocation that
+      // is the security point of it.
+      return changeRolePassword({ newPassword, logLabel: '[InstituteAuth]' });
     },
     [session]
   );

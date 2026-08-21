@@ -42,7 +42,6 @@ export type Institute = {
   status: 'active' | 'disabled';
   validityType: 'monthly' | 'yearly' | 'custom';
   activeUntil: string;
-  firstLoginRequired: boolean;
   // ── Permission gates (set by Web Owner per institute) ──────────────
   schoolsManagementEnabled?: boolean;
   canAdminCreateFaculty?: boolean;
@@ -93,17 +92,6 @@ export type QuestionRightsCeiling = {
   delete: CeilingRight;
 };
 
-export type InstituteCredentials = {
-  instituteId: string;
-  email: string;
-  // N8 (audit 2026-08-06): `password` removed. Authentication is Firebase
-  // Auth; nothing in the codebase has ever READ this field. Leaving it
-  // declared was worse than dead weight — it is non-optional, so any caller
-  // constructing one of these was REQUIRED by the compiler to supply a
-  // plaintext password, which is precisely how one ends up in Firestore.
-  firstLoginRequired: boolean;
-};
-
 // Audit L2 (2026-08-04): this said `{ instituteId, logoUrl }` and the stored
 // document has never had either field. Every reader and the single writer use
 // `dataUrl` (InstituteAuthContext.uploadLogo writes { dataUrl, updatedAt }, and
@@ -130,7 +118,6 @@ export type Faculty = {
   email: string;
   role: 'Faculty';
   status: 'active' | 'disabled';
-  firstLoginRequired: boolean;
   schoolsManagementEnabled?: boolean;
   canCreateStudents?: boolean;
   canManageExamRosters?: boolean;  // Individual faculty gate (effective only when institute also has facultyCanManageExamRosters = true)
@@ -164,17 +151,6 @@ export type FacultyQuestionRights = {
   delete: FacultyRight;
 };
 
-export type FacultyCredentials = {
-  facultyId: string;
-  email: string;
-  // N8 (audit 2026-08-06): `password` removed. Authentication is Firebase
-  // Auth; nothing in the codebase has ever READ this field. Leaving it
-  // declared was worse than dead weight — it is non-optional, so any caller
-  // constructing one of these was REQUIRED by the compiler to supply a
-  // plaintext password, which is precisely how one ends up in Firestore.
-  firstLoginRequired: boolean;
-};
-
 export type Student = {
   id: string;
   instituteId: string;
@@ -195,7 +171,6 @@ export type Student = {
   // worse than stating it. Normalising needs a backfill, not a type edit.
   role: 'Student' | 'student';
   status: 'active' | 'disabled';
-  firstLoginRequired: boolean;
   group?: string[];
   section?: string[];
   specialisation?: string[];
@@ -204,22 +179,6 @@ export type Student = {
   school?: string[];
   createdAt: string;
   updatedAt: string;
-};
-
-export type StudentCredentials = {
-  studentId: string;
-  email: string;
-  // N8 (audit 2026-08-06): `password` removed. Authentication is Firebase
-  // Auth; nothing in the codebase has ever READ this field. Leaving it
-  // declared was worse than dead weight — it is non-optional, so any caller
-  // constructing one of these was REQUIRED by the compiler to supply a
-  // plaintext password, which is precisely how one ends up in Firestore.
-  //
-  // NOTE: this stops NEW plaintext being written. It does not touch documents
-  // that already carry one — see functions/scripts/purge-legacy-credentials.ts,
-  // which strips the field from existing docs while keeping
-  // firstLoginRequired intact.
-  firstLoginRequired: boolean;
 };
 
 // ──────────────────────────────────────────────────────────────────
@@ -464,30 +423,6 @@ export async function getFacultyByEmail(email: string): Promise<Faculty | null> 
 // FACULTY CREDENTIALS
 // ──────────────────────────────────────────────────────────────────
 
-export async function getFacultyCredentials(
-  facultyId: string
-): Promise<FacultyCredentials | null> {
-  return firestoreGet<FacultyCredentials>('facultyCredentials', facultyId);
-}
-
-export async function setFacultyCredentials(
-  facultyId: string,
-  data: FacultyCredentials
-): Promise<void> {
-  return firestoreSet<FacultyCredentials>('facultyCredentials', facultyId, data);
-}
-
-export async function updateFacultyCredentials(
-  facultyId: string,
-  data: Partial<FacultyCredentials>
-): Promise<void> {
-  return firestoreUpdate<FacultyCredentials>('facultyCredentials', facultyId, data);
-}
-
-export async function deleteFacultyCredentials(facultyId: string): Promise<void> {
-  return firestoreDelete('facultyCredentials', facultyId);
-}
-
 // ──────────────────────────────────────────────────────────────────
 // STUDENT OPERATIONS
 // ──────────────────────────────────────────────────────────────────
@@ -521,28 +456,6 @@ export async function getStudentByEmail(email: string): Promise<Student | null> 
 // ──────────────────────────────────────────────────────────────────
 // STUDENT CREDENTIALS
 // ──────────────────────────────────────────────────────────────────
-
-export async function getStudentCredentials(studentId: string): Promise<StudentCredentials | null> {
-  return firestoreGet<StudentCredentials>('studentCredentials', studentId);
-}
-
-export async function setStudentCredentials(
-  studentId: string,
-  data: StudentCredentials
-): Promise<void> {
-  return firestoreSet<StudentCredentials>('studentCredentials', studentId, data);
-}
-
-export async function updateStudentCredentials(
-  studentId: string,
-  data: Partial<StudentCredentials>
-): Promise<void> {
-  return firestoreUpdate<StudentCredentials>('studentCredentials', studentId, data);
-}
-
-export async function deleteStudentCredentials(studentId: string): Promise<void> {
-  return firestoreDelete('studentCredentials', studentId);
-}
 
 // ──────────────────────────────────────────────────────────────────
 // MULTI-CONDITION QUERY PRIMITIVE

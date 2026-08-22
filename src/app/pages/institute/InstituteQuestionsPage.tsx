@@ -37,11 +37,13 @@ type Tab = 'pool' | 'subjects';
 export function InstituteQuestionsPage() {
   const { session } = useInstituteAuth();
 
-  // Guard: redirect if permission was revoked mid-session
-  if (!session) return <Navigate to="/institute/login" replace />;
-  if (!session.canAdminCreateQuestions) return <Navigate to="/institute/dashboard" replace />;
-
-  const instituteId = session.instituteId;
+  // Both guards live at the BOTTOM of this component, just above the return.
+  // See the note on FacultyAssignmentsPage: gating here changed the hook
+  // count between the render where `session` was still null and the one after
+  // it arrived, which is the "Rendered more hooks than during the previous
+  // render" crash. Everything from here down is a hook or derived from one.
+  const instituteId = session?.instituteId ?? '';
+  const canAdminCreateQuestions = session?.canAdminCreateQuestions ?? false;
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -63,6 +65,9 @@ export function InstituteQuestionsPage() {
   const [exportOpen, setExportOpen] = useState(false);
 
   const fetchAll = useCallback(async (silent = false) => {
+    // No tenant yet — the guards below are about to redirect. Leaving
+    // `loading` true keeps the skeleton up for that frame.
+    if (!instituteId) return;
     if (!silent) setLoading(true);
     try {
       const [own, wide, subjs, faculty] = await Promise.all([
@@ -185,6 +190,11 @@ export function InstituteQuestionsPage() {
         : [],
     [isMine],
   );
+
+  // Guards: redirect if signed out, or if permission was revoked mid-session.
+  // Last thing before the return, so the hook count above never varies.
+  if (!session) return <Navigate to="/institute/login" replace />;
+  if (!canAdminCreateQuestions) return <Navigate to="/institute/dashboard" replace />;
 
   return (
     <PageShell>

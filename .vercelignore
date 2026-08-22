@@ -1,0 +1,20 @@
+# ══════════════════════════════════════════════════════════════════
+# What must NOT be uploaded to Vercel
+# ══════════════════════════════════════════════════════════════════
+#
+# EVERY FILE UNDER api/ BECOMES A PUBLIC SERVERLESS FUNCTION.
+#
+# That is Vercel's zero-config rule, and it does not care what the file is
+# for: `api/seb-verify.test.js` would be deployed and routed at
+# /api/seb-verify.test, reachable by anyone, on the same domain as the
+# endpoint that mints SEB proofs. It would not do anything useful — its
+# imports are test-only — but a public endpoint nobody meant to ship is
+# exactly the kind of surface this repo's audit exists to prevent.
+#
+# So the probes stay next to the code they test, where they get read and
+# maintained, and are excluded here instead of being moved somewhere less
+# useful. vitest still finds them: vitest.config.ts includes api/**.
+#
+# If a second handler ever gets a probe, this pattern already covers it.
+api/**/*.test.js
+api/**/*.spec.js

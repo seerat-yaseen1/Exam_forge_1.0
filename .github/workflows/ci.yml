@@ -19,24 +19,15 @@ on:
   pull_request:
   push:
     branches: [main]
-  # Manual trigger. Added 2026-08-06 as a DIAGNOSTIC and worth keeping.
+  # Manual trigger. Added 2026-08-06 as a diagnostic, when this workflow had
+  # produced zero runs despite every observable saying it should be running,
+  # and push/pull_request give no feedback when they decline to schedule
+  # anything. That is RESOLVED — the workflow has run and gone green
+  # continuously since; the diagnosis no longer needs stating here.
   #
-  # This workflow has produced zero runs since it landed on main — through
-  # four merges and four pull requests — while every observable says it should
-  # be running: the file is on the default branch with correct triggers, the
-  # API reports state=active with no parse error, Actions permissions are
-  # "Allow all actions and reusable workflows", and the account has used 0 of
-  # 3,000 included minutes.
-  #
-  # push and pull_request give no feedback when they decline to schedule
-  # anything; there is no failed run to open and no message to read.
-  # workflow_dispatch does: the API either starts a run or returns an error
-  # naming the reason. That turns a silent non-event into something
-  # actionable.
-  #
-  # Keeping it after the diagnosis is settled costs nothing and means CI can
-  # be re-run on demand — useful when a run is cancelled by the concurrency
-  # rule above, or when re-checking a flake without an empty commit.
+  # Kept because on-demand re-runs are independently useful: when a run is
+  # cancelled by the concurrency rule below, or when re-checking without
+  # pushing an empty commit.
   workflow_dispatch:
 
 # For pull requests, a new push supersedes an in-flight run for the same ref.
@@ -81,9 +72,15 @@ jobs:
       - name: Every pin names the same major
         run: node scripts/check-node-pins.mjs
 
-  # ── Frontend: does it typecheck under `strict`? ─────────────────
-  typecheck:
-    name: Frontend typecheck
+  # ── Frontend: lint, typecheck, and the vitest suite ─────────────
+  #
+  # This job used to run `tsc --noEmit` and stop, which left the largest body
+  # of frontend verification in the repository — the vitest suite, 1,000-plus
+  # assertions — running on developer machines only. "All green" was a claim
+  # about somebody's laptop again, which is the exact failure this workflow
+  # was created to end, one level up.
+  frontend:
+    name: Frontend lint, typecheck & tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,40 +93,57 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # `npm install`, not `npm ci`: the root has NO package-lock.json.
-      #
-      # N7 (audit 2026-08-06). Two consequences, and the second is the one
-      # that matters: installs here are not reproducible, and `npm audit`
-      # cannot run at all — it exits ENOLOCK — so FRONTEND DEPENDENCY
-      # VULNERABILITIES ARE INVISIBLE. functions/ has a lockfile and can be
-      # audited; the app cannot.
-      #
-      # TO FIX, from a machine that can reach cdn.sheetjs.com (the `xlsx`
-      # dependency is a direct tarball URL, not an npm package, and this
-      # sandbox's network policy blocks that host — a lockfile generated
-      # without it would be wrong rather than merely incomplete):
-      #
-      #     npm install --package-lock-only
-      #     git add package-lock.json && git commit
-      #
-      # Then switch the line below to `npm ci` and `npm audit` starts working.
+      # `npm ci`, and it can be, because the two things that blocked it are
+      # both resolved: the root now HAS a committed package-lock.json, and
+      # `xlsx` is a vendored tarball (`file:vendor/xlsx-0.20.3.tgz`) rather
+      # than a direct cdn.sheetjs.com URL, so a lockfile can describe the
+      # whole tree. Installs here are reproducible, and `npm audit` works.
       #
       # --ignore-scripts skips the root postinstall, which curls face-api
       # model weights from raw.githubusercontent.com. Those weights are a
-      # RUNTIME asset — the typecheck never touches them — so fetching them
+      # RUNTIME asset — nothing in this job touches them — so fetching them
       # here buys nothing and puts a third-party host on the critical path of
       # every CI run.
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci --ignore-scripts
 
-      # This is the step that closes the verification gap the 2026-08-06
-      # audit had to leave open. `xlsx` installs from cdn.sheetjs.com, which
-      # was unreachable from the audit sandbox, so `strict: true` was
-      # validated against a hand-written type stub instead of the real
-      # package. A CI runner has open egress, so this is the first time the
-      # frontend is typechecked against the dependency it actually ships.
+      # ── The repo carries TWO lockfiles, and both have to agree ──────
+      #
+      # package-lock.json is what CI installs from. pnpm-lock.yaml is what
+      # VERCEL installs from — it auto-detects pnpm from the file's presence,
+      # and runs with --frozen-lockfile. So a dependency change that updates
+      # only the npm lockfile passes every check here and then fails the
+      # deploy with ERR_PNPM_OUTDATED_LOCKFILE.
+      #
+      # That is not hypothetical; it is how this step came to exist. CI was
+      # green on all three jobs while the Vercel deployment for the same
+      # commit was red, which is the worst version of the failure: the
+      # signal everyone reads said the branch was fine.
+      #
+      # --lockfile-only resolves and compares without linking anything, so
+      # this costs seconds and cannot disturb the npm tree installed above.
+      # Fix a failure with `pnpm install --lockfile-only` and commit the
+      # result — never by deleting the lockfile.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - name: pnpm-lock.yaml agrees with package.json
+        run: pnpm install --frozen-lockfile --lockfile-only --ignore-scripts
+
+      # Errors only (--quiet). The warning count is real debt and is meant to
+      # be read by a person running `npm run lint`; it must not fail a deploy
+      # while it is being worked down. When it reaches zero, drop --quiet and
+      # add --max-warnings 0 here — that is the moment this becomes a ratchet.
+      - name: eslint
+        run: npm run lint:errors
+
+      # `strict: true`, checked against the dependency the app actually ships.
       - name: tsc --noEmit
         run: npm run typecheck
+
+      - name: vitest
+        run: npm test
 
   # ── Functions: build, then the seven suites ─────────────────────
   functions:

@@ -58,10 +58,16 @@ type Tab = 'pool' | 'subjects' | 'requests';
 export function FacultyQuestionsPage() {
   const { session } = useFacultyAuth();
 
-  if (!session) return <Navigate to="/faculty/login" replace />;
-
-  const facultyId = session.facultyId;
-  const instituteId = session.instituteId;
+  // The sign-in gate lives at the BOTTOM of this component, just above the
+  // return, and every hook below runs unconditionally. See the note on
+  // FacultyAssignmentsPage: a gate here changed the hook COUNT between the
+  // render where `session` was still null and the one after it arrived, which
+  // is the "Rendered more hooks than during the previous render" crash.
+  //
+  // The consequence is that these two are optional until the gate has had its
+  // say, and every fetch below has to tolerate that.
+  const facultyId = session?.facultyId ?? '';
+  const instituteId = session?.instituteId ?? '';
 
   // Effective question rights (permission-model Phase 2): institute ceiling
   // ∩ this faculty's grants. Fetched alongside questions; undefined until
@@ -111,6 +117,10 @@ export function FacultyQuestionsPage() {
   }, [notice]);
 
   const fetchAll = useCallback(async (silent = false) => {
+    // No identity yet — the sign-in gate below is about to redirect. Leaving
+    // `loading` true keeps the skeleton up for the frame before it does,
+    // which is what the page showed here before anyway.
+    if (!facultyId || !instituteId) return;
     if (!silent) setLoading(true);
     try {
       const [qs, subjs, fac, inst] = await Promise.all([
@@ -252,6 +262,11 @@ export function FacultyQuestionsPage() {
     { key: 'subjects', label: 'Subjects', count: loading ? undefined : subjects.length },
     ...(anyRequestMode ? [{ key: 'requests', label: 'My requests' }] : []),
   ];
+
+  // Sign-in gate. Deliberately the last thing before the return: everything
+  // above is a hook or derived from one, so the hook count is identical on
+  // every render whether or not there is a session.
+  if (!session) return <Navigate to="/faculty/login" replace />;
 
   return (
     <PageShell>

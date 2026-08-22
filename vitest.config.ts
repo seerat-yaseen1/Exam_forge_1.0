@@ -27,7 +27,11 @@ export default defineConfig({
     // people stop adding to.
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // api/ carries the two Vercel serverless handlers. They are part of the
+    // deployed surface — seb-verify mints the SEB proof — so their probes
+    // belong in the same suite as everything else, not in a corner nobody
+    // runs. They are plain .js, hence the extension list.
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'api/**/*.{test,spec}.{js,ts}'],
     // node_modules is excluded by default; functions/ has its own headless
     // suites run by node and must not be picked up here.
     exclude: ['node_modules/**', 'functions/**', 'dist/**'],

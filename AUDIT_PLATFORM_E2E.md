@@ -8,6 +8,48 @@ that can be re-checked. Where I could not prove something, I say so.
 
 ---
 
+## Resolution status
+
+The audit is kept below as written. This is what has since been done about it.
+
+| # | Finding | Status |
+|---|---|---|
+| S-1 | seb-verify: work before authentication | **Fixed.** Auth moved above the Firestore read; cache bounded; id shape validated. 19 probes in `api/seb-verify.test.js`, two of which fail if the ordering is put back. |
+| S-2 | App Check not enforced | **Open — yours to run.** No code change needed; it is the four console/deploy steps in `functions/src/index.ts`. Must land before self-signup traffic. |
+| S-3 | Images public-by-URL | **Open — a design decision**, not a patch. See §4. |
+| S-4 | Storage has no tenancy | **Open.** Needs a prefix change plus a migration of existing objects. |
+| S-5 | react-router advisories | **Fixed.** 7.13.0 → 7.18.2. Typecheck, 1,010 tests and the build all clean on it. |
+| S-6 | Transitive `uuid` advisory | **Won't fix, deliberately** — see below. |
+| S-7 | No linter | **Fixed.** ESLint 9 flat config, wired into CI. It found a real crash on the way in — see below. |
+| S-8 | ~1 hour revocation window | **Accepted**, as it already was. |
+
+Two things found while fixing, which were not in the original audit:
+
+- **A latent React crash in four pages.** `FacultyAssignmentsPage`,
+  `FacultyQuestionsPage`, `InstituteAssignmentsPage` and
+  `InstituteQuestionsPage` each gated on `session` and returned early *above*
+  their hooks. `session` is null while the auth context resolves, so the first
+  render called two hooks and the render after it arrived called six or more —
+  React compares the counts and throws *"Rendered more hooks than during the
+  previous render"*. It survived only because the redirect usually unmounts the
+  page before the session lands, which is a race, not a design. All four now
+  gate below every hook. **This is exactly the bug class §S-7 predicted:**
+  correctly typed, invisible to 1,010 passing tests, and only reachable in a
+  real browser over real time.
+- **The frontend test suite never ran in CI.** The workflow ran `tsc --noEmit`
+  and stopped, so the largest body of frontend verification in the repository
+  was running on developer machines only. Now wired in, along with lint.
+
+**Why S-6 is deliberately not fixed:** npm's proposed remedy is
+`firebase-admin@10.3.0` — a **major downgrade** from the pinned `^14.2.0`, on
+the SDK that runs every exam. The advisory itself is a missing buffer bounds
+check in `uuid` v3/v5/v6 *when an explicit `buf` argument is passed*; Google's
+libraries call `v4()` without one, so the vulnerable path is not reached.
+Forcing two majors onto a transitive dependency via `overrides` to silence an
+unreachable advisory is a worse trade than waiting for the upstream bump.
+
+---
+
 ## 0 · Verdict
 
 **Nothing is broken.** 2,195 assertions across both halves of the codebase pass,

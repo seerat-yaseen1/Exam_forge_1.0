@@ -39,6 +39,17 @@
  * certs) and bind the minted token to that authenticated uid — otherwise one
  * student in SEB could mint proofs for friends sitting in Chrome.
  *
+ * ORDER OF CHECKS — LOAD-BEARING, NOT INCIDENTAL
+ * Nothing whose cost the CALLER can multiply may run before authentication.
+ * The config-key lookup reads `sebAssessmentKeys/{assessmentId}` and caches
+ * the result, both keyed on a caller-supplied string, so with authentication
+ * after it an anonymous request could spend a Firestore read and a cache slot
+ * per invented id. The hash header does not gate that — it stops an ordinary
+ * browser, and forging it costs an attacker one line. So the sequence is:
+ * shape checks (free) → hash header present (free) → AUTHENTICATE → resolve
+ * keys (Firestore) → compare hash → mint. Adding a step means asking which
+ * side of the authenticate line it belongs on.
+ *
  * ENV (Vercel project settings — never exposed to the browser):
  *   SEB_CONFIG_KEYS        comma-separated fallback Config Keys
  *   SEB_SIGNING_SECRET     shared with the Cloud Functions. Comma-separated
@@ -56,6 +67,46 @@ import {
 const TOKEN_TTL_SECONDS = 90; // heartbeat (15s) refreshes it comfortably
 const KEYS_CACHE_MS = 2 * 60 * 1000;   // Firestore key docs
 const SA_TOKEN_SLACK_S = 300;          // refresh SA token 5 min before expiry
+
+/**
+ * Hard cap on distinct assessment ids held in `keysCache`.
+ *
+ * The cache is keyed by a value the CALLER supplies, so its size is not a
+ * function of how many exams exist — it is a function of how many distinct
+ * strings someone has sent. Without a cap that is an unbounded Map on a warm
+ * serverless instance. 500 is far above any real concurrent exam count and far
+ * below anything that matters for memory.
+ *
+ * Eviction is oldest-first, which a Map gives for free: iteration order is
+ * insertion order, so the first key is the least recently ADDED. Deliberately
+ * not LRU — the entries expire after KEYS_CACHE_MS anyway, so the only job here
+ * is to stop the Map growing, not to keep the hottest keys.
+ */
+const MAX_KEYS_CACHE_ENTRIES = 500;
+
+/** Longest assessment id accepted. Real ones are ~30 chars (`assess_<ms>_<7>`). */
+const MAX_ASSESSMENT_ID_LENGTH = 200;
+
+/**
+ * Is this string shaped like a document id this platform could have issued?
+ *
+ * DELIBERATELY PERMISSIVE. It is not trying to prove the exam exists — the
+ * Firestore read does that. It exists to reject input that could only be
+ * hostile (a 40 KB string, a path fragment, a control character) before that
+ * string is used to build a URL or a cache key.
+ *
+ * It does NOT pin the `assess_` prefix, on purpose: rejecting a legitimate id
+ * locks a student out of an exam they are sitting, which is a far worse
+ * outcome than accepting a junk id that the Firestore read will then miss.
+ * Requiring the first character to be alphanumeric is what rules out `.`, `..`
+ * and the reserved `__…__` form without enumerating them.
+ */
+export function isPlausibleAssessmentId(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= MAX_ASSESSMENT_ID_LENGTH
+    && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value);
+}
 const GOOGLE_CERTS_URL =
   'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -196,8 +247,31 @@ async function readKeyDoc(projectId, docPath, fieldName) {
   } else {
     throw new Error(`FIRESTORE_HTTP_${r.status}`);
   }
-  keysCache.set(docPath, { keys, fetchedAt: Date.now() });
+  cachePut(keysCache, docPath, { keys, fetchedAt: Date.now() }, MAX_KEYS_CACHE_ENTRIES);
   return keys;
+}
+
+/**
+ * Insert into a Map that is not allowed to grow past `max`.
+ *
+ * Split out from readKeyDoc so the bound is testable without standing up a
+ * service account and a Firestore transport — the thing worth asserting is
+ * "the Map never exceeds max", and that is arithmetic, not I/O.
+ *
+ * Re-inserting an existing key must not evict anything, so the existing entry
+ * is deleted first: without that, refreshing a cached doc while the Map is
+ * full would drop an unrelated entry on every refresh.
+ */
+export function cachePut(cache, key, value, max) {
+  cache.delete(key);
+  // Iteration order is insertion order, so the first key is the oldest.
+  while (cache.size >= max) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+  cache.set(key, value);
+  return cache;
 }
 
 /**
@@ -273,15 +347,53 @@ export default async function handler(req, res) {
   if (!assessmentId) {
     return res.status(400).json({ ok: false, error: 'SEB_VERIFY_BAD_REQUEST', reason: 'missing_assessment' });
   }
+  if (!isPlausibleAssessmentId(assessmentId)) {
+    return res.status(400).json({ ok: false, error: 'SEB_VERIFY_BAD_REQUEST', reason: 'bad_assessment_id' });
+  }
 
   // 1. The SEB header must be present. Chrome never sends it.
+  //
+  // This is a gate against an ordinary BROWSER, not against an attacker: the
+  // header is trivially forgeable with any junk value, so passing it proves
+  // nothing and must not be treated as having proved anything. Everything
+  // expensive below is ordered on that assumption.
   const headers = req.headers || {};
   const received = String(headers['x-safeexambrowser-configkeyhash'] || '').toLowerCase();
   if (!received) {
     return res.status(403).json({ ok: false, error: 'SEB_REQUIRED', reason: 'no_header' });
   }
 
-  // 2. Resolve the allowed keys (per-exam → platform → env), then recompute
+  // 2. Authenticate the caller — BEFORE anything that costs a Firestore read.
+  //
+  // WHY THE ORDER MATTERS (and why it changed). Step 3 reads
+  // `sebAssessmentKeys/{assessmentId}`, and assessmentId is supplied by the
+  // caller. With this check below that read, an UNAUTHENTICATED caller who
+  // sent any junk hash header could drive one Firestore read — and one cache
+  // entry — per distinct id they invented. Billable, and unbounded in memory.
+  //
+  // Verifying here costs no network in the steady state: Google's signing
+  // certs are cached for five minutes and the RS256 check is local CPU, so
+  // this step's cost does not scale with anything the caller controls.
+  //
+  // NO LEGITIMATE CLIENT SEES A DIFFERENCE. getSebToken refuses to call this
+  // endpoint without a signed-in user (assessmentService.ts), so the only
+  // caller that reaches the moved check unauthenticated is one that was never
+  // going to be issued a token anyway. It now learns that at 401 instead of
+  // at 403, which tells it strictly less than before.
+  const auth = String(headers.authorization || '');
+  const idToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!idToken) {
+    return res.status(401).json({ ok: false, error: 'AUTH_REQUIRED' });
+  }
+
+  let uid;
+  try {
+    uid = await verifyFirebaseIdToken(idToken, projectId);
+  } catch (e) {
+    return res.status(401).json({ ok: false, error: 'AUTH_INVALID', reason: e.message });
+  }
+
+  // 3. Resolve the allowed keys (per-exam → platform → env), then recompute
   //    SHA256(url + configKey). Constant URL → constant target.
   const { keys: configKeys, source } = await resolveConfigKeys(projectId, assessmentId, envKeys);
   if (!configKeys.length) {
@@ -304,22 +416,11 @@ export default async function handler(req, res) {
     return res.status(403).json({ ok: false, error: 'SEB_CONFIG_MISMATCH', reason: 'hash_mismatch' });
   }
 
-  // 3. Authenticate the caller. Without this, a student in SEB could mint
-  //    tokens for classmates sitting in Chrome.
-  const auth = String(headers.authorization || '');
-  const idToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!idToken) {
-    return res.status(401).json({ ok: false, error: 'AUTH_REQUIRED' });
-  }
-
-  let uid;
-  try {
-    uid = await verifyFirebaseIdToken(idToken, projectId);
-  } catch (e) {
-    return res.status(401).json({ ok: false, error: 'AUTH_INVALID', reason: e.message });
-  }
-
   // 4. Mint the short-lived proof, bound to the authenticated uid + exam.
+  //    `uid` came from step 2 — the caller was authenticated before any of
+  //    the work above, which is what stops an anonymous caller spending our
+  //    Firestore quota. Binding to it is still what stops a student in SEB
+  //    minting tokens for classmates sitting in Chrome.
   const { token, expiresAt } = mintSebToken(uid, assessmentId, secret);
   return res.status(200).json({
     ok: true, sebToken: token, expiresAt, ttlSeconds: TOKEN_TTL_SECONDS, keySource: source,

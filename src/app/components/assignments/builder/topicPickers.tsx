@@ -220,7 +220,7 @@ export function RuleBuilderPanel({
   const toggleSubject = (subject: string) => {
     setExpandedSubjects((prev) => {
       const next = new Set(prev);
-      next.has(subject) ? next.delete(subject) : next.add(subject);
+      if (next.has(subject)) next.delete(subject); else next.add(subject);
       return next;
     });
   };
@@ -661,7 +661,7 @@ export function SectionTopicPicker({
   const toggleSubject = (subj: string) => {
     setExpandedSubjects((prev) => {
       const next = new Set(prev);
-      next.has(subj) ? next.delete(subj) : next.add(subj);
+      if (next.has(subj)) next.delete(subj); else next.add(subj);
       return next;
     });
   };
@@ -959,7 +959,7 @@ export function TopicPickerPhase({
   const toggleSubjectAccordion = (name: string) => {
     setExpandedSubjects((prev) => {
       const next = new Set(prev);
-      next.has(name) ? next.delete(name) : next.add(name);
+      if (next.has(name)) next.delete(name); else next.add(name);
       return next;
     });
   };

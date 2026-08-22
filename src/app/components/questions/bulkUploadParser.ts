@@ -462,7 +462,7 @@ export function resolveSubjectsInRows(
     const result = resolveSubject(rawSubject, subjects);
 
     let resolution: SubjectResolution;
-    let updatedDraft = { ...row.draft };
+    const updatedDraft = { ...row.draft };
     const updatedWarnings = [...row.warnings];
     const updatedErrors   = [...row.errors];
     let resolvedSubject: Subject | null = null;

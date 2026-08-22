@@ -22,18 +22,19 @@ export function InstituteAssignmentsPage() {
   const navigate = useNavigate();
   const { session } = useInstituteAuth();
 
-  // Permission gate
-  if (!session?.canAdminManageExamRosters) {
-    return <Navigate to="/institute/dashboard" replace />;
-  }
-
+  // Every hook runs before the permission gate — see the note on
+  // FacultyAssignmentsPage for the crash this ordering prevents. Briefly: the
+  // session is null while auth resolves, so a gate above these hooks changes
+  // the hook COUNT between renders and React throws.
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const instituteId = session.instituteId;
+  const instituteId = session?.instituteId ?? '';
+  const canAdminManageExamRosters = session?.canAdminManageExamRosters ?? false;
 
   const load = () => {
+    if (!instituteId || !canAdminManageExamRosters) return;
     setLoading(true);
     setError('');
     getAssessmentsVisibleToInstitute(instituteId)
@@ -49,7 +50,12 @@ export function InstituteAssignmentsPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [instituteId]);
+  useEffect(load, [instituteId, canAdminManageExamRosters]);
+
+  // Permission gate — below every hook, deliberately.
+  if (!canAdminManageExamRosters) {
+    return <Navigate to="/institute/dashboard" replace />;
+  }
 
   const active = assessments.filter((a) => a.status === 'active').length;
 

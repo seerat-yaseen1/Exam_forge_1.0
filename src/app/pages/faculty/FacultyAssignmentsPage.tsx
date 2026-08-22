@@ -19,18 +19,32 @@ export function FacultyAssignmentsPage() {
   const navigate = useNavigate();
   const { session } = useFacultyAuth();
 
-  // Permission gate — redirect if the roster gate is closed
-  if (!session?.canManageExamRosters) {
-    return <Navigate to="/faculty/dashboard" replace />;
-  }
-
+  // ── EVERY HOOK RUNS BEFORE THE PERMISSION GATE ──────────────────
+  //
+  // The gate used to sit here, above these hooks, and return <Navigate/>
+  // early. That is a hook-order violation and it had a real failure mode:
+  // `session` is null while the auth context resolves, so the first render
+  // took the early return and called two hooks, and the render after the
+  // session arrived fell through to call six. React compares the counts and
+  // throws "Rendered more hooks than during the previous render", taking the
+  // page down instead of redirecting.
+  //
+  // It survived because the redirect usually unmounts the component before
+  // the session lands — a race, not a design. The gate now sits below every
+  // hook, which is the only arrangement where the count cannot change.
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const facultyId = session.facultyId;
+  // Optional now, because these run before the gate has had its say.
+  const facultyId = session?.facultyId ?? '';
+  const canManageExamRosters = session?.canManageExamRosters ?? false;
 
   const load = () => {
+    // No identity yet, or no business being here — either way there is
+    // nothing to fetch. Not an error state: the gate below decides what the
+    // person actually sees.
+    if (!facultyId || !canManageExamRosters) return;
     setLoading(true);
     setError('');
     getAssessmentsByOwner('faculty', facultyId)
@@ -43,7 +57,12 @@ export function FacultyAssignmentsPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [facultyId]);
+  useEffect(load, [facultyId, canManageExamRosters]);
+
+  // Permission gate — redirect if the roster gate is closed.
+  if (!canManageExamRosters) {
+    return <Navigate to="/faculty/dashboard" replace />;
+  }
 
   const active = assessments.filter((a) => a.status === 'active').length;
   const drafts = assessments.filter((a) => a.status === 'draft').length;
